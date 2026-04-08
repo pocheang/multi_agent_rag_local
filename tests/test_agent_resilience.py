@@ -193,3 +193,33 @@ def test_stream_continues_when_vector_retrieval_fails(monkeypatch):
     done_events = [e for e in events if e.get("type") == "done"]
     assert done_events
     assert any("向量检索异常" in e.get("content", "") for e in thought_events)
+
+
+def test_stream_forces_web_when_user_explicitly_requests_online_search(monkeypatch):
+    fake_graph_agent = types.ModuleType("app.agents.graph_rag_agent")
+    fake_graph_agent.run_graph_rag = lambda _q: {"entities": [], "context": "", "neighbors": []}
+    fake_router_agent = types.ModuleType("app.agents.router_agent")
+    fake_router_agent.decide_route = lambda _q, use_reasoning=True: types.SimpleNamespace(
+        route="vector", reason="test", skill="answer_with_citations", agent_class="general"
+    )
+    fake_synthesis_agent = types.ModuleType("app.agents.synthesis_agent")
+    fake_synthesis_agent.stream_synthesize_answer = lambda **kwargs: iter(["ok"])
+    fake_synthesis_agent.synthesize_answer = lambda **kwargs: "ok"
+    fake_vector_agent = types.ModuleType("app.agents.vector_rag_agent")
+    fake_vector_agent.run_vector_rag = lambda _q: {"retrieved_count": 5, "context": "", "citations": []}
+    fake_web_agent = types.ModuleType("app.agents.web_research_agent")
+    fake_web_agent.run_web_research = lambda _q: {"used": True, "citations": [{"source": "web", "content": "x", "metadata": {}}], "context": "web ctx"}
+
+    monkeypatch.setitem(sys.modules, "app.agents.graph_rag_agent", fake_graph_agent)
+    monkeypatch.setitem(sys.modules, "app.agents.router_agent", fake_router_agent)
+    monkeypatch.setitem(sys.modules, "app.agents.synthesis_agent", fake_synthesis_agent)
+    monkeypatch.setitem(sys.modules, "app.agents.vector_rag_agent", fake_vector_agent)
+    monkeypatch.setitem(sys.modules, "app.agents.web_research_agent", fake_web_agent)
+
+    graph_streaming = importlib.import_module("app.graph.streaming")
+    graph_streaming = importlib.reload(graph_streaming)
+
+    events = list(graph_streaming.run_query_stream("请上网查一下最新漏洞动态", use_web_fallback=True, use_reasoning=True))
+    web_events = [e for e in events if e.get("type") == "web_result"]
+    assert web_events
+    assert web_events[0].get("used") is True

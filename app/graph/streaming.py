@@ -7,7 +7,7 @@ from app.agents.router_agent import decide_route
 from app.agents.synthesis_agent import stream_synthesize_answer, synthesize_answer
 from app.agents.vector_rag_agent import run_vector_rag
 from app.agents.web_research_agent import run_web_research
-from app.services.query_intent import is_smalltalk_query
+from app.services.query_intent import is_smalltalk_query, should_force_web_research
 
 logger = logging.getLogger(__name__)
 
@@ -99,9 +99,14 @@ def run_query_stream(
         }
 
     need_web = False
+    force_web = should_force_web_research(question) or state.get("skill") == "web_fact_check"
     if is_smalltalk_query(question):
         need_web = False
         thoughts.append("检测到问候/闲聊，不触发联网检索。")
+        yield {"type": "thought", "content": thoughts[-1]}
+    elif use_web_fallback and force_web:
+        need_web = True
+        thoughts.append("检测到用户明确联网/时效性意图，优先触发联网补充。")
         yield {"type": "thought", "content": thoughts[-1]}
     elif route == "vector":
         need_web = state.get("vector_result", {}).get("retrieved_count", 0) < 2 and use_web_fallback

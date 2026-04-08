@@ -102,6 +102,16 @@ class AdminUserSummary(BaseModel):
     username: str
     role: str
     status: str
+    created_by_user_id: str | None = None
+    created_by_username: str | None = None
+    admin_ticket_id: str | None = None
+    has_admin_approval_token: bool = False
+    business_unit: str | None = None
+    department: str | None = None
+    user_type: str | None = None
+    data_scope: str | None = None
+    is_online: bool = False
+    is_online_10m: bool = False
     created_at: str | None = None
 
 
@@ -113,11 +123,43 @@ class AdminStatusUpdateRequest(BaseModel):
     status: str
 
 
+class AdminUserClassificationUpdateRequest(BaseModel):
+    business_unit: str | None = None
+    department: str | None = None
+    user_type: str | None = None
+    data_scope: str | None = None
+
+
+class AdminCreateAdminRequest(BaseModel):
+    username: str
+    password: str
+    approval_token: str
+    ticket_id: str
+    reason: str
+    new_admin_approval_token: str
+
+
+class AdminResetApprovalTokenRequest(BaseModel):
+    approval_token: str
+    ticket_id: str
+    reason: str
+    new_admin_approval_token: str
+
+
+class AdminResetPasswordRequest(BaseModel):
+    approval_token: str
+    ticket_id: str
+    reason: str
+    new_password: str
+
+
 class AuditLogEntry(BaseModel):
     event_id: str
     actor_user_id: str | None = None
     actor_role: str | None = None
     action: str
+    event_category: str | None = None
+    severity: str | None = None
     resource_type: str
     resource_id: str | None = None
     result: str

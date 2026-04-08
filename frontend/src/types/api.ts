@@ -96,6 +96,16 @@ export type AdminUserSummary = {
   username: string;
   role: string;
   status: string;
+  created_by_user_id?: string | null;
+  created_by_username?: string | null;
+  admin_ticket_id?: string | null;
+  has_admin_approval_token?: boolean;
+  business_unit?: string | null;
+  department?: string | null;
+  user_type?: string | null;
+  data_scope?: string | null;
+  is_online?: boolean;
+  is_online_10m?: boolean;
   created_at?: string;
 };
 
@@ -104,9 +114,62 @@ export type AuditLogEntry = {
   actor_user_id?: string;
   actor_role?: string;
   action: string;
+  event_category?: string;
+  severity?: string;
   resource_type: string;
   resource_id?: string;
   result: string;
   detail?: string;
+  ip?: string | null;
+  user_agent?: string | null;
   created_at?: string;
+};
+
+export type OpsServiceHealth = {
+  ok: boolean;
+  required?: boolean;
+  latency_ms?: number;
+  error?: string;
+  path?: string;
+};
+
+export type OpsOverview = {
+  generated_at: string;
+  window_hours: number;
+  status: "healthy" | "degraded" | string;
+  kpi: {
+    requests_total: number;
+    requests_success: number;
+    requests_error: number;
+    error_rate_percent: number;
+    active_users: number;
+    active_sessions: number;
+    queries: number;
+    uploads: number;
+    login_success: number;
+    login_failed: number;
+  };
+  users: {
+    total: number;
+    active: number;
+    disabled: number;
+    admin: number;
+  };
+  top_actions: Array<{ action: string; count: number }>;
+  top_resource_types: Array<{ resource_type: string; count: number }>;
+  top_error_reasons: Array<{ reason: string; count: number }>;
+  slow_requests: Array<{
+    ts: string;
+    method: string;
+    path: string;
+    status_code: number;
+    duration_ms: number;
+    error?: string;
+  }>;
+  hourly: Array<{ bucket: string; count: number; errors: number }>;
+  services: Record<string, OpsServiceHealth>;
+  filters?: {
+    actor_user_id?: string;
+    action_keyword?: string;
+  };
 };

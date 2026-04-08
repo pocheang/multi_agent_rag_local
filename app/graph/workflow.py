@@ -8,7 +8,7 @@ from app.agents.router_agent import decide_route
 from app.agents.synthesis_agent import synthesize_answer
 from app.agents.vector_rag_agent import run_vector_rag
 from app.agents.web_research_agent import run_web_research
-from app.services.query_intent import is_smalltalk_query
+from app.services.query_intent import is_smalltalk_query, should_force_web_research
 
 logger = logging.getLogger(__name__)
 
@@ -104,23 +104,29 @@ def route_after_router(state: GraphState):
 
 
 def route_after_vector(state: GraphState):
-    if is_smalltalk_query(state.get("question", "")):
+    question = state.get("question", "")
+    if is_smalltalk_query(question):
         return "synthesis"
     route = state.get("route", "vector")
+    use_web = state.get("use_web_fallback", True)
+    if use_web and (should_force_web_research(question) or state.get("skill") == "web_fact_check"):
+        return "web"
     if route == "hybrid":
         return "graph"
     retrieved_count = state.get("vector_result", {}).get("retrieved_count", 0)
-    use_web = state.get("use_web_fallback", True)
     if retrieved_count < 2 and use_web:
         return "web"
     return "synthesis"
 
 
 def route_after_graph(state: GraphState):
-    if is_smalltalk_query(state.get("question", "")):
+    question = state.get("question", "")
+    if is_smalltalk_query(question):
         return "synthesis"
     route = state.get("route", "graph")
     use_web = state.get("use_web_fallback", True)
+    if use_web and (should_force_web_research(question) or state.get("skill") == "web_fact_check"):
+        return "web"
     has_graph_entities = bool(state.get("graph_result", {}).get("entities", []))
     if route == "hybrid":
         if state.get("vector_result", {}).get("retrieved_count", 0) < 2 and use_web:

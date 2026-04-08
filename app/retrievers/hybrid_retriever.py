@@ -56,8 +56,12 @@ def _expand_to_parent_context(candidates: list[dict]) -> list[dict]:
 
 def hybrid_search(query: str, allowed_sources: list[str] | None = None) -> list[dict]:
     settings = get_settings()
-    vector_results = similarity_search(query, k=settings.vector_top_k, allowed_sources=allowed_sources)
-    bm25_results = bm25_search(query, k=settings.bm25_top_k, allowed_sources=allowed_sources)
+    if allowed_sources is None:
+        vector_results = similarity_search(query, k=settings.vector_top_k)
+        bm25_results = bm25_search(query, k=settings.bm25_top_k)
+    else:
+        vector_results = similarity_search(query, k=settings.vector_top_k, allowed_sources=allowed_sources)
+        bm25_results = bm25_search(query, k=settings.bm25_top_k, allowed_sources=allowed_sources)
 
     merged: dict[str, dict] = {}
     scores = defaultdict(float)

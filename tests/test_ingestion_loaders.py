@@ -3,6 +3,7 @@ import sys
 import types
 from dataclasses import dataclass, field
 from pathlib import Path
+from types import SimpleNamespace
 from uuid import uuid4
 
 
@@ -65,6 +66,7 @@ def test_supported_extensions_include_images():
     assert ".pdf" in loaders.SUPPORTED_EXTENSIONS
     assert ".png" in loaders.SUPPORTED_EXTENSIONS
     assert ".jpg" in loaders.SUPPORTED_EXTENSIONS
+    assert ".csv" in loaders.SUPPORTED_EXTENSIONS
 
 
 def test_load_single_path_image_uses_image_loader(monkeypatch):
@@ -101,3 +103,54 @@ def test_load_documents_skips_unsupported_paths():
     docs = loaders.load_documents(paths=[ok, bad])
     assert len(docs) == 1
     assert "hello" in docs[0].page_content
+
+
+def test_parse_psm_modes_handles_invalid_values():
+    assert loaders._parse_psm_modes("6,11,3") == [6, 11, 3]
+    assert loaders._parse_psm_modes("a,,99,-1,4") == [4]
+    assert loaders._parse_psm_modes("") == [6, 11, 3]
+
+
+def test_normalize_ocr_text_collapses_blank_lines():
+    text = "  a  \n\n b \n   \n c"
+    assert loaders._normalize_ocr_text(text) == "a\nb\nc"
+
+
+def test_text_loader_fallbacks_to_gb18030():
+    tmp_dir = _make_tmp_dir("loaders-gb18030")
+    txt = tmp_dir / "cn.txt"
+    txt.write_bytes("中文内容".encode("gb18030"))
+
+    docs = loaders.load_documents(paths=[txt])
+    assert len(docs) == 1
+    assert "中文内容" in docs[0].page_content
+
+
+def test_detect_people_disabled_returns_safe_defaults():
+    settings = SimpleNamespace(people_detection_enabled=False, people_detection_mode="face")
+    info = loaders._detect_people_in_image(image=None, settings=settings)
+    assert info["status"] == "disabled"
+    assert info["person_count"] == 0
+    assert info["human_present"] is False
+
+
+def test_build_people_summary_contains_key_fields():
+    summary = loaders._build_people_summary(
+        {"status": "ok", "human_present": True, "person_count": 2, "face_count": 1, "detector_mode": "face"}
+    )
+    assert "[image_people]" in summary
+    assert "human_present=true" in summary
+    assert "person_count=2" in summary
+
+
+def test_describe_image_with_vision_disabled():
+    settings = SimpleNamespace(image_caption_enabled=False, image_caption_backend="auto", model_backend="ollama")
+    info = loaders._describe_image_with_vision(b"img", settings)
+    assert info["status"] == "disabled"
+    assert info["caption"] == ""
+
+
+def test_build_vision_summary_includes_caption():
+    text = loaders._build_vision_summary({"status": "ok", "model": "demo", "caption": "图中有一只猫在窗台上。"})
+    assert "[image_scene]" in text
+    assert "图中有一只猫在窗台上。" in text

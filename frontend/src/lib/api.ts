@@ -7,6 +7,7 @@ import type {
   LoginResponse,
   PromptCheckResponse,
   PromptTemplate,
+  OpsOverview,
   SessionDetail,
   SessionSummary,
   UploadResponse,
@@ -293,7 +294,122 @@ export const appApi = {
     });
     return parseOrThrow<AdminUserSummary>(res);
   },
-  adminAudit(limit: number) {
-    return request<AuditLogEntry[]>(`/admin/audit-logs?limit=${encodeURIComponent(String(limit))}`);
+  async adminUpdateClassification(
+    userId: string,
+    input: { businessUnit?: string; department?: string; userType?: string; dataScope?: string },
+  ) {
+    const res = await authFetch(`/admin/users/${encodeURIComponent(userId)}/classification`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        business_unit: input.businessUnit || null,
+        department: input.department || null,
+        user_type: input.userType || null,
+        data_scope: input.dataScope || null,
+      }),
+    });
+    return parseOrThrow<AdminUserSummary>(res);
+  },
+  async adminCreateAdmin(input: {
+    username: string;
+    password: string;
+    approvalToken: string;
+    ticketId: string;
+    reason: string;
+    newAdminApprovalToken: string;
+  }) {
+    const res = await authFetch("/admin/users/create-admin", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        username: input.username,
+        password: input.password,
+        approval_token: input.approvalToken,
+        ticket_id: input.ticketId,
+        reason: input.reason,
+        new_admin_approval_token: input.newAdminApprovalToken,
+      }),
+    });
+    return parseOrThrow<AdminUserSummary>(res);
+  },
+  async adminResetApprovalToken(input: {
+    userId: string;
+    approvalToken: string;
+    ticketId: string;
+    reason: string;
+    newAdminApprovalToken: string;
+  }) {
+    const res = await authFetch(`/admin/users/${encodeURIComponent(input.userId)}/reset-approval-token`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        approval_token: input.approvalToken,
+        ticket_id: input.ticketId,
+        reason: input.reason,
+        new_admin_approval_token: input.newAdminApprovalToken,
+      }),
+    });
+    return parseOrThrow<AdminUserSummary>(res);
+  },
+  async adminResetPassword(input: {
+    userId: string;
+    approvalToken: string;
+    ticketId: string;
+    reason: string;
+    newPassword: string;
+  }) {
+    const res = await authFetch(`/admin/users/${encodeURIComponent(input.userId)}/reset-password`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        approval_token: input.approvalToken,
+        ticket_id: input.ticketId,
+        reason: input.reason,
+        new_password: input.newPassword,
+      }),
+    });
+    return parseOrThrow<AdminUserSummary>(res);
+  },
+  adminAudit(input: {
+    limit: number;
+    actorUserId?: string;
+    actionKeyword?: string;
+    eventCategory?: string;
+    severity?: string;
+    result?: string;
+  }) {
+    const qs = new URLSearchParams();
+    qs.set("limit", String(input.limit));
+    if (input.actorUserId) qs.set("actor_user_id", input.actorUserId);
+    if (input.actionKeyword) qs.set("action_keyword", input.actionKeyword);
+    if (input.eventCategory) qs.set("event_category", input.eventCategory);
+    if (input.severity) qs.set("severity", input.severity);
+    if (input.result) qs.set("result", input.result);
+    return request<AuditLogEntry[]>(`/admin/audit-logs?${qs.toString()}`);
+  },
+  adminOpsOverview(input: { hours?: number; actorUserId?: string; actionKeyword?: string } = {}) {
+    const qs = new URLSearchParams();
+    qs.set("hours", String(input.hours ?? 24));
+    if (input.actorUserId) qs.set("actor_user_id", input.actorUserId);
+    if (input.actionKeyword) qs.set("action_keyword", input.actionKeyword);
+    return request<OpsOverview>(`/admin/ops/overview?${qs.toString()}`);
+  },
+  async adminOpsExportCsv(input: { hours?: number; actorUserId?: string; actionKeyword?: string } = {}) {
+    const qs = new URLSearchParams();
+    qs.set("hours", String(input.hours ?? 24));
+    if (input.actorUserId) qs.set("actor_user_id", input.actorUserId);
+    if (input.actionKeyword) qs.set("action_keyword", input.actionKeyword);
+    const res = await authFetch(`/admin/ops/export.csv?${qs.toString()}`, { method: "GET" });
+    if (!res.ok) {
+      const text = await res.text();
+      let payload: any = {};
+      try {
+        payload = text ? JSON.parse(text) : {};
+      } catch {
+        payload = {};
+      }
+      throw new ApiError(res.status, String(payload?.detail || "request failed"));
+    }
+    return res.text();
   },
 };

@@ -83,7 +83,10 @@ def decide_route(question: str, use_reasoning: bool = True) -> RouteDecision:
         }
 
     route = data.get("route", "vector")
+    reason_raw = data.get("reason", "fallback")
     if route not in {"vector", "graph", "hybrid"}:
+        if route == "web":
+            reason_raw = f"{reason_raw} | web_downgraded_to_local_first"
         route = "vector"
 
     skill = data.get("skill", "answer_with_citations")
@@ -106,5 +109,5 @@ def decide_route(question: str, use_reasoning: bool = True) -> RouteDecision:
     elif agent_class == "artificial_intelligence":
         skill = "ai_knowledge_assistant"
 
-    reason = f"{data.get('reason', 'fallback')} | agent_class={agent_class}"
+    reason = f"{reason_raw} | agent_class={agent_class}"
     return RouteDecision(route=route, reason=reason, skill=skill, agent_class=agent_class)

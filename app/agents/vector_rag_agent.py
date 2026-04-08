@@ -6,7 +6,10 @@ from app.retrievers.hybrid_retriever import hybrid_search
 
 def run_vector_rag(question: str, allowed_sources: list[str] | None = None) -> dict:
     settings = get_settings()
-    results = hybrid_search(question, allowed_sources=allowed_sources)
+    if allowed_sources is None:
+        results = hybrid_search(question)
+    else:
+        results = hybrid_search(question, allowed_sources=allowed_sources)
     citations = []
     context_blocks = []
 

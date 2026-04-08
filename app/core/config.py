@@ -67,6 +67,8 @@ class Settings(BaseSettings):
     auth_login_window_seconds: int = Field(default=300, alias="AUTH_LOGIN_WINDOW_SECONDS")
     auth_register_max_attempts: int = Field(default=12, alias="AUTH_REGISTER_MAX_ATTEMPTS")
     auth_register_window_seconds: int = Field(default=300, alias="AUTH_REGISTER_WINDOW_SECONDS")
+    admin_create_approval_token: str = Field(default="", alias="ADMIN_CREATE_APPROVAL_TOKEN")
+    admin_create_approval_token_hash: str = Field(default="", alias="ADMIN_CREATE_APPROVAL_TOKEN_HASH")
 
     upload_max_files: int = Field(default=20, alias="UPLOAD_MAX_FILES")
     upload_max_file_bytes: int = Field(default=20 * 1024 * 1024, alias="UPLOAD_MAX_FILE_BYTES")
@@ -74,6 +76,16 @@ class Settings(BaseSettings):
     upload_read_chunk_bytes: int = Field(default=1024 * 1024, alias="UPLOAD_READ_CHUNK_BYTES")
     tesseract_cmd: str = Field(default="", alias="TESSERACT_CMD")
     tesseract_lang: str = Field(default="chi_sim+eng", alias="TESSERACT_LANG")
+    tessdata_prefix: str = Field(default="", alias="TESSDATA_PREFIX")
+    ocr_preprocess_enabled: bool = Field(default=True, alias="OCR_PREPROCESS_ENABLED")
+    ocr_upscale_min_side: int = Field(default=1200, alias="OCR_UPSCALE_MIN_SIDE")
+    ocr_psm_modes: str = Field(default="6,11,3", alias="OCR_PSM_MODES")
+    people_detection_enabled: bool = Field(default=True, alias="PEOPLE_DETECTION_ENABLED")
+    people_detection_mode: str = Field(default="face", alias="PEOPLE_DETECTION_MODE")
+    image_caption_enabled: bool = Field(default=False, alias="IMAGE_CAPTION_ENABLED")
+    image_caption_backend: str = Field(default="auto", alias="IMAGE_CAPTION_BACKEND")
+    openai_vision_model: str = Field(default="gpt-4.1-mini", alias="OPENAI_VISION_MODEL")
+    ollama_vision_model: str = Field(default="llava:7b", alias="OLLAMA_VISION_MODEL")
 
     @property
     def chroma_path(self) -> Path:

@@ -64,6 +64,39 @@ def _validate_status(status: str) -> str:
     return value
 
 
+def _normalize_classification_value(value: str | None, max_len: int = 64) -> str | None:
+    text = (value or "").strip()
+    if not text:
+        return None
+    if len(text) > max_len:
+        raise ValueError(f"classification field too long (max {max_len})")
+    return text
+
+
+def _classify_audit_event(action: str, result: str) -> tuple[str, str]:
+    action_lc = (action or "").strip().lower()
+    result_lc = (result or "").strip().lower()
+
+    if action_lc.startswith("auth."):
+        category = "auth"
+    elif action_lc.startswith("query.") or action_lc.startswith("document."):
+        category = "data"
+    elif action_lc.startswith("admin."):
+        category = "admin"
+    elif action_lc.startswith("prompt."):
+        category = "prompt"
+    else:
+        category = "system"
+
+    if result_lc == "failed":
+        severity = "high"
+    elif result_lc == "denied":
+        severity = "medium"
+    else:
+        severity = "info"
+    return category, severity
+
+
 class AuthDBService:
     def __init__(self, db_path: Path | None = None, token_ttl_hours: int | None = None):
         settings = get_settings()
@@ -88,6 +121,14 @@ class AuthDBService:
                   password_hash TEXT NOT NULL,
                   role TEXT NOT NULL DEFAULT 'viewer',
                   status TEXT NOT NULL DEFAULT 'active',
+                  created_by_user_id TEXT,
+                  created_by_username TEXT,
+                  admin_ticket_id TEXT,
+                  admin_approval_token_hash TEXT,
+                  business_unit TEXT,
+                  department TEXT,
+                  user_type TEXT,
+                  data_scope TEXT,
                   created_at TEXT NOT NULL
                 )
                 """
@@ -100,10 +141,12 @@ class AuthDBService:
                   user_id TEXT NOT NULL,
                   username TEXT NOT NULL,
                   issued_at TEXT NOT NULL,
+                  last_seen_at TEXT NOT NULL,
                   expires_at TEXT NOT NULL
                 )
                 """
             )
+            self._ensure_auth_session_columns(conn)
             conn.execute("CREATE INDEX IF NOT EXISTS idx_auth_sessions_user ON auth_sessions(user_id)")
             conn.execute(
                 """
@@ -112,6 +155,8 @@ class AuthDBService:
                   actor_user_id TEXT,
                   actor_role TEXT,
                   action TEXT NOT NULL,
+                  event_category TEXT,
+                  severity TEXT,
                   resource_type TEXT NOT NULL,
                   resource_id TEXT,
                   result TEXT NOT NULL,
@@ -122,6 +167,7 @@ class AuthDBService:
                 )
                 """
             )
+            self._ensure_audit_columns(conn)
             conn.execute("CREATE INDEX IF NOT EXISTS idx_audit_logs_actor ON audit_logs(actor_user_id)")
             conn.execute("CREATE INDEX IF NOT EXISTS idx_audit_logs_created ON audit_logs(created_at)")
 
@@ -132,23 +178,110 @@ class AuthDBService:
             conn.execute("ALTER TABLE users ADD COLUMN role TEXT NOT NULL DEFAULT 'viewer'")
         if "status" not in existing:
             conn.execute("ALTER TABLE users ADD COLUMN status TEXT NOT NULL DEFAULT 'active'")
+        if "created_by_user_id" not in existing:
+            conn.execute("ALTER TABLE users ADD COLUMN created_by_user_id TEXT")
+        if "created_by_username" not in existing:
+            conn.execute("ALTER TABLE users ADD COLUMN created_by_username TEXT")
+        if "admin_ticket_id" not in existing:
+            conn.execute("ALTER TABLE users ADD COLUMN admin_ticket_id TEXT")
+        if "admin_approval_token_hash" not in existing:
+            conn.execute("ALTER TABLE users ADD COLUMN admin_approval_token_hash TEXT")
+        if "business_unit" not in existing:
+            conn.execute("ALTER TABLE users ADD COLUMN business_unit TEXT")
+        if "department" not in existing:
+            conn.execute("ALTER TABLE users ADD COLUMN department TEXT")
+        if "user_type" not in existing:
+            conn.execute("ALTER TABLE users ADD COLUMN user_type TEXT")
+        if "data_scope" not in existing:
+            conn.execute("ALTER TABLE users ADD COLUMN data_scope TEXT")
+
+    def _ensure_audit_columns(self, conn: sqlite3.Connection) -> None:
+        rows = conn.execute("PRAGMA table_info(audit_logs)").fetchall()
+        existing = {str(r["name"]) for r in rows}
+        if "event_category" not in existing:
+            conn.execute("ALTER TABLE audit_logs ADD COLUMN event_category TEXT")
+        if "severity" not in existing:
+            conn.execute("ALTER TABLE audit_logs ADD COLUMN severity TEXT")
+
+    def _ensure_auth_session_columns(self, conn: sqlite3.Connection) -> None:
+        rows = conn.execute("PRAGMA table_info(auth_sessions)").fetchall()
+        existing = {str(r["name"]) for r in rows}
+        if "last_seen_at" not in existing:
+            conn.execute("ALTER TABLE auth_sessions ADD COLUMN last_seen_at TEXT")
+            conn.execute("UPDATE auth_sessions SET last_seen_at=issued_at WHERE last_seen_at IS NULL OR last_seen_at=''")
 
     def register(self, username: str, password: str) -> dict[str, Any]:
+        return self.create_user_with_role(username=username, password=password, role="viewer")
+
+    def create_user_with_role(
+        self,
+        username: str,
+        password: str,
+        role: str = "viewer",
+        created_by_user_id: str | None = None,
+        created_by_username: str | None = None,
+        admin_ticket_id: str | None = None,
+        admin_approval_token_hash: str | None = None,
+        business_unit: str | None = None,
+        department: str | None = None,
+        user_type: str | None = None,
+        data_scope: str | None = None,
+    ) -> dict[str, Any]:
         username = _validate_username(username)
         password = _validate_password(password)
+        role = _validate_role(role)
         user_id = uuid.uuid4().hex
         salt_hex = secrets.token_hex(16)
         password_hash = _hash_password(password, salt_hex)
         now = _iso(_now())
+        business_unit = _normalize_classification_value(business_unit)
+        department = _normalize_classification_value(department)
+        user_type = _normalize_classification_value(user_type)
+        data_scope = _normalize_classification_value(data_scope)
         try:
             with self._connect() as conn:
                 conn.execute(
-                    "INSERT INTO users(user_id, username, salt, password_hash, role, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
-                    (user_id, username, salt_hex, password_hash, "viewer", "active", now),
+                    """
+                    INSERT INTO users(
+                      user_id, username, salt, password_hash, role, status,
+                      created_by_user_id, created_by_username, admin_ticket_id, admin_approval_token_hash,
+                      business_unit, department, user_type, data_scope, created_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        user_id,
+                        username,
+                        salt_hex,
+                        password_hash,
+                        role,
+                        "active",
+                        (created_by_user_id or "").strip() or None,
+                        (created_by_username or "").strip() or None,
+                        (admin_ticket_id or "").strip() or None,
+                        (admin_approval_token_hash or "").strip() or None,
+                        business_unit,
+                        department,
+                        user_type,
+                        data_scope,
+                        now,
+                    ),
                 )
         except sqlite3.IntegrityError:
             raise ValueError("username already exists")
-        return {"user_id": user_id, "username": username, "role": "viewer", "status": "active"}
+        return {
+            "user_id": user_id,
+            "username": username,
+            "role": role,
+            "status": "active",
+            "created_by_user_id": (created_by_user_id or "").strip() or None,
+            "created_by_username": (created_by_username or "").strip() or None,
+            "admin_ticket_id": (admin_ticket_id or "").strip() or None,
+            "has_admin_approval_token": bool((admin_approval_token_hash or "").strip()),
+            "business_unit": business_unit,
+            "department": department,
+            "user_type": user_type,
+            "data_scope": data_scope,
+        }
 
     def login(self, username: str, password: str) -> dict[str, Any]:
         username = _validate_username(username)
@@ -169,8 +302,8 @@ class AuthDBService:
             issued_at = _now()
             expires_at = issued_at + timedelta(hours=self.token_ttl_hours)
             conn.execute(
-                "INSERT INTO auth_sessions(token, user_id, username, issued_at, expires_at) VALUES (?, ?, ?, ?, ?)",
-                (token, str(row["user_id"]), str(row["username"]), _iso(issued_at), _iso(expires_at)),
+                "INSERT INTO auth_sessions(token, user_id, username, issued_at, last_seen_at, expires_at) VALUES (?, ?, ?, ?, ?, ?)",
+                (token, str(row["user_id"]), str(row["username"]), _iso(issued_at), _iso(issued_at), _iso(expires_at)),
             )
             return {
                 "token": token,
@@ -216,31 +349,247 @@ class AuthDBService:
                 "status": str(row["status"]),
             }
 
+    def touch_session(self, token: str) -> None:
+        with self._connect() as conn:
+            conn.execute("UPDATE auth_sessions SET last_seen_at=? WHERE token=?", (_iso(_now()), token))
+
     def list_users(self) -> list[dict[str, Any]]:
+        now = _iso(_now())
+        recent_10m = _iso(_now() - timedelta(minutes=10))
         with self._connect() as conn:
             rows = conn.execute(
-                "SELECT user_id, username, role, status, created_at FROM users ORDER BY created_at DESC"
+                """
+                SELECT u.user_id, u.username, u.role, u.status, u.created_by_user_id, u.created_by_username, u.admin_ticket_id,
+                       CASE WHEN u.admin_approval_token_hash IS NOT NULL AND u.admin_approval_token_hash <> '' THEN 1 ELSE 0 END AS has_admin_approval_token,
+                       u.business_unit, u.department, u.user_type, u.data_scope,
+                       CASE WHEN s.user_id IS NULL THEN 0 ELSE 1 END AS is_online,
+                       CASE WHEN s10.user_id IS NULL THEN 0 ELSE 1 END AS is_online_10m,
+                       u.created_at
+                FROM users u
+                LEFT JOIN (
+                  SELECT DISTINCT user_id
+                  FROM auth_sessions
+                  WHERE expires_at > ?
+                ) s ON s.user_id = u.user_id
+                LEFT JOIN (
+                  SELECT DISTINCT user_id
+                  FROM auth_sessions
+                  WHERE expires_at > ? AND COALESCE(last_seen_at, issued_at) >= ?
+                ) s10 ON s10.user_id = u.user_id
+                ORDER BY created_at DESC
+                """,
+                (now, now, recent_10m),
             ).fetchall()
             return [dict(r) for r in rows]
 
+    def get_user_profile(self, user_id: str) -> dict[str, Any] | None:
+        with self._connect() as conn:
+            row = conn.execute(
+                """
+                SELECT user_id, username, role, status, created_by_user_id, created_by_username, admin_ticket_id,
+                       business_unit, department, user_type, data_scope,
+                       admin_approval_token_hash, created_at
+                FROM users
+                WHERE user_id=?
+                """,
+                (user_id,),
+            ).fetchone()
+            return dict(row) if row else None
+
     def update_user_role(self, user_id: str, role: str) -> dict[str, Any] | None:
         role = _validate_role(role)
+        now = _iso(_now())
+        recent_10m = _iso(_now() - timedelta(minutes=10))
         with self._connect() as conn:
             result = conn.execute("UPDATE users SET role=? WHERE user_id=?", (role, user_id))
             if result.rowcount <= 0:
                 return None
-            row = conn.execute("SELECT user_id, username, role, status, created_at FROM users WHERE user_id=?", (user_id,)).fetchone()
+            row = conn.execute(
+                """
+                SELECT u.user_id, u.username, u.role, u.status, u.created_by_user_id, u.created_by_username, u.admin_ticket_id,
+                       CASE WHEN u.admin_approval_token_hash IS NOT NULL AND u.admin_approval_token_hash <> '' THEN 1 ELSE 0 END AS has_admin_approval_token,
+                       u.business_unit, u.department, u.user_type, u.data_scope,
+                       CASE WHEN s.user_id IS NULL THEN 0 ELSE 1 END AS is_online,
+                       CASE WHEN s10.user_id IS NULL THEN 0 ELSE 1 END AS is_online_10m,
+                       u.created_at
+                FROM users u
+                LEFT JOIN (
+                  SELECT DISTINCT user_id
+                  FROM auth_sessions
+                  WHERE expires_at > ?
+                ) s ON s.user_id = u.user_id
+                LEFT JOIN (
+                  SELECT DISTINCT user_id
+                  FROM auth_sessions
+                  WHERE expires_at > ? AND COALESCE(last_seen_at, issued_at) >= ?
+                ) s10 ON s10.user_id = u.user_id
+                WHERE u.user_id=?
+                """,
+                (now, now, recent_10m, user_id),
+            ).fetchone()
             return dict(row) if row else None
 
     def update_user_status(self, user_id: str, status: str) -> dict[str, Any] | None:
         status = _validate_status(status)
+        now = _iso(_now())
+        recent_10m = _iso(_now() - timedelta(minutes=10))
         with self._connect() as conn:
             result = conn.execute("UPDATE users SET status=? WHERE user_id=?", (status, user_id))
             if result.rowcount <= 0:
                 return None
             if status == "disabled":
                 conn.execute("DELETE FROM auth_sessions WHERE user_id=?", (user_id,))
-            row = conn.execute("SELECT user_id, username, role, status, created_at FROM users WHERE user_id=?", (user_id,)).fetchone()
+            row = conn.execute(
+                """
+                SELECT u.user_id, u.username, u.role, u.status, u.created_by_user_id, u.created_by_username, u.admin_ticket_id,
+                       CASE WHEN u.admin_approval_token_hash IS NOT NULL AND u.admin_approval_token_hash <> '' THEN 1 ELSE 0 END AS has_admin_approval_token,
+                       u.business_unit, u.department, u.user_type, u.data_scope,
+                       CASE WHEN s.user_id IS NULL THEN 0 ELSE 1 END AS is_online,
+                       CASE WHEN s10.user_id IS NULL THEN 0 ELSE 1 END AS is_online_10m,
+                       u.created_at
+                FROM users u
+                LEFT JOIN (
+                  SELECT DISTINCT user_id
+                  FROM auth_sessions
+                  WHERE expires_at > ?
+                ) s ON s.user_id = u.user_id
+                LEFT JOIN (
+                  SELECT DISTINCT user_id
+                  FROM auth_sessions
+                  WHERE expires_at > ? AND COALESCE(last_seen_at, issued_at) >= ?
+                ) s10 ON s10.user_id = u.user_id
+                WHERE u.user_id=?
+                """,
+                (now, now, recent_10m, user_id),
+            ).fetchone()
+            return dict(row) if row else None
+
+    def update_user_admin_approval_token(
+        self, user_id: str, admin_approval_token_hash: str | None, admin_ticket_id: str | None = None
+    ) -> dict[str, Any] | None:
+        now = _iso(_now())
+        recent_10m = _iso(_now() - timedelta(minutes=10))
+        with self._connect() as conn:
+            result = conn.execute(
+                "UPDATE users SET admin_approval_token_hash=?, admin_ticket_id=COALESCE(?, admin_ticket_id) WHERE user_id=?",
+                (
+                    (admin_approval_token_hash or "").strip() or None,
+                    (admin_ticket_id or "").strip() or None,
+                    user_id,
+                ),
+            )
+            if result.rowcount <= 0:
+                return None
+            row = conn.execute(
+                """
+                SELECT u.user_id, u.username, u.role, u.status, u.created_by_user_id, u.created_by_username, u.admin_ticket_id,
+                       CASE WHEN u.admin_approval_token_hash IS NOT NULL AND u.admin_approval_token_hash <> '' THEN 1 ELSE 0 END AS has_admin_approval_token,
+                       u.business_unit, u.department, u.user_type, u.data_scope,
+                       CASE WHEN s.user_id IS NULL THEN 0 ELSE 1 END AS is_online,
+                       CASE WHEN s10.user_id IS NULL THEN 0 ELSE 1 END AS is_online_10m,
+                       u.created_at
+                FROM users u
+                LEFT JOIN (
+                  SELECT DISTINCT user_id
+                  FROM auth_sessions
+                  WHERE expires_at > ?
+                ) s ON s.user_id = u.user_id
+                LEFT JOIN (
+                  SELECT DISTINCT user_id
+                  FROM auth_sessions
+                  WHERE expires_at > ? AND COALESCE(last_seen_at, issued_at) >= ?
+                ) s10 ON s10.user_id = u.user_id
+                WHERE u.user_id=?
+                """,
+                (now, now, recent_10m, user_id),
+            ).fetchone()
+            return dict(row) if row else None
+
+    def update_user_password(self, user_id: str, password: str) -> dict[str, Any] | None:
+        password = _validate_password(password)
+        salt_hex = secrets.token_hex(16)
+        password_hash = _hash_password(password, salt_hex)
+        now = _iso(_now())
+        recent_10m = _iso(_now() - timedelta(minutes=10))
+        with self._connect() as conn:
+            result = conn.execute("UPDATE users SET salt=?, password_hash=? WHERE user_id=?", (salt_hex, password_hash, user_id))
+            if result.rowcount <= 0:
+                return None
+            # Force relogin after password reset.
+            conn.execute("DELETE FROM auth_sessions WHERE user_id=?", (user_id,))
+            row = conn.execute(
+                """
+                SELECT u.user_id, u.username, u.role, u.status, u.created_by_user_id, u.created_by_username, u.admin_ticket_id,
+                       CASE WHEN u.admin_approval_token_hash IS NOT NULL AND u.admin_approval_token_hash <> '' THEN 1 ELSE 0 END AS has_admin_approval_token,
+                       u.business_unit, u.department, u.user_type, u.data_scope,
+                       CASE WHEN s.user_id IS NULL THEN 0 ELSE 1 END AS is_online,
+                       CASE WHEN s10.user_id IS NULL THEN 0 ELSE 1 END AS is_online_10m,
+                       u.created_at
+                FROM users u
+                LEFT JOIN (
+                  SELECT DISTINCT user_id
+                  FROM auth_sessions
+                  WHERE expires_at > ?
+                ) s ON s.user_id = u.user_id
+                LEFT JOIN (
+                  SELECT DISTINCT user_id
+                  FROM auth_sessions
+                  WHERE expires_at > ? AND COALESCE(last_seen_at, issued_at) >= ?
+                ) s10 ON s10.user_id = u.user_id
+                WHERE u.user_id=?
+                """,
+                (now, now, recent_10m, user_id),
+            ).fetchone()
+            return dict(row) if row else None
+
+    def update_user_classification(
+        self,
+        user_id: str,
+        business_unit: str | None = None,
+        department: str | None = None,
+        user_type: str | None = None,
+        data_scope: str | None = None,
+    ) -> dict[str, Any] | None:
+        business_unit = _normalize_classification_value(business_unit)
+        department = _normalize_classification_value(department)
+        user_type = _normalize_classification_value(user_type)
+        data_scope = _normalize_classification_value(data_scope)
+        now = _iso(_now())
+        recent_10m = _iso(_now() - timedelta(minutes=10))
+        with self._connect() as conn:
+            result = conn.execute(
+                """
+                UPDATE users
+                SET business_unit=?, department=?, user_type=?, data_scope=?
+                WHERE user_id=?
+                """,
+                (business_unit, department, user_type, data_scope, user_id),
+            )
+            if result.rowcount <= 0:
+                return None
+            row = conn.execute(
+                """
+                SELECT u.user_id, u.username, u.role, u.status, u.created_by_user_id, u.created_by_username, u.admin_ticket_id,
+                       CASE WHEN u.admin_approval_token_hash IS NOT NULL AND u.admin_approval_token_hash <> '' THEN 1 ELSE 0 END AS has_admin_approval_token,
+                       u.business_unit, u.department, u.user_type, u.data_scope,
+                       CASE WHEN s.user_id IS NULL THEN 0 ELSE 1 END AS is_online,
+                       CASE WHEN s10.user_id IS NULL THEN 0 ELSE 1 END AS is_online_10m,
+                       u.created_at
+                FROM users u
+                LEFT JOIN (
+                  SELECT DISTINCT user_id
+                  FROM auth_sessions
+                  WHERE expires_at > ?
+                ) s ON s.user_id = u.user_id
+                LEFT JOIN (
+                  SELECT DISTINCT user_id
+                  FROM auth_sessions
+                  WHERE expires_at > ? AND COALESCE(last_seen_at, issued_at) >= ?
+                ) s10 ON s10.user_id = u.user_id
+                WHERE u.user_id=?
+                """,
+                (now, now, recent_10m, user_id),
+            ).fetchone()
             return dict(row) if row else None
 
     def add_audit_log(
@@ -257,19 +606,36 @@ class AuthDBService:
     ) -> dict[str, Any]:
         event_id = uuid.uuid4().hex
         created_at = _iso(_now())
+        event_category, severity = _classify_audit_event(action=action, result=result)
         with self._connect() as conn:
             conn.execute(
                 """
-                INSERT INTO audit_logs(event_id, actor_user_id, actor_role, action, resource_type, resource_id, result, ip, user_agent, detail, created_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                INSERT INTO audit_logs(event_id, actor_user_id, actor_role, action, event_category, severity, resource_type, resource_id, result, ip, user_agent, detail, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
-                (event_id, actor_user_id, actor_role, action, resource_type, resource_id, result, ip, user_agent, detail, created_at),
+                (
+                    event_id,
+                    actor_user_id,
+                    actor_role,
+                    action,
+                    event_category,
+                    severity,
+                    resource_type,
+                    resource_id,
+                    result,
+                    ip,
+                    user_agent,
+                    detail,
+                    created_at,
+                ),
             )
         return {
             "event_id": event_id,
             "actor_user_id": actor_user_id,
             "actor_role": actor_role,
             "action": action,
+            "event_category": event_category,
+            "severity": severity,
             "resource_type": resource_type,
             "resource_id": resource_id,
             "result": result,
@@ -279,16 +645,57 @@ class AuthDBService:
             "created_at": created_at,
         }
 
-    def list_audit_logs(self, limit: int = 200) -> list[dict[str, Any]]:
+    def list_audit_logs(
+        self,
+        limit: int = 200,
+        actor_user_id: str | None = None,
+        action_keyword: str | None = None,
+        event_category: str | None = None,
+        severity: str | None = None,
+        result: str | None = None,
+    ) -> list[dict[str, Any]]:
         cap = max(1, min(limit, 1000))
+        where: list[str] = []
+        params: list[Any] = []
+        actor = (actor_user_id or "").strip()
+        keyword = (action_keyword or "").strip().lower()
+        category = (event_category or "").strip().lower()
+        sev = (severity or "").strip().lower()
+        res = (result or "").strip().lower()
+
+        if actor:
+            where.append("actor_user_id=?")
+            params.append(actor)
+        if keyword:
+            where.append("lower(action) LIKE ?")
+            params.append(f"%{keyword}%")
+        if category:
+            where.append("lower(COALESCE(event_category, ''))=?")
+            params.append(category)
+        if sev:
+            where.append("lower(COALESCE(severity, ''))=?")
+            params.append(sev)
+        if res:
+            where.append("lower(result)=?")
+            params.append(res)
+
+        where_sql = f"WHERE {' AND '.join(where)}" if where else ""
         with self._connect() as conn:
             rows = conn.execute(
-                """
-                SELECT event_id, actor_user_id, actor_role, action, resource_type, resource_id, result, ip, user_agent, detail, created_at
+                f"""
+                SELECT event_id, actor_user_id, actor_role, action, event_category, severity,
+                       resource_type, resource_id, result, ip, user_agent, detail, created_at
                 FROM audit_logs
+                {where_sql}
                 ORDER BY created_at DESC
                 LIMIT ?
                 """,
-                (cap,),
+                (*params, cap),
             ).fetchall()
             return [dict(r) for r in rows]
+
+    def count_active_sessions(self) -> int:
+        now = _iso(_now())
+        with self._connect() as conn:
+            row = conn.execute("SELECT COUNT(*) AS c FROM auth_sessions WHERE expires_at > ?", (now,)).fetchone()
+            return int(row["c"]) if row else 0

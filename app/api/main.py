@@ -1,18 +1,34 @@
 from pathlib import Path
 import threading
 import re
+from collections import Counter
+from collections import deque
+import csv
+import hashlib
+import hmac
+from datetime import datetime, timedelta, timezone
+import io
+import socket
+import time
 from typing import Annotated, Any
+from urllib.parse import urlparse
 
 from fastapi import Depends, FastAPI, File, Form, HTTPException, Request, UploadFile, status
-from fastapi.responses import FileResponse, RedirectResponse, StreamingResponse
+from fastapi.responses import JSONResponse
+from fastapi.responses import FileResponse, RedirectResponse, StreamingResponse, Response
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from fastapi.staticfiles import StaticFiles
+import httpx
 
 from app.core.config import get_settings
 from app.ingestion.loaders import IMAGE_EXTENSIONS
 from app.core.schemas import (
     AdminRoleUpdateRequest,
+    AdminResetPasswordRequest,
+    AdminResetApprovalTokenRequest,
     AdminStatusUpdateRequest,
+    AdminUserClassificationUpdateRequest,
+    AdminCreateAdminRequest,
     AdminUserSummary,
     AuditLogEntry,
     AuthCredentials,
@@ -71,12 +87,40 @@ register_limiter = SlidingWindowLimiter(
 )
 _auto_ingest_stop_event = threading.Event()
 _auto_ingest_thread: threading.Thread | None = None
+_request_metrics_lock = threading.Lock()
+_request_metrics: deque[dict[str, Any]] = deque(maxlen=3000)
 
 react_dist_dir = Path(__file__).resolve().parents[2] / "frontend" / "dist"
 
 # Mount React frontend
 if react_dist_dir.exists():
     app.mount("/app", StaticFiles(directory=str(react_dist_dir), html=True), name="react-app")
+
+
+@app.middleware("http")
+async def request_timing_middleware(request: Request, call_next):
+    started = time.perf_counter()
+    status_code = 500
+    error_text = ""
+    try:
+        response = await call_next(request)
+        status_code = response.status_code
+        return response
+    except Exception as e:
+        error_text = type(e).__name__
+        raise
+    finally:
+        elapsed_ms = int((time.perf_counter() - started) * 1000)
+        metric = {
+            "ts": datetime.now(timezone.utc).isoformat(),
+            "method": request.method,
+            "path": request.url.path,
+            "status_code": status_code,
+            "duration_ms": elapsed_ms,
+            "error": error_text,
+        }
+        with _request_metrics_lock:
+            _request_metrics.append(metric)
 
 
 @app.on_event("startup")
@@ -316,6 +360,7 @@ def _require_user(credentials: HTTPAuthorizationCredentials | None = Depends(aut
     user = auth_service.get_user_by_token(credentials.credentials)
     if user is None:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="invalid or expired token")
+    auth_service.touch_session(credentials.credentials)
     return user
 
 
@@ -327,6 +372,7 @@ def _require_user_and_token(
     user = auth_service.get_user_by_token(credentials.credentials)
     if user is None:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="invalid or expired token")
+    auth_service.touch_session(credentials.credentials)
     return user, credentials.credentials
 
 
@@ -338,6 +384,321 @@ def home():
 @app.get("/health")
 def health():
     return {"status": "ok"}
+
+
+def _check_ollama_ready() -> dict[str, Any]:
+    start = time.perf_counter()
+    url = (settings.ollama_base_url or "http://localhost:11434").rstrip("/") + "/api/tags"
+    try:
+        with httpx.Client(timeout=3.0) as client:
+            resp = client.get(url)
+            resp.raise_for_status()
+        latency = int((time.perf_counter() - start) * 1000)
+        return {"ok": True, "required": settings.model_backend.lower() == "ollama", "latency_ms": latency}
+    except Exception as e:
+        latency = int((time.perf_counter() - start) * 1000)
+        return {
+            "ok": False,
+            "required": settings.model_backend.lower() == "ollama",
+            "latency_ms": latency,
+            "error": str(e),
+        }
+
+
+def _check_neo4j_ready() -> dict[str, Any]:
+    start = time.perf_counter()
+    try:
+        parsed = urlparse(settings.neo4j_uri or "")
+        host = parsed.hostname or "localhost"
+        port = int(parsed.port or 7687)
+        with socket.create_connection((host, port), timeout=3):
+            pass
+        latency = int((time.perf_counter() - start) * 1000)
+        return {"ok": True, "required": True, "latency_ms": latency}
+    except Exception as e:
+        latency = int((time.perf_counter() - start) * 1000)
+        return {"ok": False, "required": True, "latency_ms": latency, "error": str(e)}
+
+
+def _check_chroma_ready() -> dict[str, Any]:
+    start = time.perf_counter()
+    try:
+        settings.chroma_path.mkdir(parents=True, exist_ok=True)
+        probe = settings.chroma_path / ".ready_probe"
+        probe.write_text("ok", encoding="utf-8")
+        probe.unlink(missing_ok=True)
+        latency = int((time.perf_counter() - start) * 1000)
+        return {"ok": True, "required": True, "latency_ms": latency, "path": str(settings.chroma_path)}
+    except Exception as e:
+        latency = int((time.perf_counter() - start) * 1000)
+        return {"ok": False, "required": True, "latency_ms": latency, "path": str(settings.chroma_path), "error": str(e)}
+
+
+@app.get("/ready")
+def ready():
+    checks = {
+        "api": {"ok": True, "required": True, "latency_ms": 0},
+        "ollama": _check_ollama_ready(),
+        "neo4j": _check_neo4j_ready(),
+        "chroma": _check_chroma_ready(),
+    }
+    blocking_failures = [name for name, detail in checks.items() if detail.get("required") and not detail.get("ok")]
+    status_text = "ok" if not blocking_failures else "degraded"
+    code = 200 if status_text == "ok" else 503
+    payload = {
+        "status": status_text,
+        "blocking_failures": blocking_failures,
+        "services": checks,
+    }
+    return JSONResponse(content=payload, status_code=code)
+
+
+def _parse_audit_ts(value: str | None) -> datetime:
+    if not value:
+        return datetime.fromtimestamp(0, tz=timezone.utc)
+    try:
+        dt = datetime.fromisoformat(value)
+    except Exception:
+        return datetime.fromtimestamp(0, tz=timezone.utc)
+    if dt.tzinfo is None:
+        return dt.replace(tzinfo=timezone.utc)
+    return dt.astimezone(timezone.utc)
+
+
+def _filter_audit_rows(
+    rows: list[dict[str, Any]],
+    cutoff: datetime,
+    actor_user_id: str | None = None,
+    action_keyword: str | None = None,
+) -> list[dict[str, Any]]:
+    filtered: list[dict[str, Any]] = []
+    actor_filter = (actor_user_id or "").strip()
+    action_filter = (action_keyword or "").strip().lower()
+    for row in rows:
+        if _parse_audit_ts(str(row.get("created_at", ""))) < cutoff:
+            continue
+        if actor_filter and str(row.get("actor_user_id", "") or "") != actor_filter:
+            continue
+        if action_filter and action_filter not in str(row.get("action", "")).lower():
+            continue
+        filtered.append(row)
+    return filtered
+
+
+def _parse_request_ts(value: str | None) -> datetime:
+    if not value:
+        return datetime.fromtimestamp(0, tz=timezone.utc)
+    try:
+        dt = datetime.fromisoformat(value)
+    except Exception:
+        return datetime.fromtimestamp(0, tz=timezone.utc)
+    if dt.tzinfo is None:
+        return dt.replace(tzinfo=timezone.utc)
+    return dt.astimezone(timezone.utc)
+
+
+def _is_valid_admin_approval_token(input_token: str) -> tuple[bool, str]:
+    token_hash_cfg = (settings.admin_create_approval_token_hash or "").strip().lower()
+    token_plain_cfg = (settings.admin_create_approval_token or "").strip()
+    token = (input_token or "").strip()
+
+    if token_hash_cfg:
+        digest = hashlib.sha256(token.encode("utf-8")).hexdigest()
+        return hmac.compare_digest(digest, token_hash_cfg), "hash"
+    if token_plain_cfg:
+        return hmac.compare_digest(token, token_plain_cfg), "plain"
+    return False, "missing"
+
+
+def _is_valid_admin_approval_token_for_actor(input_token: str, actor_user_id: str) -> tuple[bool, str]:
+    token = (input_token or "").strip()
+    actor = auth_service.get_user_profile(actor_user_id)
+    if actor:
+        actor_hash = str(actor.get("admin_approval_token_hash", "") or "").strip().lower()
+        if actor_hash:
+            digest = hashlib.sha256(token.encode("utf-8")).hexdigest()
+            if hmac.compare_digest(digest, actor_hash):
+                return True, "user_hash"
+    return _is_valid_admin_approval_token(token)
+
+
+@app.get("/admin/ops/overview")
+def admin_ops_overview(
+    request: Request,
+    hours: int = 24,
+    actor_user_id: str | None = None,
+    action_keyword: str | None = None,
+    user: dict[str, Any] = Depends(_require_user),
+):
+    _require_permission(user, "admin:audit_read", request, "admin")
+    window_hours = max(1, min(hours, 24 * 7))
+    now = datetime.now(timezone.utc)
+    cutoff = now - timedelta(hours=window_hours)
+
+    audit_rows = auth_service.list_audit_logs(limit=1000)
+    window_rows = _filter_audit_rows(
+        rows=audit_rows,
+        cutoff=cutoff,
+        actor_user_id=actor_user_id,
+        action_keyword=action_keyword,
+    )
+
+    total_requests = len(window_rows)
+    error_count = sum(1 for row in window_rows if str(row.get("result", "")).lower() != "success")
+    success_count = max(0, total_requests - error_count)
+    error_rate = round((error_count / total_requests) * 100, 2) if total_requests > 0 else 0.0
+
+    action_counter = Counter(str(row.get("action", "") or "unknown") for row in window_rows)
+    resource_counter = Counter(str(row.get("resource_type", "") or "unknown") for row in window_rows)
+    actor_users = {str(row.get("actor_user_id")) for row in window_rows if row.get("actor_user_id")}
+    error_reason_counter = Counter(
+        str(row.get("detail", "") or str(row.get("action", "") or "unknown_error"))
+        for row in window_rows
+        if str(row.get("result", "")).lower() != "success"
+    )
+
+    users = auth_service.list_users()
+    user_total = len(users)
+    user_active = sum(1 for row in users if str(row.get("status", "")).lower() == "active")
+    user_disabled = user_total - user_active
+    user_admin = sum(1 for row in users if str(row.get("role", "")).lower() == "admin")
+
+    active_sessions = auth_service.count_active_sessions()
+    login_success = sum(
+        1 for row in window_rows if str(row.get("action", "")) == "auth.login" and str(row.get("result", "")).lower() == "success"
+    )
+    login_failed = sum(
+        1 for row in window_rows if str(row.get("action", "")) == "auth.login" and str(row.get("result", "")).lower() != "success"
+    )
+    query_requests = sum(1 for row in window_rows if str(row.get("action", "")).startswith("query."))
+    upload_requests = sum(
+        1
+        for row in window_rows
+        if str(row.get("action", "")) == "document.upload" and str(row.get("result", "")).lower() == "success"
+    )
+
+    bucket_counter: dict[str, dict[str, int]] = {}
+    for row in window_rows:
+        created_at = _parse_audit_ts(str(row.get("created_at", "")))
+        bucket = created_at.strftime("%Y-%m-%d %H:00")
+        slot = bucket_counter.setdefault(bucket, {"count": 0, "errors": 0})
+        slot["count"] += 1
+        if str(row.get("result", "")).lower() != "success":
+            slot["errors"] += 1
+    hourly = [
+        {"bucket": key, "count": value["count"], "errors": value["errors"]}
+        for key, value in sorted(bucket_counter.items(), key=lambda x: x[0])
+    ]
+
+    with _request_metrics_lock:
+        req_rows = list(_request_metrics)
+    req_window = [r for r in req_rows if _parse_request_ts(str(r.get("ts", ""))) >= cutoff]
+    slow_requests = sorted(req_window, key=lambda x: int(x.get("duration_ms", 0)), reverse=True)[:10]
+    slow_requests_view = [
+        {
+            "ts": str(row.get("ts", "")),
+            "method": str(row.get("method", "")),
+            "path": str(row.get("path", "")),
+            "status_code": int(row.get("status_code", 0)),
+            "duration_ms": int(row.get("duration_ms", 0)),
+            "error": str(row.get("error", "")),
+        }
+        for row in slow_requests
+    ]
+
+    services = {
+        "ollama": _check_ollama_ready(),
+        "neo4j": _check_neo4j_ready(),
+        "chroma": _check_chroma_ready(),
+    }
+    services_ok = all(bool(x.get("ok")) for x in services.values())
+
+    return {
+        "generated_at": now.isoformat(),
+        "window_hours": window_hours,
+        "status": "healthy" if services_ok else "degraded",
+        "kpi": {
+            "requests_total": total_requests,
+            "requests_success": success_count,
+            "requests_error": error_count,
+            "error_rate_percent": error_rate,
+            "active_users": len(actor_users),
+            "active_sessions": active_sessions,
+            "queries": query_requests,
+            "uploads": upload_requests,
+            "login_success": login_success,
+            "login_failed": login_failed,
+        },
+        "users": {
+            "total": user_total,
+            "active": user_active,
+            "disabled": user_disabled,
+            "admin": user_admin,
+        },
+        "top_actions": [{"action": k, "count": v} for k, v in action_counter.most_common(8)],
+        "top_resource_types": [{"resource_type": k, "count": v} for k, v in resource_counter.most_common(8)],
+        "top_error_reasons": [{"reason": k, "count": v} for k, v in error_reason_counter.most_common(8)],
+        "slow_requests": slow_requests_view,
+        "hourly": hourly,
+        "services": services,
+        "filters": {
+            "actor_user_id": (actor_user_id or "").strip(),
+            "action_keyword": (action_keyword or "").strip(),
+        },
+    }
+
+
+@app.get("/admin/ops/export.csv")
+def admin_ops_export_csv(
+    request: Request,
+    hours: int = 24,
+    actor_user_id: str | None = None,
+    action_keyword: str | None = None,
+    user: dict[str, Any] = Depends(_require_user),
+):
+    _require_permission(user, "admin:audit_read", request, "admin")
+    window_hours = max(1, min(hours, 24 * 7))
+    now = datetime.now(timezone.utc)
+    cutoff = now - timedelta(hours=window_hours)
+
+    audit_rows = auth_service.list_audit_logs(limit=1000)
+    window_rows = _filter_audit_rows(
+        rows=audit_rows,
+        cutoff=cutoff,
+        actor_user_id=actor_user_id,
+        action_keyword=action_keyword,
+    )
+
+    out = io.StringIO()
+    writer = csv.writer(out)
+    writer.writerow(["section", "key", "value"])
+    writer.writerow(["meta", "generated_at", now.isoformat()])
+    writer.writerow(["meta", "window_hours", str(window_hours)])
+    writer.writerow(["meta", "actor_user_id", (actor_user_id or "").strip()])
+    writer.writerow(["meta", "action_keyword", (action_keyword or "").strip()])
+    writer.writerow(["summary", "request_count", str(len(window_rows))])
+    writer.writerow([])
+    writer.writerow(["audit_created_at", "actor_user_id", "actor_role", "action", "resource_type", "resource_id", "result", "detail"])
+    for row in window_rows:
+        writer.writerow(
+            [
+                str(row.get("created_at", "")),
+                str(row.get("actor_user_id", "")),
+                str(row.get("actor_role", "")),
+                str(row.get("action", "")),
+                str(row.get("resource_type", "")),
+                str(row.get("resource_id", "")),
+                str(row.get("result", "")),
+                str(row.get("detail", "")),
+            ]
+        )
+
+    filename = f"ops_report_{now.strftime('%Y%m%d_%H%M%S')}.csv"
+    return Response(
+        content=out.getvalue(),
+        media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": f"attachment; filename={filename}"},
+    )
 
 
 @app.post("/auth/register", response_model=AuthUser)
@@ -407,6 +768,8 @@ def admin_list_users(request: Request, user: dict[str, Any] = Depends(_require_u
 @app.patch("/admin/users/{user_id}/role", response_model=AdminUserSummary)
 def admin_update_user_role(user_id: str, req: AdminRoleUpdateRequest, request: Request, user: dict[str, Any] = Depends(_require_user)):
     _require_permission(user, "admin:user_manage", request, "admin", resource_id=user_id)
+    if str(req.role or "").strip().lower() == "admin":
+        raise HTTPException(status_code=400, detail="admin role promotion is restricted; use /admin/users/create-admin")
     try:
         row = auth_service.update_user_role(user_id=user_id, role=req.role)
     except ValueError as e:
@@ -422,6 +785,193 @@ def admin_update_user_role(user_id: str, req: AdminRoleUpdateRequest, request: R
         user=user,
         resource_id=user_id,
         detail=f"role={row['role']}",
+    )
+    return AdminUserSummary(**row)
+
+
+@app.post("/admin/users/create-admin", response_model=AdminUserSummary)
+def admin_create_user_as_admin(req: AdminCreateAdminRequest, request: Request, user: dict[str, Any] = Depends(_require_user)):
+    _require_permission(user, "admin:user_manage", request, "admin")
+    approval_token = req.approval_token or ""
+    token_ok, token_mode = _is_valid_admin_approval_token_for_actor(approval_token, str(user.get("user_id", "")))
+    if token_mode == "missing":
+        raise HTTPException(
+            status_code=500,
+            detail="approval token is not configured (set ADMIN_CREATE_APPROVAL_TOKEN_HASH or ADMIN_CREATE_APPROVAL_TOKEN)",
+        )
+    ticket_id = (req.ticket_id or "").strip()
+    reason = (req.reason or "").strip()
+    new_admin_approval_token = (req.new_admin_approval_token or "").strip()
+    if not token_ok:
+        _audit(
+            request,
+            action="admin.user.create_admin",
+            resource_type="user",
+            result="failed",
+            user=user,
+            detail=f"approval_failed; mode={token_mode}; ticket={ticket_id or '-'}",
+        )
+        raise HTTPException(status_code=403, detail="invalid approval token")
+    if len(ticket_id) < 3:
+        raise HTTPException(status_code=400, detail="ticket_id is required")
+    if len(reason) < 5:
+        raise HTTPException(status_code=400, detail="reason is required")
+    if len(new_admin_approval_token) < 12:
+        raise HTTPException(status_code=400, detail="new_admin_approval_token must be at least 12 chars")
+    new_admin_approval_hash = hashlib.sha256(new_admin_approval_token.encode("utf-8")).hexdigest()
+    try:
+        row = auth_service.create_user_with_role(
+            username=req.username,
+            password=req.password,
+            role="admin",
+            created_by_user_id=str(user.get("user_id", "")),
+            created_by_username=str(user.get("username", "")),
+            admin_ticket_id=ticket_id,
+            admin_approval_token_hash=new_admin_approval_hash,
+        )
+    except ValueError as e:
+        _audit(
+            request,
+            action="admin.user.create_admin",
+            resource_type="user",
+            result="failed",
+            user=user,
+            detail=str(e),
+        )
+        raise HTTPException(status_code=400, detail=str(e))
+    _audit(
+        request,
+        action="admin.user.create_admin",
+        resource_type="user",
+        result="success",
+        user=user,
+        resource_id=row["user_id"],
+        detail=f"username={row['username']}; mode={token_mode}; ticket={ticket_id}; reason={reason}",
+    )
+    return AdminUserSummary(**row)
+
+
+@app.post("/admin/users/{user_id}/reset-approval-token", response_model=AdminUserSummary)
+def admin_reset_user_approval_token(
+    user_id: str,
+    req: AdminResetApprovalTokenRequest,
+    request: Request,
+    user: dict[str, Any] = Depends(_require_user),
+):
+    _require_permission(user, "admin:user_manage", request, "admin", resource_id=user_id)
+    target = auth_service.get_user_profile(user_id)
+    if not target:
+        raise HTTPException(status_code=404, detail="user not found")
+    if str(target.get("role", "")).lower() != "admin":
+        raise HTTPException(status_code=400, detail="target user is not admin")
+
+    approval_token = req.approval_token or ""
+    token_ok, token_mode = _is_valid_admin_approval_token_for_actor(approval_token, str(user.get("user_id", "")))
+    if token_mode == "missing":
+        raise HTTPException(
+            status_code=500,
+            detail="approval token is not configured (set ADMIN_CREATE_APPROVAL_TOKEN_HASH or ADMIN_CREATE_APPROVAL_TOKEN)",
+        )
+    ticket_id = (req.ticket_id or "").strip()
+    reason = (req.reason or "").strip()
+    new_admin_approval_token = (req.new_admin_approval_token or "").strip()
+    if not token_ok:
+        _audit(
+            request,
+            action="admin.user.reset_approval_token",
+            resource_type="user",
+            result="failed",
+            user=user,
+            resource_id=user_id,
+            detail=f"approval_failed; mode={token_mode}; ticket={ticket_id or '-'}",
+        )
+        raise HTTPException(status_code=403, detail="invalid approval token")
+    if len(ticket_id) < 3:
+        raise HTTPException(status_code=400, detail="ticket_id is required")
+    if len(reason) < 5:
+        raise HTTPException(status_code=400, detail="reason is required")
+    if len(new_admin_approval_token) < 12:
+        raise HTTPException(status_code=400, detail="new_admin_approval_token must be at least 12 chars")
+
+    token_hash = hashlib.sha256(new_admin_approval_token.encode("utf-8")).hexdigest()
+    row = auth_service.update_user_admin_approval_token(
+        user_id=user_id,
+        admin_approval_token_hash=token_hash,
+        admin_ticket_id=ticket_id,
+    )
+    if row is None:
+        raise HTTPException(status_code=404, detail="user not found")
+
+    _audit(
+        request,
+        action="admin.user.reset_approval_token",
+        resource_type="user",
+        result="success",
+        user=user,
+        resource_id=user_id,
+        detail=(
+            f"target={target.get('username', '-')}; mode={token_mode}; ticket={ticket_id}; reason={reason}; "
+            f"actor={user.get('username', '-')}"
+        ),
+    )
+    return AdminUserSummary(**row)
+
+
+@app.post("/admin/users/{user_id}/reset-password", response_model=AdminUserSummary)
+def admin_reset_user_password(
+    user_id: str,
+    req: AdminResetPasswordRequest,
+    request: Request,
+    user: dict[str, Any] = Depends(_require_user),
+):
+    _require_permission(user, "admin:user_manage", request, "admin", resource_id=user_id)
+    target = auth_service.get_user_profile(user_id)
+    if not target:
+        raise HTTPException(status_code=404, detail="user not found")
+
+    approval_token = req.approval_token or ""
+    token_ok, token_mode = _is_valid_admin_approval_token_for_actor(approval_token, str(user.get("user_id", "")))
+    if token_mode == "missing":
+        raise HTTPException(
+            status_code=500,
+            detail="approval token is not configured (set ADMIN_CREATE_APPROVAL_TOKEN_HASH or ADMIN_CREATE_APPROVAL_TOKEN)",
+        )
+    ticket_id = (req.ticket_id or "").strip()
+    reason = (req.reason or "").strip()
+    new_password = req.new_password or ""
+    if not token_ok:
+        _audit(
+            request,
+            action="admin.user.reset_password",
+            resource_type="user",
+            result="failed",
+            user=user,
+            resource_id=user_id,
+            detail=f"approval_failed; mode={token_mode}; ticket={ticket_id or '-'}",
+        )
+        raise HTTPException(status_code=403, detail="invalid approval token")
+    if len(ticket_id) < 3:
+        raise HTTPException(status_code=400, detail="ticket_id is required")
+    if len(reason) < 5:
+        raise HTTPException(status_code=400, detail="reason is required")
+    try:
+        row = auth_service.update_user_password(user_id=user_id, password=new_password)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    if row is None:
+        raise HTTPException(status_code=404, detail="user not found")
+
+    _audit(
+        request,
+        action="admin.user.reset_password",
+        resource_type="user",
+        result="success",
+        user=user,
+        resource_id=user_id,
+        detail=(
+            f"target={target.get('username', '-')}; mode={token_mode}; ticket={ticket_id}; reason={reason}; "
+            f"actor={user.get('username', '-')}"
+        ),
     )
     return AdminUserSummary(**row)
 
@@ -448,10 +998,70 @@ def admin_update_user_status(user_id: str, req: AdminStatusUpdateRequest, reques
     return AdminUserSummary(**row)
 
 
+@app.patch("/admin/users/{user_id}/classification", response_model=AdminUserSummary)
+def admin_update_user_classification(
+    user_id: str,
+    req: AdminUserClassificationUpdateRequest,
+    request: Request,
+    user: dict[str, Any] = Depends(_require_user),
+):
+    _require_permission(user, "admin:user_manage", request, "admin", resource_id=user_id)
+    try:
+        row = auth_service.update_user_classification(
+            user_id=user_id,
+            business_unit=req.business_unit,
+            department=req.department,
+            user_type=req.user_type,
+            data_scope=req.data_scope,
+        )
+    except ValueError as e:
+        _audit(
+            request,
+            action="admin.user.classification_update",
+            resource_type="user",
+            result="failed",
+            user=user,
+            resource_id=user_id,
+            detail=str(e),
+        )
+        raise HTTPException(status_code=400, detail=str(e))
+    if row is None:
+        raise HTTPException(status_code=404, detail="user not found")
+    _audit(
+        request,
+        action="admin.user.classification_update",
+        resource_type="user",
+        result="success",
+        user=user,
+        resource_id=user_id,
+        detail=(
+            f"business_unit={row.get('business_unit') or '-'}; department={row.get('department') or '-'}; "
+            f"user_type={row.get('user_type') or '-'}; data_scope={row.get('data_scope') or '-'}"
+        ),
+    )
+    return AdminUserSummary(**row)
+
+
 @app.get("/admin/audit-logs", response_model=list[AuditLogEntry])
-def admin_list_audit_logs(request: Request, limit: int = 200, user: dict[str, Any] = Depends(_require_user)):
+def admin_list_audit_logs(
+    request: Request,
+    limit: int = 200,
+    actor_user_id: str | None = None,
+    action_keyword: str | None = None,
+    event_category: str | None = None,
+    severity: str | None = None,
+    result: str | None = None,
+    user: dict[str, Any] = Depends(_require_user),
+):
     _require_permission(user, "admin:audit_read", request, "admin")
-    rows = auth_service.list_audit_logs(limit=limit)
+    rows = auth_service.list_audit_logs(
+        limit=limit,
+        actor_user_id=actor_user_id,
+        action_keyword=action_keyword,
+        event_category=event_category,
+        severity=severity,
+        result=result,
+    )
     return [AuditLogEntry(**x) for x in rows]
 
 

@@ -488,6 +488,472 @@ button.secondary,
   padding: 16px;
 }
 
+.admin-shell {
+  max-width: 1500px;
+  margin: 0 auto;
+  padding: 24px;
+  display: grid;
+  gap: 16px;
+  background:
+    radial-gradient(900px 360px at -8% -12%, rgba(37, 99, 235, 0.09), transparent 62%),
+    radial-gradient(900px 360px at 108% -16%, rgba(20, 184, 166, 0.08), transparent 64%);
+}
+
+.admin-shell .topbar {
+  border-radius: 20px;
+  padding: 18px 20px;
+  border: 1px solid color-mix(in srgb, #1a84dd 28%, var(--border));
+  background:
+    linear-gradient(110deg, rgba(20, 132, 223, 0.96), rgba(14, 112, 205, 0.95)),
+    radial-gradient(90% 130% at 0% -30%, rgba(255, 255, 255, 0.24), transparent 52%);
+  color: #f7fbff;
+  box-shadow:
+    0 24px 44px -36px rgba(16, 42, 82, 0.42),
+    inset 0 1px 0 rgba(255, 255, 255, 0.7);
+}
+
+.admin-shell .topbar h2 {
+  font-size: 24px;
+  letter-spacing: 0.15px;
+  font-weight: 800;
+}
+
+.admin-shell .topbar .muted {
+  color: rgba(238, 247, 255, 0.92);
+}
+
+.admin-console {
+  display: grid;
+  grid-template-columns: 230px minmax(0, 1fr);
+  gap: 14px;
+}
+
+.admin-nav {
+  align-self: start;
+  position: sticky;
+  top: 16px;
+}
+
+.admin-nav-list {
+  display: grid;
+  gap: 8px;
+}
+
+.admin-nav-item {
+  width: 100%;
+  justify-content: flex-start;
+  background: linear-gradient(180deg, #f8fbff, #f2f7ff);
+  color: #17406c;
+  border: 1px solid color-mix(in srgb, var(--accent) 15%, var(--border));
+}
+
+.admin-nav-item.active {
+  color: #fff;
+  border-color: #1b7fd4;
+  background: linear-gradient(145deg, #23a5ff, #1e75d8);
+  box-shadow: 0 12px 20px -14px rgba(18, 93, 175, 0.8);
+}
+
+.admin-workspace {
+  display: grid;
+  gap: 14px;
+}
+
+.admin-overview {
+  display: grid;
+  gap: 12px;
+}
+
+.admin-kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.admin-kpi-card {
+  border-radius: 14px;
+  padding: 14px;
+  color: #fff;
+  display: grid;
+  gap: 4px;
+  box-shadow: 0 16px 28px -24px rgba(10, 28, 61, 0.8);
+}
+
+.admin-kpi-card span {
+  font-size: 12px;
+  opacity: 0.92;
+}
+
+.admin-kpi-card strong {
+  font-size: 26px;
+  line-height: 1.05;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+
+.admin-kpi-card.blue { background: linear-gradient(145deg, #29a8ff, #2f78e4); }
+.admin-kpi-card.teal { background: linear-gradient(145deg, #22c7ad, #1da5bd); }
+.admin-kpi-card.orange { background: linear-gradient(145deg, #ffab50, #f07a3e); }
+.admin-kpi-card.purple { background: linear-gradient(145deg, #8f8cff, #6e6ae5); }
+
+.admin-mini-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.admin-mini-card {
+  border: 1px solid color-mix(in srgb, var(--accent) 11%, var(--border));
+  border-radius: 12px;
+  padding: 10px 12px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.95), rgba(247, 251, 255, 0.92));
+  display: grid;
+  gap: 3px;
+}
+
+.admin-mini-card strong {
+  font-size: 22px;
+  font-weight: 800;
+  color: color-mix(in srgb, var(--text) 80%, #0d4f92);
+}
+
+.admin-shell .panel {
+  margin-top: 0;
+  border-radius: 20px;
+  padding: 16px;
+  border: 1px solid color-mix(in srgb, var(--accent) 8%, var(--border));
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.94), rgba(255, 255, 255, 0.9));
+  box-shadow:
+    0 18px 36px -30px rgba(16, 42, 82, 0.36),
+    inset 0 1px 0 rgba(255, 255, 255, 0.8);
+}
+
+.admin-shell .section-head {
+  margin-bottom: 10px;
+  padding-bottom: 8px;
+  border-bottom: 1px dashed color-mix(in srgb, var(--accent) 18%, var(--border));
+}
+
+.admin-shell .section-head strong {
+  font-size: 18px;
+  letter-spacing: 0.05px;
+  font-weight: 800;
+}
+
+.admin-shell .row-actions button,
+.admin-shell .row-actions .link-btn {
+  transition: transform 0.16s ease, box-shadow 0.18s ease, filter 0.16s ease;
+}
+
+.admin-shell .row-actions button:hover,
+.admin-shell .row-actions .link-btn:hover {
+  transform: translateY(-1.5px);
+  filter: brightness(1.04);
+  box-shadow: 0 14px 24px -18px rgba(27, 77, 144, 0.55);
+}
+
+.admin-shell .admin-section-tabs {
+  gap: 10px;
+}
+
+.admin-shell .admin-section-tabs button {
+  min-width: 120px;
+  border-radius: 999px;
+}
+
+.admin-shell .ops-two-col input,
+.admin-shell .ops-two-col select {
+  margin-top: 0;
+  height: 44px;
+  border-radius: 12px;
+  border: 1px solid color-mix(in srgb, var(--accent) 8%, var(--border));
+  background: #fff;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.85);
+}
+
+.admin-shell .ops-two-col input:focus,
+.admin-shell .ops-two-col select:focus {
+  outline: none;
+  border-color: color-mix(in srgb, var(--accent) 55%, #9abdf2);
+  box-shadow:
+    0 0 0 3px color-mix(in srgb, var(--accent) 20%, transparent),
+    inset 0 1px 0 rgba(255, 255, 255, 0.92);
+}
+
+.admin-shell .table {
+  border-collapse: separate;
+  border-spacing: 0;
+  overflow: hidden;
+  border-radius: 16px;
+  border: 1px solid color-mix(in srgb, var(--accent) 9%, var(--border));
+  background: #fff;
+}
+
+.admin-shell .table thead th {
+  font-size: 11px;
+  font-weight: 700;
+  color: color-mix(in srgb, var(--text) 72%, var(--muted));
+  text-transform: uppercase;
+  letter-spacing: 0.45px;
+  background: linear-gradient(180deg, #f7faff, #f3f7ff);
+  border-bottom: 1px solid color-mix(in srgb, var(--accent) 10%, var(--border));
+}
+
+.admin-shell .table tbody tr {
+  transition: background-color 0.14s ease;
+}
+
+.admin-shell .table tbody tr:hover {
+  background: #f6faff;
+}
+
+.admin-shell .table td,
+.admin-shell .table th {
+  padding: 11px 10px;
+}
+
+.admin-shell .table td .row-actions {
+  gap: 8px;
+}
+
+.admin-shell .table td select {
+  margin-top: 0;
+  height: 34px;
+  border-radius: 10px;
+  padding: 0 10px;
+  background: #fff;
+}
+
+.admin-shell .muted {
+  font-size: 13px;
+}
+
+.admin-shell .status {
+  margin-top: 0;
+  border: 1px solid color-mix(in srgb, var(--ok) 38%, var(--border));
+  background: color-mix(in srgb, var(--ok) 12%, transparent);
+  border-radius: 12px;
+  padding: 8px 10px;
+}
+
+.admin-shell .status.error {
+  border-color: color-mix(in srgb, var(--danger) 42%, var(--border));
+  background: color-mix(in srgb, var(--danger) 12%, transparent);
+}
+
+.admin-shell .ops-kpi-card,
+.admin-shell .ops-health-card,
+.admin-shell .ops-trend-list {
+  border-radius: 16px;
+  border: 1px solid color-mix(in srgb, var(--accent) 10%, var(--border));
+}
+
+.admin-shell .ops-kpi-card strong {
+  font-size: 24px;
+  font-variant-numeric: tabular-nums;
+}
+
+.admin-shell .tiny-btn {
+  border-radius: 10px;
+}
+
+:root[data-theme="dark"] .admin-shell .panel {
+  background: linear-gradient(180deg, rgba(22, 30, 44, 0.92), rgba(16, 24, 36, 0.9));
+}
+
+:root[data-theme="dark"] .admin-shell .topbar {
+  background:
+    linear-gradient(110deg, rgba(19, 85, 163, 0.94), rgba(14, 67, 133, 0.9)),
+    radial-gradient(90% 130% at 0% -30%, rgba(255, 255, 255, 0.2), transparent 52%);
+}
+
+:root[data-theme="dark"] .admin-nav-item {
+  background: linear-gradient(180deg, rgba(24, 38, 58, 0.95), rgba(20, 32, 48, 0.94));
+  color: #b8cdea;
+}
+
+:root[data-theme="dark"] .admin-nav-item.active {
+  color: #ecf6ff;
+  border-color: rgba(82, 162, 255, 0.5);
+  background: linear-gradient(145deg, rgba(40, 136, 227, 0.92), rgba(34, 103, 196, 0.92));
+}
+
+:root[data-theme="dark"] .admin-mini-card {
+  background: linear-gradient(180deg, rgba(26, 38, 57, 0.9), rgba(17, 28, 43, 0.88));
+}
+
+:root[data-theme="dark"] .admin-mini-card strong {
+  color: #9acbff;
+}
+
+:root[data-theme="dark"] .admin-shell .ops-two-col input,
+:root[data-theme="dark"] .admin-shell .ops-two-col select,
+:root[data-theme="dark"] .admin-shell .table td select {
+  background: rgba(12, 18, 30, 0.88);
+}
+
+:root[data-theme="dark"] .admin-shell .table {
+  background: rgba(14, 20, 30, 0.86);
+}
+
+:root[data-theme="dark"] .admin-shell .table thead th {
+  background: linear-gradient(180deg, rgba(27, 38, 58, 0.9), rgba(22, 32, 49, 0.88));
+}
+
+:root[data-theme="dark"] .admin-shell .table tbody tr:hover {
+  background: rgba(52, 96, 176, 0.16);
+}
+
+@media (max-width: 860px) {
+  .admin-console {
+    grid-template-columns: 1fr;
+  }
+
+  .admin-nav {
+    position: static;
+  }
+
+  .admin-nav-list {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .admin-kpi-grid,
+  .admin-mini-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .admin-shell {
+    padding: 12px 10px;
+    gap: 10px;
+  }
+
+  .admin-shell .panel {
+    padding: 10px;
+    border-radius: 14px;
+  }
+
+  .admin-shell .topbar {
+    border-radius: 14px;
+    padding: 12px;
+  }
+
+  .admin-shell .table {
+    border-radius: 10px;
+    font-size: 12px;
+  }
+
+  .admin-shell .table td,
+  .admin-shell .table th {
+    padding: 8px 7px;
+  }
+}
+
+.ops-wrap {
+  display: grid;
+  gap: 12px;
+}
+
+.ops-kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(120px, 1fr));
+  gap: 8px;
+}
+
+.ops-kpi-card {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 10px;
+  background: rgba(255, 255, 255, 0.65);
+  display: grid;
+  gap: 4px;
+}
+
+:root[data-theme="dark"] .ops-kpi-card {
+  background: rgba(17, 26, 40, 0.7);
+}
+
+.ops-kpi-card span {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.ops-kpi-card strong {
+  font-size: 22px;
+  line-height: 1.1;
+}
+
+.ops-health-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(160px, 1fr));
+  gap: 8px;
+}
+
+.ops-health-card {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 10px;
+  background: rgba(255, 255, 255, 0.65);
+}
+
+:root[data-theme="dark"] .ops-health-card {
+  background: rgba(17, 26, 40, 0.7);
+}
+
+.ops-health-card.ok {
+  border-color: rgba(15, 159, 99, 0.35);
+}
+
+.ops-health-card.bad {
+  border-color: rgba(200, 57, 57, 0.4);
+}
+
+.ops-health-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.ops-two-col {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.ops-trend-list {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 8px;
+  display: grid;
+  gap: 6px;
+  background: rgba(255, 255, 255, 0.6);
+}
+
+:root[data-theme="dark"] .ops-trend-list {
+  background: rgba(17, 26, 40, 0.68);
+}
+
+.ops-trend-row {
+  display: grid;
+  grid-template-columns: 88px 1fr 84px;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+}
+
+.ops-trend-bar {
+  height: 8px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  overflow: hidden;
+}
+
+.ops-trend-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--accent), #58b2ff);
+}
+
 .architecture-shell .panel {
   margin-top: 14px;
 }
@@ -755,6 +1221,12 @@ button.secondary,
 
   .social-grid,
   .architecture-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .ops-kpi-grid,
+  .ops-health-grid,
+  .ops-two-col {
     grid-template-columns: 1fr;
   }
 }
