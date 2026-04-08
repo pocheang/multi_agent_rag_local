@@ -20,8 +20,6 @@ frontend/dist/
 # Local runtime data
 data/
 !data/.gitkeep
-!data/docs/
-!data/docs/**
 
 # Build / metadata
 multi_agent_local_rag.egg-info/
