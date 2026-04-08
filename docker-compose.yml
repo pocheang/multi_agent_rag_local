@@ -1,0 +1,22 @@
+services:
+  neo4j:
+    image: neo4j:5.26
+    container_name: local-rag-neo4j
+    restart: unless-stopped
+    ports:
+      - "7474:7474"
+      - "7687:7687"
+    environment:
+      NEO4J_AUTH: neo4j/neo4j_password
+      NEO4J_PLUGINS: '["apoc"]'
+    volumes:
+      - neo4j_data:/data
+      - neo4j_logs:/logs
+      - neo4j_plugins:/plugins
+      - neo4j_conf:/conf
+
+volumes:
+  neo4j_data:
+  neo4j_logs:
+  neo4j_plugins:
+  neo4j_conf:
