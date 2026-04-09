@@ -1,6 +1,6 @@
 # Multi-Agent Local RAG
 
-Current version: `0.2.1`
+Current version: `0.2.2`
 
 Local-first multi-agent RAG system with:
 
@@ -9,15 +9,23 @@ Local-first multi-agent RAG system with:
 - Hybrid retrieval (`Vector + BM25 + Reranker`)
 - Neo4j graph retrieval
 - Session/prompt/document management
-- Admin ops for RAG/Agent governance
+- Admin ops for RAG/Agent governance and runtime resilience
 
-## What's New in 0.2.1
+## What's New in 0.2.2
 
-- RAG runtime control: profile (`baseline/advanced/safe`), canary, shadow, rollback.
-- AB compare, replay trends, benchmark trends, and index freshness reporting.
-- Session-level retrieval strategy lock.
-- Prompt versioning + approval + rollback.
-- Streaming stability fixes (avoid duplicated streamed answer text).
+### Added
+- Runtime resilience modules: alerting, background queue, bulkhead isolation, hybrid executor, query guard, quota guard, and query-result cache.
+- Operational scripts for chaos probing, load/performance validation, and data migrations.
+- Concurrency regression test coverage (`tests/test_concurrency_regression.py`).
+
+### Changed
+- Workflow orchestration, graph streaming, and Neo4j integration were updated to support stronger runtime control behavior.
+- API and schema/model contracts were expanded for governance and reliability flows.
+- CI quality-gate checks were improved for release readiness.
+
+### Release Notes
+- Changelog entry: [`CHANGELOG.md`](./CHANGELOG.md)
+- GitHub release (`v0.2.2`): <https://github.com/pocheang/multi_agent_rag_local/releases/tag/v0.2.2>
 
 ## Core Features
 
@@ -56,12 +64,14 @@ Open: `http://127.0.0.1:5173/app`
 
 - API health: `GET /health`
 - readiness: `GET /ready`
+- metrics (Prometheus text format): `GET /metrics`
 
 ## Admin Ops API (RAG/Agent)
 
 - profile/canary/shadow:
   - `GET/POST /admin/ops/retrieval-profile`
   - `POST /admin/ops/canary`
+  - `POST /admin/ops/feature-flags`
   - `GET/POST /admin/ops/shadow`
   - `GET /admin/ops/shadow/runs`
 - rollback/evaluation:
@@ -72,6 +82,7 @@ Open: `http://127.0.0.1:5173/app`
   - `POST /admin/ops/benchmark/run`
   - `GET /admin/ops/benchmark/trends`
 - reliability/quality:
+  - `GET /admin/ops/alerts`
   - `GET /admin/ops/index-freshness`
   - `POST /admin/ops/autotune`
 
