@@ -170,3 +170,84 @@ def test_admin_audit_logs_supports_filters(monkeypatch):
         assert len(res.json()) == 1
     finally:
         api_main.app.dependency_overrides.clear()
+
+
+def test_admin_ops_retrieval_profile_and_canary(monkeypatch):
+    client = TestClient(api_main.app)
+    api_main.app.dependency_overrides[api_main._require_user] = lambda: {
+        "user_id": "u_admin",
+        "username": "admin",
+        "role": "admin",
+        "status": "active",
+    }
+    try:
+        get_res = client.get("/admin/ops/retrieval-profile")
+        assert get_res.status_code == 200
+        assert "active_profile" in get_res.json()
+
+        set_res = client.post("/admin/ops/retrieval-profile", json={"profile": "baseline"})
+        assert set_res.status_code == 200
+        assert set_res.json()["active_profile"] == "baseline"
+
+        canary_res = client.post(
+            "/admin/ops/canary",
+            json={"enabled": True, "baseline_percent": 20, "safe_percent": 10, "seed": "qa"},
+        )
+        assert canary_res.status_code == 200
+        assert canary_res.json()["canary"]["enabled"] is True
+        assert canary_res.json()["canary"]["baseline_percent"] == 20
+    finally:
+        api_main.app.dependency_overrides.clear()
+
+
+def test_admin_ops_rollback_and_trends(monkeypatch):
+    client = TestClient(api_main.app)
+    api_main.app.dependency_overrides[api_main._require_user] = lambda: {
+        "user_id": "u_admin",
+        "username": "admin",
+        "role": "admin",
+        "status": "active",
+    }
+    monkeypatch.setattr(api_main, "read_benchmark_trends", lambda limit=30: [{"created_at": "2026-04-09T00:00:00+00:00"}])
+    try:
+        rollback_res = client.post("/admin/ops/rollback")
+        assert rollback_res.status_code == 200
+        assert rollback_res.json()["ok"] is True
+        assert rollback_res.json()["state"]["active_profile"] == "baseline"
+
+        trends_res = client.get("/admin/ops/benchmark/trends?limit=5")
+        assert trends_res.status_code == 200
+        assert trends_res.json()["count"] == 1
+    finally:
+        api_main.app.dependency_overrides.clear()
+
+
+def test_admin_ops_benchmark_run(monkeypatch):
+    client = TestClient(api_main.app)
+    api_main.app.dependency_overrides[api_main._require_user] = lambda: {
+        "user_id": "u_admin",
+        "username": "admin",
+        "role": "admin",
+        "status": "active",
+    }
+    monkeypatch.setattr(api_main, "_load_benchmark_queries", lambda path, limit=100: ["q1", "q2"])
+    monkeypatch.setattr(
+        api_main,
+        "run_query",
+        lambda *args, **kwargs: {
+            "grounding": {"support_ratio": 0.8},
+            "vector_result": {"citations": [{"source": "a", "content": "b"}]},
+            "web_result": {"citations": []},
+        },
+    )
+    saved: list[dict] = []
+    monkeypatch.setattr(api_main, "append_benchmark_trend", lambda x: saved.append(x))
+    try:
+        res = client.post("/admin/ops/benchmark/run?max_queries=2&strategy=advanced")
+        assert res.status_code == 200
+        data = res.json()
+        assert data["ok"] is True
+        assert data["result"]["num_queries"] == 2
+        assert len(saved) == 1
+    finally:
+        api_main.app.dependency_overrides.clear()

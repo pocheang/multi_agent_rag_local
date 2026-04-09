@@ -23,6 +23,8 @@ def memory_api_env(monkeypatch):
     monkeypatch.setattr(api_main, "_audit", lambda *args, **kwargs: None)
     monkeypatch.setattr(api_main, "normalize_and_validate_user_question", lambda text: (text or "").strip())
     monkeypatch.setattr(api_main, "normalize_user_question", lambda text: (text or "").strip())
+    monkeypatch.setattr(api_main, "enhance_user_question_for_completion", lambda text: (text or "").strip())
+    monkeypatch.setattr(api_main, "is_casual_chat_query", lambda _text: False)
     monkeypatch.setattr(api_main, "classify_agent_class", lambda _text: "general")
 
     api_main.app.dependency_overrides[api_main._require_user] = lambda: user
@@ -162,3 +164,153 @@ def test_stream_query_injects_memory_context_and_promotes(memory_api_env, monkey
     assert "Long-term memory" in seen["memory_context"]
     after_count = len(memory_store.get_session_payload(session_id)["candidates"])
     assert after_count == before_count + 1
+
+
+def test_query_passes_agent_class_hint_to_workflow(memory_api_env, monkeypatch):
+    client, _user, _history_store, _memory_store = memory_api_env
+    seen: dict[str, str] = {}
+
+    def fake_run_query(
+        question: str,
+        use_web_fallback: bool = True,
+        use_reasoning: bool = True,
+        memory_context: str = "",
+        allowed_sources: list[str] | None = None,
+        agent_class_hint: str | None = None,
+    ):
+        seen["question"] = question
+        seen["agent_class_hint"] = str(agent_class_hint or "")
+        return {
+            "answer": "ok",
+            "route": "vector",
+            "reason": "ok",
+            "skill": "answer_with_citations",
+            "agent_class": "cybersecurity",
+            "vector_result": {"retrieved_count": 1, "citations": []},
+            "graph_result": {"entities": []},
+            "web_result": {"used": False, "citations": [], "context": ""},
+            "thoughts": [],
+        }
+
+    monkeypatch.setattr(api_main, "run_query", fake_run_query)
+    res = client.post(
+        "/query",
+        json={
+            "question": "hello",
+            "use_web_fallback": True,
+            "use_reasoning": True,
+            "agent_class_hint": "cybersecurity",
+        },
+    )
+    assert res.status_code == 200
+    assert seen["question"] == "hello"
+    assert seen["agent_class_hint"] == "cybersecurity"
+
+
+def test_query_applies_question_enhancement_before_workflow(memory_api_env, monkeypatch):
+    client, _user, _history_store, _memory_store = memory_api_env
+    seen: dict[str, str] = {}
+
+    monkeypatch.setattr(api_main, "enhance_user_question_for_completion", lambda text: f"{text}\n[enhanced]")
+
+    def fake_run_query(
+        question: str,
+        use_web_fallback: bool = True,
+        use_reasoning: bool = True,
+        memory_context: str = "",
+        allowed_sources: list[str] | None = None,
+        agent_class_hint: str | None = None,
+    ):
+        seen["question"] = question
+        return {
+            "answer": "ok",
+            "route": "vector",
+            "reason": "ok",
+            "skill": "answer_with_citations",
+            "agent_class": "general",
+            "vector_result": {"retrieved_count": 1, "citations": []},
+            "graph_result": {"entities": []},
+            "web_result": {"used": False, "citations": [], "context": ""},
+            "thoughts": [],
+        }
+
+    monkeypatch.setattr(api_main, "run_query", fake_run_query)
+    res = client.post(
+        "/query",
+        json={
+            "question": "这个怎么修",
+            "use_web_fallback": True,
+            "use_reasoning": True,
+        },
+    )
+    assert res.status_code == 200
+    assert "[enhanced]" in seen["question"]
+
+
+def test_stream_query_applies_question_enhancement_before_workflow(memory_api_env, monkeypatch):
+    client, _user, _history_store, _memory_store = memory_api_env
+    seen: dict[str, str] = {}
+
+    monkeypatch.setattr(api_main, "enhance_user_question_for_completion", lambda text: f"{text}\n[enhanced]")
+
+    def fake_run_query_stream(
+        question: str,
+        use_web_fallback: bool = True,
+        use_reasoning: bool = True,
+        memory_context: str = "",
+    ):
+        seen["question"] = question
+        yield {"type": "done", "result": {"answer": "ok", "vector_result": {}, "graph_result": {}, "web_result": {"used": False, "citations": []}}}
+
+    monkeypatch.setattr(api_main, "run_query_stream", fake_run_query_stream)
+    res = client.post(
+        "/query/stream",
+        data={
+            "question": "那个怎么做",
+            "use_web_fallback": "true",
+            "use_reasoning": "true",
+        },
+    )
+    assert res.status_code == 200
+    assert "[enhanced]" in seen["question"]
+
+
+def test_query_skips_question_enhancement_for_casual_chat(memory_api_env, monkeypatch):
+    client, _user, _history_store, _memory_store = memory_api_env
+    seen: dict[str, str] = {}
+
+    monkeypatch.setattr(api_main, "is_casual_chat_query", lambda _text: True)
+    monkeypatch.setattr(api_main, "enhance_user_question_for_completion", lambda text: f"{text}\n[enhanced]")
+
+    def fake_run_query(
+        question: str,
+        use_web_fallback: bool = True,
+        use_reasoning: bool = True,
+        memory_context: str = "",
+        allowed_sources: list[str] | None = None,
+        agent_class_hint: str | None = None,
+    ):
+        seen["question"] = question
+        return {
+            "answer": "ok",
+            "route": "vector",
+            "reason": "ok",
+            "skill": "answer_with_citations",
+            "agent_class": "general",
+            "vector_result": {"retrieved_count": 0, "citations": []},
+            "graph_result": {"entities": []},
+            "web_result": {"used": False, "citations": [], "context": ""},
+            "thoughts": [],
+        }
+
+    monkeypatch.setattr(api_main, "run_query", fake_run_query)
+    res = client.post(
+        "/query",
+        json={
+            "question": "你好，你在干嘛呢",
+            "use_web_fallback": True,
+            "use_reasoning": True,
+        },
+    )
+    assert res.status_code == 200
+    assert "[enhanced]" not in seen["question"]

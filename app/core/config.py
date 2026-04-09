@@ -43,6 +43,43 @@ class Settings(BaseSettings):
     bm25_top_k: int = Field(default=6, alias="BM25_TOP_K")
     vector_top_k: int = Field(default=6, alias="VECTOR_TOP_K")
     hybrid_rrf_k: int = Field(default=60, alias="HYBRID_RRF_K")
+    hybrid_vector_weight: float = Field(default=0.95, alias="HYBRID_VECTOR_WEIGHT")
+    hybrid_bm25_weight: float = Field(default=0.05, alias="HYBRID_BM25_WEIGHT")
+    vector_similarity_threshold: float = Field(default=0.2, alias="VECTOR_SIMILARITY_THRESHOLD")
+    vector_similarity_relaxed_threshold: float = Field(default=0.05, alias="VECTOR_SIMILARITY_RELAXED_THRESHOLD")
+    query_rewrite_enabled: bool = Field(default=True, alias="QUERY_REWRITE_ENABLED")
+    query_rewrite_with_llm: bool = Field(default=False, alias="QUERY_REWRITE_WITH_LLM")
+    query_decompose_enabled: bool = Field(default=True, alias="QUERY_DECOMPOSE_ENABLED")
+    query_rewrite_max_variants: int = Field(default=6, alias="QUERY_REWRITE_MAX_VARIANTS")
+    rank_feature_enabled: bool = Field(default=True, alias="RANK_FEATURE_ENABLED")
+    rank_feature_source_weight: float = Field(default=0.08, alias="RANK_FEATURE_SOURCE_WEIGHT")
+    rank_feature_freshness_weight: float = Field(default=0.07, alias="RANK_FEATURE_FRESHNESS_WEIGHT")
+    rank_feature_retrieval_diversity_weight: float = Field(default=0.05, alias="RANK_FEATURE_RETRIEVAL_DIVERSITY_WEIGHT")
+    dynamic_retrieval_enabled: bool = Field(default=True, alias="DYNAMIC_RETRIEVAL_ENABLED")
+    dynamic_vector_top_k_cap: int = Field(default=16, alias="DYNAMIC_VECTOR_TOP_K_CAP")
+    dynamic_bm25_top_k_cap: int = Field(default=16, alias="DYNAMIC_BM25_TOP_K_CAP")
+    dynamic_reranker_top_n_cap: int = Field(default=10, alias="DYNAMIC_RERANKER_TOP_N_CAP")
+    retrieval_cache_enabled: bool = Field(default=True, alias="RETRIEVAL_CACHE_ENABLED")
+    retrieval_cache_ttl_seconds: int = Field(default=45, alias="RETRIEVAL_CACHE_TTL_SECONDS")
+    retrieval_cache_max_items: int = Field(default=256, alias="RETRIEVAL_CACHE_MAX_ITEMS")
+    circuit_breaker_enabled: bool = Field(default=True, alias="CIRCUIT_BREAKER_ENABLED")
+    circuit_breaker_fail_threshold: int = Field(default=3, alias="CIRCUIT_BREAKER_FAIL_THRESHOLD")
+    circuit_breaker_cooldown_seconds: int = Field(default=30, alias="CIRCUIT_BREAKER_COOLDOWN_SECONDS")
+    retrieval_cache_backend: str = Field(default="auto", alias="RETRIEVAL_CACHE_BACKEND")  # auto|memory|redis|off
+    redis_url: str = Field(default="redis://localhost:6379/0", alias="REDIS_URL")
+    otel_tracing_enabled: bool = Field(default=True, alias="OTEL_TRACING_ENABLED")
+    slo_p95_latency_ms_threshold: int = Field(default=3000, alias="SLO_P95_LATENCY_MS_THRESHOLD")
+    slo_error_rate_percent_threshold: float = Field(default=5.0, alias="SLO_ERROR_RATE_PERCENT_THRESHOLD")
+    slo_grounding_support_ratio_threshold: float = Field(default=0.6, alias="SLO_GROUNDING_SUPPORT_RATIO_THRESHOLD")
+    retrieval_profile: str = Field(default="advanced", alias="RETRIEVAL_PROFILE")  # baseline|advanced|safe
+    consistency_guard_enabled: bool = Field(default=True, alias="CONSISTENCY_GUARD_ENABLED")
+    consistency_guard_similarity_threshold: float = Field(default=0.55, alias="CONSISTENCY_GUARD_SIMILARITY_THRESHOLD")
+    web_domain_allowlist: str = Field(
+        default="gov.cn,gov,edu,org,nist.gov,cisa.gov,mitre.org,wikipedia.org,owasp.org,microsoft.com,openai.com",
+        alias="WEB_DOMAIN_ALLOWLIST",
+    )
+    web_min_source_score: float = Field(default=0.2, alias="WEB_MIN_SOURCE_SCORE")
+    answer_safety_scan_enabled: bool = Field(default=True, alias="ANSWER_SAFETY_SCAN_ENABLED")
 
     enable_reranker: bool = Field(default=True, alias="ENABLE_RERANKER")
     reranker_model_name: str = Field(default="BAAI/bge-reranker-v2-m3", alias="RERANKER_MODEL_NAME")
@@ -137,3 +174,8 @@ def get_settings() -> Settings:
     settings.auth_sessions_path.parent.mkdir(parents=True, exist_ok=True)
     settings.app_db_path.parent.mkdir(parents=True, exist_ok=True)
     return settings
+
+
+def reload_settings() -> Settings:
+    get_settings.cache_clear()
+    return get_settings()

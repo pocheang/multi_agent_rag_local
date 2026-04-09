@@ -17,14 +17,23 @@ def test_prompt_store_crud():
 
     created = store.create_prompt(user_id=user_id, title="分析模板", content="请按攻击链分析")
     assert created["prompt_id"]
+    assert created["agent_class"] == "general"
 
     listed = store.list_prompts(user_id=user_id)
     assert len(listed) == 1
     assert listed[0]["title"] == "分析模板"
+    assert listed[0]["agent_class"] == "general"
 
-    updated = store.update_prompt(user_id=user_id, prompt_id=created["prompt_id"], title="新标题", content="新内容")
+    updated = store.update_prompt(
+        user_id=user_id,
+        prompt_id=created["prompt_id"],
+        title="新标题",
+        content="新内容",
+        agent_class="cybersecurity",
+    )
     assert updated is not None
     assert updated["title"] == "新标题"
+    assert updated["agent_class"] == "cybersecurity"
 
     ok = store.delete_prompt(user_id=user_id, prompt_id=created["prompt_id"])
     assert ok is True

@@ -88,6 +88,34 @@ class Neo4jClient:
         with self.driver.session() as session:
             return [dict(r) for r in session.run(cypher, **params)]
 
+    def entity_paths_2hop(self, entity: str, limit: int = 8, allowed_sources: list[str] | None = None) -> list[dict]:
+        if allowed_sources is not None:
+            if not allowed_sources:
+                return []
+            cypher = """
+            MATCH p=(e:Entity {name: $entity})-[r1:RELATED]-(m:Entity)-[r2:RELATED]-(o:Entity)
+            WHERE o.name <> e.name
+              AND EXISTS {
+                MATCH (e)-[:MENTIONED_IN]->(se:Source)
+                MATCH (m)-[:MENTIONED_IN]->(sm:Source)
+                MATCH (o)-[:MENTIONED_IN]->(so:Source)
+                WHERE se.name IN $allowed_sources AND sm.name IN $allowed_sources AND so.name IN $allowed_sources
+              }
+            RETURN e.name AS source, r1.type AS rel1, m.name AS middle, r2.type AS rel2, o.name AS target
+            LIMIT $limit
+            """
+            params = {"entity": entity, "limit": limit, "allowed_sources": allowed_sources}
+        else:
+            cypher = """
+            MATCH p=(e:Entity {name: $entity})-[r1:RELATED]-(m:Entity)-[r2:RELATED]-(o:Entity)
+            WHERE o.name <> e.name
+            RETURN e.name AS source, r1.type AS rel1, m.name AS middle, r2.type AS rel2, o.name AS target
+            LIMIT $limit
+            """
+            params = {"entity": entity, "limit": limit}
+        with self.driver.session() as session:
+            return [dict(r) for r in session.run(cypher, **params)]
+
 
     def delete_by_source(self, source: str) -> int:
         count_cypher = """
@@ -96,6 +124,13 @@ class Neo4jClient:
         WHERE EXISTS { MATCH (a:Entity)-[:MENTIONED_IN]->(:Source {name: $source}) WHERE a = startNode(r) }
           AND EXISTS { MATCH (b:Entity)-[:MENTIONED_IN]->(:Source {name: $source}) WHERE b = endNode(r) }
         RETURN count(r) AS rel_count
+        """
+        delete_relation_cypher = """
+        MATCH (:Entity)-[r:RELATED]-(:Entity)
+        WITH r
+        WHERE EXISTS { MATCH (a:Entity)-[:MENTIONED_IN]->(:Source {name: $source}) WHERE a = startNode(r) }
+          AND EXISTS { MATCH (b:Entity)-[:MENTIONED_IN]->(:Source {name: $source}) WHERE b = endNode(r) }
+        DELETE r
         """
         delete_cypher = """
         MATCH (s:Source {name: $source})
@@ -111,5 +146,6 @@ class Neo4jClient:
         with self.driver.session() as session:
             rel_count = session.run(count_cypher, source=source).single()
             count = int(rel_count["rel_count"]) if rel_count else 0
+            session.run(delete_relation_cypher, source=source)
             session.run(delete_cypher, source=source)
             return count

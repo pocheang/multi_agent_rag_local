@@ -56,6 +56,7 @@ def list_indexed_files() -> list[dict[str, Any]]:
                 "pages": set(),
                 "owner_user_id": meta.get("owner_user_id"),
                 "visibility": str(meta.get("visibility", "private") or "private"),
+                "agent_class": str(meta.get("agent_class", "general") or "general"),
                 "in_uploads": False,
                 "exists_on_disk": False,
             },
@@ -65,6 +66,8 @@ def list_indexed_files() -> list[dict[str, Any]]:
             entry["owner_user_id"] = meta.get("owner_user_id")
         if str(meta.get("visibility", "")).strip():
             entry["visibility"] = str(meta.get("visibility"))
+        if str(meta.get("agent_class", "")).strip():
+            entry["agent_class"] = str(meta.get("agent_class"))
         page = meta.get("page")
         if page is not None:
             entry["pages"].add(str(page))
@@ -83,6 +86,7 @@ def list_indexed_files() -> list[dict[str, Any]]:
                 "pages": set(),
                 "owner_user_id": None,
                 "visibility": "private",
+                "agent_class": "general",
                 "in_uploads": True,
                 "exists_on_disk": True,
             },
@@ -104,6 +108,7 @@ def list_indexed_files() -> list[dict[str, Any]]:
                 "pages": set(),
                 "owner_user_id": None,
                 "visibility": "private",
+                "agent_class": "general",
                 "in_uploads": False,
                 "exists_on_disk": True,
             },

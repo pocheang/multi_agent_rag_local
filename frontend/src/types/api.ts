@@ -52,6 +52,7 @@ export type IndexedFileSummary = {
   filename: string;
   source: string;
   chunks: number;
+  agent_class?: string;
   owner_user_id?: string | null;
   visibility?: "private" | "public" | string;
   exists_on_disk?: boolean;
@@ -73,6 +74,7 @@ export type UploadResponse = {
   filenames: string[];
   skipped_files?: string[];
   visibility_applied?: "private" | "public" | string;
+  assigned_agent_classes?: Record<string, string>;
   loaded_documents: number;
   chunks_indexed: number;
   triplets_written: number;
@@ -82,6 +84,7 @@ export type PromptTemplate = {
   prompt_id: string;
   title: string;
   content: string;
+  agent_class?: string;
 };
 
 export type PromptCheckResponse = {
@@ -171,5 +174,38 @@ export type OpsOverview = {
   filters?: {
     actor_user_id?: string;
     action_keyword?: string;
+  };
+};
+
+export type RetrievalProfileState = {
+  active_profile: string;
+  config_default_profile: string;
+  follow_config_default: boolean;
+  canary: {
+    enabled: boolean;
+    baseline_percent: number;
+    safe_percent: number;
+    seed: string;
+  };
+  updated_at: string;
+  profiles?: Array<{ id: string; label: string; desc: string }>;
+};
+
+export type BenchmarkTrendItem = {
+  created_at: string;
+  num_queries: number;
+  strategy: string;
+  latency_ms: {
+    p50: number;
+    p95: number;
+    avg: number;
+  };
+  grounding_support_ratio: {
+    avg: number;
+    min: number;
+  };
+  citations: {
+    avg: number;
+    max: number;
   };
 };

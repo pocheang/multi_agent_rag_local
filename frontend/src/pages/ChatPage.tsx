@@ -1,106 +1,22 @@
-import { isValidElement, useEffect, useRef, useState } from "react";
-import ReactMarkdown from "react-markdown";
-import remarkGfm from "remark-gfm";
-import { Link } from "react-router-dom";
+import { useEffect, useRef, useState } from "react";
+import type React from "react";
 import { ApiError, appApi } from "@/lib/api";
-import type {
-  AuthUser,
-  Citation,
-  IndexedFileSummary,
-  PromptTemplate,
-  SessionMessage,
-  SessionSummary,
-} from "@/types/api";
+import type { Citation, IndexedFileSummary, PromptTemplate, SessionMessage, SessionSummary } from "@/types/api";
+import {
+  EMPTY_METADATA,
+  QUICK_PROMPTS,
+  SUPPORTED_CHAT_RE,
+  SUPPORTED_DOC_RE,
+  isMobile,
+  mapRunStatus,
+} from "@/pages/chat/constants";
+import type { Props, Toast } from "@/pages/chat/types";
+import { ChatTopbar } from "@/pages/chat/components/ChatTopbar";
+import { ChatMessages } from "@/pages/chat/components/ChatMessages";
+import { ChatComposer } from "@/pages/chat/components/ChatComposer";
+import { ToastStack } from "@/pages/chat/components/ToastStack";
 
-type Props = {
-  user: AuthUser | null;
-  onLogout: () => Promise<void>;
-  themeLabel: string;
-  onThemeToggle: () => void;
-};
-
-type Toast = {
-  id: string;
-  text: string;
-  kind: "info" | "success" | "warn" | "error";
-};
-
-const QUICK_PROMPTS = [
-  "分析这次告警可能的攻击链，并给出 P0/P1/P2 处置优先级",
-  "针对暴露在公网的 Web 服务，给一份分层防护加固清单",
-  "给出勒索事件的应急响应流程，包含证据保全和恢复步骤",
-  "解释 SQL 注入的原理、常见检测信号和修复方案",
-];
-
-const SUPPORTED_DOC_RE = /\.(md|txt|pdf|png|jpe?g|bmp|tiff?|webp)$/i;
-const SUPPORTED_CHAT_RE = /\.(pdf|png|jpe?g|bmp|tiff?|webp)$/i;
-
-const EMPTY_METADATA = {
-  route: "",
-  agent_class: "",
-  web_used: false,
-  thoughts: [] as string[],
-  graph_entities: [] as string[],
-  citations: [] as Citation[],
-};
-
-function isMobile() {
-  return window.matchMedia("(max-width: 1080px)").matches;
-}
-
-function mapRunStatus(statusKey: string) {
-  const map: Record<string, string> = {
-    routing: "路由中",
-    retrieving_vector: "检索向量库",
-    retrieving_graph: "检索图谱",
-    retrieving_web: "联网补充",
-    synthesizing: "生成回答",
-    pdf_upload_required: "需要先上传文档",
-    pdf_selection_required: "需要选择文档",
-    pdf_reindex_required: "需要重建索引",
-  };
-  return map[statusKey] || statusKey || "";
-}
-
-function CodeBlock({ code, className = "" }: { code: string; className?: string }) {
-  const [copied, setCopied] = useState(false);
-  const copyCode = async () => {
-    try {
-      await navigator.clipboard.writeText(code);
-      setCopied(true);
-      window.setTimeout(() => setCopied(false), 1200);
-    } catch {
-      setCopied(false);
-    }
-  };
-  return (
-    <pre>
-      <button type="button" className="copy-code-btn" onClick={() => void copyCode()}>
-        {copied ? "已复制" : "复制"}
-      </button>
-      <code className={className}>{code}</code>
-    </pre>
-  );
-}
-
-function MarkdownBlock({ text }: { text: string }) {
-  return (
-    <ReactMarkdown
-      remarkPlugins={[remarkGfm]}
-      components={{
-        pre({ children }) {
-          const child = Array.isArray(children) ? children[0] : children;
-          if (!isValidElement(child)) return <pre>{children}</pre>;
-          const className = String((child.props as { className?: string })?.className || "");
-          const code = String((child.props as { children?: unknown })?.children || "").replace(/\n$/, "");
-          return <CodeBlock className={className} code={code} />;
-        },
-      }}
-    >
-      {text || ""}
-    </ReactMarkdown>
-  );
-}
+type AgentClassHint = "" | "general" | "cybersecurity" | "artificial_intelligence" | "pdf_text";
 
 export function ChatPage({ user, onLogout, themeLabel, onThemeToggle }: Props) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -113,6 +29,7 @@ export function ChatPage({ user, onLogout, themeLabel, onThemeToggle }: Props) {
   const [runStatus, setRunStatus] = useState("");
   const [useWeb, setUseWeb] = useState(true);
   const [useReasoning, setUseReasoning] = useState(true);
+  const [agentClassHint, setAgentClassHint] = useState<AgentClassHint>("");
 
   const [documents, setDocuments] = useState<IndexedFileSummary[]>([]);
   const [docsLoading, setDocsLoading] = useState(false);
@@ -157,7 +74,7 @@ export function ChatPage({ user, onLogout, themeLabel, onThemeToggle }: Props) {
 
   const handleApiError = async (e: unknown, fallback: string) => {
     if (e instanceof ApiError && e.status === 401) {
-      notify("登录状态失效，请重新登录", "error");
+      notify("登录已过期，请重新登录", "error");
       await onLogout();
       return;
     }
@@ -175,7 +92,7 @@ export function ChatPage({ user, onLogout, themeLabel, onThemeToggle }: Props) {
       setError("");
       closeSidebar();
     } catch (e) {
-      await handleApiError(e, "读取会话失败");
+      await handleApiError(e, "加载会话失败");
     } finally {
       setBusySessionId(null);
     }
@@ -190,7 +107,7 @@ export function ChatPage({ user, onLogout, themeLabel, onThemeToggle }: Props) {
       if (preferSelectFirst && rows.length > 0) await loadSession(rows[0].session_id);
       return rows;
     } catch (e) {
-      await handleApiError(e, "会话加载失败");
+      await handleApiError(e, "刷新会话列表失败");
       return [] as SessionSummary[];
     } finally {
       if (!silent) setSessionLoading(false);
@@ -203,7 +120,7 @@ export function ChatPage({ user, onLogout, themeLabel, onThemeToggle }: Props) {
       setCurrentSessionId(detail.session_id);
       setMessages(detail.messages || []);
       await refreshSessions();
-      notify("已创建新会话", "success");
+      notify("新会话已创建", "success");
       closeSidebar();
       return detail.session_id;
     } catch (e) {
@@ -234,7 +151,7 @@ export function ChatPage({ user, onLogout, themeLabel, onThemeToggle }: Props) {
       setDocuments(rows);
       setError("");
     } catch (e) {
-      await handleApiError(e, "文档加载失败");
+      await handleApiError(e, "加载文档失败");
     } finally {
       if (!silent) setDocsLoading(false);
     }
@@ -243,13 +160,13 @@ export function ChatPage({ user, onLogout, themeLabel, onThemeToggle }: Props) {
   const uploadFiles = async (files: File[]) => {
     if (!files.length) return;
     if (!canUploadAndManageDocs) {
-      notify("当前角色无上传权限", "warn");
+      notify("无上传权限", "warn");
       return;
     }
     try {
       setUploading(true);
       setUploadProgress(0);
-      setUploadProgressText("上传准备中...");
+      setUploadProgressText("准备上传...");
       setUploadInfo("上传中...");
       const data = await appApi.upload(
         files,
@@ -262,12 +179,17 @@ export function ChatPage({ user, onLogout, themeLabel, onThemeToggle }: Props) {
       setUploadProgress(100);
       setUploadProgressText("上传完成");
       setUploadInfo(
-        `已入库: ${data.filenames.join(", ")} | 跳过: ${(data.skipped_files || []).join(", ") || "无"} | 可见性: ${data.visibility_applied || uploadVisibility} | docs=${data.loaded_documents}, chunks=${data.chunks_indexed}, triplets=${data.triplets_written}`,
+        `已索引: ${data.filenames.join(", ")} | 跳过: ${(data.skipped_files || []).join(", ") || "无"} | 可见性: ${data.visibility_applied || uploadVisibility} | 文档=${data.loaded_documents}, 分块=${data.chunks_indexed}, 三元组=${data.triplets_written}`,
       );
+      const classes = Object.values(data.assigned_agent_classes || {}).filter(Boolean);
+      if (classes.length > 0) {
+        const unique = Array.from(new Set(classes));
+        if (unique.length === 1) setAgentClassHint((unique[0] as AgentClassHint) || "");
+      }
       notify(`上传完成: ${data.filenames.join(", ")}`, "success");
       await refreshDocuments();
     } catch (e) {
-      setUploadInfo(`上传失败: ${e instanceof Error ? e.message : "unknown error"}`);
+      setUploadInfo(`上传失败: ${e instanceof Error ? e.message : "未知错误"}`);
       await handleApiError(e, "上传失败");
     } finally {
       setUploading(false);
@@ -299,7 +221,7 @@ export function ChatPage({ user, onLogout, themeLabel, onThemeToggle }: Props) {
     setDocDropActive(false);
     const files = Array.from(evt.dataTransfer.files || []).filter((f) => SUPPORTED_DOC_RE.test(f.name));
     if (!files.length) {
-      notify("仅支持 .md / .txt / .pdf / 图片文件", "warn");
+      notify("只支持 .md / .txt / .pdf / 图片 文件", "warn");
       return;
     }
     await uploadFiles(files);
@@ -319,7 +241,7 @@ export function ChatPage({ user, onLogout, themeLabel, onThemeToggle }: Props) {
 
   const deleteDocument = async (item: IndexedFileSummary, removeFile: boolean) => {
     if (!canUploadAndManageDocs) {
-      notify("当前角色无文档管理权限", "warn");
+      notify("无文档管理权限", "warn");
       return;
     }
     const verb = removeFile ? "删除文件和索引" : "删除索引";
@@ -327,29 +249,29 @@ export function ChatPage({ user, onLogout, themeLabel, onThemeToggle }: Props) {
     try {
       const res = await appApi.documentDelete(item.filename, item.source, removeFile);
       setUploadInfo(
-        `${item.filename}: chunks_removed=${res.chunks_removed}, triplets_removed=${res.triplets_removed}, file_removed=${res.file_removed}`,
+        `${item.filename}: 已删分块=${res.chunks_removed}, 已删三元组=${res.triplets_removed}, 文件已删=${res.file_removed}`,
       );
-      notify(`${item.filename} 删除成功`, "success");
+      notify(`${item.filename} 已删除`, "success");
       await refreshDocuments();
     } catch (e) {
-      await handleApiError(e, "文档删除失败");
+      await handleApiError(e, "删除文档失败");
     }
   };
 
   const reindexDocument = async (item: IndexedFileSummary) => {
     if (!canUploadAndManageDocs) {
-      notify("当前角色无文档管理权限", "warn");
+      notify("无文档管理权限", "warn");
       return;
     }
     try {
       const res = await appApi.documentReindex(item.filename, item.source);
       setUploadInfo(
-        `${item.filename}: docs=${res.loaded_documents || 0}, chunks=${res.chunks_indexed || 0}, triplets=${res.triplets_written || 0}`,
+        `${item.filename}: 文档=${res.loaded_documents || 0}, 分块=${res.chunks_indexed || 0}, 三元组=${res.triplets_written || 0}`,
       );
-      notify(`${item.filename} 重建索引完成`, "success");
+      notify(`${item.filename} 已重建索引`, "success");
       await refreshDocuments();
     } catch (e) {
-      await handleApiError(e, "文档重建失败");
+      await handleApiError(e, "重建索引失败");
     }
   };
 
@@ -360,7 +282,7 @@ export function ChatPage({ user, onLogout, themeLabel, onThemeToggle }: Props) {
       setPrompts(rows);
       setError("");
     } catch (e) {
-      await handleApiError(e, "Prompt 模板加载失败");
+      await handleApiError(e, "加载提示词模板失败");
     } finally {
       if (!silent) setPromptsLoading(false);
     }
@@ -370,19 +292,21 @@ export function ChatPage({ user, onLogout, themeLabel, onThemeToggle }: Props) {
     const title = promptTitle.trim();
     const content = promptContent.trim();
     if (!title || !content) {
-      notify("请填写模板标题和内容", "warn");
+      notify("请填写标题和内容", "warn");
       return;
     }
     try {
-      if (editingPromptId) await appApi.promptUpdate(editingPromptId, title, content);
-      else await appApi.promptCreate(title, content);
+      const saved = editingPromptId
+        ? await appApi.promptUpdate(editingPromptId, title, content)
+        : await appApi.promptCreate(title, content);
+      if (saved.agent_class) setAgentClassHint((saved.agent_class as AgentClassHint) || "");
       setEditingPromptId(null);
       setPromptTitle("");
       setPromptContent("");
-      notify("模板已保存", "success");
+      notify("提示词已保存", "success");
       await refreshPrompts();
     } catch (e) {
-      await handleApiError(e, "模板保存失败");
+      await handleApiError(e, "保存提示词失败");
     }
   };
 
@@ -390,7 +314,7 @@ export function ChatPage({ user, onLogout, themeLabel, onThemeToggle }: Props) {
     const title = promptTitle.trim();
     const content = promptContent.trim();
     if (!title || !content) {
-      notify("请先填写模板标题和内容", "warn");
+      notify("请先填写标题和内容", "warn");
       return;
     }
     try {
@@ -398,20 +322,20 @@ export function ChatPage({ user, onLogout, themeLabel, onThemeToggle }: Props) {
       const res = await appApi.promptCheck(title, content, useReasoning);
       const suggestions = (res.suggestions || []).filter(Boolean);
       const suggestionBlock = suggestions.length
-        ? `\n\n【建议补充（可自行修改）】\n${suggestions.map((x, i) => `${i + 1}. ${x}`).join("\n")}`
+        ? `\n\n[建议补充]\n${suggestions.map((x, i) => `${i + 1}. ${x}`).join("\n")}`
         : "";
       setPromptTitle(res.title || title);
       setPromptContent(`${(res.content || content).trim()}${suggestionBlock}`);
       setPromptCheckInfo(`检查完成。${(res.issues || []).slice(0, 3).join("；")}`);
-      notify("模板检查完成", "success");
+      notify("提示词检查完成", "success");
     } catch (e) {
       setPromptCheckInfo("");
-      await handleApiError(e, "模板检查失败");
+      await handleApiError(e, "检查提示词失败");
     }
   };
 
   const deletePrompt = async (item: PromptTemplate) => {
-    if (!window.confirm(`删除模板：${item.title} ?`)) return;
+    if (!window.confirm(`确认删除模板：${item.title} ？`)) return;
     try {
       await appApi.promptDelete(item.prompt_id);
       if (editingPromptId === item.prompt_id) {
@@ -419,20 +343,20 @@ export function ChatPage({ user, onLogout, themeLabel, onThemeToggle }: Props) {
         setPromptTitle("");
         setPromptContent("");
       }
-      notify("模板已删除", "success");
+      notify("提示词已删除", "success");
       await refreshPrompts();
     } catch (e) {
-      await handleApiError(e, "模板删除失败");
+      await handleApiError(e, "删除提示词失败");
     }
   };
 
   const editMessage = async (msg: SessionMessage) => {
     if (!currentSessionId) return;
-    const next = window.prompt("修改消息内容", msg.content || "");
+    const next = window.prompt("编辑消息内容", msg.content || "");
     if (next === null) return;
     try {
       const rerun = msg.role === "user";
-      if (rerun) setRunStatus("重跑中");
+      if (rerun) setRunStatus("重新执行中");
       const detail = await appApi.messageUpdate(
         currentSessionId,
         msg.message_id,
@@ -445,7 +369,7 @@ export function ChatPage({ user, onLogout, themeLabel, onThemeToggle }: Props) {
       await refreshSessions();
       notify("消息已更新", "success");
     } catch (e) {
-      await handleApiError(e, "消息更新失败");
+      await handleApiError(e, "更新消息失败");
     } finally {
       setRunStatus("");
     }
@@ -460,7 +384,7 @@ export function ChatPage({ user, onLogout, themeLabel, onThemeToggle }: Props) {
       await refreshSessions();
       notify("消息已删除", "success");
     } catch (e) {
-      await handleApiError(e, "消息删除失败");
+      await handleApiError(e, "删除消息失败");
     }
   };
 
@@ -477,7 +401,7 @@ export function ChatPage({ user, onLogout, themeLabel, onThemeToggle }: Props) {
 
     setIsSending(true);
     setQuestion("");
-    setRunStatus("运行中");
+    setRunStatus("处理中");
     setMessages((prev) => [
       ...prev,
       { message_id: `local-user-${Date.now()}`, role: "user", content: q },
@@ -485,10 +409,16 @@ export function ChatPage({ user, onLogout, themeLabel, onThemeToggle }: Props) {
     ]);
 
     try {
-      const res = await appApi.streamQuery({ question: q, useWebFallback: useWeb, useReasoning, sessionId: sid });
+      const res = await appApi.streamQuery({
+        question: q,
+        useWebFallback: useWeb,
+        useReasoning,
+        sessionId: sid,
+        agentClassHint: agentClassHint || undefined,
+      });
       if (!res.ok || !res.body) {
         const raw = await res.text();
-        const detail = raw ? JSON.parse(raw).detail || raw : "stream failed";
+        const detail = raw ? JSON.parse(raw).detail || raw : "流式请求失败";
         throw new Error(String(detail));
       }
       const reader = res.body.getReader();
@@ -529,9 +459,14 @@ export function ChatPage({ user, onLogout, themeLabel, onThemeToggle }: Props) {
           else if (evt.type === "answer_chunk") {
             answer += String(evt.content || "");
             patchStreamMessage(answer);
+          } else if (evt.type === "answer_reset") {
+            answer = String(evt.content || "");
+            patchStreamMessage(answer);
           } else if (evt.type === "done") {
             const result = evt.result || {};
-            patchStreamMessage(answer || String(result.answer || ""), {
+            const finalAnswer = String(result.answer || answer || "");
+            answer = finalAnswer;
+            patchStreamMessage(finalAnswer, {
               route: result.route || meta.route,
               agent_class: result.agent_class || meta.agent_class,
               web_used: !!(result.web_result && result.web_result.used),
@@ -550,11 +485,11 @@ export function ChatPage({ user, onLogout, themeLabel, onThemeToggle }: Props) {
       setMessages(detail.messages || []);
       await refreshSessions();
     } catch (e) {
-      await handleApiError(e, "请求失败，请确认后端与模型服务状态");
+      await handleApiError(e, "请求失败，请检查后端或模型状态");
       setMessages((prev) =>
         prev.map((m) =>
           m.message_id === "local-assistant-stream"
-            ? { ...m, content: "请求失败。请确认 API 已启动、模型已就绪、向量库已导入。" }
+            ? { ...m, content: "请求失败，请检查 API、模型服务和向量索引状态。" }
             : m,
         ),
       );
@@ -609,11 +544,18 @@ export function ChatPage({ user, onLogout, themeLabel, onThemeToggle }: Props) {
     <div className="page-shell">
       <aside className={`sidebar ${sidebarOpen ? "open" : ""}`}>
         <div className="brand">CyberSec RAG</div>
-        <p className="muted">React 全功能迁移版（进行中）</p>
+        <p className="muted">React 全功能迁移版</p>
         <section className="panel">
           <div className="section-head">
-            <strong>事件会话</strong>
-            <button type="button" className="secondary tiny-btn" onClick={() => void createSession()} disabled={sessionLoading}>新建</button>
+            <strong>会话</strong>
+            <button
+              type="button"
+              className="secondary tiny-btn"
+              onClick={() => void createSession()}
+              disabled={sessionLoading}
+            >
+              新建
+            </button>
           </div>
           {sessionLoading && <div className="skeleton-list" />}
           {!sessionLoading && sessions.length === 0 && <div className="muted">暂无会话</div>}
@@ -621,11 +563,18 @@ export function ChatPage({ user, onLogout, themeLabel, onThemeToggle }: Props) {
             <ul className="list">
               {sessions.map((s) => (
                 <li key={s.session_id} className={`session-item ${s.session_id === currentSessionId ? "active" : ""}`}>
-                  <button type="button" className="list-main-btn" onClick={() => void loadSession(s.session_id)} disabled={busySessionId === s.session_id}>
+                  <button
+                    type="button"
+                    className="list-main-btn"
+                    onClick={() => void loadSession(s.session_id)}
+                    disabled={busySessionId === s.session_id}
+                  >
                     <span>{s.title || "新会话"}</span>
-                    <small>{s.message_count || 0} 条</small>
+                    <small>{s.message_count || 0} 条消息</small>
                   </button>
-                  <button type="button" className="danger tiny-btn" onClick={() => void deleteSession(s.session_id)}>删除</button>
+                  <button type="button" className="danger tiny-btn" onClick={() => void deleteSession(s.session_id)}>
+                    删除
+                  </button>
                 </li>
               ))}
             </ul>
@@ -633,8 +582,10 @@ export function ChatPage({ user, onLogout, themeLabel, onThemeToggle }: Props) {
         </section>
         <section className="panel">
           <div className="section-head">
-            <strong>文档库</strong>
-            <button type="button" className="secondary tiny-btn" onClick={() => void refreshDocuments()}>刷新</button>
+            <strong>文档</strong>
+            <button type="button" className="secondary tiny-btn" onClick={() => void refreshDocuments()}>
+              刷新
+            </button>
           </div>
           {canUploadAndManageDocs && (
             <div className="upload-box">
@@ -643,16 +594,24 @@ export function ChatPage({ user, onLogout, themeLabel, onThemeToggle }: Props) {
                   value={uploadVisibility}
                   onChange={(e) => setUploadVisibility((e.target.value as "private" | "public") || "private")}
                 >
-                  <option value="private">仅自己可见</option>
-                  <option value="public">所有人可见</option>
+                  <option value="private">私有</option>
+                  <option value="public">公开</option>
                 </select>
               )}
-              <input ref={fileInputRef} type="file" multiple onChange={onMainUploadChange} accept=".md,.txt,.pdf,.png,.jpg,.jpeg,.bmp,.tif,.tiff,.webp" />
+              <input
+                ref={fileInputRef}
+                type="file"
+                multiple
+                onChange={(evt) => void onMainUploadChange(evt)}
+                accept=".md,.txt,.pdf,.png,.jpg,.jpeg,.bmp,.tif,.tiff,.webp"
+              />
               <div className="muted">{uploading ? "上传中..." : "支持 .md/.txt/.pdf/图片"}</div>
               {uploadInfo && <div className="hint">{uploadInfo}</div>}
               {(uploading || uploadProgress > 0) && (
                 <div className="progress-wrap">
-                  <div className="progress-bar"><div className="progress-fill" style={{ width: `${Math.round(uploadProgress)}%` }} /></div>
+                  <div className="progress-bar">
+                    <div className="progress-fill" style={{ width: `${Math.round(uploadProgress)}%` }} />
+                  </div>
                   <div className="progress-text">{uploadProgressText || `上传中 ${Math.round(uploadProgress)}%`}</div>
                 </div>
               )}
@@ -661,158 +620,177 @@ export function ChatPage({ user, onLogout, themeLabel, onThemeToggle }: Props) {
           {canUploadAndManageDocs && (
             <div
               className={`dropzone ${docDropActive ? "dragover" : ""}`}
-              onDragEnter={(evt) => { evt.preventDefault(); evt.stopPropagation(); setDocDropActive(true); }}
-              onDragOver={(evt) => { evt.preventDefault(); evt.stopPropagation(); setDocDropActive(true); }}
-              onDragLeave={(evt) => { evt.preventDefault(); evt.stopPropagation(); setDocDropActive(false); }}
+              onDragEnter={(evt) => {
+                evt.preventDefault();
+                evt.stopPropagation();
+                setDocDropActive(true);
+              }}
+              onDragOver={(evt) => {
+                evt.preventDefault();
+                evt.stopPropagation();
+                setDocDropActive(true);
+              }}
+              onDragLeave={(evt) => {
+                evt.preventDefault();
+                evt.stopPropagation();
+                setDocDropActive(false);
+              }}
               onDrop={(evt) => void onDocsDrop(evt)}
             >
-              拖拽文件到这里上传（.md / .txt / .pdf / 图片）
+              拖拽文件到这里（.md / .txt / .pdf / 图片）
             </div>
           )}
           {docsLoading && <div className="skeleton-list" />}
-          {!docsLoading && documents.length === 0 && <div className="muted">暂无已索引文件</div>}
-          {!docsLoading && documents.map((doc) => (
-            <div key={`${doc.filename}-${doc.source}`} className="doc-row">
-              <div>
-                <div>{doc.filename}</div>
-                <small className="muted">
-                  chunks={doc.chunks} | visibility={doc.visibility || "private"} | on_disk={doc.exists_on_disk ? "yes" : "no"} | uploads={doc.in_uploads ? "yes" : "no"}
-                </small>
-              </div>
-              {(canUploadAndManageDocs && (isAdmin || doc.owner_user_id === user?.user_id)) && (
-                <div className="row-actions">
-                  <button type="button" className="secondary tiny-btn" onClick={() => void reindexDocument(doc)}>重建</button>
-                  <button type="button" className="danger tiny-btn" onClick={() => void deleteDocument(doc, false)}>删索引</button>
-                  <button type="button" className="danger tiny-btn" onClick={() => void deleteDocument(doc, true)}>删文件</button>
+          {!docsLoading && documents.length === 0 && <div className="muted">暂无已索引文档</div>}
+          {!docsLoading &&
+            documents.map((doc) => (
+              <div key={`${doc.filename}-${doc.source}`} className="doc-row">
+                <div>
+                  <div>{doc.filename}</div>
+                  <small className="muted">
+                    分块={doc.chunks} | 可见性={doc.visibility || "private"} | 在磁盘={doc.exists_on_disk ? "是" : "否"} |
+                    上传目录={doc.in_uploads ? "是" : "否"} | agent={doc.agent_class || "general"}
+                  </small>
                 </div>
-              )}
-            </div>
-          ))}
+                {(canUploadAndManageDocs && (isAdmin || doc.owner_user_id === user?.user_id)) && (
+                  <div className="row-actions">
+                    <button type="button" className="secondary tiny-btn" onClick={() => void reindexDocument(doc)}>
+                      重建索引
+                    </button>
+                    <button type="button" className="danger tiny-btn" onClick={() => void deleteDocument(doc, false)}>
+                      删除索引
+                    </button>
+                    <button type="button" className="danger tiny-btn" onClick={() => void deleteDocument(doc, true)}>
+                      删除文件
+                    </button>
+                  </div>
+                )}
+              </div>
+            ))}
         </section>
         <section className="panel">
           <div className="section-head">
-            <strong>Prompt 模板库</strong>
-            <button type="button" className="secondary tiny-btn" onClick={() => void refreshPrompts()}>刷新</button>
+            <strong>提示词模板</strong>
+            <button type="button" className="secondary tiny-btn" onClick={() => void refreshPrompts()}>
+              刷新
+            </button>
           </div>
           <input value={promptTitle} onChange={(e) => setPromptTitle(e.target.value)} placeholder="模板标题" />
-          <textarea value={promptContent} onChange={(e) => setPromptContent(e.target.value)} placeholder="在这里写模板内容..." rows={4} />
+          <textarea
+            value={promptContent}
+            onChange={(e) => setPromptContent(e.target.value)}
+            placeholder="在这里编写提示词模板..."
+            rows={4}
+          />
           <div className="row-actions">
-            <button type="button" className="secondary tiny-btn" onClick={() => void checkPrompt()}>检查并补全</button>
-            <button type="button" className="tiny-btn" onClick={() => void savePrompt()}>{editingPromptId ? "更新模板" : "保存模板"}</button>
+            <button type="button" className="secondary tiny-btn" onClick={() => void checkPrompt()}>
+              检查并补全
+            </button>
+            <button type="button" className="tiny-btn" onClick={() => void savePrompt()}>
+              {editingPromptId ? "更新模板" : "保存模板"}
+            </button>
           </div>
           {promptCheckInfo && <div className="hint">{promptCheckInfo}</div>}
           {promptsLoading && <div className="skeleton-list" />}
-          {!promptsLoading && prompts.length === 0 && <div className="muted">还没有模板</div>}
-          {!promptsLoading && prompts.map((p) => (
-            <div key={p.prompt_id} className="prompt-row">
-              <div><div>{p.title}</div><small className="muted">{(p.content || "").slice(0, 86)}</small></div>
-              <div className="row-actions">
-                <button type="button" className="secondary tiny-btn" onClick={() => setQuestion(p.content || "")}>使用</button>
-                <button type="button" className="secondary tiny-btn" onClick={() => { setEditingPromptId(p.prompt_id); setPromptTitle(p.title || ""); setPromptContent(p.content || ""); }}>编辑</button>
-                <button type="button" className="danger tiny-btn" onClick={() => void deletePrompt(p)}>删除</button>
+          {!promptsLoading && prompts.length === 0 && <div className="muted">暂无模板</div>}
+          {!promptsLoading &&
+            prompts.map((p) => (
+              <div key={p.prompt_id} className="prompt-row">
+                <div>
+                  <div>{p.title}</div>
+                  <small className="muted">
+                    agent={p.agent_class || "general"} | {(p.content || "").slice(0, 72)}
+                  </small>
+                </div>
+                <div className="row-actions">
+                  <button
+                    type="button"
+                    className="secondary tiny-btn"
+                    onClick={() => {
+                      setQuestion(p.content || "");
+                      if (p.agent_class) setAgentClassHint((p.agent_class as AgentClassHint) || "");
+                    }}
+                  >
+                    使用
+                  </button>
+                  <button
+                    type="button"
+                    className="secondary tiny-btn"
+                    onClick={() => {
+                      setEditingPromptId(p.prompt_id);
+                      setPromptTitle(p.title || "");
+                      setPromptContent(p.content || "");
+                    }}
+                  >
+                    编辑
+                  </button>
+                  <button type="button" className="danger tiny-btn" onClick={() => void deletePrompt(p)}>
+                    删除
+                  </button>
+                </div>
               </div>
-            </div>
-          ))}
+            ))}
         </section>
       </aside>
 
       <div className={`backdrop ${sidebarOpen ? "show" : ""}`} onClick={() => setSidebarOpen(false)} />
       <main className="main">
-        <header className="topbar">
-          <div>
-            <h2>网络安全攻防问答中枢（React）</h2>
-            <p className="muted">已迁移: 会话、流式问答、文档上传、Prompt 模板、RBAC。</p>
-          </div>
-          <div className="top-actions">
-            <span className="user-badge">{userBadge}</span>
-            <button type="button" className="secondary" onClick={() => setSidebarOpen((v) => !v)}>菜单</button>
-            <button type="button" className="secondary" onClick={onThemeToggle}>{themeLabel}</button>
-            <Link className="secondary link-btn" to="/app/architecture">架构总览</Link>
-            <label className="checkline"><input type="checkbox" checked={useWeb} onChange={(e) => setUseWeb(e.target.checked)} />联网校验</label>
-            <label className="checkline"><input type="checkbox" checked={useReasoning} onChange={(e) => setUseReasoning(e.target.checked)} />推理模型</label>
-            {isAdmin && <Link className="secondary link-btn" to="/app/admin">管理页</Link>}
-            <button type="button" onClick={() => void onLogout()}>退出</button>
-          </div>
-        </header>
-        <section className="chat-window panel" ref={chatScrollRef}>
-          {messages.length === 0 && <div className="muted">还没有消息，输入一个问题开始分析。</div>}
-          {messages.map((msg) => {
-            const isAssistant = msg.role === "assistant";
-            const md = msg.metadata || EMPTY_METADATA;
-            return (
-              <article key={msg.message_id} className={`bubble ${isAssistant ? "assistant" : "user"}`}>
-                <div className="message-head">
-                  <span>{isAssistant ? "助手" : "用户"}</span>
-                  {msg.message_id.startsWith("local-") ? null : (
-                    <div className="row-actions">
-                      <button type="button" className="secondary tiny-btn" onClick={() => void editMessage(msg)}>修改</button>
-                      <button type="button" className="danger tiny-btn" onClick={() => void removeMessage(msg)}>删除</button>
-                    </div>
-                  )}
-                </div>
-                <div className="markdown"><MarkdownBlock text={msg.content || ""} /></div>
-                {isAssistant && (
-                  <>
-                    <div className="chips">
-                      {md.route && <span className="chip">route: {md.route}</span>}
-                      {md.agent_class && <span className="chip">agent: {md.agent_class}</span>}
-                      <span className="chip">web: {md.web_used ? "yes" : "no"}</span>
-                      {(md.graph_entities || []).slice(0, 6).map((x) => <span key={x} className="chip">{x}</span>)}
-                    </div>
-                    {(md.thoughts || []).length > 0 && (
-                      <details>
-                        <summary>查看过程</summary>
-                        <ul className="compact-list">{(md.thoughts || []).slice(-8).map((x, i) => <li key={`${msg.message_id}-thought-${i}`}>{x}</li>)}</ul>
-                      </details>
-                    )}
-                    {(md.citations || []).length > 0 && (
-                      <details>
-                        <summary>查看引用</summary>
-                        <div className="citation-grid">
-                          {(md.citations || []).slice(0, 8).map((c, i) => (
-                            <div key={`${msg.message_id}-cit-${i}`} className="citation-card">
-                              <strong>{c.source || "unknown"}</strong>
-                              <MarkdownBlock text={c.content || ""} />
-                            </div>
-                          ))}
-                        </div>
-                      </details>
-                    )}
-                  </>
-                )}
-              </article>
-            );
-          })}
-        </section>
-        <section
-          className={`panel composer-panel ${composerDropActive ? "dragover" : ""}`}
-          onDragEnter={(evt) => { evt.preventDefault(); evt.stopPropagation(); setComposerDropActive(true); }}
-          onDragOver={(evt) => { evt.preventDefault(); evt.stopPropagation(); setComposerDropActive(true); }}
-          onDragLeave={(evt) => { evt.preventDefault(); evt.stopPropagation(); setComposerDropActive(false); }}
-          onDrop={(evt) => void onComposerDrop(evt)}
-        >
-          <textarea
-            ref={questionRef}
-            value={question}
-            onChange={(e) => setQuestion(e.target.value)}
-            placeholder="输入安全问题，例如：如何检测疑似横向移动？Ctrl/⌘ + Enter 发送"
-            rows={3}
-            onKeyDown={(e) => { if ((e.ctrlKey || e.metaKey) && e.key === "Enter") { e.preventDefault(); void ask(); } }}
-          />
-          <div className="row-actions">
-            <button type="button" onClick={() => void ask()} disabled={isSending}>{isSending ? "分析中..." : "分析"}</button>
-            <label className="secondary link-btn">
-              上传 PDF/图片
-              <input ref={chatUploadInputRef} type="file" multiple accept=".pdf,.png,.jpg,.jpeg,.bmp,.tif,.tiff,.webp" style={{ display: "none" }} onChange={onChatUploadChange} />
-            </label>
-            <button type="button" className="secondary" onClick={() => setQuestion("")}>清空</button>
-          </div>
-          <div className="row-actions wrap">{QUICK_PROMPTS.map((x) => <button key={x} type="button" className="secondary tiny-btn" onClick={() => setQuestion(x)}>{x}</button>)}</div>
-          {runStatus && <div className="status">{runStatus}</div>}
-          {error && <div className="status error">{error}</div>}
-        </section>
+        <ChatTopbar
+          userBadge={userBadge}
+          themeLabel={themeLabel}
+          useWeb={useWeb}
+          useReasoning={useReasoning}
+          agentClassHint={agentClassHint}
+          isAdmin={isAdmin}
+          onToggleSidebar={() => setSidebarOpen((v) => !v)}
+          onThemeToggle={onThemeToggle}
+          onUseWebChange={setUseWeb}
+          onUseReasoningChange={setUseReasoning}
+          onAgentClassHintChange={(v) => setAgentClassHint((v as AgentClassHint) || "")}
+          onLogout={onLogout}
+        />
+
+        <ChatMessages
+          messages={messages}
+          containerRef={chatScrollRef}
+          onEditMessage={editMessage}
+          onRemoveMessage={removeMessage}
+        />
+
+        <ChatComposer
+          composerDropActive={composerDropActive}
+          question={question}
+          questionRef={questionRef}
+          chatUploadInputRef={chatUploadInputRef}
+          isSending={isSending}
+          quickPrompts={QUICK_PROMPTS}
+          runStatus={runStatus}
+          error={error}
+          onQuestionChange={setQuestion}
+          onAsk={ask}
+          onClearQuestion={() => setQuestion("")}
+          onPromptPick={setQuestion}
+          onComposerDragEnter={(evt) => {
+            evt.preventDefault();
+            evt.stopPropagation();
+            setComposerDropActive(true);
+          }}
+          onComposerDragOver={(evt) => {
+            evt.preventDefault();
+            evt.stopPropagation();
+            setComposerDropActive(true);
+          }}
+          onComposerDragLeave={(evt) => {
+            evt.preventDefault();
+            evt.stopPropagation();
+            setComposerDropActive(false);
+          }}
+          onComposerDrop={onComposerDrop}
+          onChatUploadChange={onChatUploadChange}
+        />
       </main>
-      <div className="toast-stack">{toasts.map((t) => <div key={t.id} className={`toast ${t.kind}`}>{t.text}</div>)}</div>
+
+      <ToastStack toasts={toasts} />
     </div>
   );
 }

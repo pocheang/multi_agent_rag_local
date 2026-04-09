@@ -28,6 +28,11 @@ _PROMPT_INJECTION_RE = re.compile(
     r"绕过安全策略)",
     flags=re.IGNORECASE,
 )
+_INCOMPLETE_REFER_RE = re.compile(
+    r"(这个|那个|上面|前面|如下|这里|它|他|她|该项|这个问题|那个问题)",
+    flags=re.IGNORECASE,
+)
+_SHORT_TOKEN_RE = re.compile(r"[\u4e00-\u9fffA-Za-z0-9_]+")
 
 
 def normalize_user_question(question: str) -> str:
@@ -71,3 +76,26 @@ def normalize_and_validate_user_question(question: str) -> str:
     normalized = normalize_user_question(question)
     validate_user_question_security(normalized)
     return normalized
+
+
+def enhance_user_question_for_completion(question: str) -> str:
+    """
+    Improve short/underspecified user questions so downstream agents can
+    reason with clearer constraints while preserving the original intent text.
+    """
+    text = normalize_user_question(question)
+    tokens = _SHORT_TOKEN_RE.findall(text)
+    too_short = len(text) <= 12 or (len(text) <= 24 and len(tokens) <= 3)
+    has_refer = bool(_INCOMPLETE_REFER_RE.search(text))
+    likely_incomplete = too_short or has_refer
+    if not likely_incomplete:
+        return text
+
+    return (
+        f"{text}\n\n"
+        "[补全提示]\n"
+        "- 优先按用户当前这条最新提问作答，不要被更早轮次覆盖。\n"
+        "- 用户提问可能信息不完整，请先结合当前会话上下文补全语义。\n"
+        "- 若仍缺少关键条件，请先列出缺失信息，再在明确假设下给出可执行建议。\n"
+        "- 回答需包含：结论、执行步骤、风险点。"
+    )

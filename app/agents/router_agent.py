@@ -16,12 +16,14 @@ class RouteDecision(BaseModel):
 
 
 ROUTER_PROMPT = """
-你是一个网络安全问答场景的 RAG 路由器。根据用户问题判断最合适的路线：
-- vector: 适合从文档片段中找答案
-- graph: 适合实体关系、依赖、组织结构、关联分析
-- hybrid: 同时需要文档证据和关系图
+You are a route planner for a cybersecurity RAG assistant.
 
-同时选择一个 skill：
+Choose one route:
+- vector: best for finding answers from text chunks
+- graph: best for entity relations, dependencies, and topology
+- hybrid: needs both text evidence and relation graph
+
+Choose one skill from:
 - answer_with_citations
 - compare_entities
 - timeline_builder
@@ -31,12 +33,12 @@ ROUTER_PROMPT = """
 - incident_response_playbook
 - ai_knowledge_assistant
 
-路由建议：
-- 提到漏洞利用、攻击链、横向移动、权限提升、C2，优先 cyber_attack_analysis
-- 提到防护体系、检测规则、加固清单、零信任，优先 cyber_defense_hardening
-- 提到告警处置、溯源、隔离、应急演练，优先 incident_response_playbook
+Cyber skill hints:
+- exploitation, attack chain, lateral movement, privilege escalation, C2 => cyber_attack_analysis
+- defense architecture, detection rules, hardening checklist, zero trust => cyber_defense_hardening
+- incident triage, containment, forensic trace, emergency drill => incident_response_playbook
 
-只输出 JSON，格式：
+Output JSON only:
 {"route":"vector|graph|hybrid","reason":"...","skill":"..."}
 """
 
@@ -51,12 +53,21 @@ def _extract_json(text: str) -> dict:
         return {"route": "vector", "reason": "fallback_json_error", "skill": "answer_with_citations"}
 
 
-def decide_route(question: str, use_reasoning: bool = True) -> RouteDecision:
-    agent_class = classify_agent_class(question)
+def _normalize_agent_class_hint(agent_class_hint: str | None) -> str | None:
+    hint = str(agent_class_hint or "").strip().lower()
+    if hint in {"general", "cybersecurity", "artificial_intelligence", "pdf_text", "policy"}:
+        return hint
+    return None
+
+
+def decide_route(question: str, use_reasoning: bool = True, agent_class_hint: str | None = None) -> RouteDecision:
+    forced = _normalize_agent_class_hint(agent_class_hint)
+    agent_class = forced or classify_agent_class(question)
+    forced_reason = f" | forced_agent_class={forced}" if forced else ""
     if is_smalltalk_query(question):
         return RouteDecision(
             route="vector",
-            reason=f"smalltalk_local_only | agent_class={agent_class}",
+            reason=f"smalltalk_local_only | agent_class={agent_class}{forced_reason}",
             skill="answer_with_citations",
             agent_class=agent_class,
         )
@@ -65,7 +76,7 @@ def decide_route(question: str, use_reasoning: bool = True) -> RouteDecision:
     if agent_class == "pdf_text":
         return RouteDecision(
             route="vector",
-            reason=f"pdf_text_direct_route | agent_class={agent_class}",
+            reason=f"pdf_text_direct_route | agent_class={agent_class}{forced_reason}",
             skill="pdf_text_reader",
             agent_class=agent_class,
         )
@@ -110,4 +121,6 @@ def decide_route(question: str, use_reasoning: bool = True) -> RouteDecision:
         skill = "ai_knowledge_assistant"
 
     reason = f"{reason_raw} | agent_class={agent_class}"
+    if forced:
+        reason = f"{reason} | forced_agent_class={forced}"
     return RouteDecision(route=route, reason=reason, skill=skill, agent_class=agent_class)

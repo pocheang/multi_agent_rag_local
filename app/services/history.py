@@ -22,6 +22,7 @@ class HistoryStore:
             "created_at": now,
             "updated_at": now,
             "messages": [],
+            "runtime_policy": {"strategy_lock": None},
         }
         self._write(session_id, data)
         return data
@@ -60,6 +61,25 @@ class HistoryStore:
         data = json.loads(path.read_text(encoding="utf-8"))
         if self._ensure_message_ids(data):
             self._write(session_id, data)
+        return data
+
+    def get_session_strategy_lock(self, session_id: str) -> str | None:
+        data = self.get_session(session_id)
+        if data is None:
+            return None
+        policy = data.get("runtime_policy", {}) or {}
+        value = str(policy.get("strategy_lock", "") or "").strip().lower()
+        return value or None
+
+    def set_session_strategy_lock(self, session_id: str, strategy: str | None) -> dict[str, Any] | None:
+        data = self.get_session(session_id)
+        if data is None:
+            return None
+        policy = dict(data.get("runtime_policy", {}) or {})
+        policy["strategy_lock"] = str(strategy or "").strip().lower() or None
+        data["runtime_policy"] = policy
+        data["updated_at"] = self._now()
+        self._write(session_id, data)
         return data
 
     def delete_session(self, session_id: str) -> bool:

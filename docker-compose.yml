@@ -14,9 +14,25 @@ services:
       - neo4j_logs:/logs
       - neo4j_plugins:/plugins
       - neo4j_conf:/conf
+  n8n:
+    image: n8nio/n8n:latest
+    container_name: local-rag-n8n
+    restart: unless-stopped
+    ports:
+      - "5678:5678"
+    environment:
+      N8N_HOST: localhost
+      N8N_PORT: 5678
+      N8N_PROTOCOL: http
+      N8N_EDITOR_BASE_URL: http://localhost:5678
+      WEBHOOK_URL: http://localhost:5678
+      GENERIC_TIMEZONE: Asia/Shanghai
+    volumes:
+      - n8n_data:/home/node/.n8n
 
 volumes:
   neo4j_data:
   neo4j_logs:
   neo4j_plugins:
   neo4j_conf:
+  n8n_data:

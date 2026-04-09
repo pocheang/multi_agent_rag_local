@@ -1,0 +1,10 @@
+{
+  "python_version": "3.11",
+  "dependencies": [
+    "."
+  ],
+  "graphs": {
+    "local_rag_workflow": "app.graph.studio_entry:get_graph"
+  }
+}
+

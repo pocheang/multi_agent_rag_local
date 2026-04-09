@@ -1,12 +1,13 @@
 from app.core.config import get_settings
 
 
-def get_chat_model():
+def get_chat_model(temperature: float | None = None):
     settings = get_settings()
+    temp = 0 if temperature is None else float(temperature)
     if settings.model_backend.lower() == "openai":
         from langchain_openai import ChatOpenAI
 
-        kwargs = {"model": settings.openai_chat_model, "temperature": 0}
+        kwargs = {"model": settings.openai_chat_model, "temperature": temp}
         if settings.openai_api_key:
             kwargs["api_key"] = settings.openai_api_key
         if settings.openai_base_url:
@@ -18,7 +19,7 @@ def get_chat_model():
     return ChatOllama(
         model=settings.ollama_chat_model,
         base_url=settings.ollama_base_url,
-        temperature=0,
+        temperature=temp,
     )
 
 
@@ -42,13 +43,14 @@ def get_embedding_model():
     )
 
 
-def get_reasoning_model():
+def get_reasoning_model(temperature: float | None = None):
     settings = get_settings()
+    temp = 0 if temperature is None else float(temperature)
     backend = (settings.reasoning_model_backend or settings.model_backend).lower()
     if backend == "openai":
         from langchain_openai import ChatOpenAI
 
-        kwargs = {"model": settings.openai_reasoning_model or settings.openai_chat_model, "temperature": 0}
+        kwargs = {"model": settings.openai_reasoning_model or settings.openai_chat_model, "temperature": temp}
         if settings.openai_api_key:
             kwargs["api_key"] = settings.openai_api_key
         if settings.openai_base_url:
@@ -60,5 +62,5 @@ def get_reasoning_model():
     return ChatOllama(
         model=settings.ollama_reasoning_model or settings.ollama_chat_model,
         base_url=settings.ollama_base_url,
-        temperature=0,
+        temperature=temp,
     )

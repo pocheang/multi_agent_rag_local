@@ -6,6 +6,7 @@ from collections import deque
 import csv
 import hashlib
 import hmac
+import statistics
 from datetime import datetime, timedelta, timezone
 import io
 import socket
@@ -20,7 +21,7 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from fastapi.staticfiles import StaticFiles
 import httpx
 
-from app.core.config import get_settings
+from app.core.config import get_settings, reload_settings
 from app.ingestion.loaders import IMAGE_EXTENSIONS
 from app.core.schemas import (
     AdminRoleUpdateRequest,
@@ -59,7 +60,11 @@ from app.services.ingest_service import ingest_paths
 from app.services.index_manager import delete_file_index, list_indexed_files, rebuild_file_index
 from app.services.auto_ingest_watcher import AutoIngestWatcher
 from app.services.agent_classifier import classify_agent_class
-from app.services.input_normalizer import normalize_and_validate_user_question, normalize_user_question
+from app.services.input_normalizer import (
+    enhance_user_question_for_completion,
+    normalize_and_validate_user_question,
+    normalize_user_question,
+)
 from app.services.pdf_agent_guard import (
     apply_pdf_focus_to_question,
     build_choose_pdf_hint,
@@ -68,8 +73,29 @@ from app.services.pdf_agent_guard import (
 )
 from app.services.prompt_store import PromptStore
 from app.services.prompt_checker import check_and_enhance_prompt
+from app.services.query_intent import is_casual_chat_query
+from app.services.consistency_guard import should_stabilize, text_similarity
+from app.services.evidence_conflict import detect_evidence_conflict
+from app.services.retrieval_profiles import normalize_retrieval_profile, profile_force_local_only, profile_to_strategy
 from app.services.rate_limiter import SlidingWindowLimiter
 from app.services.rbac import can
+from app.services.runtime_ops import (
+    append_index_freshness,
+    append_replay_trend,
+    append_shadow_run,
+    append_benchmark_trend,
+    apply_rollback_profile,
+    choose_shadow,
+    get_runtime_state,
+    read_benchmark_trends,
+    read_index_freshness,
+    read_replay_trends,
+    read_shadow_runs,
+    resolve_profile_for_request,
+    set_active_profile,
+    set_canary,
+    set_shadow,
+)
 
 app = FastAPI(title="Multi-Agent Local RAG")
 settings = get_settings()
@@ -164,11 +190,38 @@ def _memory_signals_from_result(result: dict[str, Any]) -> dict[str, Any]:
     web_citations = web_result.get("citations", []) or []
     return {
         "vector_retrieved": int(vector_result.get("retrieved_count", 0) or 0),
+        "vector_effective_hits": int(vector_result.get("effective_hit_count", 0) or 0),
         "citation_count": len(vector_citations) + len(web_citations),
         "web_used": bool(web_result.get("used", False)),
         "route": str(result.get("route", "unknown")),
         "reason": str(result.get("reason", "")),
+        "retrieval_diagnostics": vector_result.get("retrieval_diagnostics", {}),
+        "grounding": result.get("grounding", {}),
+        "explainability": result.get("explainability", {}),
+        "answer_safety": result.get("answer_safety", {}),
     }
+
+
+def _latest_answer_for_same_question(user: dict[str, Any], session_id: str | None, question: str) -> str | None:
+    if not session_id:
+        return None
+    session_data = _history_store_for_user(user).get_session(session_id) or {}
+    msgs = list(session_data.get("messages", []) or [])
+    if not msgs:
+        return None
+    target = str(question or "").strip()
+    for i in range(len(msgs) - 2, -1, -1):
+        m = msgs[i]
+        if str(m.get("role", "")) != "user":
+            continue
+        if str(m.get("content", "")).strip() != target:
+            continue
+        for j in range(i + 1, len(msgs)):
+            n = msgs[j]
+            if str(n.get("role", "")) == "assistant":
+                return str(n.get("content", "") or "")
+        break
+    return None
 
 
 def _build_memory_context_for_session(user: dict[str, Any], session_id: str | None, question: str) -> str:
@@ -242,6 +295,46 @@ def _allowed_sources_for_user(user: dict[str, Any]) -> list[str]:
         if source and source not in allowed:
             allowed.append(source)
     return allowed
+
+
+def _enforce_result_source_scope(result: dict[str, Any], allowed_sources: list[str], request: Request, user: dict[str, Any]) -> dict[str, Any]:
+    allowed_set = set(allowed_sources)
+    if not allowed_set:
+        return result
+    vector_result = dict(result.get("vector_result", {}) or {})
+    citations = list(vector_result.get("citations", []) or [])
+    kept = []
+    denied = 0
+    for c in citations:
+        meta = c.get("metadata", {}) or {}
+        src = str(meta.get("source", "") or "")
+        if src and src in allowed_set:
+            kept.append(c)
+        else:
+            denied += 1
+    if denied > 0:
+        _audit(
+            request,
+            action="query.source_scope",
+            resource_type="query",
+            result="denied",
+            user=user,
+            detail=f"filtered_citations={denied}",
+        )
+    else:
+        _audit(
+            request,
+            action="query.source_scope",
+            resource_type="query",
+            result="success",
+            user=user,
+            detail=f"citations_checked={len(citations)}",
+        )
+    vector_result["citations"] = kept
+    vector_result["retrieved_count"] = len(kept)
+    out = dict(result)
+    out["vector_result"] = vector_result
+    return out
 
 
 def _list_visible_pdf_names_for_user(user: dict[str, Any]) -> list[str]:
@@ -352,6 +445,40 @@ def _normalize_prompt_fields(title: str, content: str) -> tuple[str, str]:
     if len(c) > 6000:
         raise HTTPException(status_code=400, detail="content too long")
     return t, c
+
+
+_ALLOWED_AGENT_CLASSES = {"general", "cybersecurity", "artificial_intelligence", "pdf_text", "policy"}
+_ALLOWED_RETRIEVAL_STRATEGIES = {"baseline", "advanced", "safe"}
+
+
+def _normalize_agent_class_hint(value: str | None) -> str | None:
+    hint = str(value or "").strip().lower()
+    if hint in _ALLOWED_AGENT_CLASSES:
+        return hint
+    return None
+
+
+def _normalize_retrieval_strategy(value: str | None) -> str | None:
+    strategy = str(value or "").strip().lower()
+    if strategy in _ALLOWED_RETRIEVAL_STRATEGIES:
+        return normalize_retrieval_profile(strategy)
+    return normalize_retrieval_profile(None)
+
+
+def _guess_agent_class_for_upload(filename: str) -> str:
+    suffix = Path(filename).suffix.lower()
+    if suffix in {".pdf", *IMAGE_EXTENSIONS}:
+        return "pdf_text"
+    guessed = classify_agent_class(Path(filename).stem)
+    return guessed if guessed in _ALLOWED_AGENT_CLASSES else "general"
+
+
+def _resolve_effective_agent_class(question: str, agent_class_hint: str | None) -> str:
+    hinted = _normalize_agent_class_hint(agent_class_hint)
+    if hinted:
+        return hinted
+    guessed = classify_agent_class(question)
+    return guessed if guessed in _ALLOWED_AGENT_CLASSES else "general"
 
 
 def _require_user(credentials: HTTPAuthorizationCredentials | None = Depends(auth_scheme)) -> dict[str, Any]:
@@ -495,6 +622,112 @@ def _parse_request_ts(value: str | None) -> datetime:
     if dt.tzinfo is None:
         return dt.replace(tzinfo=timezone.utc)
     return dt.astimezone(timezone.utc)
+
+
+def _extract_grounding_support_from_detail(detail: str | None) -> float | None:
+    text = str(detail or "")
+    m = re.search(r"grounding_support=([0-9]*\.?[0-9]+)", text)
+    if not m:
+        return None
+    try:
+        v = float(m.group(1))
+    except Exception:
+        return None
+    if v < 0:
+        return 0.0
+    if v > 1:
+        return 1.0
+    return v
+
+
+def _load_benchmark_queries(path: Path, limit: int = 100) -> list[str]:
+    if not path.exists():
+        return []
+    rows: list[str] = []
+    for line in path.read_text(encoding="utf-8").splitlines():
+        q = line.strip()
+        if q:
+            rows.append(q)
+    return rows[: max(1, limit)]
+
+
+def _effective_strategy_for_session(
+    *,
+    req_strategy: str | None,
+    user: dict[str, Any],
+    session_id: str | None,
+    question: str,
+) -> tuple[str, dict[str, Any]]:
+    if req_strategy is not None:
+        requested = _normalize_retrieval_strategy(req_strategy)
+        return resolve_profile_for_request(
+            requested,
+            user_id=str(user.get("user_id", "")),
+            session_id=str(session_id or ""),
+            question=question,
+        )
+    lock = None
+    if session_id:
+        lock = _history_store_for_user(user).get_session_strategy_lock(session_id)
+    if lock:
+        return normalize_retrieval_profile(lock), {"reason": "session_lock", "bucket": None}
+    return resolve_profile_for_request(
+        None,
+        user_id=str(user.get("user_id", "")),
+        session_id=str(session_id or ""),
+        question=question,
+    )
+
+
+def _launch_shadow_run(
+    *,
+    user: dict[str, Any],
+    session_id: str | None,
+    question: str,
+    primary_result: dict[str, Any],
+) -> None:
+    enabled, strategy = choose_shadow(
+        user_id=str(user.get("user_id", "")),
+        session_id=str(session_id or ""),
+        question=question,
+    )
+    if not enabled or not strategy:
+        return
+
+    def _worker():
+        started = time.perf_counter()
+        try:
+            shadow = run_query(
+                question,
+                use_web_fallback=True,
+                use_reasoning=False,
+                retrieval_strategy=strategy,
+            )
+            latency_ms = (time.perf_counter() - started) * 1000.0
+            sim = text_similarity(str(primary_result.get("answer", "") or ""), str(shadow.get("answer", "") or ""))
+            append_shadow_run(
+                {
+                    "user_id": str(user.get("user_id", "")),
+                    "session_id": str(session_id or ""),
+                    "strategy": strategy,
+                    "latency_ms": round(latency_ms, 2),
+                    "answer_similarity": round(float(sim), 4),
+                    "primary_grounding": float((primary_result.get("grounding", {}) or {}).get("support_ratio", 0.0) or 0.0),
+                    "shadow_grounding": float((shadow.get("grounding", {}) or {}).get("support_ratio", 0.0) or 0.0),
+                }
+            )
+        except Exception as e:
+            append_shadow_run(
+                {
+                    "user_id": str(user.get("user_id", "")),
+                    "session_id": str(session_id or ""),
+                    "strategy": strategy,
+                    "error": f"{type(e).__name__}",
+                }
+            )
+
+    t = threading.Thread(target=_worker, daemon=True, name="shadow-query")
+    t.start()
 
 
 def _is_valid_admin_approval_token(input_token: str) -> tuple[bool, str]:
@@ -697,6 +930,507 @@ def admin_ops_export_csv(
     return Response(
         content=out.getvalue(),
         media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": f"attachment; filename={filename}"},
+    )
+
+
+@app.get("/admin/ops/alerts")
+def admin_ops_alerts(
+    request: Request,
+    hours: int = 24,
+    user: dict[str, Any] = Depends(_require_user),
+):
+    _require_permission(user, "admin:audit_read", request, "admin")
+    window_hours = max(1, min(hours, 24 * 7))
+    now = datetime.now(timezone.utc)
+    cutoff = now - timedelta(hours=window_hours)
+
+    audit_rows = auth_service.list_audit_logs(limit=2000)
+    window_rows = _filter_audit_rows(rows=audit_rows, cutoff=cutoff)
+    total = len(window_rows)
+    errors = sum(1 for row in window_rows if str(row.get("result", "")).lower() != "success")
+    error_rate = (errors / total) * 100 if total > 0 else 0.0
+
+    with _request_metrics_lock:
+        req_rows = list(_request_metrics)
+    req_window = [r for r in req_rows if _parse_request_ts(str(r.get("ts", ""))) >= cutoff]
+    durations = sorted([int(r.get("duration_ms", 0) or 0) for r in req_window])
+    p95 = durations[max(0, int(len(durations) * 0.95) - 1)] if durations else 0
+
+    grounding_values = []
+    for row in window_rows:
+        if str(row.get("action", "")).strip() != "query.run":
+            continue
+        v = _extract_grounding_support_from_detail(str(row.get("detail", "")))
+        if v is not None:
+            grounding_values.append(v)
+    grounding_avg = (sum(grounding_values) / len(grounding_values)) if grounding_values else 1.0
+
+    alerts = []
+    if p95 > int(settings.slo_p95_latency_ms_threshold):
+        alerts.append({"type": "latency", "severity": "high", "value": p95, "threshold": int(settings.slo_p95_latency_ms_threshold)})
+    if error_rate > float(settings.slo_error_rate_percent_threshold):
+        alerts.append(
+            {
+                "type": "error_rate",
+                "severity": "high",
+                "value": round(error_rate, 2),
+                "threshold": float(settings.slo_error_rate_percent_threshold),
+            }
+        )
+    if grounding_avg < float(settings.slo_grounding_support_ratio_threshold):
+        alerts.append(
+            {
+                "type": "grounding_support",
+                "severity": "medium",
+                "value": round(grounding_avg, 3),
+                "threshold": float(settings.slo_grounding_support_ratio_threshold),
+            }
+        )
+
+    return {
+        "generated_at": now.isoformat(),
+        "window_hours": window_hours,
+        "status": "alerting" if alerts else "ok",
+        "slo": {
+            "p95_latency_ms": p95,
+            "error_rate_percent": round(error_rate, 2),
+            "grounding_support_ratio_avg": round(grounding_avg, 3),
+        },
+        "alerts": alerts,
+    }
+
+
+@app.get("/admin/ops/retrieval-profile")
+def admin_ops_retrieval_profile(request: Request, user: dict[str, Any] = Depends(_require_user)):
+    _require_permission(user, "admin:audit_read", request, "admin")
+    state = get_runtime_state()
+    return {
+        **state,
+        "profiles": [
+            {"id": "baseline", "label": "Baseline", "desc": "Conservative retrieval, lower risk."},
+            {"id": "advanced", "label": "Advanced", "desc": "Default RAGFlow-like advanced strategy."},
+            {"id": "safe", "label": "Safe", "desc": "Local-only retrieval, web fallback disabled."},
+        ],
+    }
+
+
+@app.post("/admin/ops/retrieval-profile")
+def admin_ops_set_retrieval_profile(
+    payload: dict[str, Any],
+    request: Request,
+    user: dict[str, Any] = Depends(_require_user),
+):
+    _require_permission(user, "admin:audit_read", request, "admin")
+    follow_default = bool(payload.get("follow_config_default", False))
+    profile = str(payload.get("profile", "") or "")
+    state = set_active_profile(profile=profile or "advanced", follow_config_default=follow_default)
+    _audit(
+        request,
+        action="admin.ops.profile.set",
+        resource_type="admin",
+        result="success",
+        user=user,
+        detail=f"profile={state['active_profile']}; follow_default={state['follow_config_default']}",
+    )
+    return state
+
+
+@app.post("/admin/ops/canary")
+def admin_ops_set_canary(payload: dict[str, Any], request: Request, user: dict[str, Any] = Depends(_require_user)):
+    _require_permission(user, "admin:audit_read", request, "admin")
+    enabled = bool(payload.get("enabled", False))
+    baseline_percent = int(payload.get("baseline_percent", 0) or 0)
+    safe_percent = int(payload.get("safe_percent", 0) or 0)
+    seed = str(payload.get("seed", "default") or "default")
+    state = set_canary(enabled=enabled, baseline_percent=baseline_percent, safe_percent=safe_percent, seed=seed)
+    _audit(
+        request,
+        action="admin.ops.canary.set",
+        resource_type="admin",
+        result="success",
+        user=user,
+        detail=f"enabled={enabled}; baseline={baseline_percent}; safe={safe_percent}; seed={seed}",
+    )
+    return state
+
+
+@app.post("/admin/config/reload")
+def admin_reload_config(request: Request, user: dict[str, Any] = Depends(_require_user)):
+    _require_permission(user, "admin:audit_read", request, "admin")
+    global settings
+    settings = reload_settings()
+    auto_ingest_watcher.settings = settings
+    _audit(
+        request,
+        action="admin.config.reload",
+        resource_type="admin",
+        result="success",
+        user=user,
+        detail="settings_reloaded",
+    )
+    return {
+        "ok": True,
+        "reloaded_at": datetime.now(timezone.utc).isoformat(),
+        "snapshot": {
+            "retrieval_profile": settings.retrieval_profile,
+            "top_k": settings.top_k,
+            "max_context_chunks": settings.max_context_chunks,
+            "retrieval_cache_enabled": settings.retrieval_cache_enabled,
+            "dynamic_retrieval_enabled": settings.dynamic_retrieval_enabled,
+            "query_rewrite_enabled": settings.query_rewrite_enabled,
+            "query_decompose_enabled": settings.query_decompose_enabled,
+            "rank_feature_enabled": settings.rank_feature_enabled,
+        },
+    }
+
+
+@app.post("/admin/ops/rollback")
+def admin_ops_rollback(request: Request, user: dict[str, Any] = Depends(_require_user)):
+    _require_permission(user, "admin:audit_read", request, "admin")
+    state = apply_rollback_profile()
+    _audit(
+        request,
+        action="admin.ops.rollback",
+        resource_type="admin",
+        result="success",
+        user=user,
+        detail="runtime_profile_rollback_to_baseline",
+    )
+    return {"ok": True, "state": state}
+
+
+@app.get("/admin/ops/benchmark/trends")
+def admin_ops_benchmark_trends(
+    request: Request,
+    limit: int = 30,
+    user: dict[str, Any] = Depends(_require_user),
+):
+    _require_permission(user, "admin:audit_read", request, "admin")
+    rows = read_benchmark_trends(limit=max(1, min(limit, 300)))
+    return {"items": rows, "count": len(rows)}
+
+
+@app.get("/admin/ops/shadow")
+def admin_ops_shadow_get(request: Request, user: dict[str, Any] = Depends(_require_user)):
+    _require_permission(user, "admin:audit_read", request, "admin")
+    return get_runtime_state().get("shadow", {})
+
+
+@app.post("/admin/ops/shadow")
+def admin_ops_shadow_set(payload: dict[str, Any], request: Request, user: dict[str, Any] = Depends(_require_user)):
+    _require_permission(user, "admin:audit_read", request, "admin")
+    state = set_shadow(
+        enabled=bool(payload.get("enabled", False)),
+        strategy=str(payload.get("strategy", "baseline") or "baseline"),
+        sample_percent=int(payload.get("sample_percent", 10) or 10),
+        seed=str(payload.get("seed", "shadow") or "shadow"),
+    )
+    _audit(
+        request,
+        action="admin.ops.shadow.set",
+        resource_type="admin",
+        result="success",
+        user=user,
+        detail=(
+            f"enabled={state.get('shadow', {}).get('enabled')}; "
+            f"strategy={state.get('shadow', {}).get('strategy')}; "
+            f"sample={state.get('shadow', {}).get('sample_percent')}"
+        ),
+    )
+    return state.get("shadow", {})
+
+
+@app.get("/admin/ops/shadow/runs")
+def admin_ops_shadow_runs(request: Request, limit: int = 100, user: dict[str, Any] = Depends(_require_user)):
+    _require_permission(user, "admin:audit_read", request, "admin")
+    rows = read_shadow_runs(limit=max(1, min(limit, 1000)))
+    return {"items": rows, "count": len(rows)}
+
+
+@app.post("/admin/ops/ab-compare")
+def admin_ops_ab_compare(payload: dict[str, Any], request: Request, user: dict[str, Any] = Depends(_require_user)):
+    _require_permission(user, "admin:audit_read", request, "admin")
+    question = str(payload.get("question", "") or "").strip()
+    if not question:
+        raise HTTPException(status_code=400, detail="question is required")
+    strategies = payload.get("strategies")
+    if not isinstance(strategies, list) or not strategies:
+        strategies = ["baseline", "advanced", "safe"]
+    normalized = [normalize_retrieval_profile(str(x)) for x in strategies]
+    runs: dict[str, Any] = {}
+    for s in normalized:
+        t0 = time.perf_counter()
+        res = run_query(question, use_web_fallback=not profile_force_local_only(s), use_reasoning=False, retrieval_strategy=s)
+        runs[s] = {
+            "latency_ms": round((time.perf_counter() - t0) * 1000.0, 2),
+            "answer": str(res.get("answer", "") or ""),
+            "grounding_support_ratio": float((res.get("grounding", {}) or {}).get("support_ratio", 0.0) or 0.0),
+            "citations": len(res.get("vector_result", {}).get("citations", []) or [])
+            + len(res.get("web_result", {}).get("citations", []) or []),
+        }
+    base = runs.get("advanced") or next(iter(runs.values()))
+    diff = {}
+    for s, r in runs.items():
+        diff[s] = {
+            "answer_similarity_vs_advanced": round(text_similarity(str(base.get("answer", "")), str(r.get("answer", ""))), 4),
+            "latency_delta_ms_vs_advanced": round(float(r.get("latency_ms", 0.0)) - float(base.get("latency_ms", 0.0)), 2),
+            "grounding_delta_vs_advanced": round(
+                float(r.get("grounding_support_ratio", 0.0)) - float(base.get("grounding_support_ratio", 0.0)),
+                4,
+            ),
+        }
+    return {"question": question, "runs": runs, "diff": diff}
+
+
+@app.post("/admin/ops/replay-history")
+def admin_ops_replay_history(
+    payload: dict[str, Any],
+    request: Request,
+    user: dict[str, Any] = Depends(_require_user),
+):
+    _require_permission(user, "admin:audit_read", request, "admin")
+    max_questions = max(1, min(int(payload.get("max_questions", 30) or 30), 200))
+    strategy = normalize_retrieval_profile(str(payload.get("strategy", "advanced") or "advanced"))
+    history_store = _history_store_for_user(user)
+    sessions = history_store.list_sessions()
+    questions: list[str] = []
+    for s in sessions:
+        sid = str(s.get("session_id", "") or "")
+        if not sid:
+            continue
+        detail = history_store.get_session(sid) or {}
+        for m in detail.get("messages", []) or []:
+            if str(m.get("role", "")) == "user":
+                q = str(m.get("content", "") or "").strip()
+                if q:
+                    questions.append(q)
+            if len(questions) >= max_questions:
+                break
+        if len(questions) >= max_questions:
+            break
+    if not questions:
+        raise HTTPException(status_code=400, detail="no historical questions found")
+
+    latencies: list[float] = []
+    groundings: list[float] = []
+    conflicts = 0
+    for q in questions:
+        t0 = time.perf_counter()
+        res = run_query(q, use_web_fallback=not profile_force_local_only(strategy), use_reasoning=False, retrieval_strategy=strategy)
+        latencies.append((time.perf_counter() - t0) * 1000.0)
+        groundings.append(float((res.get("grounding", {}) or {}).get("support_ratio", 0.0) or 0.0))
+        all_citations = list(res.get("vector_result", {}).get("citations", []) or []) + list(res.get("web_result", {}).get("citations", []) or [])
+        if detect_evidence_conflict(all_citations).get("conflict"):
+            conflicts += 1
+    summary = {
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "strategy": strategy,
+        "num_questions": len(questions),
+        "latency_ms": {
+            "p50": round(statistics.median(latencies), 2),
+            "p95": round(sorted(latencies)[max(0, int(len(latencies) * 0.95) - 1)], 2),
+            "avg": round(statistics.mean(latencies), 2),
+        },
+        "grounding_support_ratio": {"avg": round(statistics.mean(groundings), 4), "min": round(min(groundings), 4)},
+        "conflict_rate": round(conflicts / len(questions), 4),
+    }
+    append_replay_trend(summary)
+    _audit(
+        request,
+        action="admin.ops.replay.run",
+        resource_type="admin",
+        result="success",
+        user=user,
+        detail=f"questions={len(questions)}; strategy={strategy}",
+    )
+    return {"ok": True, "summary": summary}
+
+
+@app.get("/admin/ops/replay/trends")
+def admin_ops_replay_trends(request: Request, limit: int = 30, user: dict[str, Any] = Depends(_require_user)):
+    _require_permission(user, "admin:audit_read", request, "admin")
+    rows = read_replay_trends(limit=max(1, min(limit, 300)))
+    return {"items": rows, "count": len(rows)}
+
+
+@app.get("/admin/ops/index-freshness")
+def admin_ops_index_freshness(
+    request: Request,
+    limit: int = 200,
+    sla_seconds: int = 120,
+    user: dict[str, Any] = Depends(_require_user),
+):
+    _require_permission(user, "admin:audit_read", request, "admin")
+    rows = read_index_freshness(limit=max(1, min(limit, 1000)))
+    total = len(rows)
+    breached = sum(1 for r in rows if float(r.get("freshness_seconds", 0.0) or 0.0) > float(sla_seconds))
+    return {
+        "items": rows,
+        "count": total,
+        "sla_seconds": sla_seconds,
+        "breach_count": breached,
+        "breach_rate": round((breached / total), 4) if total > 0 else 0.0,
+    }
+
+
+@app.post("/admin/ops/autotune")
+def admin_ops_autotune(payload: dict[str, Any], request: Request, user: dict[str, Any] = Depends(_require_user)):
+    _require_permission(user, "admin:audit_read", request, "admin")
+    target_p95 = float(payload.get("target_p95_ms", 3000) or 3000)
+    target_grounding = float(payload.get("target_grounding", 0.65) or 0.65)
+    trends = read_replay_trends(limit=1)
+    if not trends:
+        raise HTTPException(status_code=400, detail="no replay trends found; run replay first")
+    latest = trends[-1]
+    latest_p95 = float(((latest.get("latency_ms", {}) or {}).get("p95", 0.0) or 0.0))
+    latest_grounding = float(((latest.get("grounding_support_ratio", {}) or {}).get("avg", 0.0) or 0.0))
+    patch: dict[str, Any] = {}
+    if latest_p95 > target_p95:
+        patch["TOP_K"] = max(2, int(settings.top_k) - 1)
+        patch["MAX_CONTEXT_CHUNKS"] = max(3, int(settings.max_context_chunks) - 1)
+    if latest_grounding < target_grounding:
+        patch["TOP_K"] = max(int(patch.get("TOP_K", settings.top_k)), int(settings.top_k) + 1)
+        patch["RANK_FEATURE_ENABLED"] = True
+        patch["DYNAMIC_RETRIEVAL_ENABLED"] = True
+    if not patch:
+        patch = {"status": "no_change"}
+    else:
+        if "TOP_K" in patch:
+            settings.top_k = int(patch["TOP_K"])
+        if "MAX_CONTEXT_CHUNKS" in patch:
+            settings.max_context_chunks = int(patch["MAX_CONTEXT_CHUNKS"])
+        if "RANK_FEATURE_ENABLED" in patch:
+            settings.rank_feature_enabled = bool(patch["RANK_FEATURE_ENABLED"])
+        if "DYNAMIC_RETRIEVAL_ENABLED" in patch:
+            settings.dynamic_retrieval_enabled = bool(patch["DYNAMIC_RETRIEVAL_ENABLED"])
+    _audit(
+        request,
+        action="admin.ops.autotune",
+        resource_type="admin",
+        result="success",
+        user=user,
+        detail=f"patch={patch}",
+    )
+    return {"ok": True, "latest": latest, "applied_patch": patch}
+
+
+@app.post("/admin/ops/benchmark/run")
+def admin_ops_benchmark_run(
+    request: Request,
+    max_queries: int = 20,
+    strategy: str | None = None,
+    user: dict[str, Any] = Depends(_require_user),
+):
+    _require_permission(user, "admin:audit_read", request, "admin")
+    query_path = Path("data/eval/benchmark_queries.txt")
+    queries = _load_benchmark_queries(query_path, limit=max(1, min(max_queries, 100)))
+    if not queries:
+        raise HTTPException(status_code=400, detail="benchmark query set is empty")
+
+    latencies: list[float] = []
+    support_ratios: list[float] = []
+    citation_counts: list[int] = []
+    used_profile = normalize_retrieval_profile(strategy)
+    for q in queries:
+        t0 = time.perf_counter()
+        result = run_query(
+            q,
+            use_web_fallback=True,
+            use_reasoning=False,
+            retrieval_strategy=used_profile,
+        )
+        latencies.append((time.perf_counter() - t0) * 1000.0)
+        support_ratios.append(float((result.get("grounding", {}) or {}).get("support_ratio", 0.0) or 0.0))
+        citation_counts.append(
+            len(result.get("vector_result", {}).get("citations", []) or [])
+            + len(result.get("web_result", {}).get("citations", []) or [])
+        )
+
+    entry = {
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "num_queries": len(queries),
+        "strategy": used_profile,
+        "latency_ms": {
+            "p50": round(statistics.median(latencies), 2),
+            "p95": round(sorted(latencies)[max(0, int(len(latencies) * 0.95) - 1)], 2),
+            "avg": round(statistics.mean(latencies), 2),
+        },
+        "grounding_support_ratio": {
+            "avg": round(statistics.mean(support_ratios), 4),
+            "min": round(min(support_ratios), 4),
+        },
+        "citations": {
+            "avg": round(statistics.mean(citation_counts), 2),
+            "max": max(citation_counts),
+        },
+    }
+    append_benchmark_trend(entry)
+    _audit(
+        request,
+        action="admin.ops.benchmark.run",
+        resource_type="admin",
+        result="success",
+        user=user,
+        detail=f"queries={len(queries)}; strategy={used_profile}",
+    )
+    return {"ok": True, "result": entry}
+
+
+@app.get("/admin/ops/audit-report.md")
+def admin_ops_audit_report_md(
+    request: Request,
+    hours: int = 24,
+    user: dict[str, Any] = Depends(_require_user),
+):
+    _require_permission(user, "admin:audit_read", request, "admin")
+    overview = admin_ops_overview(
+        request=request,
+        hours=hours,
+        actor_user_id=None,
+        action_keyword=None,
+        user=user,
+    )
+    alerts = admin_ops_alerts(request=request, hours=hours, user=user)
+    lines = [
+        "# Ops Audit Report",
+        "",
+        f"- generated_at: {datetime.now(timezone.utc).isoformat()}",
+        f"- window_hours: {hours}",
+        f"- status: {overview.get('status', 'unknown')}",
+        "",
+        "## KPI",
+        "",
+        f"- requests_total: {overview.get('kpi', {}).get('requests_total', 0)}",
+        f"- requests_success: {overview.get('kpi', {}).get('requests_success', 0)}",
+        f"- requests_error: {overview.get('kpi', {}).get('requests_error', 0)}",
+        f"- error_rate_percent: {overview.get('kpi', {}).get('error_rate_percent', 0)}",
+        "",
+        "## SLO",
+        "",
+        f"- p95_latency_ms: {alerts.get('slo', {}).get('p95_latency_ms', 0)}",
+        f"- error_rate_percent: {alerts.get('slo', {}).get('error_rate_percent', 0)}",
+        f"- grounding_support_ratio_avg: {alerts.get('slo', {}).get('grounding_support_ratio_avg', 0)}",
+        "",
+        "## Top Actions",
+        "",
+    ]
+    for row in overview.get("top_actions", [])[:10]:
+        lines.append(f"- {row.get('action', 'unknown')}: {row.get('count', 0)}")
+    lines.extend(["", "## Alerts", ""])
+    if not alerts.get("alerts"):
+        lines.append("- no_active_alerts")
+    else:
+        for row in alerts.get("alerts", []):
+            lines.append(
+                f"- {row.get('type', 'unknown')} ({row.get('severity', 'unknown')}): "
+                f"value={row.get('value')} threshold={row.get('threshold')}"
+            )
+    text = "\n".join(lines) + "\n"
+    filename = f"ops_audit_report_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}.md"
+    return Response(
+        content=text,
+        media_type="text/markdown; charset=utf-8",
         headers={"Content-Disposition": f"attachment; filename={filename}"},
     )
 
@@ -1076,7 +1810,8 @@ def list_prompts(request: Request, user: dict[str, Any] = Depends(_require_user)
 def create_prompt(req: PromptTemplateCreateRequest, request: Request, user: dict[str, Any] = Depends(_require_user)):
     _require_permission(user, "prompt:manage", request, "prompt")
     title, content = _normalize_prompt_fields(req.title, req.content)
-    row = prompt_store.create_prompt(user_id=user["user_id"], title=title, content=content)
+    agent_class = _resolve_effective_agent_class(f"{title}\n{content}", None)
+    row = prompt_store.create_prompt(user_id=user["user_id"], title=title, content=content, agent_class=agent_class)
     _audit(request, action="prompt.create", resource_type="prompt", result="success", user=user, resource_id=row["prompt_id"])
     return PromptTemplate(**row)
 
@@ -1094,10 +1829,49 @@ def check_prompt(req: PromptCheckRequest, request: Request, user: dict[str, Any]
 def update_prompt(prompt_id: str, req: PromptTemplateUpdateRequest, request: Request, user: dict[str, Any] = Depends(_require_user)):
     _require_permission(user, "prompt:manage", request, "prompt", resource_id=prompt_id)
     title, content = _normalize_prompt_fields(req.title, req.content)
-    row = prompt_store.update_prompt(user_id=user["user_id"], prompt_id=prompt_id, title=title, content=content)
+    agent_class = _resolve_effective_agent_class(f"{title}\n{content}", None)
+    row = prompt_store.update_prompt(
+        user_id=user["user_id"],
+        prompt_id=prompt_id,
+        title=title,
+        content=content,
+        agent_class=agent_class,
+    )
     if row is None:
         raise HTTPException(status_code=404, detail="prompt not found")
     _audit(request, action="prompt.update", resource_type="prompt", result="success", user=user, resource_id=prompt_id)
+    return PromptTemplate(**row)
+
+
+@app.get("/prompts/{prompt_id}/versions")
+def list_prompt_versions(prompt_id: str, request: Request, limit: int = 20, user: dict[str, Any] = Depends(_require_user)):
+    _require_permission(user, "prompt:manage", request, "prompt", resource_id=prompt_id)
+    rows = prompt_store.list_versions(user_id=user["user_id"], prompt_id=prompt_id, limit=limit)
+    return {"items": rows, "count": len(rows)}
+
+
+@app.post("/prompts/{prompt_id}/versions/{version_id}/approve")
+def approve_prompt_version(prompt_id: str, version_id: str, request: Request, user: dict[str, Any] = Depends(_require_user)):
+    _require_permission(user, "prompt:manage", request, "prompt", resource_id=prompt_id)
+    row = prompt_store.approve_version(
+        user_id=user["user_id"],
+        prompt_id=prompt_id,
+        version_id=version_id,
+        approved_by=str(user.get("username", "")),
+    )
+    if row is None:
+        raise HTTPException(status_code=404, detail="prompt version not found")
+    _audit(request, action="prompt.version.approve", resource_type="prompt", result="success", user=user, resource_id=prompt_id)
+    return row
+
+
+@app.post("/prompts/{prompt_id}/versions/{version_id}/rollback", response_model=PromptTemplate)
+def rollback_prompt_version(prompt_id: str, version_id: str, request: Request, user: dict[str, Any] = Depends(_require_user)):
+    _require_permission(user, "prompt:manage", request, "prompt", resource_id=prompt_id)
+    row = prompt_store.rollback_to_version(user_id=user["user_id"], prompt_id=prompt_id, version_id=version_id)
+    if row is None:
+        raise HTTPException(status_code=404, detail="prompt version not found")
+    _audit(request, action="prompt.version.rollback", resource_type="prompt", result="success", user=user, resource_id=prompt_id)
     return PromptTemplate(**row)
 
 
@@ -1132,6 +1906,42 @@ def get_session(session_id: str, request: Request, user: dict[str, Any] = Depend
     if data is None:
         raise HTTPException(status_code=404, detail="session not found")
     return data
+
+
+@app.get("/sessions/{session_id}/strategy-lock")
+def get_session_strategy_lock(session_id: str, request: Request, user: dict[str, Any] = Depends(_require_user)):
+    _require_permission(user, "session:manage", request, "session", resource_id=session_id)
+    store = _history_store_for_user(user)
+    data = store.get_session(session_id)
+    if data is None:
+        raise HTTPException(status_code=404, detail="session not found")
+    return {"session_id": session_id, "strategy_lock": store.get_session_strategy_lock(session_id)}
+
+
+@app.post("/sessions/{session_id}/strategy-lock")
+def set_session_strategy_lock(
+    session_id: str,
+    payload: dict[str, Any],
+    request: Request,
+    user: dict[str, Any] = Depends(_require_user),
+):
+    _require_permission(user, "session:manage", request, "session", resource_id=session_id)
+    strategy_raw = payload.get("strategy_lock")
+    strategy = normalize_retrieval_profile(str(strategy_raw)) if strategy_raw else None
+    store = _history_store_for_user(user)
+    updated = store.set_session_strategy_lock(session_id, strategy)
+    if updated is None:
+        raise HTTPException(status_code=404, detail="session not found")
+    _audit(
+        request,
+        action="session.strategy_lock.set",
+        resource_type="session",
+        result="success",
+        user=user,
+        resource_id=session_id,
+        detail=f"strategy_lock={strategy or 'none'}",
+    )
+    return {"session_id": session_id, "strategy_lock": strategy}
 
 
 @app.delete("/sessions/{session_id}")
@@ -1191,9 +2001,10 @@ def update_session_message(
         raise HTTPException(status_code=404, detail="message not found")
 
     if rerun and current.get("role") == "user":
-        memory_context = _build_memory_context_for_session(user=user, session_id=session_id, question=content)
+        effective_question = content if is_casual_chat_query(content) else enhance_user_question_for_completion(content)
+        memory_context = _build_memory_context_for_session(user=user, session_id=session_id, question=effective_question)
         result = run_query(
-            content,
+            effective_question,
             use_web_fallback=use_web_fallback,
             use_reasoning=use_reasoning,
             memory_context=memory_context,
@@ -1269,17 +2080,21 @@ def reindex_document(filename: str, request: Request, source: str | None = None,
         _audit(request, action="document.reindex", resource_type="document", result="denied", user=user, resource_id=filename)
         raise HTTPException(status_code=403, detail="source not allowed")
     try:
+        t0 = time.perf_counter()
         visibility = "private"
         owner_user_id = str(user.get("user_id", ""))
+        agent_class = "general"
         for row in list_indexed_files():
             if str(row.get("source", "") or "") == source:
                 visibility = str(row.get("visibility", visibility) or visibility)
                 owner_user_id = str(row.get("owner_user_id", owner_user_id) or owner_user_id)
+                agent_class = str(row.get("agent_class", agent_class) or agent_class)
                 break
         metadata_overrides_by_source = {
             source: {
                 "owner_user_id": owner_user_id,
                 "visibility": visibility,
+                "agent_class": agent_class,
             }
         }
         result = FileIndexActionResponse(
@@ -1288,6 +2103,16 @@ def reindex_document(filename: str, request: Request, source: str | None = None,
                 source=source,
                 metadata_overrides_by_source=metadata_overrides_by_source,
             )
+        )
+        append_index_freshness(
+            {
+                "user_id": str(user.get("user_id", "")),
+                "filename": filename,
+                "source": source,
+                "freshness_seconds": round((time.perf_counter() - t0), 4),
+                "chunks_indexed": int(result.chunks_indexed or 0),
+                "mode": "reindex",
+            }
         )
         _audit(request, action="document.reindex", resource_type="document", result="success", user=user, resource_id=filename)
         return result
@@ -1318,6 +2143,7 @@ async def upload_files(
         requested_visibility = "private"
     role = str(user.get("role", "viewer")).lower()
     visibility_applied = requested_visibility if role == "admin" else "private"
+    assigned_agent_classes: dict[str, str] = {}
     total_uploaded_bytes = 0
     read_chunk = max(16 * 1024, int(settings.upload_read_chunk_bytes))
     user_upload_root = settings.uploads_path / user["user_id"]
@@ -1358,6 +2184,7 @@ async def upload_files(
             continue
         saved_paths.append(target)
         filenames.append(target.name)
+        assigned_agent_classes[str(target)] = _guess_agent_class_for_upload(target.name)
 
     if not saved_paths:
         detail = "no supported files uploaded"
@@ -1372,11 +2199,13 @@ async def upload_files(
         _audit(request, action="document.upload", resource_type="document", result="failed", user=user, detail=f"pre-clean failed: {e}")
         raise HTTPException(status_code=500, detail=f"upload pre-clean failed: {e}")
 
+    ingest_started = time.perf_counter()
     try:
         metadata_overrides_by_source = {
             str(p): {
                 "owner_user_id": str(user.get("user_id", "")),
                 "visibility": visibility_applied,
+                "agent_class": assigned_agent_classes.get(str(p), "general"),
             }
             for p in saved_paths
         }
@@ -1388,11 +2217,24 @@ async def upload_files(
     except Exception as e:
         _audit(request, action="document.upload", resource_type="document", result="failed", user=user, detail=str(e))
         raise HTTPException(status_code=500, detail=f"upload ingest failed: {e}")
+    ingest_elapsed = (time.perf_counter() - ingest_started)
+    per_file = ingest_elapsed / max(1, len(saved_paths))
+    for p in saved_paths:
+        append_index_freshness(
+            {
+                "user_id": str(user.get("user_id", "")),
+                "filename": p.name,
+                "source": str(p),
+                "freshness_seconds": round(per_file, 4),
+                "chunks_indexed": int(result.get("chunks_indexed", 0) or 0),
+            }
+        )
     _audit(request, action="document.upload", resource_type="document", result="success", user=user, detail=",".join(filenames))
     return UploadResponse(
         filenames=filenames,
         skipped_files=skipped_files,
         visibility_applied=visibility_applied,
+        assigned_agent_classes=assigned_agent_classes,
         **result,
     )
 
@@ -1405,6 +2247,7 @@ def query(req: QueryRequest, request: Request, user: dict[str, Any] = Depends(_r
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     original_question = normalized_question
+    effective_agent_class = _resolve_effective_agent_class(normalized_question, req.agent_class_hint)
 
     if _is_file_inventory_question(normalized_question):
         answer = _build_user_file_inventory_answer(user)
@@ -1426,7 +2269,7 @@ def query(req: QueryRequest, request: Request, user: dict[str, Any] = Depends(_r
             debug={"reason": "user_file_inventory_only"},
         )
 
-    if classify_agent_class(normalized_question) == "pdf_text":
+    if effective_agent_class == "pdf_text":
         pdf_names = _list_visible_pdf_names_for_user(user)
         if not pdf_names:
             answer = build_upload_pdf_hint()
@@ -1497,16 +2340,66 @@ def query(req: QueryRequest, request: Request, user: dict[str, Any] = Depends(_r
                 )
             normalized_question = apply_pdf_focus_to_question(normalized_question, selected_with_chunks)
 
-    memory_context = _build_memory_context_for_session(user=user, session_id=req.session_id, question=normalized_question)
-    result = run_query(
-        normalized_question,
-        use_web_fallback=req.use_web_fallback,
-        use_reasoning=req.use_reasoning,
-        memory_context=memory_context,
-        allowed_sources=_allowed_sources_for_user(user),
+    effective_question = (
+        normalized_question
+        if is_casual_chat_query(normalized_question)
+        else enhance_user_question_for_completion(normalized_question)
     )
+    memory_context = _build_memory_context_for_session(user=user, session_id=req.session_id, question=effective_question)
+    allowed_sources = _allowed_sources_for_user(user)
+    retrieval_strategy, strategy_meta = _effective_strategy_for_session(
+        req_strategy=req.retrieval_strategy,
+        user=user,
+        session_id=req.session_id,
+        question=effective_question,
+    )
+    effective_use_web_fallback = bool(req.use_web_fallback and (not profile_force_local_only(retrieval_strategy)))
+    run_query_kwargs: dict[str, Any] = {
+        "use_web_fallback": effective_use_web_fallback,
+        "use_reasoning": req.use_reasoning,
+        "memory_context": memory_context,
+        "allowed_sources": allowed_sources,
+    }
+    hinted = _normalize_agent_class_hint(req.agent_class_hint)
+    if hinted:
+        run_query_kwargs["agent_class_hint"] = hinted
+    if retrieval_strategy and (req.retrieval_strategy is not None or retrieval_strategy != "advanced"):
+        run_query_kwargs["retrieval_strategy"] = profile_to_strategy(retrieval_strategy)
+    result = run_query(effective_question, **run_query_kwargs)
+    result = _enforce_result_source_scope(result, allowed_sources=allowed_sources, request=request, user=user)
+    consistency_info = {"checked": False}
+    if bool(settings.consistency_guard_enabled):
+        prev_answer = _latest_answer_for_same_question(user=user, session_id=req.session_id, question=original_question)
+        if prev_answer:
+            sim = text_similarity(prev_answer, result.get("answer", ""))
+            consistency_info = {"checked": True, "previous_similarity": round(sim, 4), "stabilized": False}
+            if should_stabilize(
+                previous_answer=prev_answer,
+                new_answer=result.get("answer", ""),
+                threshold=float(settings.consistency_guard_similarity_threshold),
+            ):
+                stabilize_kwargs = dict(run_query_kwargs)
+                stabilize_kwargs["retrieval_strategy"] = "baseline"
+                stabilize_kwargs["use_reasoning"] = False
+                retried = run_query(effective_question, **stabilize_kwargs)
+                retried = _enforce_result_source_scope(retried, allowed_sources=allowed_sources, request=request, user=user)
+                retried_sim = text_similarity(prev_answer, retried.get("answer", ""))
+                if retried_sim > sim:
+                    result = retried
+                    consistency_info = {
+                        "checked": True,
+                        "previous_similarity": round(sim, 4),
+                        "retried_similarity": round(retried_sim, 4),
+                        "stabilized": True,
+                    }
     vector_citations = [Citation(**x) for x in result.get("vector_result", {}).get("citations", [])]
     web_citations = [Citation(**x) for x in result.get("web_result", {}).get("citations", [])]
+    conflict_report = detect_evidence_conflict(
+        list(result.get("vector_result", {}).get("citations", []) or [])
+        + list(result.get("web_result", {}).get("citations", []) or [])
+    )
+    if conflict_report.get("conflict"):
+        result["answer"] = f"[evidence-conflict-warning]\n{result.get('answer', '')}"
     if req.session_id:
         history_store = _history_store_for_user(user)
         history_store.append_message(req.session_id, "user", original_question)
@@ -1521,6 +2414,12 @@ def query(req: QueryRequest, request: Request, user: dict[str, Any] = Depends(_r
                 "thoughts": result.get("thoughts", []),
                 "graph_entities": result.get("graph_result", {}).get("entities", []),
                 "citations": result.get("vector_result", {}).get("citations", []) + result.get("web_result", {}).get("citations", []),
+                "retrieval_diagnostics": result.get("vector_result", {}).get("retrieval_diagnostics", {}),
+                "grounding": result.get("grounding", {}),
+                "explainability": result.get("explainability", {}),
+                "answer_safety": result.get("answer_safety", {}),
+                "consistency": consistency_info,
+                "evidence_conflict": conflict_report,
             },
         )
         _promote_long_term_memory(user=user, session_id=req.session_id, question=original_question, result=result)
@@ -1535,10 +2434,35 @@ def query(req: QueryRequest, request: Request, user: dict[str, Any] = Depends(_r
             "skill": result.get("skill", ""),
             "agent_class": result.get("agent_class", "general"),
             "vector_retrieved": result.get("vector_result", {}).get("retrieved_count", 0),
+            "vector_effective_hits": result.get("vector_result", {}).get("effective_hit_count", 0),
+            "retrieval_diagnostics": result.get("vector_result", {}).get("retrieval_diagnostics", {}),
+            "grounding": result.get("grounding", {}),
+            "answer_safety": result.get("answer_safety", {}),
+            "explainability": result.get("explainability", {}),
+            "consistency": consistency_info,
             "use_reasoning": req.use_reasoning,
+            "retrieval_strategy": retrieval_strategy or "advanced",
+            "retrieval_strategy_reason": strategy_meta.get("reason"),
+            "retrieval_strategy_bucket": strategy_meta.get("bucket"),
+            "evidence_conflict": conflict_report,
         },
     )
-    _audit(request, action="query.run", resource_type="query", result="success", user=user, resource_id=req.session_id or None)
+    grounding_support = float((result.get("grounding", {}) or {}).get("support_ratio", 0.0) or 0.0)
+    _audit(
+        request,
+        action="query.run",
+        resource_type="query",
+        result="success",
+        user=user,
+        resource_id=req.session_id or None,
+        detail=f"grounding_support={grounding_support:.3f}",
+    )
+    _launch_shadow_run(
+        user=user,
+        session_id=req.session_id,
+        question=effective_question,
+        primary_result=result,
+    )
     return response
 
 
@@ -1549,6 +2473,8 @@ def stream_query(
     use_web_fallback: Annotated[bool, Form()] = True,
     use_reasoning: Annotated[bool, Form()] = True,
     session_id: Annotated[str | None, Form()] = None,
+    agent_class_hint: Annotated[str | None, Form()] = None,
+    retrieval_strategy: Annotated[str | None, Form()] = None,
     user: dict[str, Any] = Depends(_require_user),
 ):
     _require_permission(user, "query:run", request, "query")
@@ -1557,6 +2483,7 @@ def stream_query(
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     original_question = normalized_question
+    effective_agent_class = _resolve_effective_agent_class(normalized_question, agent_class_hint)
 
     if _is_file_inventory_question(normalized_question):
         answer = _build_user_file_inventory_answer(user)
@@ -1592,7 +2519,7 @@ def stream_query(
 
         return StreamingResponse(event_gen_file_inventory(), media_type="text/event-stream")
 
-    if classify_agent_class(normalized_question) == "pdf_text":
+    if effective_agent_class == "pdf_text":
         pdf_names = _list_visible_pdf_names_for_user(user)
         selected_pdfs = choose_pdf_targets(normalized_question, pdf_names) if pdf_names else []
         if not pdf_names:
@@ -1702,22 +2629,56 @@ def stream_query(
                 return StreamingResponse(event_gen_pdf_chunks_zero(), media_type="text/event-stream")
             normalized_question = apply_pdf_focus_to_question(normalized_question, selected_with_chunks)
 
+    effective_question = (
+        normalized_question
+        if is_casual_chat_query(normalized_question)
+        else enhance_user_question_for_completion(normalized_question)
+    )
     history_store = _history_store_for_user(user)
-    memory_context = _build_memory_context_for_session(user=user, session_id=session_id, question=normalized_question)
+    memory_context = _build_memory_context_for_session(user=user, session_id=session_id, question=effective_question)
+    allowed_sources = _allowed_sources_for_user(user)
+    normalized_strategy, strategy_meta = _effective_strategy_for_session(
+        req_strategy=retrieval_strategy,
+        user=user,
+        session_id=session_id,
+        question=effective_question,
+    )
+    effective_use_web_fallback = bool(use_web_fallback and (not profile_force_local_only(normalized_strategy)))
     if session_id:
         history_store.append_message(session_id, "user", original_question)
 
     def event_gen():
         final_result = None
+        stream_kwargs: dict[str, Any] = {
+            "use_web_fallback": effective_use_web_fallback,
+            "use_reasoning": use_reasoning,
+            "memory_context": memory_context,
+            "allowed_sources": allowed_sources,
+        }
+        hinted = _normalize_agent_class_hint(agent_class_hint)
+        if hinted:
+            stream_kwargs["agent_class_hint"] = hinted
+        if normalized_strategy and (retrieval_strategy is not None or normalized_strategy != "advanced"):
+            stream_kwargs["retrieval_strategy"] = profile_to_strategy(normalized_strategy)
         for event in run_query_stream(
-            normalized_question,
-            use_web_fallback=use_web_fallback,
-            use_reasoning=use_reasoning,
-            memory_context=memory_context,
-            allowed_sources=_allowed_sources_for_user(user),
+            effective_question,
+            **stream_kwargs,
         ):
             if event.get("type") == "done":
-                final_result = event.get("result", {})
+                final_result = _enforce_result_source_scope(
+                    event.get("result", {}),
+                    allowed_sources=allowed_sources,
+                    request=request,
+                    user=user,
+                )
+                conflict_report = detect_evidence_conflict(
+                    list(final_result.get("vector_result", {}).get("citations", []) or [])
+                    + list(final_result.get("web_result", {}).get("citations", []) or [])
+                )
+                final_result["evidence_conflict"] = conflict_report
+                if conflict_report.get("conflict"):
+                    final_result["answer"] = f"[evidence-conflict-warning]\n{final_result.get('answer', '')}"
+                event = {**event, "result": final_result}
             yield encode_sse(event)
 
         if session_id and final_result is not None:
@@ -1732,8 +2693,22 @@ def stream_query(
                     "thoughts": final_result.get("thoughts", []),
                     "graph_entities": final_result.get("graph_result", {}).get("entities", []),
                     "citations": final_result.get("vector_result", {}).get("citations", []) + final_result.get("web_result", {}).get("citations", []),
+                    "retrieval_diagnostics": final_result.get("vector_result", {}).get("retrieval_diagnostics", {}),
+                    "grounding": final_result.get("grounding", {}),
+                    "explainability": final_result.get("explainability", {}),
+                    "answer_safety": final_result.get("answer_safety", {}),
+                    "retrieval_strategy": normalized_strategy or "advanced",
+                    "retrieval_strategy_reason": strategy_meta.get("reason"),
+                    "retrieval_strategy_bucket": strategy_meta.get("bucket"),
+                    "evidence_conflict": final_result.get("evidence_conflict", {}),
                 },
             )
             _promote_long_term_memory(user=user, session_id=session_id, question=original_question, result=final_result)
+            _launch_shadow_run(
+                user=user,
+                session_id=session_id,
+                question=effective_question,
+                primary_result=final_result,
+            )
 
     return StreamingResponse(event_gen(), media_type="text/event-stream")

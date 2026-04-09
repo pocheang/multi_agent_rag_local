@@ -4,10 +4,12 @@ from pydantic import BaseModel, Field
 
 
 class QueryRequest(BaseModel):
-    question: str = Field(..., description="用户问题")
+    question: str = Field(..., description="User question")
     use_web_fallback: bool = Field(default=True)
     use_reasoning: bool = Field(default=True)
     session_id: str | None = None
+    agent_class_hint: str | None = None
+    retrieval_strategy: str | None = None  # baseline|advanced|safe
 
 
 class Citation(BaseModel):
@@ -44,7 +46,7 @@ class ChatMessage(BaseModel):
 
 
 class MessageUpdateRequest(BaseModel):
-    content: str = Field(..., description="修改后的消息内容")
+    content: str = Field(..., description="Updated message content")
 
 
 class AuthCredentials(BaseModel):
@@ -70,6 +72,7 @@ class PromptTemplate(BaseModel):
     prompt_id: str
     title: str
     content: str
+    agent_class: str = "general"
     created_at: str
     updated_at: str
 
@@ -191,6 +194,7 @@ class UploadResponse(BaseModel):
     filenames: list[str] = Field(default_factory=list)
     skipped_files: list[str] = Field(default_factory=list)
     visibility_applied: str = "private"
+    assigned_agent_classes: dict[str, str] = Field(default_factory=dict)
     loaded_documents: int = 0
     chunks_indexed: int = 0
     triplets_written: int = 0
@@ -203,6 +207,7 @@ class IndexedFileSummary(BaseModel):
     pages: list[str] = Field(default_factory=list)
     owner_user_id: str | None = None
     visibility: str = "private"
+    agent_class: str = "general"
     in_uploads: bool = False
     exists_on_disk: bool = False
 

@@ -1,4 +1,4 @@
-.PHONY: install up ingest api cli test fe-install fe-dev fe-build
+.PHONY: install up ingest api cli test fe-install fe-dev fe-build quality-gate benchmark apply-rollback
 
 install:
 	python -m venv .venv && . .venv/bin/activate && pip install -U pip && pip install -e .
@@ -26,3 +26,12 @@ fe-dev:
 
 fe-build:
 	cd frontend && npm run build
+
+quality-gate:
+	python scripts/ci_quality_gate.py --dataset data/eval/retrieval_eval.jsonl --min-recall 0.35 --report-md artifacts/quality-report.md
+
+benchmark:
+	python scripts/benchmark_pipeline.py --queries data/eval/benchmark_queries.txt
+
+apply-rollback:
+	python scripts/apply_rollback_profile.py --profile artifacts/rollback.env --env-file .env

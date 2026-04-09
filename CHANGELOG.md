@@ -4,6 +4,29 @@ All notable changes to this project will be documented in this file.
 
 The format is based on Keep a Changelog and this project follows Semantic Versioning.
 
+## [0.2.1] - 2026-04-09
+
+### Added
+- Runtime RAG/Agent operations controls:
+  - retrieval profile control (`baseline` / `advanced` / `safe`)
+  - canary routing and shadow traffic sampling
+  - one-click rollback endpoint
+  - AB compare / replay evaluation / benchmark trend APIs
+- Session strategy lock APIs for consistent per-session retrieval behavior.
+- Prompt versioning lifecycle with version list, approval, and rollback APIs.
+- Index freshness tracking and admin freshness reporting endpoint.
+- Production readiness checklist documentation.
+
+### Changed
+- Streaming response flow now supports overwrite-style updates (`answer_reset`) to avoid duplicated text after fallback/safety rewrite.
+- Graph source cleanup now removes source-scoped `RELATED` edges during delete-by-source operations.
+- Admin console and API contracts expanded for RAG/Agent ops governance.
+
+### Fixed
+- Fixed duplicated assistant output in stream mode when synthesis fallback occurs after partial chunks.
+- Fixed stale graph edge residue after source-level index deletion.
+- Corrected retrieval strategy schema note to include `safe`.
+
 ## [0.2] - 2026-04-08
 
 ### Added

@@ -8,9 +8,11 @@ import type {
   PromptCheckResponse,
   PromptTemplate,
   OpsOverview,
+  RetrievalProfileState,
   SessionDetail,
   SessionSummary,
   UploadResponse,
+  BenchmarkTrendItem,
 } from "@/types/api";
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || "";
@@ -153,12 +155,14 @@ export const appApi = {
     useWebFallback: boolean;
     useReasoning: boolean;
     sessionId: string;
+    agentClassHint?: string;
   }) {
     const form = new FormData();
     form.append("question", input.question);
     form.append("use_web_fallback", input.useWebFallback ? "1" : "0");
     form.append("use_reasoning", input.useReasoning ? "1" : "0");
     form.append("session_id", input.sessionId);
+    if (input.agentClassHint) form.append("agent_class_hint", input.agentClassHint);
     return authFetch("/query/stream", { method: "POST", body: form });
   },
   upload(
@@ -411,5 +415,65 @@ export const appApi = {
       throw new ApiError(res.status, String(payload?.detail || "request failed"));
     }
     return res.text();
+  },
+  adminOpsRetrievalProfile() {
+    return request<RetrievalProfileState>("/admin/ops/retrieval-profile");
+  },
+  async adminOpsSetRetrievalProfile(input: { profile: string; followConfigDefault?: boolean }) {
+    const res = await authFetch("/admin/ops/retrieval-profile", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        profile: input.profile,
+        follow_config_default: Boolean(input.followConfigDefault),
+      }),
+    });
+    return parseOrThrow<RetrievalProfileState>(res);
+  },
+  async adminOpsSetCanary(input: { enabled: boolean; baselinePercent: number; safePercent: number; seed?: string }) {
+    const res = await authFetch("/admin/ops/canary", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        enabled: input.enabled,
+        baseline_percent: input.baselinePercent,
+        safe_percent: input.safePercent,
+        seed: input.seed || "default",
+      }),
+    });
+    return parseOrThrow<RetrievalProfileState>(res);
+  },
+  async adminReloadConfig() {
+    const res = await authFetch("/admin/config/reload", { method: "POST" });
+    return parseOrThrow<{
+      ok: boolean;
+      reloaded_at: string;
+      snapshot: Record<string, unknown>;
+    }>(res);
+  },
+  async adminOpsRollback() {
+    const res = await authFetch("/admin/ops/rollback", { method: "POST" });
+    return parseOrThrow<{ ok: boolean; state: RetrievalProfileState }>(res);
+  },
+  async adminOpsExportAuditReportMd(input: { hours?: number } = {}) {
+    const qs = new URLSearchParams();
+    qs.set("hours", String(input.hours ?? 24));
+    const res = await authFetch(`/admin/ops/audit-report.md?${qs.toString()}`, { method: "GET" });
+    if (!res.ok) {
+      throw new ApiError(res.status, "request failed");
+    }
+    return res.text();
+  },
+  adminBenchmarkTrends(input: { limit?: number } = {}) {
+    const qs = new URLSearchParams();
+    qs.set("limit", String(input.limit ?? 30));
+    return request<{ items: BenchmarkTrendItem[]; count: number }>(`/admin/ops/benchmark/trends?${qs.toString()}`);
+  },
+  async adminRunBenchmark(input: { maxQueries?: number; strategy?: string } = {}) {
+    const qs = new URLSearchParams();
+    qs.set("max_queries", String(input.maxQueries ?? 20));
+    if (input.strategy) qs.set("strategy", input.strategy);
+    const res = await authFetch(`/admin/ops/benchmark/run?${qs.toString()}`, { method: "POST" });
+    return parseOrThrow<{ ok: boolean; result: BenchmarkTrendItem }>(res);
   },
 };

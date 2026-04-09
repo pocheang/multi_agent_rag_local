@@ -1,6 +1,10 @@
 import pytest
 
-from app.services.input_normalizer import normalize_and_validate_user_question, normalize_user_question
+from app.services.input_normalizer import (
+    enhance_user_question_for_completion,
+    normalize_and_validate_user_question,
+    normalize_user_question,
+)
 
 
 def test_normalize_user_question_removes_noise_and_normalizes_spaces():
@@ -27,3 +31,15 @@ def test_normalize_and_validate_blocks_prompt_injection():
 def test_normalize_and_validate_keeps_safe_question():
     question = normalize_and_validate_user_question("请总结一下这个项目的检索流程")
     assert question == "请总结一下这个项目的检索流程"
+
+
+def test_enhance_user_question_for_completion_adds_guidance_for_short_question():
+    enhanced = enhance_user_question_for_completion("怎么做")
+    assert enhanced.startswith("怎么做")
+    assert "[补全提示]" in enhanced
+
+
+def test_enhance_user_question_for_completion_keeps_complete_question():
+    text = "请基于最近一周告警，按攻击链给出处置建议和优先级。"
+    enhanced = enhance_user_question_for_completion(text)
+    assert enhanced == normalize_user_question(text)
