@@ -1,4 +1,7 @@
 import logging
+from concurrent.futures import TimeoutError as FutureTimeoutError
+import time
+import threading
 from typing import Any, TypedDict
 
 from langgraph.graph import END, START, StateGraph
@@ -10,14 +13,20 @@ from app.agents.vector_rag_agent import run_vector_rag
 from app.agents.web_research_agent import run_web_research
 from app.services.adaptive_rag_policy import build_adaptive_plan
 from app.services.answer_safety import sanitize_answer
+from app.services.bulkhead import bulkhead
 from app.services.citation_grounding import apply_sentence_grounding
 from app.services.evidence_scoring import evidence_is_sufficient
 from app.services.explainability import build_explainability_report
+from app.services.hybrid_executor import HybridExecutorRejectedError, submit_hybrid
 from app.services.query_intent import is_casual_chat_query, should_force_web_research
+from app.services.request_context import deadline_exceeded, remaining_seconds
+from app.services.retry_policy import call_with_retry
 from app.services.resilience import call_with_circuit_breaker
 from app.services.tracing import traced_span
 
 logger = logging.getLogger(__name__)
+_WORKFLOW_LOCK = threading.Lock()
+_WORKFLOW_APP = None
 
 
 class GraphState(TypedDict, total=False):
@@ -46,13 +55,27 @@ class GraphState(TypedDict, total=False):
     retrieval_strategy: str | None
 
 
-def _safe_vector_result(question: str, allowed_sources: list[str] | None = None) -> dict[str, Any]:
+def _safe_vector_result(
+    question: str,
+    allowed_sources: list[str] | None = None,
+    retrieval_strategy: str | None = None,
+) -> dict[str, Any]:
     try:
         with traced_span("workflow.vector_retrieval", {"component": "vector_rag"}):
-            return call_with_circuit_breaker(
-                "vector_rag.run",
-                lambda: run_vector_rag(question, allowed_sources=allowed_sources),
-            )
+            with bulkhead("llm"):
+                return call_with_retry(
+                    "workflow.vector_rag",
+                    lambda: call_with_circuit_breaker(
+                        "vector_rag.run",
+                        lambda: run_vector_rag(
+                            question,
+                            allowed_sources=allowed_sources,
+                            retrieval_strategy=retrieval_strategy,
+                        )
+                        if retrieval_strategy
+                        else run_vector_rag(question, allowed_sources=allowed_sources),
+                    ),
+                )
     except Exception as e:
         logger.exception(f"Vector RAG failed for question: {question}")
         return {"context": "", "citations": [], "retrieved_count": 0, "error": f"vector_error:{type(e).__name__}"}
@@ -60,10 +83,14 @@ def _safe_vector_result(question: str, allowed_sources: list[str] | None = None)
 
 def _safe_graph_result(question: str, allowed_sources: list[str] | None = None) -> dict[str, Any]:
     try:
-        return call_with_circuit_breaker(
-            "graph_rag.run",
-            lambda: run_graph_rag(question, allowed_sources=allowed_sources),
-        )
+        with bulkhead("neo4j"):
+            return call_with_retry(
+                "workflow.graph_rag",
+                lambda: call_with_circuit_breaker(
+                    "graph_rag.run",
+                    lambda: run_graph_rag(question, allowed_sources=allowed_sources),
+                ),
+            )
     except Exception as e:
         logger.exception(f"Graph RAG failed for question: {question}")
         return {"context": "", "entities": [], "neighbors": [], "error": f"graph_error:{type(e).__name__}"}
@@ -71,7 +98,11 @@ def _safe_graph_result(question: str, allowed_sources: list[str] | None = None) 
 
 def _safe_web_result(question: str) -> dict[str, Any]:
     try:
-        return call_with_circuit_breaker("web_research.run", lambda: run_web_research(question))
+        with bulkhead("web"):
+            return call_with_retry(
+                "workflow.web_research",
+                lambda: call_with_circuit_breaker("web_research.run", lambda: run_web_research(question)),
+            )
     except Exception as e:
         logger.exception(f"Web research failed for question: {question}")
         return {"used": False, "citations": [], "context": "", "error": f"web_error:{type(e).__name__}"}
@@ -137,18 +168,75 @@ def route_by_next_step(state: GraphState):
 
 
 def vector_node(state: GraphState) -> GraphState:
+    if deadline_exceeded():
+        return {**state, "vector_result": {"context": "", "citations": [], "retrieved_count": 0, "timeout": True}}
+    route = state.get("route", "vector")
+    if route == "hybrid":
+        timeout_s = remaining_seconds()
+        if timeout_s is None:
+            timeout_s = 15.0
+        timeout_s = max(0.05, float(timeout_s))
+        deadline = time.monotonic() + timeout_s
+        fut_vector = None
+        fut_graph = None
+        try:
+            fut_vector = submit_hybrid(
+                _safe_vector_result,
+                state["question"],
+                state.get("allowed_sources"),
+                state.get("retrieval_strategy"),
+            )
+            fut_graph = submit_hybrid(_safe_graph_result, state["question"], state.get("allowed_sources"))
+        except HybridExecutorRejectedError:
+            if fut_vector is not None:
+                fut_vector.cancel()
+            return {
+                **state,
+                "vector_result": {
+                    "context": "",
+                    "citations": [],
+                    "retrieved_count": 0,
+                    "error": "vector_error:Overloaded",
+                },
+                "graph_result": {
+                    "context": "",
+                    "entities": [],
+                    "neighbors": [],
+                    "error": "graph_error:Overloaded",
+                },
+            }
+        try:
+            left = max(0.05, deadline - time.monotonic())
+            vector_result = fut_vector.result(timeout=left)
+        except FutureTimeoutError:
+            fut_vector.cancel()
+            vector_result = {"context": "", "citations": [], "retrieved_count": 0, "error": "vector_error:Timeout"}
+        except Exception as e:
+            logger.exception(f"Vector RAG failed for question: {state.get('question', '')}")
+            vector_result = {"context": "", "citations": [], "retrieved_count": 0, "error": f"vector_error:{type(e).__name__}"}
+        try:
+            left = max(0.05, deadline - time.monotonic())
+            graph_result = fut_graph.result(timeout=left)
+        except FutureTimeoutError:
+            fut_graph.cancel()
+            graph_result = {"context": "", "entities": [], "neighbors": [], "error": "graph_error:Timeout"}
+        return {**state, "vector_result": vector_result, "graph_result": graph_result}
     try:
         with traced_span("workflow.vector_node", {"strategy": str(state.get("retrieval_strategy", "") or "default")}):
-            result = call_with_circuit_breaker(
-                "vector_rag.run",
-                lambda: run_vector_rag(
-                    state["question"],
-                    allowed_sources=state.get("allowed_sources"),
-                    retrieval_strategy=state.get("retrieval_strategy"),
+            with bulkhead("llm"):
+                result = call_with_retry(
+                    "workflow.vector_node",
+                    lambda: call_with_circuit_breaker(
+                        "vector_rag.run",
+                        lambda: run_vector_rag(
+                            state["question"],
+                            allowed_sources=state.get("allowed_sources"),
+                            retrieval_strategy=state.get("retrieval_strategy"),
+                        )
+                        if state.get("retrieval_strategy")
+                        else run_vector_rag(state["question"], allowed_sources=state.get("allowed_sources")),
+                    ),
                 )
-                if state.get("retrieval_strategy")
-                else run_vector_rag(state["question"], allowed_sources=state.get("allowed_sources")),
-            )
     except Exception as e:
         logger.exception(f"Vector RAG failed for question: {state.get('question', '')}")
         result = {"context": "", "citations": [], "retrieved_count": 0, "error": f"vector_error:{type(e).__name__}"}
@@ -156,14 +244,31 @@ def vector_node(state: GraphState) -> GraphState:
 
 
 def graph_node(state: GraphState) -> GraphState:
+    if deadline_exceeded():
+        return {**state, "graph_result": {"context": "", "entities": [], "neighbors": [], "timeout": True}}
     return {**state, "graph_result": _safe_graph_result(state["question"], allowed_sources=state.get("allowed_sources"))}
 
 
 def web_node(state: GraphState) -> GraphState:
+    if deadline_exceeded():
+        return {**state, "web_result": {"used": False, "citations": [], "context": "", "timeout": True}}
     return {**state, "web_result": _safe_web_result(state["question"])}
 
 
 def synthesis_node(state: GraphState) -> GraphState:
+    if deadline_exceeded():
+        timeout_answer = "请求超时，请缩小问题范围后重试。"
+        next_state = {
+            **state,
+            "answer": timeout_answer,
+            "grounding": {},
+            "answer_safety": {},
+            "vector_result": state.get("vector_result", {}),
+            "graph_result": state.get("graph_result", {}),
+            "web_result": state.get("web_result", {"used": False, "citations": [], "context": ""}),
+        }
+        next_state["explainability"] = build_explainability_report(next_state)
+        return next_state
     memory_context = state.get("memory_context", "")
     vector_context = state.get("vector_result", {}).get("context", "")
     graph_context = state.get("graph_result", {}).get("context", "")
@@ -203,6 +308,8 @@ def route_after_router(state: GraphState):
 
 
 def route_after_vector(state: GraphState):
+    if deadline_exceeded():
+        return "synthesis"
     question = state.get("question", "")
     if is_casual_chat_query(question):
         return "synthesis"
@@ -210,6 +317,11 @@ def route_after_vector(state: GraphState):
     use_web = state.get("use_web_fallback", True)
     if use_web and state.get("adaptive_prefer_web", False):
         return "web"
+    if route == "hybrid" and state.get("graph_result"):
+        min_hits = int(state.get("adaptive_min_vector_hits", 2) or 2)
+        if (not evidence_is_sufficient(state.get("vector_result", {}), state.get("graph_result", {}), route="hybrid", min_hits=min_hits)) and use_web:
+            return "web"
+        return "synthesis"
     if route == "hybrid" or state.get("adaptive_prefer_graph", False):
         return "graph"
     vector_result = state.get("vector_result", {})
@@ -220,6 +332,8 @@ def route_after_vector(state: GraphState):
 
 
 def route_after_graph(state: GraphState):
+    if deadline_exceeded():
+        return "synthesis"
     question = state.get("question", "")
     if is_casual_chat_query(question):
         return "synthesis"
@@ -286,7 +400,12 @@ def run_query(
     agent_class_hint: str | None = None,
     retrieval_strategy: str | None = None,
 ) -> GraphState:
-    app = build_workflow()
+    global _WORKFLOW_APP
+    if _WORKFLOW_APP is None:
+        with _WORKFLOW_LOCK:
+            if _WORKFLOW_APP is None:
+                _WORKFLOW_APP = build_workflow()
+    app = _WORKFLOW_APP
     with traced_span("workflow.run_query", {"strategy": str(retrieval_strategy or "default")}):
         return app.invoke(
             {
@@ -299,3 +418,9 @@ def run_query(
                 "retrieval_strategy": retrieval_strategy,
             }
         )
+
+
+def clear_workflow_cache() -> None:
+    global _WORKFLOW_APP
+    with _WORKFLOW_LOCK:
+        _WORKFLOW_APP = None

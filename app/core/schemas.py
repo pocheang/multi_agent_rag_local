@@ -8,6 +8,7 @@ class QueryRequest(BaseModel):
     use_web_fallback: bool = Field(default=True)
     use_reasoning: bool = Field(default=True)
     session_id: str | None = None
+    request_id: str | None = None
     agent_class_hint: str | None = None
     retrieval_strategy: str | None = None  # baseline|advanced|safe
 

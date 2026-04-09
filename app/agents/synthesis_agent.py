@@ -1,14 +1,16 @@
-﻿from collections.abc import Iterable
+from collections.abc import Iterable
 import json
 import re
 
+from app.core.config import get_settings
 from app.core.models import get_chat_model, get_reasoning_model
+from app.services.bulkhead import bulkhead
 from app.services.query_intent import is_casual_chat_query
+from app.services.request_context import deadline_exceeded, overload_mode_enabled
 from app.skills.registry import get_skill
 
 SYNTHESIS_FALLBACK_MESSAGE = "抱歉，当前答案生成服务暂时不可用。请稍后重试，或先缩小问题范围后再试。"
 CASUAL_CHAT_HIGH_TEMPERATURE = 2.0
-MAX_REFINE_ROUNDS = 5
 SIMILARITY_STOP_THRESHOLD = 0.92
 
 
@@ -123,6 +125,8 @@ def _review_once(
     web_context: str,
     use_reasoning: bool,
 ) -> tuple[bool, str, list[str], str]:
+    if deadline_exceeded():
+        return True, candidate_answer, [], "deadline_exceeded"
     payload = (
         f"用户问题:\n{question}\n\n"
         f"记忆上下文:\n{memory_context or '无'}\n\n"
@@ -132,8 +136,9 @@ def _review_once(
         f"当前答案:\n{candidate_answer}\n"
     )
     try:
-        model = _build_review_model(use_reasoning=use_reasoning)
-        result = model.invoke([("system", REVIEW_PROMPT), ("human", payload)])
+        with bulkhead("llm"):
+            model = _build_review_model(use_reasoning=use_reasoning)
+            result = model.invoke([("system", REVIEW_PROMPT), ("human", payload)])
         data = _extract_json(result.content if hasattr(result, "content") else str(result))
     except Exception as e:
         return True, candidate_answer, [], f"review_unavailable:{type(e).__name__}"
@@ -160,8 +165,18 @@ def _refine_answer(
     if not answer:
         return SYNTHESIS_FALLBACK_MESSAGE
 
+    settings = get_settings()
+    max_rounds = int(getattr(settings, "synthesis_refine_max_rounds", 3) or 3)
+    if overload_mode_enabled():
+        max_rounds = min(max_rounds, int(getattr(settings, "synthesis_refine_overload_rounds", 1) or 1))
+    max_rounds = max(0, max_rounds)
+    if max_rounds == 0:
+        return answer
+
     prev = answer
-    for _i in range(1, MAX_REFINE_ROUNDS + 1):
+    for _i in range(1, max_rounds + 1):
+        if deadline_exceeded():
+            return prev
         is_correct, improved, _issues, _analysis = _review_once(
             question=question,
             candidate_answer=prev,
@@ -192,8 +207,9 @@ def synthesize_answer(
 ) -> str:
     prompt = _build_prompt(question, skill_name, memory_context, vector_context, graph_context, web_context)
     try:
-        model = _build_generation_model(use_reasoning=use_reasoning, question=question)
-        result = model.invoke([("system", ANSWER_PROMPT), ("human", prompt)])
+        with bulkhead("llm"):
+            model = _build_generation_model(use_reasoning=use_reasoning, question=question)
+            result = model.invoke([("system", ANSWER_PROMPT), ("human", prompt)])
         content = result.content if hasattr(result, "content") else str(result)
         initial = str(content).strip()
         if not initial:
@@ -219,21 +235,27 @@ def stream_synthesize_answer(
     graph_context: str = "",
     web_context: str = "",
     use_reasoning: bool = True,
-) -> Iterable[str]:
+) -> Iterable[dict[str, str]]:
     prompt = _build_prompt(question, skill_name, memory_context, vector_context, graph_context, web_context)
     try:
-        model = _build_generation_model(use_reasoning=use_reasoning, question=question)
-        parts: list[str] = []
-        for chunk in model.stream([("system", ANSWER_PROMPT), ("human", prompt)]):
-            content = getattr(chunk, "content", None)
-            if content:
-                parts.append(str(content))
+        with bulkhead("llm"):
+            model = _build_generation_model(use_reasoning=use_reasoning, question=question)
+            parts: list[str] = []
+            for chunk in model.stream([("system", ANSWER_PROMPT), ("human", prompt)]):
+                content = getattr(chunk, "content", None)
+                if content:
+                    text = str(content)
+                    parts.append(text)
+                    yield {"type": "chunk", "content": text}
         initial = "".join(parts).strip()
         if not initial:
-            result = model.invoke([("system", ANSWER_PROMPT), ("human", prompt)])
+            with bulkhead("llm"):
+                result = model.invoke([("system", ANSWER_PROMPT), ("human", prompt)])
             initial = str(result.content if hasattr(result, "content") else result).strip()
+            if initial:
+                yield {"type": "reset", "content": initial}
         if not initial:
-            yield SYNTHESIS_FALLBACK_MESSAGE
+            yield {"type": "reset", "content": SYNTHESIS_FALLBACK_MESSAGE}
             return
         final = _refine_answer(
             question=question,
@@ -244,6 +266,7 @@ def stream_synthesize_answer(
             web_context=web_context,
             use_reasoning=use_reasoning,
         )
-        yield final
+        if final != initial:
+            yield {"type": "reset", "content": final}
     except Exception:
-        yield SYNTHESIS_FALLBACK_MESSAGE
+        yield {"type": "reset", "content": SYNTHESIS_FALLBACK_MESSAGE}

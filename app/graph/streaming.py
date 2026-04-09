@@ -1,5 +1,7 @@
-﻿import json
+import json
 import logging
+from concurrent.futures import TimeoutError as FutureTimeoutError
+import time
 from typing import Any, Generator
 
 from app.agents.graph_rag_agent import run_graph_rag
@@ -9,22 +11,40 @@ from app.agents.vector_rag_agent import run_vector_rag
 from app.agents.web_research_agent import run_web_research
 from app.services.adaptive_rag_policy import build_adaptive_plan
 from app.services.answer_safety import sanitize_answer
+from app.services.bulkhead import bulkhead
 from app.services.citation_grounding import apply_sentence_grounding
 from app.services.evidence_scoring import evidence_is_sufficient
 from app.services.explainability import build_explainability_report
+from app.services.hybrid_executor import HybridExecutorRejectedError, submit_hybrid
 from app.services.query_intent import is_casual_chat_query, should_force_web_research
+from app.services.request_context import deadline_exceeded, remaining_seconds
+from app.services.retry_policy import call_with_retry
 from app.services.resilience import call_with_circuit_breaker
 from app.services.tracing import traced_span
 
 logger = logging.getLogger(__name__)
 
 
-def _safe_vector_result(question: str, allowed_sources: list[str] | None = None) -> dict[str, Any]:
+def _safe_vector_result(
+    question: str,
+    allowed_sources: list[str] | None = None,
+    retrieval_strategy: str | None = None,
+) -> dict[str, Any]:
     try:
-        return call_with_circuit_breaker(
-            "vector_rag.run",
-            lambda: run_vector_rag(question, allowed_sources=allowed_sources),
-        )
+        with bulkhead("llm"):
+            return call_with_retry(
+                "stream.vector_rag",
+                lambda: call_with_circuit_breaker(
+                    "vector_rag.run",
+                    lambda: run_vector_rag(
+                        question,
+                        allowed_sources=allowed_sources,
+                        retrieval_strategy=retrieval_strategy,
+                    )
+                    if retrieval_strategy
+                    else run_vector_rag(question, allowed_sources=allowed_sources),
+                ),
+            )
     except Exception as e:
         logger.exception(f"Vector RAG failed for question: {question}")
         return {"context": "", "citations": [], "retrieved_count": 0, "error": f"vector_error:{type(e).__name__}"}
@@ -32,10 +52,14 @@ def _safe_vector_result(question: str, allowed_sources: list[str] | None = None)
 
 def _safe_graph_result(question: str, allowed_sources: list[str] | None = None) -> dict[str, Any]:
     try:
-        return call_with_circuit_breaker(
-            "graph_rag.run",
-            lambda: run_graph_rag(question, allowed_sources=allowed_sources),
-        )
+        with bulkhead("neo4j"):
+            return call_with_retry(
+                "stream.graph_rag",
+                lambda: call_with_circuit_breaker(
+                    "graph_rag.run",
+                    lambda: run_graph_rag(question, allowed_sources=allowed_sources),
+                ),
+            )
     except Exception as e:
         logger.exception(f"Graph RAG failed for question: {question}")
         return {"context": "", "entities": [], "neighbors": [], "error": f"graph_error:{type(e).__name__}"}
@@ -43,7 +67,11 @@ def _safe_graph_result(question: str, allowed_sources: list[str] | None = None) 
 
 def _safe_web_result(question: str) -> dict[str, Any]:
     try:
-        return call_with_circuit_breaker("web_research.run", lambda: run_web_research(question))
+        with bulkhead("web"):
+            return call_with_retry(
+                "stream.web_research",
+                lambda: call_with_circuit_breaker("web_research.run", lambda: run_web_research(question)),
+            )
     except Exception as e:
         logger.exception(f"Web research failed for question: {question}")
         return {"used": False, "citations": [], "context": "", "error": f"web_error:{type(e).__name__}"}
@@ -66,6 +94,24 @@ def run_query_stream(
         "retrieval_strategy": retrieval_strategy,
     }
     thoughts: list[str] = []
+
+    if deadline_exceeded():
+        timeout_payload = {
+            "answer": "请求超时，请缩小问题范围后重试。",
+            "route": "unknown",
+            "reason": "deadline_exceeded_before_start",
+            "skill": "",
+            "agent_class": "general",
+            "vector_result": {},
+            "graph_result": {},
+            "web_result": {"used": False, "citations": [], "context": ""},
+            "grounding": {},
+            "answer_safety": {},
+            "explainability": {},
+            "thoughts": ["执行前已超出请求超时预算。"],
+        }
+        yield {"type": "done", "result": timeout_payload}
+        return timeout_payload
 
     yield {"type": "status", "message": "routing"}
     if agent_class_hint:
@@ -107,6 +153,7 @@ def run_query_stream(
 
     route = state.get("route", decision.route)
     casual_chat = is_casual_chat_query(question)
+    did_parallel_hybrid = False
 
     if casual_chat:
         state["vector_result"] = {"context": "", "citations": [], "retrieved_count": 0}
@@ -115,23 +162,97 @@ def run_query_stream(
         thoughts.append("[执行阶段] 检测到问候/日常闲聊，跳过检索与引用，仅进行自然对话回复。")
         yield {"type": "thought", "content": thoughts[-1]}
 
-    if (not casual_chat) and route in {"vector", "hybrid"}:
+    if (not casual_chat) and route == "hybrid" and (not deadline_exceeded()):
+        did_parallel_hybrid = True
+        yield {"type": "status", "message": "retrieving_hybrid_parallel"}
+        timeout_s = remaining_seconds()
+        if timeout_s is None:
+            timeout_s = 15.0
+        timeout_s = max(0.05, float(timeout_s))
+        deadline = time.monotonic() + timeout_s
+        fut_vector = None
+        fut_graph = None
+        try:
+            fut_vector = submit_hybrid(_safe_vector_result, question, allowed_sources, retrieval_strategy)
+            fut_graph = submit_hybrid(_safe_graph_result, question, allowed_sources)
+            try:
+                left = max(0.05, deadline - time.monotonic())
+                state["vector_result"] = fut_vector.result(timeout=left)
+            except FutureTimeoutError:
+                fut_vector.cancel()
+                state["vector_result"] = {
+                    "context": "",
+                    "citations": [],
+                    "retrieved_count": 0,
+                    "error": "vector_error:Timeout",
+                }
+            try:
+                left = max(0.05, deadline - time.monotonic())
+                state["graph_result"] = fut_graph.result(timeout=left)
+            except FutureTimeoutError:
+                fut_graph.cancel()
+                state["graph_result"] = {
+                    "context": "",
+                    "entities": [],
+                    "neighbors": [],
+                    "error": "graph_error:Timeout",
+                }
+        except HybridExecutorRejectedError:
+            if fut_vector is not None:
+                fut_vector.cancel()
+            state["vector_result"] = {
+                "context": "",
+                "citations": [],
+                "retrieved_count": 0,
+                "error": "vector_error:Overloaded",
+            }
+            state["graph_result"] = {
+                "context": "",
+                "entities": [],
+                "neighbors": [],
+                "error": "graph_error:Overloaded",
+            }
+
+        if state["vector_result"].get("error"):
+            thoughts.append(f"本地向量检索异常，已降级继续: {state['vector_result']['error']}")
+            yield {"type": "thought", "content": thoughts[-1]}
+        vector_count = state["vector_result"].get("retrieved_count", 0)
+        retrieval_diag = state["vector_result"].get("retrieval_diagnostics", {}) or {}
+        if retrieval_diag.get("degraded_to_relaxed_threshold"):
+            thoughts.append("[执行阶段] 严格阈值召回为空，已自动放宽阈值重试。")
+            yield {"type": "thought", "content": thoughts[-1]}
+        thoughts.append(f"[执行阶段] 本地向量命中: {vector_count} 条。")
+        yield {"type": "thought", "content": thoughts[-1]}
+        yield {
+            "type": "vector_result",
+            "retrieved_count": vector_count,
+            "diagnostics": {
+                "rewrites": retrieval_diag.get("rewrites", []),
+                "degraded_to_relaxed_threshold": retrieval_diag.get("degraded_to_relaxed_threshold", False),
+                "vector_hits_by_rewrite": retrieval_diag.get("vector_hits_by_rewrite", {}),
+                "bm25_hits_by_rewrite": retrieval_diag.get("bm25_hits_by_rewrite", {}),
+            },
+        }
+
+        if state["graph_result"].get("error"):
+            thoughts.append(f"本地图谱检索异常，已降级继续: {state['graph_result']['error']}")
+            yield {"type": "thought", "content": thoughts[-1]}
+        entity_count = len(state["graph_result"].get("entities", []))
+        thoughts.append(f"[执行阶段] 本地图谱实体命中: {entity_count} 个。")
+        yield {"type": "thought", "content": thoughts[-1]}
+        yield {
+            "type": "graph_result",
+            "entities": state["graph_result"].get("entities", []),
+        }
+
+    if (not casual_chat) and route in {"vector", "hybrid"} and (not did_parallel_hybrid) and (not deadline_exceeded()):
         yield {"type": "status", "message": "retrieving_vector"}
         with traced_span("streaming.vector_retrieval", {"strategy": str(retrieval_strategy or "default")}):
-            try:
-                state["vector_result"] = call_with_circuit_breaker(
-                    "vector_rag.run",
-                    lambda: run_vector_rag(
-                        question,
-                        allowed_sources=allowed_sources,
-                        retrieval_strategy=retrieval_strategy,
-                    )
-                    if retrieval_strategy
-                    else run_vector_rag(question, allowed_sources=allowed_sources),
-                )
-            except Exception as e:
-                logger.exception(f"Vector RAG failed for question: {question}")
-                state["vector_result"] = {"context": "", "citations": [], "retrieved_count": 0, "error": f"vector_error:{type(e).__name__}"}
+            state["vector_result"] = _safe_vector_result(
+                question,
+                allowed_sources=allowed_sources,
+                retrieval_strategy=retrieval_strategy,
+            )
         if state["vector_result"].get("error"):
             thoughts.append(f"本地向量检索异常，已降级继续: {state['vector_result']['error']}")
             yield {"type": "thought", "content": thoughts[-1]}
@@ -154,7 +275,7 @@ def run_query_stream(
             },
         }
 
-    if (not casual_chat) and route in {"graph", "hybrid"}:
+    if (not casual_chat) and route in {"graph", "hybrid"} and (not did_parallel_hybrid) and (not deadline_exceeded()):
         yield {"type": "status", "message": "retrieving_graph"}
         state["graph_result"] = _safe_graph_result(question, allowed_sources=allowed_sources)
         if state["graph_result"].get("error"):
@@ -173,7 +294,6 @@ def run_query_stream(
     force_web = bool(state.get("adaptive_prefer_web", False))
     if casual_chat:
         need_web = False
-        # already emitted a clearer thought above
     elif use_web_fallback and force_web:
         need_web = True
         thoughts.append("[执行阶段] 检测到用户明确联网/时效性意图，优先触发联网补充。")
@@ -199,7 +319,11 @@ def run_query_stream(
             and use_web_fallback
         )
 
-    if need_web:
+    if deadline_exceeded():
+        state.setdefault("web_result", {"used": False, "citations": [], "context": ""})
+        thoughts.append("[执行阶段] 已达到请求超时预算，跳过后续联网补充。")
+        yield {"type": "thought", "content": thoughts[-1]}
+    elif need_web:
         thoughts.append("[执行阶段] 本地证据不足，触发联网补充。")
         yield {"type": "thought", "content": thoughts[-1]}
         yield {"type": "status", "message": "retrieving_web"}
@@ -231,7 +355,7 @@ def run_query_stream(
     stream_had_chunks = False
     stream_failed = False
     try:
-        for chunk in stream_synthesize_answer(
+        for chunk_event in stream_synthesize_answer(
             question=question,
             skill_name=state.get("skill", "answer_with_citations"),
             memory_context=state.get("memory_context", ""),
@@ -240,9 +364,27 @@ def run_query_stream(
             web_context=state.get("web_result", {}).get("context", ""),
             use_reasoning=use_reasoning,
         ):
-            answer_parts.append(chunk)
-            stream_had_chunks = True
-            yield {"type": "answer_chunk", "content": chunk}
+            if not isinstance(chunk_event, dict):
+                text = str(chunk_event)
+                answer_parts.append(text)
+                stream_had_chunks = True
+                yield {"type": "answer_chunk", "content": text}
+                continue
+            event_type = str(chunk_event.get("type", "chunk") or "chunk").strip().lower()
+            content = str(chunk_event.get("content", "") or "")
+            if not content:
+                continue
+            if event_type == "reset":
+                answer_parts = [content]
+                if stream_had_chunks:
+                    yield {"type": "answer_reset", "content": content}
+                else:
+                    stream_had_chunks = True
+                    yield {"type": "answer_chunk", "content": content}
+            else:
+                answer_parts.append(content)
+                stream_had_chunks = True
+                yield {"type": "answer_chunk", "content": content}
     except Exception as e:
         logger.exception(f"Streaming synthesis crashed for question: {question}")
         stream_failed = True

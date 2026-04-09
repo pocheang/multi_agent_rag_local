@@ -104,6 +104,53 @@ class Settings(BaseSettings):
     auth_login_window_seconds: int = Field(default=300, alias="AUTH_LOGIN_WINDOW_SECONDS")
     auth_register_max_attempts: int = Field(default=12, alias="AUTH_REGISTER_MAX_ATTEMPTS")
     auth_register_window_seconds: int = Field(default=300, alias="AUTH_REGISTER_WINDOW_SECONDS")
+    query_rate_limit_max_attempts: int = Field(default=30, alias="QUERY_RATE_LIMIT_MAX_ATTEMPTS")
+    query_rate_limit_window_seconds: int = Field(default=60, alias="QUERY_RATE_LIMIT_WINDOW_SECONDS")
+    query_guard_backend: str = Field(default="auto", alias="QUERY_GUARD_BACKEND")  # auto|memory|redis
+    query_max_concurrent: int = Field(default=24, alias="QUERY_MAX_CONCURRENT")
+    query_max_waiting: int = Field(default=120, alias="QUERY_MAX_WAITING")
+    query_acquire_timeout_ms: int = Field(default=3000, alias="QUERY_ACQUIRE_TIMEOUT_MS")
+    query_request_timeout_ms: int = Field(default=20000, alias="QUERY_REQUEST_TIMEOUT_MS")
+    query_overload_inflight_threshold: int = Field(default=20, alias="QUERY_OVERLOAD_INFLIGHT_THRESHOLD")
+    query_overload_waiting_threshold: int = Field(default=60, alias="QUERY_OVERLOAD_WAITING_THRESHOLD")
+    query_result_cache_backend: str = Field(default="auto", alias="QUERY_RESULT_CACHE_BACKEND")  # auto|memory|redis|off
+    query_result_cache_ttl_seconds: int = Field(default=45, alias="QUERY_RESULT_CACHE_TTL_SECONDS")
+    query_result_cache_max_items: int = Field(default=512, alias="QUERY_RESULT_CACHE_MAX_ITEMS")
+    query_result_session_ttl_seconds: int = Field(default=300, alias="QUERY_RESULT_SESSION_TTL_SECONDS")
+    stream_replay_cache_ttl_seconds: int = Field(default=600, alias="STREAM_REPLAY_CACHE_TTL_SECONDS")
+    stream_replay_cache_max_events: int = Field(default=1200, alias="STREAM_REPLAY_CACHE_MAX_EVENTS")
+    shadow_queue_workers: int = Field(default=2, alias="SHADOW_QUEUE_WORKERS")
+    shadow_queue_maxsize: int = Field(default=200, alias="SHADOW_QUEUE_MAXSIZE")
+    synthesis_refine_max_rounds: int = Field(default=3, alias="SYNTHESIS_REFINE_MAX_ROUNDS")
+    synthesis_refine_overload_rounds: int = Field(default=1, alias="SYNTHESIS_REFINE_OVERLOAD_ROUNDS")
+    history_backend: str = Field(default="file", alias="HISTORY_BACKEND")  # file|sqlite
+    history_sqlite_path_str: str = Field(default="./data/history.db", alias="HISTORY_SQLITE_PATH")
+    history_cold_dir: str = Field(default="./data/sessions_cold", alias="HISTORY_COLD_DIR")
+    history_hot_tier_days: int = Field(default=14, alias="HISTORY_HOT_TIER_DAYS")
+    bulkhead_enabled: bool = Field(default=True, alias="BULKHEAD_ENABLED")
+    bulkhead_llm_max_concurrent: int = Field(default=12, alias="BULKHEAD_LLM_MAX_CONCURRENT")
+    bulkhead_neo4j_max_concurrent: int = Field(default=20, alias="BULKHEAD_NEO4J_MAX_CONCURRENT")
+    bulkhead_web_max_concurrent: int = Field(default=8, alias="BULKHEAD_WEB_MAX_CONCURRENT")
+    bulkhead_acquire_timeout_ms: int = Field(default=1500, alias="BULKHEAD_ACQUIRE_TIMEOUT_MS")
+    alerting_enabled: bool = Field(default=False, alias="ALERTING_ENABLED")
+    alert_webhook_url: str = Field(default="", alias="ALERT_WEBHOOK_URL")
+    alert_webhook_allowlist: str = Field(default="", alias="ALERT_WEBHOOK_ALLOWLIST")  # csv domains
+    alert_min_interval_seconds: int = Field(default=60, alias="ALERT_MIN_INTERVAL_SECONDS")
+    response_signing_enabled: bool = Field(default=True, alias="RESPONSE_SIGNING_ENABLED")
+    response_signing_secret: str = Field(default="", alias="RESPONSE_SIGNING_SECRET")
+    response_signing_active_kid: str = Field(default="v1", alias="RESPONSE_SIGNING_ACTIVE_KID")
+    response_signing_keys: str = Field(default="", alias="RESPONSE_SIGNING_KEYS")  # kid:secret;kid2:secret2
+    quota_enabled: bool = Field(default=False, alias="QUOTA_ENABLED")
+    quota_query_max_per_minute: int = Field(default=120, alias="QUOTA_QUERY_MAX_PER_MINUTE")
+    quota_web_max_per_minute: int = Field(default=30, alias="QUOTA_WEB_MAX_PER_MINUTE")
+    quota_mode: str = Field(default="user", alias="QUOTA_MODE")  # user|business_unit
+    feature_flags: str = Field(default="", alias="FEATURE_FLAGS")  # name=on|off|pct:10
+    feature_flag_seed: str = Field(default="feature", alias="FEATURE_FLAG_SEED")
+    query_retry_enabled: bool = Field(default=True, alias="QUERY_RETRY_ENABLED")
+    query_retry_max_attempts: int = Field(default=2, alias="QUERY_RETRY_MAX_ATTEMPTS")
+    query_retry_base_delay_ms: int = Field(default=120, alias="QUERY_RETRY_BASE_DELAY_MS")
+    perf_gate_max_p95_ms: int = Field(default=4000, alias="PERF_GATE_MAX_P95_MS")
+    perf_gate_max_error_rate_percent: float = Field(default=5.0, alias="PERF_GATE_MAX_ERROR_RATE_PERCENT")
     admin_create_approval_token: str = Field(default="", alias="ADMIN_CREATE_APPROVAL_TOKEN")
     admin_create_approval_token_hash: str = Field(default="", alias="ADMIN_CREATE_APPROVAL_TOKEN_HASH")
 
@@ -123,6 +170,14 @@ class Settings(BaseSettings):
     image_caption_backend: str = Field(default="auto", alias="IMAGE_CAPTION_BACKEND")
     openai_vision_model: str = Field(default="gpt-4.1-mini", alias="OPENAI_VISION_MODEL")
     ollama_vision_model: str = Field(default="llava:7b", alias="OLLAMA_VISION_MODEL")
+    cors_enabled: bool = Field(default=True, alias="CORS_ENABLED")
+    cors_allow_origins: str = Field(
+        default="http://127.0.0.1:5173,http://localhost:5173,http://127.0.0.1:8000,http://localhost:8000",
+        alias="CORS_ALLOW_ORIGINS",
+    )
+    cors_allow_methods: str = Field(default="*", alias="CORS_ALLOW_METHODS")
+    cors_allow_headers: str = Field(default="*", alias="CORS_ALLOW_HEADERS")
+    cors_allow_credentials: bool = Field(default=True, alias="CORS_ALLOW_CREDENTIALS")
 
     @property
     def chroma_path(self) -> Path:
@@ -160,6 +215,35 @@ class Settings(BaseSettings):
     def app_db_path(self) -> Path:
         return Path(self.app_db_path_str)
 
+    @property
+    def history_sqlite_path(self) -> Path:
+        return Path(self.history_sqlite_path_str)
+
+    @property
+    def history_cold_path(self) -> Path:
+        return Path(self.history_cold_dir)
+
+    @property
+    def cors_origins(self) -> list[str]:
+        raw = str(self.cors_allow_origins or "").strip()
+        if not raw:
+            return []
+        return [x.strip() for x in raw.split(",") if x.strip()]
+
+    @property
+    def cors_methods(self) -> list[str]:
+        raw = str(self.cors_allow_methods or "").strip()
+        if not raw:
+            return ["*"]
+        return [x.strip() for x in raw.split(",") if x.strip()]
+
+    @property
+    def cors_headers(self) -> list[str]:
+        raw = str(self.cors_allow_headers or "").strip()
+        if not raw:
+            return ["*"]
+        return [x.strip() for x in raw.split(",") if x.strip()]
+
 
 @lru_cache(maxsize=1)
 def get_settings() -> Settings:
@@ -173,6 +257,8 @@ def get_settings() -> Settings:
     settings.users_path.parent.mkdir(parents=True, exist_ok=True)
     settings.auth_sessions_path.parent.mkdir(parents=True, exist_ok=True)
     settings.app_db_path.parent.mkdir(parents=True, exist_ok=True)
+    settings.history_sqlite_path.parent.mkdir(parents=True, exist_ok=True)
+    settings.history_cold_path.mkdir(parents=True, exist_ok=True)
     return settings
 
 

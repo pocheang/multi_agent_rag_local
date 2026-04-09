@@ -1,6 +1,7 @@
 import time
 from collections import OrderedDict
 from dataclasses import dataclass
+import threading
 from typing import Any, Callable
 
 from app.core.config import get_settings
@@ -17,6 +18,7 @@ class _BreakerState:
 
 
 _BREAKERS: dict[str, _BreakerState] = {}
+_BREAKERS_LOCK = threading.Lock()
 
 
 def call_with_circuit_breaker(name: str, fn: Callable[[], Any]) -> Any:
@@ -24,21 +26,24 @@ def call_with_circuit_breaker(name: str, fn: Callable[[], Any]) -> Any:
     if not bool(getattr(settings, "circuit_breaker_enabled", True)):
         return fn()
     now = time.time()
-    state = _BREAKERS.setdefault(name, _BreakerState())
-    if state.opened_until > now:
-        raise CircuitBreakerOpenError(f"circuit_open:{name}")
+    with _BREAKERS_LOCK:
+        state = _BREAKERS.setdefault(name, _BreakerState())
+        if state.opened_until > now:
+            raise CircuitBreakerOpenError(f"circuit_open:{name}")
     try:
         result = fn()
-        state.fails = 0
-        state.opened_until = 0.0
+        with _BREAKERS_LOCK:
+            state.fails = 0
+            state.opened_until = 0.0
         return result
     except Exception:
-        state.fails += 1
-        threshold = int(getattr(settings, "circuit_breaker_fail_threshold", 3) or 3)
-        cooldown = int(getattr(settings, "circuit_breaker_cooldown_seconds", 30) or 30)
-        if state.fails >= threshold:
-            state.opened_until = now + max(1, cooldown)
-            state.fails = 0
+        with _BREAKERS_LOCK:
+            state.fails += 1
+            threshold = int(getattr(settings, "circuit_breaker_fail_threshold", 3) or 3)
+            cooldown = int(getattr(settings, "circuit_breaker_cooldown_seconds", 30) or 30)
+            if state.fails >= threshold:
+                state.opened_until = now + max(1, cooldown)
+                state.fails = 0
         raise
 
 
@@ -47,6 +52,7 @@ class TTLCache:
         self.ttl_seconds = max(1, int(ttl_seconds))
         self.max_items = max(1, int(max_items))
         self._store: OrderedDict[str, tuple[float, Any]] = OrderedDict()
+        self._lock = threading.RLock()
 
     def _evict(self) -> None:
         now = time.time()
@@ -57,19 +63,21 @@ class TTLCache:
             self._store.popitem(last=False)
 
     def get(self, key: str) -> Any | None:
-        self._evict()
-        item = self._store.get(key)
-        if not item:
-            return None
-        exp, value = item
-        if exp <= time.time():
-            self._store.pop(key, None)
-            return None
-        self._store.move_to_end(key, last=True)
-        return value
+        with self._lock:
+            self._evict()
+            item = self._store.get(key)
+            if not item:
+                return None
+            exp, value = item
+            if exp <= time.time():
+                self._store.pop(key, None)
+                return None
+            self._store.move_to_end(key, last=True)
+            return value
 
     def set(self, key: str, value: Any) -> None:
-        self._evict()
-        self._store[key] = (time.time() + self.ttl_seconds, value)
-        self._store.move_to_end(key, last=True)
-        self._evict()
+        with self._lock:
+            self._evict()
+            self._store[key] = (time.time() + self.ttl_seconds, value)
+            self._store.move_to_end(key, last=True)
+            self._evict()

@@ -2,12 +2,14 @@ import hashlib
 import hmac
 import secrets
 import sqlite3
+import threading
 import uuid
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
 from app.core.config import get_settings
+from app.services.alerting import resolve_signing_secret, sign_payload
 
 
 def _now() -> datetime:
@@ -103,11 +105,16 @@ class AuthDBService:
         self.db_path = db_path or settings.app_db_path
         self.token_ttl_hours = token_ttl_hours or settings.auth_token_ttl_hours
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
+        self._audit_lock = threading.Lock()
         self._init_schema()
 
     def _connect(self) -> sqlite3.Connection:
-        conn = sqlite3.connect(self.db_path)
+        settings = get_settings()
+        timeout_s = max(1.0, float(getattr(settings, "sqlite_busy_timeout_seconds", 10) or 10))
+        conn = sqlite3.connect(self.db_path, timeout=timeout_s)
         conn.row_factory = sqlite3.Row
+        conn.execute(f"PRAGMA busy_timeout = {int(timeout_s * 1000)}")
+        conn.execute("PRAGMA journal_mode=WAL")
         return conn
 
     def _init_schema(self) -> None:
@@ -202,6 +209,12 @@ class AuthDBService:
             conn.execute("ALTER TABLE audit_logs ADD COLUMN event_category TEXT")
         if "severity" not in existing:
             conn.execute("ALTER TABLE audit_logs ADD COLUMN severity TEXT")
+        if "prev_event_hash" not in existing:
+            conn.execute("ALTER TABLE audit_logs ADD COLUMN prev_event_hash TEXT")
+        if "event_hash" not in existing:
+            conn.execute("ALTER TABLE audit_logs ADD COLUMN event_hash TEXT")
+        if "hash_kid" not in existing:
+            conn.execute("ALTER TABLE audit_logs ADD COLUMN hash_kid TEXT")
 
     def _ensure_auth_session_columns(self, conn: sqlite3.Connection) -> None:
         rows = conn.execute("PRAGMA table_info(auth_sessions)").fetchall()
@@ -607,28 +620,65 @@ class AuthDBService:
         event_id = uuid.uuid4().hex
         created_at = _iso(_now())
         event_category, severity = _classify_audit_event(action=action, result=result)
-        with self._connect() as conn:
-            conn.execute(
-                """
-                INSERT INTO audit_logs(event_id, actor_user_id, actor_role, action, event_category, severity, resource_type, resource_id, result, ip, user_agent, detail, created_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """,
-                (
-                    event_id,
-                    actor_user_id,
-                    actor_role,
-                    action,
-                    event_category,
-                    severity,
-                    resource_type,
-                    resource_id,
-                    result,
-                    ip,
-                    user_agent,
-                    detail,
-                    created_at,
-                ),
-            )
+        hash_kid, hash_secret = resolve_signing_secret()
+        prev_event_hash = None
+        event_hash = None
+        with self._audit_lock:
+            with self._connect() as conn:
+                conn.execute("BEGIN IMMEDIATE")
+                prev_row = conn.execute(
+                    "SELECT event_hash FROM audit_logs WHERE event_hash IS NOT NULL AND event_hash <> '' ORDER BY created_at DESC, event_id DESC LIMIT 1"
+                ).fetchone()
+                prev_event_hash = str(prev_row["event_hash"]) if prev_row and prev_row["event_hash"] else None
+                if hash_secret:
+                    event_hash = sign_payload(
+                        {
+                            "event_id": event_id,
+                            "created_at": created_at,
+                            "prev_event_hash": prev_event_hash or "",
+                            "actor_user_id": actor_user_id or "",
+                            "actor_role": actor_role or "",
+                            "action": action,
+                            "event_category": event_category or "",
+                            "severity": severity or "",
+                            "resource_type": resource_type,
+                            "resource_id": resource_id or "",
+                            "result": result,
+                            "ip": ip or "",
+                            "user_agent": user_agent or "",
+                            "detail": detail or "",
+                        },
+                        hash_secret,
+                    )
+                conn.execute(
+                    """
+                    INSERT INTO audit_logs(
+                        event_id, actor_user_id, actor_role, action, event_category, severity,
+                        resource_type, resource_id, result, ip, user_agent, detail, created_at,
+                        prev_event_hash, event_hash, hash_kid
+                    )
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        event_id,
+                        actor_user_id,
+                        actor_role,
+                        action,
+                        event_category,
+                        severity,
+                        resource_type,
+                        resource_id,
+                        result,
+                        ip,
+                        user_agent,
+                        detail,
+                        created_at,
+                        prev_event_hash,
+                        event_hash,
+                        hash_kid,
+                    ),
+                )
+                conn.commit()
         return {
             "event_id": event_id,
             "actor_user_id": actor_user_id,
@@ -643,6 +693,9 @@ class AuthDBService:
             "user_agent": user_agent,
             "detail": detail,
             "created_at": created_at,
+            "prev_event_hash": prev_event_hash,
+            "event_hash": event_hash,
+            "hash_kid": hash_kid,
         }
 
     def list_audit_logs(
@@ -684,7 +737,8 @@ class AuthDBService:
             rows = conn.execute(
                 f"""
                 SELECT event_id, actor_user_id, actor_role, action, event_category, severity,
-                       resource_type, resource_id, result, ip, user_agent, detail, created_at
+                       resource_type, resource_id, result, ip, user_agent, detail, created_at,
+                       prev_event_hash, event_hash, hash_kid
                 FROM audit_logs
                 {where_sql}
                 ORDER BY created_at DESC

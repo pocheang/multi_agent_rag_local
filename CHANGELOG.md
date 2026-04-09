@@ -4,6 +4,17 @@ All notable changes to this project will be documented in this file.
 
 The format is based on Keep a Changelog and this project follows Semantic Versioning.
 
+## [0.2.2] - 2026-04-09
+
+### Added
+- Runtime resilience and governance enhancements, including alerting, background queue execution, bulkhead isolation, hybrid executor support, query guards, quota guards, and query-result caching services.
+- Operational tooling scripts for chaos probing, load/performance checks, and migration helpers.
+- Concurrency regression test coverage (`tests/test_concurrency_regression.py`).
+
+### Changed
+- Updated core workflow, graph streaming, Neo4j integration, API surface, and schema/model definitions to support the new runtime controls and reliability features.
+- Improved CI quality-gate checks for release readiness.
+
 ## [0.2.1] - 2026-04-09
 
 ### Added

@@ -29,6 +29,12 @@ def main() -> int:
     parser.add_argument("--auto-rollback-file", default="")
     parser.add_argument("--strategy", default="")
     parser.add_argument("--report-md", default="")
+    parser.add_argument("--perf-base-url", default="")
+    parser.add_argument("--perf-token", default="")
+    parser.add_argument("--perf-concurrency", type=int, default=20)
+    parser.add_argument("--perf-rounds", type=int, default=8)
+    parser.add_argument("--perf-max-p95-ms", type=float, default=4000.0)
+    parser.add_argument("--perf-max-error-rate", type=float, default=5.0)
     args = parser.parse_args()
 
     def _emit_rollback(reason: str) -> None:
@@ -90,6 +96,39 @@ def main() -> int:
     recall = float(payload.get("recall_at_k", 0.0) or 0.0)
     ok = recall >= args.min_recall
     out = {"ok": ok, "min_recall": args.min_recall, "recall_at_k": recall, "payload": payload}
+    perf_base = str(args.perf_base_url or "").strip()
+    if ok and perf_base:
+        cmd = [
+            sys.executable,
+            "scripts/perf_gate.py",
+            "--base-url",
+            perf_base,
+            "--token",
+            str(args.perf_token or ""),
+            "--concurrency",
+            str(max(1, int(args.perf_concurrency))),
+            "--rounds",
+            str(max(1, int(args.perf_rounds))),
+            "--max-p95-ms",
+            str(float(args.perf_max_p95_ms)),
+            "--max-error-rate",
+            str(float(args.perf_max_error_rate)),
+        ]
+        proc = subprocess.run(cmd, capture_output=True, text=True)
+        if proc.returncode != 0:
+            ok = False
+            out["perf"] = {
+                "ok": False,
+                "returncode": int(proc.returncode),
+                "stdout": proc.stdout.strip(),
+                "stderr": proc.stderr.strip(),
+            }
+        else:
+            try:
+                out["perf"] = json.loads((proc.stdout.strip() or "{}").splitlines()[-1])
+            except Exception:
+                out["perf"] = {"ok": True, "raw": proc.stdout.strip()}
+    out["ok"] = ok
     _write_report("threshold_check", out)
     print(json.dumps(out, ensure_ascii=False, indent=2))
     if not ok:

@@ -7,6 +7,7 @@ import csv
 import hashlib
 import hmac
 import statistics
+import uuid
 from datetime import datetime, timedelta, timezone
 import io
 import socket
@@ -15,6 +16,7 @@ from typing import Annotated, Any
 from urllib.parse import urlparse
 
 from fastapi import Depends, FastAPI, File, Form, HTTPException, Request, UploadFile, status
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.responses import FileResponse, RedirectResponse, StreamingResponse, Response
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
@@ -22,6 +24,7 @@ from fastapi.staticfiles import StaticFiles
 import httpx
 
 from app.core.config import get_settings, reload_settings
+from app.core.models import clear_model_caches
 from app.ingestion.loaders import IMAGE_EXTENSIONS
 from app.core.schemas import (
     AdminRoleUpdateRequest,
@@ -53,12 +56,17 @@ from app.core.schemas import (
 )
 from app.graph.streaming import encode_sse, run_query_stream
 from app.graph.workflow import run_query
+from app.graph.neo4j_client import Neo4jClient
 from app.services.auth_db import AuthDBService
+from app.services.background_queue import BackgroundTaskQueue
+from app.services.alerting import emit_alert, sign_payload, resolve_signing_secret
+from app.services.bulkhead import reset_bulkheads
 from app.services.history import HistoryStore
 from app.services.memory_store import MemoryStore, build_memory_context
 from app.services.ingest_service import ingest_paths
 from app.services.index_manager import delete_file_index, list_indexed_files, rebuild_file_index
 from app.services.auto_ingest_watcher import AutoIngestWatcher
+from app.retrievers.vector_store import clear_vector_store_cache
 from app.services.agent_classifier import classify_agent_class
 from app.services.input_normalizer import (
     enhance_user_question_for_completion,
@@ -74,6 +82,11 @@ from app.services.pdf_agent_guard import (
 from app.services.prompt_store import PromptStore
 from app.services.prompt_checker import check_and_enhance_prompt
 from app.services.query_intent import is_casual_chat_query
+from app.services.query_guard import QueryLoadGuard, QueryOverloadedError, QueryRateLimitedError
+from app.services.query_result_cache import QueryResultCache
+from app.services.quota_guard import QuotaExceededError, QuotaGuard
+from app.services.request_context import overload_mode_enabled, request_context
+from app.services.retry_policy import call_with_retry
 from app.services.consistency_guard import should_stabilize, text_similarity
 from app.services.evidence_conflict import detect_evidence_conflict
 from app.services.retrieval_profiles import normalize_retrieval_profile, profile_force_local_only, profile_to_strategy
@@ -86,6 +99,7 @@ from app.services.runtime_ops import (
     append_benchmark_trend,
     apply_rollback_profile,
     choose_shadow,
+    feature_enabled,
     get_runtime_state,
     read_benchmark_trends,
     read_index_freshness,
@@ -94,11 +108,23 @@ from app.services.runtime_ops import (
     resolve_profile_for_request,
     set_active_profile,
     set_canary,
+    set_feature_flags,
     set_shadow,
 )
+from app.services.runtime_metrics import RuntimeMetrics
 
 app = FastAPI(title="Multi-Agent Local RAG")
 settings = get_settings()
+if bool(getattr(settings, "cors_enabled", True)):
+    cors_origins = settings.cors_origins or []
+    allow_all = "*" in cors_origins
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=["*"] if allow_all else cors_origins,
+        allow_credentials=bool(getattr(settings, "cors_allow_credentials", True)) and (not allow_all),
+        allow_methods=settings.cors_methods,
+        allow_headers=settings.cors_headers,
+    )
 auth_service = AuthDBService()
 prompt_store = PromptStore()
 auth_scheme = HTTPBearer(auto_error=False)
@@ -111,10 +137,31 @@ register_limiter = SlidingWindowLimiter(
     max_attempts=settings.auth_register_max_attempts,
     window_seconds=settings.auth_register_window_seconds,
 )
+query_guard = QueryLoadGuard(
+    per_user_max_requests=settings.query_rate_limit_max_attempts,
+    per_user_window_seconds=settings.query_rate_limit_window_seconds,
+    max_concurrent=settings.query_max_concurrent,
+    max_waiting=settings.query_max_waiting,
+    acquire_timeout_ms=settings.query_acquire_timeout_ms,
+    backend=settings.query_guard_backend,
+)
+query_result_cache = QueryResultCache(
+    backend=settings.query_result_cache_backend,
+    ttl_seconds=settings.query_result_cache_ttl_seconds,
+    max_items=settings.query_result_cache_max_items,
+    session_ttl_seconds=settings.query_result_session_ttl_seconds,
+)
+quota_guard = QuotaGuard()
+shadow_queue = BackgroundTaskQueue(
+    maxsize=settings.shadow_queue_maxsize,
+    workers=settings.shadow_queue_workers,
+    name="shadow-query",
+)
 _auto_ingest_stop_event = threading.Event()
 _auto_ingest_thread: threading.Thread | None = None
 _request_metrics_lock = threading.Lock()
 _request_metrics: deque[dict[str, Any]] = deque(maxlen=3000)
+runtime_metrics = RuntimeMetrics()
 
 react_dist_dir = Path(__file__).resolve().parents[2] / "frontend" / "dist"
 
@@ -128,9 +175,12 @@ async def request_timing_middleware(request: Request, call_next):
     started = time.perf_counter()
     status_code = 500
     error_text = ""
+    trace_id = request.headers.get("x-trace-id", "").strip() or uuid.uuid4().hex
+    request.state.trace_id = trace_id
     try:
         response = await call_next(request)
         status_code = response.status_code
+        response.headers["X-Trace-Id"] = trace_id
         return response
     except Exception as e:
         error_text = type(e).__name__
@@ -147,11 +197,15 @@ async def request_timing_middleware(request: Request, call_next):
         }
         with _request_metrics_lock:
             _request_metrics.append(metric)
+        runtime_metrics.inc("http_requests_total")
+        runtime_metrics.inc(f"http_status_{status_code}_total")
+        runtime_metrics.observe("http_request_duration", elapsed_ms / 1000.0)
 
 
 @app.on_event("startup")
 def start_auto_ingest_watcher():
     global _auto_ingest_thread
+    shadow_queue.start()
     if not settings.auto_ingest_enabled:
         return
     if _auto_ingest_thread is not None and _auto_ingest_thread.is_alive():
@@ -173,10 +227,124 @@ def stop_auto_ingest_watcher():
     if _auto_ingest_thread is not None and _auto_ingest_thread.is_alive():
         _auto_ingest_thread.join(timeout=5)
     _auto_ingest_thread = None
+    shadow_queue.stop(timeout=2.0)
+    Neo4jClient.close_shared_driver()
 
 
 def _history_store_for_user(user: dict[str, Any]) -> HistoryStore:
     return HistoryStore(base_dir=settings.sessions_path / user["user_id"])
+
+
+def _query_limiter_key(user: dict[str, Any], request: Request) -> str:
+    user_id = str(user.get("user_id", "") or "").strip()
+    if user_id:
+        return f"user:{user_id}"
+    host = str(getattr(request.client, "host", "") or "").strip()
+    return f"ip:{host or 'unknown'}"
+
+
+def _is_overload_mode() -> bool:
+    stats = query_guard.stats()
+    return (
+        int(stats.get("inflight", 0))
+        >= int(getattr(settings, "query_overload_inflight_threshold", settings.query_max_concurrent))
+    ) or (
+        int(stats.get("waiting", 0))
+        >= int(getattr(settings, "query_overload_waiting_threshold", settings.query_max_waiting))
+    )
+
+
+def _query_cache_key(
+    *,
+    user: dict[str, Any],
+    session_id: str | None,
+    question: str,
+    use_web_fallback: bool,
+    use_reasoning: bool,
+    retrieval_strategy: str | None,
+    agent_class_hint: str | None,
+    request_id: str | None,
+    mode: str = "query",
+    ) -> str:
+    return QueryResultCache.build_key(
+        user_id=str(user.get("user_id", "")),
+        session_id=str(session_id or ""),
+        question=str(question or ""),
+        use_web_fallback=bool(use_web_fallback),
+        use_reasoning=bool(use_reasoning),
+        retrieval_strategy=str(retrieval_strategy or ""),
+        agent_class_hint=str(agent_class_hint or ""),
+        request_id=f"{mode}:{str(request_id or '')}",
+        include_request_id=False,
+    )
+
+
+def _trace_id(request: Request) -> str:
+    return str(getattr(request.state, "trace_id", "") or "").strip() or uuid.uuid4().hex
+
+
+def _maybe_sign_response(
+    payload: dict[str, Any],
+    *,
+    user: dict[str, Any] | None = None,
+    session_id: str = "",
+    question: str = "",
+) -> tuple[str | None, str | None]:
+    if not bool(getattr(settings, "response_signing_enabled", True)):
+        return None, None
+    uid = str((user or {}).get("user_id", "") or "")
+    if not feature_enabled("response_signing", user_id=uid, session_id=session_id, question=question):
+        return None, None
+    kid, secret = resolve_signing_secret()
+    if not secret:
+        emit_alert(
+            "response_signing_missing_key",
+            {
+                "feature": "response_signing",
+                "user_id": uid,
+                "session_id": session_id,
+            },
+        )
+        return None, None
+    return sign_payload(payload, secret), kid
+
+
+def _run_with_query_runtime(
+    *,
+    user: dict[str, Any],
+    request: Request,
+    fn,
+):
+    limiter_key = _query_limiter_key(user, request)
+    try:
+        with query_guard.acquire(limiter_key):
+            with request_context(
+                timeout_ms=int(getattr(settings, "query_request_timeout_ms", 20000) or 20000),
+                overload_mode=_is_overload_mode(),
+            ):
+                return call_with_retry("query.runtime", fn)
+    except QueryRateLimitedError as e:
+        runtime_metrics.inc("query_rate_limited_total")
+        emit_alert(
+            "query_rate_limited",
+            {
+                "message": str(e),
+                "path": str(request.url.path),
+                "trace_id": _trace_id(request),
+            },
+        )
+        raise HTTPException(status_code=429, detail=str(e))
+    except QueryOverloadedError as e:
+        runtime_metrics.inc("query_overloaded_total")
+        emit_alert(
+            "query_overloaded",
+            {
+                "message": str(e),
+                "path": str(request.url.path),
+                "trace_id": _trace_id(request),
+            },
+        )
+        raise HTTPException(status_code=503, detail=str(e))
 
 
 def _memory_store_for_user(user: dict[str, Any]) -> MemoryStore:
@@ -513,6 +681,17 @@ def health():
     return {"status": "ok"}
 
 
+@app.get("/metrics")
+def metrics():
+    guard = query_guard.stats()
+    runtime_metrics.set_gauge("query_guard_inflight", float(guard.get("inflight", 0) or 0))
+    runtime_metrics.set_gauge("query_guard_waiting", float(guard.get("waiting", 0) or 0))
+    qstats = shadow_queue.stats()
+    runtime_metrics.set_gauge("shadow_queue_size", float(qstats.get("queue_size", 0) or 0))
+    runtime_metrics.set_gauge("shadow_queue_workers", float(qstats.get("workers", 0) or 0))
+    return Response(content=runtime_metrics.render_prometheus(), media_type="text/plain; version=0.0.4")
+
+
 def _check_ollama_ready() -> dict[str, Any]:
     start = time.perf_counter()
     url = (settings.ollama_base_url or "http://localhost:11434").rstrip("/") + "/api/tags"
@@ -576,6 +755,10 @@ def ready():
         "status": status_text,
         "blocking_failures": blocking_failures,
         "services": checks,
+        "query_runtime": {
+            "guard": query_guard.stats(),
+            "shadow_queue": shadow_queue.stats(),
+        },
     }
     return JSONResponse(content=payload, status_code=code)
 
@@ -725,9 +908,16 @@ def _launch_shadow_run(
                     "error": f"{type(e).__name__}",
                 }
             )
-
-    t = threading.Thread(target=_worker, daemon=True, name="shadow-query")
-    t.start()
+    accepted = shadow_queue.submit(_worker)
+    if not accepted:
+        append_shadow_run(
+            {
+                "user_id": str(user.get("user_id", "")),
+                "session_id": str(session_id or ""),
+                "strategy": strategy,
+                "error": "shadow_queue_full",
+            }
+        )
 
 
 def _is_valid_admin_approval_token(input_token: str) -> tuple[bool, str]:
@@ -1055,11 +1245,55 @@ def admin_ops_set_canary(payload: dict[str, Any], request: Request, user: dict[s
     return state
 
 
+@app.post("/admin/ops/feature-flags")
+def admin_ops_set_feature_flags(payload: dict[str, Any], request: Request, user: dict[str, Any] = Depends(_require_user)):
+    _require_permission(user, "admin:audit_read", request, "admin")
+    flags = payload.get("flags", {})
+    if not isinstance(flags, dict):
+        raise HTTPException(status_code=400, detail="flags must be an object")
+    state = set_feature_flags({str(k): str(v) for k, v in flags.items()})
+    _audit(
+        request,
+        action="admin.ops.feature_flags.set",
+        resource_type="admin",
+        result="success",
+        user=user,
+        detail=f"flags={len(state.get('feature_flags', {}) or {})}",
+    )
+    return state
+
+
 @app.post("/admin/config/reload")
 def admin_reload_config(request: Request, user: dict[str, Any] = Depends(_require_user)):
     _require_permission(user, "admin:audit_read", request, "admin")
-    global settings
+    global settings, query_guard, query_result_cache, quota_guard, shadow_queue
     settings = reload_settings()
+    clear_model_caches()
+    clear_vector_store_cache()
+    Neo4jClient.close_shared_driver()
+    reset_bulkheads()
+    shadow_queue.stop(timeout=1.0)
+    query_guard = QueryLoadGuard(
+        per_user_max_requests=settings.query_rate_limit_max_attempts,
+        per_user_window_seconds=settings.query_rate_limit_window_seconds,
+        max_concurrent=settings.query_max_concurrent,
+        max_waiting=settings.query_max_waiting,
+        acquire_timeout_ms=settings.query_acquire_timeout_ms,
+        backend=settings.query_guard_backend,
+    )
+    query_result_cache = QueryResultCache(
+        backend=settings.query_result_cache_backend,
+        ttl_seconds=settings.query_result_cache_ttl_seconds,
+        max_items=settings.query_result_cache_max_items,
+        session_ttl_seconds=settings.query_result_session_ttl_seconds,
+    )
+    quota_guard = QuotaGuard()
+    shadow_queue = BackgroundTaskQueue(
+        maxsize=settings.shadow_queue_maxsize,
+        workers=settings.shadow_queue_workers,
+        name="shadow-query",
+    )
+    shadow_queue.start()
     auto_ingest_watcher.settings = settings
     _audit(
         request,
@@ -2243,6 +2477,17 @@ async def upload_files(
 def query(req: QueryRequest, request: Request, user: dict[str, Any] = Depends(_require_user)):
     _require_permission(user, "query:run", request, "query")
     try:
+        quota_guard.enforce_query_quota(user)
+        if bool(req.use_web_fallback):
+            quota_guard.enforce_web_quota(user)
+    except QuotaExceededError as e:
+        runtime_metrics.inc("query_quota_exceeded_total")
+        emit_alert(
+            "query_quota_exceeded",
+            {"trace_id": _trace_id(request), "message": str(e), "user_id": str(user.get("user_id", ""))},
+        )
+        raise HTTPException(status_code=429, detail=str(e))
+    try:
         normalized_question = normalize_and_validate_user_question(req.question)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -2365,33 +2610,70 @@ def query(req: QueryRequest, request: Request, user: dict[str, Any] = Depends(_r
         run_query_kwargs["agent_class_hint"] = hinted
     if retrieval_strategy and (req.retrieval_strategy is not None or retrieval_strategy != "advanced"):
         run_query_kwargs["retrieval_strategy"] = profile_to_strategy(retrieval_strategy)
-    result = run_query(effective_question, **run_query_kwargs)
-    result = _enforce_result_source_scope(result, allowed_sources=allowed_sources, request=request, user=user)
-    consistency_info = {"checked": False}
-    if bool(settings.consistency_guard_enabled):
-        prev_answer = _latest_answer_for_same_question(user=user, session_id=req.session_id, question=original_question)
-        if prev_answer:
-            sim = text_similarity(prev_answer, result.get("answer", ""))
-            consistency_info = {"checked": True, "previous_similarity": round(sim, 4), "stabilized": False}
-            if should_stabilize(
-                previous_answer=prev_answer,
-                new_answer=result.get("answer", ""),
-                threshold=float(settings.consistency_guard_similarity_threshold),
-            ):
-                stabilize_kwargs = dict(run_query_kwargs)
-                stabilize_kwargs["retrieval_strategy"] = "baseline"
-                stabilize_kwargs["use_reasoning"] = False
-                retried = run_query(effective_question, **stabilize_kwargs)
-                retried = _enforce_result_source_scope(retried, allowed_sources=allowed_sources, request=request, user=user)
-                retried_sim = text_similarity(prev_answer, retried.get("answer", ""))
-                if retried_sim > sim:
-                    result = retried
-                    consistency_info = {
-                        "checked": True,
-                        "previous_similarity": round(sim, 4),
-                        "retried_similarity": round(retried_sim, 4),
-                        "stabilized": True,
-                    }
+    cache_key = _query_cache_key(
+        user=user,
+        session_id=req.session_id,
+        question=effective_question,
+        use_web_fallback=effective_use_web_fallback,
+        use_reasoning=req.use_reasoning,
+        retrieval_strategy=run_query_kwargs.get("retrieval_strategy"),
+        agent_class_hint=hinted,
+        request_id=req.request_id,
+        mode="query",
+    )
+    cached_response = query_result_cache.get(cache_key, session_id=req.session_id)
+    if isinstance(cached_response, dict) and cached_response:
+        runtime_metrics.inc("query_cache_hit_total")
+        return QueryResponse(**cached_response)
+    if not query_result_cache.mark_inflight(cache_key):
+        runtime_metrics.inc("query_duplicate_total")
+        hot_cached = query_result_cache.get(cache_key, session_id=req.session_id)
+        if isinstance(hot_cached, dict) and hot_cached:
+            return QueryResponse(**hot_cached)
+        emit_alert(
+            "query_duplicate_inflight",
+            {"trace_id": _trace_id(request), "session_id": str(req.session_id or "")},
+        )
+        raise HTTPException(status_code=409, detail="duplicate request in progress")
+    def _query_pipeline():
+        runtime_kwargs = dict(run_query_kwargs)
+        if overload_mode_enabled():
+            runtime_kwargs["use_web_fallback"] = False
+            runtime_kwargs["use_reasoning"] = False
+            runtime_kwargs.setdefault("retrieval_strategy", "baseline")
+        result_local = run_query(effective_question, **runtime_kwargs)
+        result_local = _enforce_result_source_scope(result_local, allowed_sources=allowed_sources, request=request, user=user)
+        consistency_local = {"checked": False}
+        if bool(settings.consistency_guard_enabled):
+            prev_answer = _latest_answer_for_same_question(user=user, session_id=req.session_id, question=original_question)
+            if prev_answer:
+                sim = text_similarity(prev_answer, result_local.get("answer", ""))
+                consistency_local = {"checked": True, "previous_similarity": round(sim, 4), "stabilized": False}
+                if should_stabilize(
+                    previous_answer=prev_answer,
+                    new_answer=result_local.get("answer", ""),
+                    threshold=float(settings.consistency_guard_similarity_threshold),
+                ):
+                    stabilize_kwargs = dict(runtime_kwargs)
+                    stabilize_kwargs["retrieval_strategy"] = "baseline"
+                    stabilize_kwargs["use_reasoning"] = False
+                    retried = run_query(effective_question, **stabilize_kwargs)
+                    retried = _enforce_result_source_scope(retried, allowed_sources=allowed_sources, request=request, user=user)
+                    retried_sim = text_similarity(prev_answer, retried.get("answer", ""))
+                    if retried_sim > sim:
+                        result_local = retried
+                        consistency_local = {
+                            "checked": True,
+                            "previous_similarity": round(sim, 4),
+                            "retried_similarity": round(retried_sim, 4),
+                            "stabilized": True,
+                        }
+        return result_local, consistency_local
+
+    try:
+        result, consistency_info = _run_with_query_runtime(user=user, request=request, fn=_query_pipeline)
+    finally:
+        query_result_cache.clear_inflight(cache_key)
     vector_citations = [Citation(**x) for x in result.get("vector_result", {}).get("citations", [])]
     web_citations = [Citation(**x) for x in result.get("web_result", {}).get("citations", [])]
     conflict_report = detect_evidence_conflict(
@@ -2423,13 +2705,13 @@ def query(req: QueryRequest, request: Request, user: dict[str, Any] = Depends(_r
             },
         )
         _promote_long_term_memory(user=user, session_id=req.session_id, question=original_question, result=result)
-    response = QueryResponse(
-        answer=result.get("answer", ""),
-        route=result.get("route", "unknown"),
-        citations=vector_citations + web_citations,
-        graph_entities=result.get("graph_result", {}).get("entities", []),
-        web_used=result.get("web_result", {}).get("used", False),
-        debug={
+    response_payload: dict[str, Any] = {
+        "answer": result.get("answer", ""),
+        "route": result.get("route", "unknown"),
+        "citations": vector_citations + web_citations,
+        "graph_entities": result.get("graph_result", {}).get("entities", []),
+        "web_used": result.get("web_result", {}).get("used", False),
+        "debug": {
             "reason": result.get("reason", ""),
             "skill": result.get("skill", ""),
             "agent_class": result.get("agent_class", "general"),
@@ -2445,8 +2727,23 @@ def query(req: QueryRequest, request: Request, user: dict[str, Any] = Depends(_r
             "retrieval_strategy_reason": strategy_meta.get("reason"),
             "retrieval_strategy_bucket": strategy_meta.get("bucket"),
             "evidence_conflict": conflict_report,
+            "trace_id": _trace_id(request),
         },
+    }
+    signature, signature_kid = _maybe_sign_response(
+        {
+            "answer": response_payload.get("answer", ""),
+            "route": response_payload.get("route", ""),
+            "trace_id": response_payload.get("debug", {}).get("trace_id", ""),
+        },
+        user=user,
+        session_id=str(req.session_id or ""),
+        question=effective_question,
     )
+    if signature:
+        response_payload["debug"]["signature"] = signature
+        response_payload["debug"]["signature_kid"] = signature_kid
+    response = QueryResponse(**response_payload)
     grounding_support = float((result.get("grounding", {}) or {}).get("support_ratio", 0.0) or 0.0)
     _audit(
         request,
@@ -2463,21 +2760,35 @@ def query(req: QueryRequest, request: Request, user: dict[str, Any] = Depends(_r
         question=effective_question,
         primary_result=result,
     )
+    query_result_cache.set(cache_key, response.model_dump(), session_id=req.session_id)
+    runtime_metrics.inc("query_success_total")
     return response
 
 
 @app.post("/query/stream")
-def stream_query(
+async def stream_query(
     question: Annotated[str, Form(...)],
     request: Request,
     use_web_fallback: Annotated[bool, Form()] = True,
     use_reasoning: Annotated[bool, Form()] = True,
     session_id: Annotated[str | None, Form()] = None,
+    request_id: Annotated[str | None, Form()] = None,
     agent_class_hint: Annotated[str | None, Form()] = None,
     retrieval_strategy: Annotated[str | None, Form()] = None,
     user: dict[str, Any] = Depends(_require_user),
 ):
     _require_permission(user, "query:run", request, "query")
+    try:
+        quota_guard.enforce_query_quota(user)
+        if bool(use_web_fallback):
+            quota_guard.enforce_web_quota(user)
+    except QuotaExceededError as e:
+        runtime_metrics.inc("query_stream_quota_exceeded_total")
+        emit_alert(
+            "query_stream_quota_exceeded",
+            {"trace_id": _trace_id(request), "message": str(e), "user_id": str(user.get("user_id", ""))},
+        )
+        raise HTTPException(status_code=429, detail=str(e))
     try:
         normalized_question = normalize_and_validate_user_question(question)
     except ValueError as e:
@@ -2644,42 +2955,154 @@ def stream_query(
         question=effective_question,
     )
     effective_use_web_fallback = bool(use_web_fallback and (not profile_force_local_only(normalized_strategy)))
+    hinted = _normalize_agent_class_hint(agent_class_hint)
+    stream_retrieval_strategy = (
+        profile_to_strategy(normalized_strategy)
+        if normalized_strategy and (retrieval_strategy is not None or normalized_strategy != "advanced")
+        else None
+    )
+    stream_cache_key = _query_cache_key(
+        user=user,
+        session_id=session_id,
+        question=effective_question,
+        use_web_fallback=effective_use_web_fallback,
+        use_reasoning=use_reasoning,
+        retrieval_strategy=stream_retrieval_strategy,
+        agent_class_hint=hinted,
+        request_id=request_id,
+        mode="stream",
+    )
+    replay_enabled = feature_enabled(
+        "stream_replay",
+        user_id=str(user.get("user_id", "")),
+        session_id=str(session_id or ""),
+        question=effective_question,
+    )
+    if replay_enabled:
+        stream_replay = query_result_cache.get_stream_events(stream_cache_key)
+        replay_events = list(stream_replay.get("events", []) or [])
+        replay_done = bool(stream_replay.get("done", False))
+        if replay_events:
+            async def event_gen_replay():
+                for ev in replay_events:
+                    if isinstance(ev, dict):
+                        yield encode_sse(ev)
+                if not replay_done:
+                    yield encode_sse({"type": "status", "message": "replay_partial", "trace_id": _trace_id(request)})
+            return StreamingResponse(event_gen_replay(), media_type="text/event-stream")
+
+    cached_stream = query_result_cache.get(stream_cache_key, session_id=session_id)
+    if isinstance(cached_stream, dict) and cached_stream.get("result"):
+        runtime_metrics.inc("query_stream_cache_hit_total")
+        done_result = dict(cached_stream.get("result", {}) or {})
+
+        async def event_gen_cached():
+            yield encode_sse({"type": "status", "message": "cache_hit"})
+            answer_text = str(done_result.get("answer", "") or "")
+            if answer_text:
+                yield encode_sse({"type": "answer_chunk", "content": answer_text})
+            yield encode_sse({"type": "done", "result": done_result})
+
+        return StreamingResponse(event_gen_cached(), media_type="text/event-stream")
+    if not query_result_cache.mark_inflight(stream_cache_key):
+        runtime_metrics.inc("query_stream_duplicate_total")
+        emit_alert(
+            "query_stream_duplicate_inflight",
+            {"trace_id": _trace_id(request), "session_id": str(session_id or "")},
+        )
+        raise HTTPException(status_code=409, detail="duplicate request in progress")
     if session_id:
         history_store.append_message(session_id, "user", original_question)
 
-    def event_gen():
+    async def event_gen():
         final_result = None
+        trace_id = _trace_id(request)
         stream_kwargs: dict[str, Any] = {
             "use_web_fallback": effective_use_web_fallback,
             "use_reasoning": use_reasoning,
             "memory_context": memory_context,
             "allowed_sources": allowed_sources,
         }
-        hinted = _normalize_agent_class_hint(agent_class_hint)
         if hinted:
             stream_kwargs["agent_class_hint"] = hinted
-        if normalized_strategy and (retrieval_strategy is not None or normalized_strategy != "advanced"):
-            stream_kwargs["retrieval_strategy"] = profile_to_strategy(normalized_strategy)
-        for event in run_query_stream(
-            effective_question,
-            **stream_kwargs,
-        ):
-            if event.get("type") == "done":
-                final_result = _enforce_result_source_scope(
-                    event.get("result", {}),
-                    allowed_sources=allowed_sources,
-                    request=request,
-                    user=user,
-                )
-                conflict_report = detect_evidence_conflict(
-                    list(final_result.get("vector_result", {}).get("citations", []) or [])
-                    + list(final_result.get("web_result", {}).get("citations", []) or [])
-                )
-                final_result["evidence_conflict"] = conflict_report
-                if conflict_report.get("conflict"):
-                    final_result["answer"] = f"[evidence-conflict-warning]\n{final_result.get('answer', '')}"
-                event = {**event, "result": final_result}
-            yield encode_sse(event)
+        if stream_retrieval_strategy:
+            stream_kwargs["retrieval_strategy"] = stream_retrieval_strategy
+        limiter_key = _query_limiter_key(user, request)
+        try:
+            with query_guard.acquire(limiter_key):
+                with request_context(
+                    timeout_ms=int(getattr(settings, "query_request_timeout_ms", 20000) or 20000),
+                    overload_mode=_is_overload_mode(),
+                ):
+                    runtime_stream_kwargs = dict(stream_kwargs)
+                    if overload_mode_enabled():
+                        runtime_stream_kwargs["use_web_fallback"] = False
+                        runtime_stream_kwargs["use_reasoning"] = False
+                        runtime_stream_kwargs.setdefault("retrieval_strategy", "baseline")
+                    hello_event = {"type": "status", "message": "trace", "trace_id": trace_id}
+                    if replay_enabled:
+                        query_result_cache.append_stream_event(stream_cache_key, hello_event, done=False)
+                    yield encode_sse(hello_event)
+                    for event in run_query_stream(
+                        effective_question,
+                        **runtime_stream_kwargs,
+                    ):
+                        if await request.is_disconnected():
+                            break
+                        if event.get("type") == "done":
+                            final_result = _enforce_result_source_scope(
+                                event.get("result", {}),
+                                allowed_sources=allowed_sources,
+                                request=request,
+                                user=user,
+                            )
+                            conflict_report = detect_evidence_conflict(
+                                list(final_result.get("vector_result", {}).get("citations", []) or [])
+                                + list(final_result.get("web_result", {}).get("citations", []) or [])
+                            )
+                            final_result["evidence_conflict"] = conflict_report
+                            if conflict_report.get("conflict"):
+                                final_result["answer"] = f"[evidence-conflict-warning]\n{final_result.get('answer', '')}"
+                            final_result["trace_id"] = trace_id
+                            sig, sig_kid = _maybe_sign_response(
+                                {
+                                    "answer": final_result.get("answer", ""),
+                                    "route": final_result.get("route", ""),
+                                    "trace_id": trace_id,
+                                },
+                                user=user,
+                                session_id=str(session_id or ""),
+                                question=effective_question,
+                            )
+                            if sig:
+                                final_result["signature"] = sig
+                                final_result["signature_kid"] = sig_kid
+                            event = {**event, "result": final_result}
+                            if replay_enabled:
+                                query_result_cache.append_stream_event(stream_cache_key, event, done=True)
+                                query_result_cache.mark_stream_done(stream_cache_key)
+                        else:
+                            if replay_enabled:
+                                query_result_cache.append_stream_event(stream_cache_key, event, done=False)
+                        yield encode_sse(event)
+        except QueryRateLimitedError as e:
+            runtime_metrics.inc("query_stream_rate_limited_total")
+            emit_alert(
+                "query_stream_rate_limited",
+                {"message": str(e), "trace_id": trace_id},
+            )
+            yield encode_sse({"type": "error", "error": "rate_limited", "message": str(e)})
+            return
+        except QueryOverloadedError as e:
+            runtime_metrics.inc("query_stream_overloaded_total")
+            emit_alert(
+                "query_stream_overloaded",
+                {"message": str(e), "trace_id": trace_id},
+            )
+            yield encode_sse({"type": "error", "error": "overloaded", "message": str(e)})
+            return
+        finally:
+            query_result_cache.clear_inflight(stream_cache_key)
 
         if session_id and final_result is not None:
             history_store.append_message(
@@ -2710,5 +3133,8 @@ def stream_query(
                 question=effective_question,
                 primary_result=final_result,
             )
+        if final_result is not None:
+            query_result_cache.set(stream_cache_key, {"result": final_result}, session_id=session_id)
+            runtime_metrics.inc("query_stream_success_total")
 
     return StreamingResponse(event_gen(), media_type="text/event-stream")

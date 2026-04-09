@@ -25,6 +25,7 @@ _STATE: dict[str, Any] = {
         "sample_percent": 10,
         "seed": "shadow",
     },
+    "feature_flags": {},
     "updated_at": datetime.now(timezone.utc).isoformat(),
 }
 
@@ -47,6 +48,7 @@ def get_runtime_state() -> dict[str, Any]:
     with _LOCK:
         canary = dict(_STATE.get("canary", {}) or {})
         shadow = dict(_STATE.get("shadow", {}) or {})
+        feature_flags = dict(_STATE.get("feature_flags", {}) or {})
         active = _STATE.get("active_profile")
         updated = str(_STATE.get("updated_at", "") or "")
     return {
@@ -65,6 +67,7 @@ def get_runtime_state() -> dict[str, Any]:
             "sample_percent": max(0, min(int(shadow.get("sample_percent", 10) or 10), 100)),
             "seed": str(shadow.get("seed", "shadow") or "shadow"),
         },
+        "feature_flags": feature_flags,
         "updated_at": updated or _now_iso(),
     }
 
@@ -108,6 +111,7 @@ def apply_rollback_profile() -> dict[str, Any]:
             "sample_percent": 10,
             "seed": "shadow",
         }
+        _STATE["feature_flags"] = {}
         _STATE["updated_at"] = _now_iso()
     return get_runtime_state()
 
@@ -122,6 +126,74 @@ def set_shadow(enabled: bool, strategy: str = "baseline", sample_percent: int = 
         }
         _STATE["updated_at"] = _now_iso()
     return get_runtime_state()
+
+
+def set_feature_flags(flags: dict[str, str]) -> dict[str, Any]:
+    normalized: dict[str, str] = {}
+    for k, v in (flags or {}).items():
+        name = str(k or "").strip().lower()
+        rule = str(v or "").strip().lower()
+        if not name:
+            continue
+        if rule in {"on", "off"} or rule.startswith("pct:"):
+            normalized[name] = rule
+    with _LOCK:
+        _STATE["feature_flags"] = normalized
+        _STATE["updated_at"] = _now_iso()
+    return get_runtime_state()
+
+
+def _feature_flags_from_settings() -> dict[str, str]:
+    raw = str(get_settings().feature_flags or "").strip()
+    if not raw:
+        return {}
+    out: dict[str, str] = {}
+    pairs = [x.strip() for x in raw.split(",") if x.strip()]
+    for p in pairs:
+        if "=" not in p:
+            continue
+        n, r = p.split("=", 1)
+        name = n.strip().lower()
+        rule = r.strip().lower()
+        if not name:
+            continue
+        if rule in {"on", "off"} or rule.startswith("pct:"):
+            out[name] = rule
+    return out
+
+
+def feature_enabled(
+    name: str,
+    *,
+    user_id: str = "",
+    session_id: str = "",
+    question: str = "",
+) -> bool:
+    feature = str(name or "").strip().lower()
+    if not feature:
+        return False
+    state = get_runtime_state()
+    flags = dict(state.get("feature_flags", {}) or {})
+    if feature not in flags:
+        flags = _feature_flags_from_settings()
+    rule = str(flags.get(feature, "") or "").strip().lower()
+    if not rule:
+        return True
+    if rule == "on":
+        return True
+    if rule == "off":
+        return False
+    if rule.startswith("pct:"):
+        try:
+            pct = max(0, min(int(rule.split(":", 1)[1]), 100))
+        except Exception:
+            return True
+        seed = str(get_settings().feature_flag_seed or "feature")
+        key = f"{seed}|{feature}|{user_id}|{session_id}|{question}"
+        h = hashlib.sha256(key.encode("utf-8")).hexdigest()
+        bucket = int(h[:8], 16) % 100
+        return bucket < pct
+    return True
 
 
 def choose_shadow(
