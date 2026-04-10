@@ -46,10 +46,15 @@ def test_is_casual_chat_query_for_normal_chat():
     query_intent.get_reasoning_model = lambda: FakeModel()
     assert query_intent.is_casual_chat_query("你是谁") is True
     assert query_intent.is_casual_chat_query("我们随便聊聊吧") is True
+    assert query_intent.is_casual_chat_query("你在干嘛呢") is True
 
 
 def test_is_casual_chat_query_false_for_web_freshness_request():
     assert query_intent.is_casual_chat_query("帮我上网查最新漏洞") is False
+
+
+def test_is_casual_chat_query_false_for_short_fact_question():
+    assert query_intent.is_casual_chat_query("你几点下班") is False
 
 
 def test_is_casual_chat_query_tolerates_non_json_true_response():

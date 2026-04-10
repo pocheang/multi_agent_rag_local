@@ -160,6 +160,12 @@ def _reset_bm25() -> None:
     reset_bm25_cache()
 
 
+def _reset_retrieval_cache() -> None:
+    from app.retrievers.hybrid_retriever import clear_retrieval_cache
+
+    clear_retrieval_cache()
+
+
 def _delete_parent_records(filename: str, source: str | None = None) -> int:
     parent_records = read_parent_records()
     removed, keep = _select_records(records=parent_records, filename=filename, source=source)
@@ -179,6 +185,7 @@ def delete_file_index(filename: str, remove_physical_file: bool = False, source:
     write_corpus_records(keep)
     _delete_parent_records(filename=filename, source=source)
     _reset_bm25()
+    _reset_retrieval_cache()
 
     removed_sources = sorted({_record_source(row) for row in removed if _record_source(row)})
     source_keys = set(removed_sources)
@@ -252,4 +259,5 @@ def rebuild_all_vector_index() -> dict[str, Any]:
     records = read_corpus_records()
     reset_vector_store_from_records(records)
     _reset_bm25()
+    _reset_retrieval_cache()
     return {"ok": True, "records_reindexed": len(records)}

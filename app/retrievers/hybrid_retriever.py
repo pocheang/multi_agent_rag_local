@@ -268,6 +268,24 @@ def _redis_client(settings):
     return _REDIS_CLIENT
 
 
+def clear_retrieval_cache() -> None:
+    global _RETRIEVAL_CACHE
+    _RETRIEVAL_CACHE = None
+    try:
+        settings = get_settings()
+        backend = _cache_backend(settings)
+        if backend not in {"redis", "auto"}:
+            return
+        client = _redis_client(settings)
+        if client is None:
+            return
+        keys = list(client.scan_iter(match="retrieval:*", count=500))
+        if keys:
+            client.delete(*keys)
+    except Exception:
+        return
+
+
 def _expand_to_parent_context(candidates: list[dict]) -> list[dict]:
     parent_ids: list[str] = []
     for item in candidates:

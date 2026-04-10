@@ -275,6 +275,32 @@ def test_stream_query_applies_question_enhancement_before_workflow(memory_api_en
     assert "[enhanced]" in seen["question"]
 
 
+def test_stream_query_returns_error_event_on_unexpected_failure(memory_api_env, monkeypatch):
+    client, _user, _history_store, _memory_store = memory_api_env
+
+    def fake_run_query_stream(
+        question: str,
+        use_web_fallback: bool = True,
+        use_reasoning: bool = True,
+        memory_context: str = "",
+    ):
+        yield {"type": "status", "message": "routing"}
+        raise RuntimeError("boom in stream")
+
+    monkeypatch.setattr(api_main, "run_query_stream", fake_run_query_stream)
+    res = client.post(
+        "/query/stream",
+        data={
+            "question": "请总结这个文档",
+            "use_web_fallback": "true",
+            "use_reasoning": "true",
+        },
+    )
+    assert res.status_code == 200
+    assert '"type": "error"' in res.text
+    assert '"error": "internal_error"' in res.text
+
+
 def test_query_skips_question_enhancement_for_casual_chat(memory_api_env, monkeypatch):
     client, _user, _history_store, _memory_store = memory_api_env
     seen: dict[str, str] = {}

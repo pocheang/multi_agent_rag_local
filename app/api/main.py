@@ -1,4 +1,6 @@
 from pathlib import Path
+import logging
+import os
 import threading
 import re
 from collections import Counter
@@ -11,6 +13,7 @@ import uuid
 from datetime import datetime, timedelta, timezone
 import io
 import socket
+import sys
 import time
 from typing import Annotated, Any
 from urllib.parse import urlparse
@@ -61,7 +64,7 @@ from app.services.auth_db import AuthDBService
 from app.services.background_queue import BackgroundTaskQueue
 from app.services.alerting import emit_alert, sign_payload, resolve_signing_secret
 from app.services.bulkhead import reset_bulkheads
-from app.services.history import HistoryStore
+from app.services.history import HistoryStore, validate_session_id
 from app.services.memory_store import MemoryStore, build_memory_context
 from app.services.ingest_service import ingest_paths
 from app.services.index_manager import delete_file_index, list_indexed_files, rebuild_file_index
@@ -81,7 +84,7 @@ from app.services.pdf_agent_guard import (
 )
 from app.services.prompt_store import PromptStore
 from app.services.prompt_checker import check_and_enhance_prompt
-from app.services.query_intent import is_casual_chat_query
+from app.services.query_intent import is_casual_chat_query, quick_smalltalk_reply
 from app.services.query_guard import QueryLoadGuard, QueryOverloadedError, QueryRateLimitedError
 from app.services.query_result_cache import QueryResultCache
 from app.services.quota_guard import QuotaExceededError, QuotaGuard
@@ -112,9 +115,12 @@ from app.services.runtime_ops import (
     set_shadow,
 )
 from app.services.runtime_metrics import RuntimeMetrics
+from app.services.log_buffer import list_captured_logs, setup_log_capture
 
 app = FastAPI(title="Multi-Agent Local RAG")
 settings = get_settings()
+setup_log_capture()
+logger = logging.getLogger(__name__)
 if bool(getattr(settings, "cors_enabled", True)):
     cors_origins = settings.cors_origins or []
     allow_all = "*" in cors_origins
@@ -164,10 +170,32 @@ _request_metrics: deque[dict[str, Any]] = deque(maxlen=3000)
 runtime_metrics = RuntimeMetrics()
 
 react_dist_dir = Path(__file__).resolve().parents[2] / "frontend" / "dist"
+react_index_file = react_dist_dir / "index.html"
+react_assets_dir = react_dist_dir / "assets"
 
-# Mount React frontend
-if react_dist_dir.exists():
-    app.mount("/app", StaticFiles(directory=str(react_dist_dir), html=True), name="react-app")
+# Serve React build assets and fall back SPA routes to index.html.
+if react_assets_dir.exists():
+    app.mount("/app/assets", StaticFiles(directory=str(react_assets_dir)), name="react-assets")
+
+
+def _serve_react_index() -> FileResponse:
+    if not react_index_file.exists():
+        raise HTTPException(status_code=404, detail="frontend build not found")
+    return FileResponse(str(react_index_file))
+
+
+@app.get("/app")
+@app.get("/app/")
+def serve_react_app_root():
+    return _serve_react_index()
+
+
+@app.get("/app/{frontend_path:path}")
+def serve_react_app(frontend_path: str):
+    normalized = str(frontend_path or "").strip().strip("/")
+    if normalized.startswith("assets/"):
+        raise HTTPException(status_code=404, detail="asset not found")
+    return _serve_react_index()
 
 
 @app.middleware("http")
@@ -181,6 +209,10 @@ async def request_timing_middleware(request: Request, call_next):
         response = await call_next(request)
         status_code = response.status_code
         response.headers["X-Trace-Id"] = trace_id
+        response.headers.setdefault("X-Content-Type-Options", "nosniff")
+        response.headers.setdefault("X-Frame-Options", "DENY")
+        response.headers.setdefault("Referrer-Policy", "same-origin")
+        response.headers.setdefault("Permissions-Policy", "geolocation=(), microphone=(), camera=()")
         return response
     except Exception as e:
         error_text = type(e).__name__
@@ -205,6 +237,14 @@ async def request_timing_middleware(request: Request, call_next):
 @app.on_event("startup")
 def start_auto_ingest_watcher():
     global _auto_ingest_thread
+    logger.info(
+        "startup_runtime python=%s conda_env=%s model_backend=%s ollama=%s chat_model=%s",
+        sys.executable,
+        str(os.environ.get("CONDA_DEFAULT_ENV", "") or ""),
+        str(settings.model_backend or ""),
+        str(settings.ollama_base_url or ""),
+        str(settings.ollama_chat_model or ""),
+    )
     shadow_queue.start()
     if not settings.auto_ingest_enabled:
         return
@@ -233,6 +273,22 @@ def stop_auto_ingest_watcher():
 
 def _history_store_for_user(user: dict[str, Any]) -> HistoryStore:
     return HistoryStore(base_dir=settings.sessions_path / user["user_id"])
+
+
+def _require_valid_session_id(session_id: str) -> str:
+    try:
+        return validate_session_id(session_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="invalid session_id format")
+
+
+def _require_existing_session_for_query(user: dict[str, Any], session_id: str | None) -> str | None:
+    if not session_id:
+        return None
+    normalized = _require_valid_session_id(session_id)
+    if _history_store_for_user(user).get_session(normalized) is None:
+        raise HTTPException(status_code=404, detail="session not found")
+    return normalized
 
 
 def _query_limiter_key(user: dict[str, Any], request: Request) -> str:
@@ -641,6 +697,25 @@ def _guess_agent_class_for_upload(filename: str) -> str:
     return guessed if guessed in _ALLOWED_AGENT_CLASSES else "general"
 
 
+def _is_probably_valid_upload_signature(suffix: str, head: bytes) -> bool:
+    prefix = (head or b"")[:16]
+    if suffix == ".pdf":
+        return prefix.startswith(b"%PDF-")
+    if suffix == ".png":
+        return prefix.startswith(b"\x89PNG\r\n\x1a\n")
+    if suffix in {".jpg", ".jpeg"}:
+        return prefix.startswith(b"\xff\xd8\xff")
+    if suffix == ".gif":
+        return prefix.startswith(b"GIF87a") or prefix.startswith(b"GIF89a")
+    if suffix == ".bmp":
+        return prefix.startswith(b"BM")
+    if suffix in {".tif", ".tiff"}:
+        return prefix.startswith(b"II*\x00") or prefix.startswith(b"MM\x00*")
+    if suffix == ".webp":
+        return len(prefix) >= 12 and prefix.startswith(b"RIFF") and prefix[8:12] == b"WEBP"
+    return True
+
+
 def _resolve_effective_agent_class(question: str, agent_class_hint: str | None) -> str:
     hinted = _normalize_agent_class_hint(agent_class_hint)
     if hinted:
@@ -649,26 +724,116 @@ def _resolve_effective_agent_class(question: str, agent_class_hint: str | None) 
     return guessed if guessed in _ALLOWED_AGENT_CLASSES else "general"
 
 
-def _require_user(credentials: HTTPAuthorizationCredentials | None = Depends(auth_scheme)) -> dict[str, Any]:
-    if credentials is None:
+def _auth_cookie_name() -> str:
+    value = str(getattr(settings, "auth_cookie_name", "auth_token") or "auth_token").strip()
+    return value or "auth_token"
+
+
+def _auth_cookie_samesite() -> str:
+    raw = str(getattr(settings, "auth_cookie_samesite", "lax") or "lax").strip().lower()
+    if raw not in {"lax", "strict", "none"}:
+        return "lax"
+    return raw
+
+
+def _resolve_auth_token(request: Request, credentials: HTTPAuthorizationCredentials | None) -> tuple[str | None, str | None]:
+    if credentials and credentials.credentials:
+        token = str(credentials.credentials).strip() or None
+        return token, ("bearer" if token else None)
+    cookie_value = str(request.cookies.get(_auth_cookie_name(), "") or "").strip()
+    token = cookie_value or None
+    return token, ("cookie" if token else None)
+
+
+def _set_auth_cookie(response: Response, token: str) -> None:
+    ttl_hours = int(getattr(settings, "auth_token_ttl_hours", 24) or 24)
+    max_age = max(300, ttl_hours * 3600)
+    response.set_cookie(
+        key=_auth_cookie_name(),
+        value=token,
+        max_age=max_age,
+        httponly=True,
+        secure=bool(getattr(settings, "auth_cookie_secure", False)),
+        samesite=_auth_cookie_samesite(),
+        path="/",
+    )
+
+
+def _clear_auth_cookie(response: Response) -> None:
+    response.delete_cookie(
+        key=_auth_cookie_name(),
+        path="/",
+    )
+
+
+def _request_origin(request: Request) -> str | None:
+    origin = str(request.headers.get("origin", "") or "").strip()
+    if origin:
+        return origin
+    referer = str(request.headers.get("referer", "") or "").strip()
+    if not referer:
+        return None
+    parsed = urlparse(referer)
+    if not parsed.scheme or not parsed.netloc:
+        return None
+    return f"{parsed.scheme}://{parsed.netloc}"
+
+
+def _origin_is_allowed(request: Request, origin: str | None) -> bool:
+    if not origin:
+        return False
+    candidate = origin.strip().rstrip("/").lower()
+    if not candidate:
+        return False
+    allowed: set[str] = set()
+    for item in settings.cors_origins:
+        value = str(item or "").strip().rstrip("/").lower()
+        if value:
+            allowed.add(value)
+    req_origin = str(request.base_url).strip().rstrip("/").lower()
+    if req_origin:
+        allowed.add(req_origin)
+    return candidate in allowed
+
+
+def _enforce_cookie_csrf(request: Request, token_source: str | None) -> None:
+    if token_source != "cookie":
+        return
+    if request.method.upper() not in {"POST", "PUT", "PATCH", "DELETE"}:
+        return
+    if _origin_is_allowed(request, _request_origin(request)):
+        return
+    raise HTTPException(status_code=403, detail="csrf validation failed")
+
+
+def _require_user(
+    request: Request,
+    credentials: HTTPAuthorizationCredentials | None = Depends(auth_scheme),
+) -> dict[str, Any]:
+    token, token_source = _resolve_auth_token(request, credentials)
+    if not token:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="authentication required")
-    user = auth_service.get_user_by_token(credentials.credentials)
+    _enforce_cookie_csrf(request, token_source)
+    user = auth_service.get_user_by_token(token)
     if user is None:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="invalid or expired token")
-    auth_service.touch_session(credentials.credentials)
+    auth_service.touch_session(token)
     return user
 
 
 def _require_user_and_token(
+    request: Request,
     credentials: HTTPAuthorizationCredentials | None = Depends(auth_scheme),
 ) -> tuple[dict[str, Any], str]:
-    if credentials is None:
+    token, token_source = _resolve_auth_token(request, credentials)
+    if not token:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="authentication required")
-    user = auth_service.get_user_by_token(credentials.credentials)
+    _enforce_cookie_csrf(request, token_source)
+    user = auth_service.get_user_by_token(token)
     if user is None:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="invalid or expired token")
-    auth_service.touch_session(credentials.credentials)
-    return user, credentials.credentials
+    auth_service.touch_session(token)
+    return user, token
 
 
 @app.get("/")
@@ -699,14 +864,23 @@ def _check_ollama_ready() -> dict[str, Any]:
         with httpx.Client(timeout=3.0) as client:
             resp = client.get(url)
             resp.raise_for_status()
+            payload = resp.json()
+        models = [str(x.get("name", "") or "") for x in list((payload or {}).get("models", []) or []) if x]
         latency = int((time.perf_counter() - start) * 1000)
-        return {"ok": True, "required": settings.model_backend.lower() == "ollama", "latency_ms": latency}
+        return {
+            "ok": True,
+            "required": settings.model_backend.lower() == "ollama",
+            "latency_ms": latency,
+            "path": url,
+            "models": models[:8],
+        }
     except Exception as e:
         latency = int((time.perf_counter() - start) * 1000)
         return {
             "ok": False,
             "required": settings.model_backend.lower() == "ollama",
             "latency_ms": latency,
+            "path": url,
             "error": str(e),
         }
 
@@ -738,6 +912,43 @@ def _check_chroma_ready() -> dict[str, Any]:
     except Exception as e:
         latency = int((time.perf_counter() - start) * 1000)
         return {"ok": False, "required": True, "latency_ms": latency, "path": str(settings.chroma_path), "error": str(e)}
+
+
+def _runtime_diagnostics_summary() -> dict[str, Any]:
+    conda_prefix = str(os.environ.get("CONDA_PREFIX", "") or "").strip()
+    conda_env = str(os.environ.get("CONDA_DEFAULT_ENV", "") or "").strip()
+    recent_errors = list_captured_logs(limit=20, level="ERROR")
+    recent_failures = []
+    with _request_metrics_lock:
+        for row in reversed(list(_request_metrics)):
+            status_code = int(row.get("status_code", 0) or 0)
+            error = str(row.get("error", "") or "")
+            if status_code < 400 and not error:
+                continue
+            recent_failures.append(
+                {
+                    "ts": str(row.get("ts", "")),
+                    "path": str(row.get("path", "")),
+                    "status_code": status_code,
+                    "error": error,
+                    "duration_ms": int(row.get("duration_ms", 0) or 0),
+                }
+            )
+            if len(recent_failures) >= 10:
+                break
+    return {
+        "python_executable": sys.executable,
+        "python_version": sys.version.split()[0],
+        "conda_prefix": conda_prefix,
+        "conda_env": conda_env,
+        "model_backend": str(settings.model_backend or ""),
+        "reasoning_model_backend": str(settings.reasoning_model_backend or settings.model_backend or ""),
+        "ollama_base_url": str(settings.ollama_base_url or ""),
+        "ollama_chat_model": str(settings.ollama_chat_model or ""),
+        "ollama_embed_model": str(settings.ollama_embed_model or ""),
+        "recent_errors": recent_errors[:5],
+        "recent_failures": recent_failures,
+    }
 
 
 @app.get("/ready")
@@ -1064,6 +1275,7 @@ def admin_ops_overview(
         "slow_requests": slow_requests_view,
         "hourly": hourly,
         "services": services,
+        "diagnostics": _runtime_diagnostics_summary(),
         "filters": {
             "actor_user_id": (actor_user_id or "").strip(),
             "action_keyword": (action_keyword or "").strip(),
@@ -1211,7 +1423,7 @@ def admin_ops_set_retrieval_profile(
     request: Request,
     user: dict[str, Any] = Depends(_require_user),
 ):
-    _require_permission(user, "admin:audit_read", request, "admin")
+    _require_permission(user, "admin:ops_manage", request, "admin")
     follow_default = bool(payload.get("follow_config_default", False))
     profile = str(payload.get("profile", "") or "")
     state = set_active_profile(profile=profile or "advanced", follow_config_default=follow_default)
@@ -1228,7 +1440,7 @@ def admin_ops_set_retrieval_profile(
 
 @app.post("/admin/ops/canary")
 def admin_ops_set_canary(payload: dict[str, Any], request: Request, user: dict[str, Any] = Depends(_require_user)):
-    _require_permission(user, "admin:audit_read", request, "admin")
+    _require_permission(user, "admin:ops_manage", request, "admin")
     enabled = bool(payload.get("enabled", False))
     baseline_percent = int(payload.get("baseline_percent", 0) or 0)
     safe_percent = int(payload.get("safe_percent", 0) or 0)
@@ -1247,7 +1459,7 @@ def admin_ops_set_canary(payload: dict[str, Any], request: Request, user: dict[s
 
 @app.post("/admin/ops/feature-flags")
 def admin_ops_set_feature_flags(payload: dict[str, Any], request: Request, user: dict[str, Any] = Depends(_require_user)):
-    _require_permission(user, "admin:audit_read", request, "admin")
+    _require_permission(user, "admin:ops_manage", request, "admin")
     flags = payload.get("flags", {})
     if not isinstance(flags, dict):
         raise HTTPException(status_code=400, detail="flags must be an object")
@@ -1265,7 +1477,7 @@ def admin_ops_set_feature_flags(payload: dict[str, Any], request: Request, user:
 
 @app.post("/admin/config/reload")
 def admin_reload_config(request: Request, user: dict[str, Any] = Depends(_require_user)):
-    _require_permission(user, "admin:audit_read", request, "admin")
+    _require_permission(user, "admin:ops_manage", request, "admin")
     global settings, query_guard, query_result_cache, quota_guard, shadow_queue
     settings = reload_settings()
     clear_model_caches()
@@ -1321,7 +1533,7 @@ def admin_reload_config(request: Request, user: dict[str, Any] = Depends(_requir
 
 @app.post("/admin/ops/rollback")
 def admin_ops_rollback(request: Request, user: dict[str, Any] = Depends(_require_user)):
-    _require_permission(user, "admin:audit_read", request, "admin")
+    _require_permission(user, "admin:ops_manage", request, "admin")
     state = apply_rollback_profile()
     _audit(
         request,
@@ -1353,7 +1565,7 @@ def admin_ops_shadow_get(request: Request, user: dict[str, Any] = Depends(_requi
 
 @app.post("/admin/ops/shadow")
 def admin_ops_shadow_set(payload: dict[str, Any], request: Request, user: dict[str, Any] = Depends(_require_user)):
-    _require_permission(user, "admin:audit_read", request, "admin")
+    _require_permission(user, "admin:ops_manage", request, "admin")
     state = set_shadow(
         enabled=bool(payload.get("enabled", False)),
         strategy=str(payload.get("strategy", "baseline") or "baseline"),
@@ -1384,7 +1596,7 @@ def admin_ops_shadow_runs(request: Request, limit: int = 100, user: dict[str, An
 
 @app.post("/admin/ops/ab-compare")
 def admin_ops_ab_compare(payload: dict[str, Any], request: Request, user: dict[str, Any] = Depends(_require_user)):
-    _require_permission(user, "admin:audit_read", request, "admin")
+    _require_permission(user, "admin:ops_manage", request, "admin")
     question = str(payload.get("question", "") or "").strip()
     if not question:
         raise HTTPException(status_code=400, detail="question is required")
@@ -1423,7 +1635,7 @@ def admin_ops_replay_history(
     request: Request,
     user: dict[str, Any] = Depends(_require_user),
 ):
-    _require_permission(user, "admin:audit_read", request, "admin")
+    _require_permission(user, "admin:ops_manage", request, "admin")
     max_questions = max(1, min(int(payload.get("max_questions", 30) or 30), 200))
     strategy = normalize_retrieval_profile(str(payload.get("strategy", "advanced") or "advanced"))
     history_store = _history_store_for_user(user)
@@ -1510,7 +1722,7 @@ def admin_ops_index_freshness(
 
 @app.post("/admin/ops/autotune")
 def admin_ops_autotune(payload: dict[str, Any], request: Request, user: dict[str, Any] = Depends(_require_user)):
-    _require_permission(user, "admin:audit_read", request, "admin")
+    _require_permission(user, "admin:ops_manage", request, "admin")
     target_p95 = float(payload.get("target_p95_ms", 3000) or 3000)
     target_grounding = float(payload.get("target_grounding", 0.65) or 0.65)
     trends = read_replay_trends(limit=1)
@@ -1556,7 +1768,7 @@ def admin_ops_benchmark_run(
     strategy: str | None = None,
     user: dict[str, Any] = Depends(_require_user),
 ):
-    _require_permission(user, "admin:audit_read", request, "admin")
+    _require_permission(user, "admin:ops_manage", request, "admin")
     query_path = Path("data/eval/benchmark_queries.txt")
     queries = _load_benchmark_queries(query_path, limit=max(1, min(max_queries, 100)))
     if not queries:
@@ -1688,7 +1900,7 @@ def register(req: AuthCredentials, request: Request):
 
 
 @app.post("/auth/login", response_model=AuthLoginResponse)
-def login(req: AuthCredentials, request: Request):
+def login(req: AuthCredentials, request: Request, response: Response):
     ip = _client_ip(request)
     username_key = (req.username or "").strip().lower() or "unknown"
     login_key = f"login::{ip}::{username_key}"
@@ -1710,13 +1922,18 @@ def login(req: AuthCredentials, request: Request):
         resource_id=payload["user"]["user_id"],
         detail=f"user={payload['user']['username']}",
     )
+    token_value = str(payload.get("token", "") or "")
+    _set_auth_cookie(response, token_value)
+    if not bool(getattr(settings, "auth_expose_token_in_response", False)):
+        payload = {**payload, "token": ""}
     return AuthLoginResponse(**payload)
 
 
 @app.post("/auth/logout")
-def logout(request: Request, auth: tuple[dict[str, Any], str] = Depends(_require_user_and_token)):
+def logout(request: Request, response: Response, auth: tuple[dict[str, Any], str] = Depends(_require_user_and_token)):
     _user, token = auth
     auth_service.logout(token)
+    _clear_auth_cookie(response)
     _audit(request, action="auth.logout", resource_type="auth", result="success", user=_user, resource_id=_user["user_id"])
     return {"ok": True}
 
@@ -2033,6 +2250,20 @@ def admin_list_audit_logs(
     return [AuditLogEntry(**x) for x in rows]
 
 
+@app.get("/admin/system-logs")
+def admin_system_logs(
+    request: Request,
+    limit: int = 200,
+    level: str | None = None,
+    logger: str | None = None,
+    keyword: str | None = None,
+    user: dict[str, Any] = Depends(_require_user),
+):
+    _require_permission(user, "admin:audit_read", request, "admin")
+    rows = list_captured_logs(limit=limit, level=level, logger_keyword=logger, keyword=keyword)
+    return {"items": rows, "count": len(rows)}
+
+
 @app.get("/prompts", response_model=list[PromptTemplate])
 def list_prompts(request: Request, user: dict[str, Any] = Depends(_require_user)):
     _require_permission(user, "prompt:manage", request, "prompt")
@@ -2135,6 +2366,7 @@ def create_session(request: Request, user: dict[str, Any] = Depends(_require_use
 
 @app.get("/sessions/{session_id}", response_model=SessionDetail)
 def get_session(session_id: str, request: Request, user: dict[str, Any] = Depends(_require_user)):
+    session_id = _require_valid_session_id(session_id)
     _require_permission(user, "session:manage", request, "session", resource_id=session_id)
     data = _history_store_for_user(user).get_session(session_id)
     if data is None:
@@ -2144,6 +2376,7 @@ def get_session(session_id: str, request: Request, user: dict[str, Any] = Depend
 
 @app.get("/sessions/{session_id}/strategy-lock")
 def get_session_strategy_lock(session_id: str, request: Request, user: dict[str, Any] = Depends(_require_user)):
+    session_id = _require_valid_session_id(session_id)
     _require_permission(user, "session:manage", request, "session", resource_id=session_id)
     store = _history_store_for_user(user)
     data = store.get_session(session_id)
@@ -2159,6 +2392,7 @@ def set_session_strategy_lock(
     request: Request,
     user: dict[str, Any] = Depends(_require_user),
 ):
+    session_id = _require_valid_session_id(session_id)
     _require_permission(user, "session:manage", request, "session", resource_id=session_id)
     strategy_raw = payload.get("strategy_lock")
     strategy = normalize_retrieval_profile(str(strategy_raw)) if strategy_raw else None
@@ -2180,6 +2414,7 @@ def set_session_strategy_lock(
 
 @app.delete("/sessions/{session_id}")
 def delete_session(session_id: str, request: Request, user: dict[str, Any] = Depends(_require_user)):
+    session_id = _require_valid_session_id(session_id)
     _require_permission(user, "session:manage", request, "session", resource_id=session_id)
     ok = _history_store_for_user(user).delete_session(session_id)
     if not ok:
@@ -2190,6 +2425,7 @@ def delete_session(session_id: str, request: Request, user: dict[str, Any] = Dep
 
 @app.get("/sessions/{session_id}/memories/long", response_model=list[LongTermMemoryItem])
 def list_long_term_memories(session_id: str, request: Request, user: dict[str, Any] = Depends(_require_user)):
+    session_id = _require_valid_session_id(session_id)
     _require_permission(user, "session:manage", request, "session", resource_id=session_id)
     rows = _memory_store_for_user(user).list_long_term(session_id)
     return [LongTermMemoryItem(**x) for x in rows]
@@ -2197,6 +2433,7 @@ def list_long_term_memories(session_id: str, request: Request, user: dict[str, A
 
 @app.delete("/sessions/{session_id}/memories/long/{memory_id}")
 def delete_long_term_memory(session_id: str, memory_id: str, request: Request, user: dict[str, Any] = Depends(_require_user)):
+    session_id = _require_valid_session_id(session_id)
     _require_permission(user, "session:manage", request, "session", resource_id=session_id)
     ok = _memory_store_for_user(user).delete_long_term(session_id=session_id, candidate_id=memory_id)
     if not ok:
@@ -2212,10 +2449,11 @@ def update_session_message(
     request: Request,
     req: MessageUpdateRequest,
     rerun: bool = False,
-    use_web_fallback: bool = True,
-    use_reasoning: bool = True,
+    use_web_fallback: bool = False,
+    use_reasoning: bool = False,
     user: dict[str, Any] = Depends(_require_user),
 ):
+    session_id = _require_valid_session_id(session_id)
     _require_permission(user, "message:manage", request, "message", resource_id=message_id)
     history_store = _history_store_for_user(user)
     current = history_store.get_message(session_id=session_id, message_id=message_id)
@@ -2266,6 +2504,7 @@ def update_session_message(
 
 @app.delete("/sessions/{session_id}/messages/{message_id}", response_model=SessionDetail)
 def delete_session_message(session_id: str, message_id: str, request: Request, user: dict[str, Any] = Depends(_require_user)):
+    session_id = _require_valid_session_id(session_id)
     _require_permission(user, "message:manage", request, "message", resource_id=message_id)
     data = _history_store_for_user(user).delete_message(session_id=session_id, message_id=message_id)
     if data is None:
@@ -2392,12 +2631,15 @@ async def upload_files(
             continue
         target = user_upload_root / Path(f.filename).name
         file_uploaded_bytes = 0
+        file_head = b""
         try:
             with target.open("wb") as out:
                 while True:
                     chunk = await f.read(read_chunk)
                     if not chunk:
                         break
+                    if len(file_head) < 16:
+                        file_head = (file_head + chunk)[:16]
                     file_uploaded_bytes += len(chunk)
                     total_uploaded_bytes += len(chunk)
                     if file_uploaded_bytes > settings.upload_max_file_bytes:
@@ -2416,6 +2658,10 @@ async def upload_files(
             if target.exists():
                 target.unlink()
             continue
+        if suffix in {".pdf", *IMAGE_EXTENSIONS} and not _is_probably_valid_upload_signature(suffix, file_head):
+            if target.exists():
+                target.unlink()
+            raise HTTPException(status_code=400, detail=f"invalid file signature: {target.name}")
         saved_paths.append(target)
         filenames.append(target.name)
         assigned_agent_classes[str(target)] = _guess_agent_class_for_upload(target.name)
@@ -2431,7 +2677,7 @@ async def upload_files(
             delete_file_index(target.name, remove_physical_file=False, source=str(target))
     except Exception as e:
         _audit(request, action="document.upload", resource_type="document", result="failed", user=user, detail=f"pre-clean failed: {e}")
-        raise HTTPException(status_code=500, detail=f"upload pre-clean failed: {e}")
+        raise HTTPException(status_code=500, detail="upload pre-clean failed")
 
     ingest_started = time.perf_counter()
     try:
@@ -2450,7 +2696,7 @@ async def upload_files(
         )
     except Exception as e:
         _audit(request, action="document.upload", resource_type="document", result="failed", user=user, detail=str(e))
-        raise HTTPException(status_code=500, detail=f"upload ingest failed: {e}")
+        raise HTTPException(status_code=500, detail="upload ingest failed")
     ingest_elapsed = (time.perf_counter() - ingest_started)
     per_file = ingest_elapsed / max(1, len(saved_paths))
     for p in saved_paths:
@@ -2476,10 +2722,9 @@ async def upload_files(
 @app.post("/query", response_model=QueryResponse)
 def query(req: QueryRequest, request: Request, user: dict[str, Any] = Depends(_require_user)):
     _require_permission(user, "query:run", request, "query")
+    req.session_id = _require_existing_session_for_query(user, req.session_id)
     try:
         quota_guard.enforce_query_quota(user)
-        if bool(req.use_web_fallback):
-            quota_guard.enforce_web_quota(user)
     except QuotaExceededError as e:
         runtime_metrics.inc("query_quota_exceeded_total")
         emit_alert(
@@ -2512,6 +2757,33 @@ def query(req: QueryRequest, request: Request, user: dict[str, Any] = Depends(_r
             graph_entities=[],
             web_used=False,
             debug={"reason": "user_file_inventory_only"},
+        )
+
+    smalltalk_answer = quick_smalltalk_reply(normalized_question)
+    if smalltalk_answer:
+        if req.session_id:
+            history_store = _history_store_for_user(user)
+            history_store.append_message(req.session_id, "user", original_question)
+            history_store.append_message(
+                req.session_id,
+                "assistant",
+                smalltalk_answer,
+                metadata={
+                    "route": "smalltalk_fast",
+                    "agent_class": "general",
+                    "web_used": False,
+                    "graph_entities": [],
+                    "citations": [],
+                    "reason": "smalltalk_quick_reply",
+                },
+            )
+        return QueryResponse(
+            answer=smalltalk_answer,
+            route="smalltalk_fast",
+            citations=[],
+            graph_entities=[],
+            web_used=False,
+            debug={"reason": "smalltalk_quick_reply", "use_reasoning": False},
         )
 
     if effective_agent_class == "pdf_text":
@@ -2585,11 +2857,8 @@ def query(req: QueryRequest, request: Request, user: dict[str, Any] = Depends(_r
                 )
             normalized_question = apply_pdf_focus_to_question(normalized_question, selected_with_chunks)
 
-    effective_question = (
-        normalized_question
-        if is_casual_chat_query(normalized_question)
-        else enhance_user_question_for_completion(normalized_question)
-    )
+    is_fast_smalltalk = is_casual_chat_query(normalized_question)
+    effective_question = normalized_question if is_fast_smalltalk else enhance_user_question_for_completion(normalized_question)
     memory_context = _build_memory_context_for_session(user=user, session_id=req.session_id, question=effective_question)
     allowed_sources = _allowed_sources_for_user(user)
     retrieval_strategy, strategy_meta = _effective_strategy_for_session(
@@ -2599,9 +2868,26 @@ def query(req: QueryRequest, request: Request, user: dict[str, Any] = Depends(_r
         question=effective_question,
     )
     effective_use_web_fallback = bool(req.use_web_fallback and (not profile_force_local_only(retrieval_strategy)))
+    effective_use_reasoning = bool(req.use_reasoning)
+    if is_fast_smalltalk:
+        # Fast path for greeting/smalltalk: skip slow reasoning/verification chain.
+        effective_use_web_fallback = False
+        effective_use_reasoning = False
+        retrieval_strategy = "baseline"
+        strategy_meta = {"reason": "smalltalk_fast_path", "bucket": "smalltalk"}
+    try:
+        if effective_use_web_fallback:
+            quota_guard.enforce_web_quota(user)
+    except QuotaExceededError as e:
+        runtime_metrics.inc("query_quota_exceeded_total")
+        emit_alert(
+            "query_quota_exceeded",
+            {"trace_id": _trace_id(request), "message": str(e), "user_id": str(user.get("user_id", ""))},
+        )
+        raise HTTPException(status_code=429, detail=str(e))
     run_query_kwargs: dict[str, Any] = {
         "use_web_fallback": effective_use_web_fallback,
-        "use_reasoning": req.use_reasoning,
+        "use_reasoning": effective_use_reasoning,
         "memory_context": memory_context,
         "allowed_sources": allowed_sources,
     }
@@ -2615,7 +2901,7 @@ def query(req: QueryRequest, request: Request, user: dict[str, Any] = Depends(_r
         session_id=req.session_id,
         question=effective_question,
         use_web_fallback=effective_use_web_fallback,
-        use_reasoning=req.use_reasoning,
+        use_reasoning=effective_use_reasoning,
         retrieval_strategy=run_query_kwargs.get("retrieval_strategy"),
         agent_class_hint=hinted,
         request_id=req.request_id,
@@ -2644,7 +2930,7 @@ def query(req: QueryRequest, request: Request, user: dict[str, Any] = Depends(_r
         result_local = run_query(effective_question, **runtime_kwargs)
         result_local = _enforce_result_source_scope(result_local, allowed_sources=allowed_sources, request=request, user=user)
         consistency_local = {"checked": False}
-        if bool(settings.consistency_guard_enabled):
+        if bool(settings.consistency_guard_enabled) and (not is_fast_smalltalk):
             prev_answer = _latest_answer_for_same_question(user=user, session_id=req.session_id, question=original_question)
             if prev_answer:
                 sim = text_similarity(prev_answer, result_local.get("answer", ""))
@@ -2722,7 +3008,9 @@ def query(req: QueryRequest, request: Request, user: dict[str, Any] = Depends(_r
             "answer_safety": result.get("answer_safety", {}),
             "explainability": result.get("explainability", {}),
             "consistency": consistency_info,
-            "use_reasoning": req.use_reasoning,
+            "use_reasoning": effective_use_reasoning,
+            "requested_use_reasoning": req.use_reasoning,
+            "fast_smalltalk_path": is_fast_smalltalk,
             "retrieval_strategy": retrieval_strategy or "advanced",
             "retrieval_strategy_reason": strategy_meta.get("reason"),
             "retrieval_strategy_bucket": strategy_meta.get("bucket"),
@@ -2769,8 +3057,8 @@ def query(req: QueryRequest, request: Request, user: dict[str, Any] = Depends(_r
 async def stream_query(
     question: Annotated[str, Form(...)],
     request: Request,
-    use_web_fallback: Annotated[bool, Form()] = True,
-    use_reasoning: Annotated[bool, Form()] = True,
+    use_web_fallback: Annotated[bool, Form()] = False,
+    use_reasoning: Annotated[bool, Form()] = False,
     session_id: Annotated[str | None, Form()] = None,
     request_id: Annotated[str | None, Form()] = None,
     agent_class_hint: Annotated[str | None, Form()] = None,
@@ -2778,10 +3066,9 @@ async def stream_query(
     user: dict[str, Any] = Depends(_require_user),
 ):
     _require_permission(user, "query:run", request, "query")
+    session_id = _require_existing_session_for_query(user, session_id)
     try:
         quota_guard.enforce_query_quota(user)
-        if bool(use_web_fallback):
-            quota_guard.enforce_web_quota(user)
     except QuotaExceededError as e:
         runtime_metrics.inc("query_stream_quota_exceeded_total")
         emit_alert(
@@ -2829,6 +3116,47 @@ async def stream_query(
             )
 
         return StreamingResponse(event_gen_file_inventory(), media_type="text/event-stream")
+
+    smalltalk_answer = quick_smalltalk_reply(normalized_question)
+    if smalltalk_answer:
+        if session_id:
+            history_store = _history_store_for_user(user)
+            history_store.append_message(session_id, "user", original_question)
+            history_store.append_message(
+                session_id,
+                "assistant",
+                smalltalk_answer,
+                metadata={
+                    "route": "smalltalk_fast",
+                    "agent_class": "general",
+                    "web_used": False,
+                    "graph_entities": [],
+                    "citations": [],
+                    "reason": "smalltalk_quick_reply",
+                },
+            )
+
+        def event_gen_smalltalk():
+            yield encode_sse({"type": "status", "message": "smalltalk_fast"})
+            yield encode_sse({"type": "answer_chunk", "content": smalltalk_answer})
+            yield encode_sse(
+                {
+                    "type": "done",
+                    "result": {
+                        "answer": smalltalk_answer,
+                        "route": "smalltalk_fast",
+                        "reason": "smalltalk_quick_reply",
+                        "skill": "answer_with_citations",
+                        "agent_class": "general",
+                        "vector_result": {},
+                        "graph_result": {},
+                        "web_result": {"used": False, "citations": [], "context": ""},
+                        "thoughts": ["检测到闲聊，直接本地快速回复。"],
+                    },
+                }
+            )
+
+        return StreamingResponse(event_gen_smalltalk(), media_type="text/event-stream")
 
     if effective_agent_class == "pdf_text":
         pdf_names = _list_visible_pdf_names_for_user(user)
@@ -2940,11 +3268,8 @@ async def stream_query(
                 return StreamingResponse(event_gen_pdf_chunks_zero(), media_type="text/event-stream")
             normalized_question = apply_pdf_focus_to_question(normalized_question, selected_with_chunks)
 
-    effective_question = (
-        normalized_question
-        if is_casual_chat_query(normalized_question)
-        else enhance_user_question_for_completion(normalized_question)
-    )
+    is_fast_smalltalk = is_casual_chat_query(normalized_question)
+    effective_question = normalized_question if is_fast_smalltalk else enhance_user_question_for_completion(normalized_question)
     history_store = _history_store_for_user(user)
     memory_context = _build_memory_context_for_session(user=user, session_id=session_id, question=effective_question)
     allowed_sources = _allowed_sources_for_user(user)
@@ -2955,6 +3280,22 @@ async def stream_query(
         question=effective_question,
     )
     effective_use_web_fallback = bool(use_web_fallback and (not profile_force_local_only(normalized_strategy)))
+    effective_use_reasoning = bool(use_reasoning)
+    if is_fast_smalltalk:
+        effective_use_web_fallback = False
+        effective_use_reasoning = False
+        normalized_strategy = "baseline"
+        strategy_meta = {"reason": "smalltalk_fast_path", "bucket": "smalltalk"}
+    try:
+        if effective_use_web_fallback:
+            quota_guard.enforce_web_quota(user)
+    except QuotaExceededError as e:
+        runtime_metrics.inc("query_stream_quota_exceeded_total")
+        emit_alert(
+            "query_stream_quota_exceeded",
+            {"trace_id": _trace_id(request), "message": str(e), "user_id": str(user.get("user_id", ""))},
+        )
+        raise HTTPException(status_code=429, detail=str(e))
     hinted = _normalize_agent_class_hint(agent_class_hint)
     stream_retrieval_strategy = (
         profile_to_strategy(normalized_strategy)
@@ -2966,7 +3307,7 @@ async def stream_query(
         session_id=session_id,
         question=effective_question,
         use_web_fallback=effective_use_web_fallback,
-        use_reasoning=use_reasoning,
+        use_reasoning=effective_use_reasoning,
         retrieval_strategy=stream_retrieval_strategy,
         agent_class_hint=hinted,
         request_id=request_id,
@@ -3019,7 +3360,7 @@ async def stream_query(
         trace_id = _trace_id(request)
         stream_kwargs: dict[str, Any] = {
             "use_web_fallback": effective_use_web_fallback,
-            "use_reasoning": use_reasoning,
+            "use_reasoning": effective_use_reasoning,
             "memory_context": memory_context,
             "allowed_sources": allowed_sources,
         }
@@ -3100,6 +3441,22 @@ async def stream_query(
                 {"message": str(e), "trace_id": trace_id},
             )
             yield encode_sse({"type": "error", "error": "overloaded", "message": str(e)})
+            return
+        except Exception as e:
+            runtime_metrics.inc("query_stream_internal_error_total")
+            logger.exception("query stream unexpected failure")
+            emit_alert(
+                "query_stream_internal_error",
+                {"message": f"{type(e).__name__}: {e}", "trace_id": trace_id},
+            )
+            yield encode_sse(
+                {
+                    "type": "error",
+                    "error": "internal_error",
+                    "message": "query stream failed unexpectedly; please retry.",
+                    "trace_id": trace_id,
+                }
+            )
             return
         finally:
             query_result_cache.clear_inflight(stream_cache_key)

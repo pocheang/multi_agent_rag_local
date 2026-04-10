@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type React from "react";
 import { ApiError, appApi } from "@/lib/api";
 import type { Citation, IndexedFileSummary, PromptTemplate, SessionMessage, SessionSummary } from "@/types/api";
@@ -17,6 +17,19 @@ import { ChatComposer } from "@/pages/chat/components/ChatComposer";
 import { ToastStack } from "@/pages/chat/components/ToastStack";
 
 type AgentClassHint = "" | "general" | "cybersecurity" | "artificial_intelligence" | "pdf_text";
+const PDF_FILE_RE = /\.(pdf|png|jpe?g|bmp|tiff?|webp)$/i;
+
+const AGENT_MODES: Array<{
+  key: AgentClassHint;
+  title: string;
+  desc: string;
+}> = [
+  { key: "", title: "Auto Router", desc: "Automatically route by user intent and context." },
+  { key: "cybersecurity", title: "Cybersecurity", desc: "Threat analysis, incident response, and hardening." },
+  { key: "artificial_intelligence", title: "AI Research", desc: "LLM, RAG, and model/system design questions." },
+  { key: "pdf_text", title: "PDF Reader", desc: "Focus on PDF/image document Q&A and evidence extraction." },
+  { key: "general", title: "General Analyst", desc: "Cross-domain summaries and executive reporting." },
+];
 
 export function ChatPage({ user, onLogout, themeLabel, onThemeToggle }: Props) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -27,9 +40,10 @@ export function ChatPage({ user, onLogout, themeLabel, onThemeToggle }: Props) {
   const [question, setQuestion] = useState("");
   const [isSending, setIsSending] = useState(false);
   const [runStatus, setRunStatus] = useState("");
-  const [useWeb, setUseWeb] = useState(true);
-  const [useReasoning, setUseReasoning] = useState(true);
+  const [useWeb, setUseWeb] = useState(false);
+  const [useReasoning, setUseReasoning] = useState(false);
   const [agentClassHint, setAgentClassHint] = useState<AgentClassHint>("");
+  const [pdfTargetFile, setPdfTargetFile] = useState("");
 
   const [documents, setDocuments] = useState<IndexedFileSummary[]>([]);
   const [docsLoading, setDocsLoading] = useState(false);
@@ -61,6 +75,28 @@ export function ChatPage({ user, onLogout, themeLabel, onThemeToggle }: Props) {
   const isAdmin = role === "admin";
   const canUploadAndManageDocs = true;
   const userBadge = user ? `${user.username} (${role})` : "unknown";
+  const pdfDocuments = useMemo(
+    () => documents.filter((doc) => PDF_FILE_RE.test(doc.filename || "")),
+    [documents],
+  );
+  const nonPdfDocuments = useMemo(
+    () => documents.filter((doc) => !PDF_FILE_RE.test(doc.filename || "")),
+    [documents],
+  );
+  const pdfNeedingReindex = useMemo(
+    () => pdfDocuments.filter((doc) => (doc.chunks || 0) <= 0),
+    [pdfDocuments],
+  );
+  const agentDistribution = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const doc of documents) {
+      const key = (doc.agent_class || "general").trim() || "general";
+      counts.set(key, (counts.get(key) || 0) + 1);
+    }
+    return Array.from(counts.entries())
+      .map(([agent, count]) => ({ agent, count }))
+      .sort((a, b) => b.count - a.count);
+  }, [documents]);
 
   const notify = (text: string, kind: Toast["kind"] = "info", ttl = 2400) => {
     const id = `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
@@ -72,15 +108,43 @@ export function ChatPage({ user, onLogout, themeLabel, onThemeToggle }: Props) {
     if (isMobile()) setSidebarOpen(false);
   };
 
+  useEffect(() => {
+    if (!pdfDocuments.length) {
+      setPdfTargetFile("");
+      return;
+    }
+    if (!pdfTargetFile || !pdfDocuments.some((doc) => doc.filename === pdfTargetFile)) {
+      setPdfTargetFile(pdfDocuments[0]?.filename || "");
+    }
+  }, [pdfDocuments, pdfTargetFile]);
+
   const handleApiError = async (e: unknown, fallback: string) => {
     if (e instanceof ApiError && e.status === 401) {
-      notify("登录已过期，请重新登录", "error");
+      notify("Session expired. Please log in again.", "error");
       await onLogout();
       return;
     }
     const msg = e instanceof Error ? e.message : fallback;
     setError(msg);
     notify(msg, "error");
+  };
+
+  const switchAgentMode = (next: AgentClassHint) => {
+    setAgentClassHint(next);
+    notify(`Mode switched to ${next || "auto"}`, "success");
+  };
+
+  const draftPdfQuestion = () => {
+    if (!pdfDocuments.length) {
+      notify("No PDF/image docs available. Upload first.", "warn");
+      return;
+    }
+    const target = pdfTargetFile || pdfDocuments[0]?.filename || "";
+    if (!target) return;
+    setAgentClassHint("pdf_text");
+    setQuestion(`Read "${target}" and provide key points, major risks, and supporting evidence.`);
+    questionRef.current?.focus();
+    notify("Drafted a PDF-focused question.", "success");
   };
 
   const loadSession = async (sessionId: string) => {
@@ -92,7 +156,7 @@ export function ChatPage({ user, onLogout, themeLabel, onThemeToggle }: Props) {
       setError("");
       closeSidebar();
     } catch (e) {
-      await handleApiError(e, "加载会话失败");
+      await handleApiError(e, "Failed to load session");
     } finally {
       setBusySessionId(null);
     }
@@ -107,7 +171,7 @@ export function ChatPage({ user, onLogout, themeLabel, onThemeToggle }: Props) {
       if (preferSelectFirst && rows.length > 0) await loadSession(rows[0].session_id);
       return rows;
     } catch (e) {
-      await handleApiError(e, "刷新会话列表失败");
+      await handleApiError(e, "Failed to refresh sessions");
       return [] as SessionSummary[];
     } finally {
       if (!silent) setSessionLoading(false);
@@ -120,17 +184,17 @@ export function ChatPage({ user, onLogout, themeLabel, onThemeToggle }: Props) {
       setCurrentSessionId(detail.session_id);
       setMessages(detail.messages || []);
       await refreshSessions();
-      notify("新会话已创建", "success");
+      notify("Session created", "success");
       closeSidebar();
       return detail.session_id;
     } catch (e) {
-      await handleApiError(e, "创建会话失败");
+      await handleApiError(e, "Failed to create session");
       return null;
     }
   };
 
   const deleteSession = async (sessionId: string) => {
-    if (!window.confirm("确认删除这个会话吗？")) return;
+    if (!window.confirm("Delete this session?")) return;
     try {
       await appApi.sessionDelete(sessionId);
       if (sessionId === currentSessionId) {
@@ -138,9 +202,9 @@ export function ChatPage({ user, onLogout, themeLabel, onThemeToggle }: Props) {
         setMessages([]);
       }
       await refreshSessions();
-      notify("会话已删除", "success");
+      notify("Session deleted", "success");
     } catch (e) {
-      await handleApiError(e, "删除会话失败");
+      await handleApiError(e, "Failed to delete session");
     }
   };
 
@@ -151,7 +215,7 @@ export function ChatPage({ user, onLogout, themeLabel, onThemeToggle }: Props) {
       setDocuments(rows);
       setError("");
     } catch (e) {
-      await handleApiError(e, "加载文档失败");
+      await handleApiError(e, "Failed to load documents");
     } finally {
       if (!silent) setDocsLoading(false);
     }
@@ -160,37 +224,37 @@ export function ChatPage({ user, onLogout, themeLabel, onThemeToggle }: Props) {
   const uploadFiles = async (files: File[]) => {
     if (!files.length) return;
     if (!canUploadAndManageDocs) {
-      notify("无上传权限", "warn");
+      notify("Upload permission denied", "warn");
       return;
     }
     try {
       setUploading(true);
       setUploadProgress(0);
-      setUploadProgressText("准备上传...");
-      setUploadInfo("上传中...");
+      setUploadProgressText("Preparing upload...");
+      setUploadInfo("Uploading...");
       const data = await appApi.upload(
         files,
         (percent) => {
           setUploadProgress(percent);
-          setUploadProgressText(`上传中 ${Math.round(percent)}%`);
+          setUploadProgressText(`Uploading ${Math.round(percent)}%`);
         },
         uploadVisibility,
       );
       setUploadProgress(100);
-      setUploadProgressText("上传完成");
+      setUploadProgressText("Upload complete");
       setUploadInfo(
-        `已索引: ${data.filenames.join(", ")} | 跳过: ${(data.skipped_files || []).join(", ") || "无"} | 可见性: ${data.visibility_applied || uploadVisibility} | 文档=${data.loaded_documents}, 分块=${data.chunks_indexed}, 三元组=${data.triplets_written}`,
+        `Indexed: ${data.filenames.join(", ")} | Skipped: ${(data.skipped_files || []).join(", ") || "none"} | Visibility: ${data.visibility_applied || uploadVisibility} | docs=${data.loaded_documents}, chunks=${data.chunks_indexed}, triplets=${data.triplets_written}`,
       );
       const classes = Object.values(data.assigned_agent_classes || {}).filter(Boolean);
       if (classes.length > 0) {
         const unique = Array.from(new Set(classes));
         if (unique.length === 1) setAgentClassHint((unique[0] as AgentClassHint) || "");
       }
-      notify(`上传完成: ${data.filenames.join(", ")}`, "success");
+      notify(`Upload completed: ${data.filenames.join(", ")}`, "success");
       await refreshDocuments();
     } catch (e) {
-      setUploadInfo(`上传失败: ${e instanceof Error ? e.message : "未知错误"}`);
-      await handleApiError(e, "上传失败");
+      setUploadInfo(`Upload failed: ${e instanceof Error ? e.message : "unknown error"}`);
+      await handleApiError(e, "Upload failed");
     } finally {
       setUploading(false);
       if (fileInputRef.current) fileInputRef.current.value = "";
@@ -209,7 +273,7 @@ export function ChatPage({ user, onLogout, themeLabel, onThemeToggle }: Props) {
   const onChatUploadChange = async (evt: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(evt.target.files || []).filter((f) => SUPPORTED_CHAT_RE.test(f.name));
     if (!files.length) {
-      notify("这里只支持 PDF/图片文件", "warn");
+      notify("This area supports PDF/image files only", "warn");
       return;
     }
     await uploadFiles(files);
@@ -221,7 +285,7 @@ export function ChatPage({ user, onLogout, themeLabel, onThemeToggle }: Props) {
     setDocDropActive(false);
     const files = Array.from(evt.dataTransfer.files || []).filter((f) => SUPPORTED_DOC_RE.test(f.name));
     if (!files.length) {
-      notify("只支持 .md / .txt / .pdf / 图片 文件", "warn");
+      notify("Only .md / .txt / .pdf / image files are supported", "warn");
       return;
     }
     await uploadFiles(files);
@@ -233,7 +297,7 @@ export function ChatPage({ user, onLogout, themeLabel, onThemeToggle }: Props) {
     setComposerDropActive(false);
     const files = Array.from(evt.dataTransfer.files || []).filter((f) => SUPPORTED_CHAT_RE.test(f.name));
     if (!files.length) {
-      notify("这里只支持 PDF/图片文件", "warn");
+      notify("This area supports PDF/image files only", "warn");
       return;
     }
     await uploadFiles(files);
@@ -241,37 +305,37 @@ export function ChatPage({ user, onLogout, themeLabel, onThemeToggle }: Props) {
 
   const deleteDocument = async (item: IndexedFileSummary, removeFile: boolean) => {
     if (!canUploadAndManageDocs) {
-      notify("无文档管理权限", "warn");
+      notify("No document management permission", "warn");
       return;
     }
-    const verb = removeFile ? "删除文件和索引" : "删除索引";
+    const verb = removeFile ? "Delete file and index" : "Delete index";
     if (!window.confirm(`${verb}: ${item.filename} ?`)) return;
     try {
       const res = await appApi.documentDelete(item.filename, item.source, removeFile);
       setUploadInfo(
-        `${item.filename}: 已删分块=${res.chunks_removed}, 已删三元组=${res.triplets_removed}, 文件已删=${res.file_removed}`,
+        `${item.filename}: chunks_removed=${res.chunks_removed}, triplets_removed=${res.triplets_removed}, file_removed=${res.file_removed}`,
       );
-      notify(`${item.filename} 已删除`, "success");
+      notify(`${item.filename} deleted`, "success");
       await refreshDocuments();
     } catch (e) {
-      await handleApiError(e, "删除文档失败");
+      await handleApiError(e, "Failed to delete document");
     }
   };
 
   const reindexDocument = async (item: IndexedFileSummary) => {
     if (!canUploadAndManageDocs) {
-      notify("无文档管理权限", "warn");
+      notify("No document management permission", "warn");
       return;
     }
     try {
       const res = await appApi.documentReindex(item.filename, item.source);
       setUploadInfo(
-        `${item.filename}: 文档=${res.loaded_documents || 0}, 分块=${res.chunks_indexed || 0}, 三元组=${res.triplets_written || 0}`,
+        `${item.filename}: docs=${res.loaded_documents || 0}, chunks=${res.chunks_indexed || 0}, triplets=${res.triplets_written || 0}`,
       );
-      notify(`${item.filename} 已重建索引`, "success");
+      notify(`${item.filename} reindexed`, "success");
       await refreshDocuments();
     } catch (e) {
-      await handleApiError(e, "重建索引失败");
+      await handleApiError(e, "Failed to reindex document");
     }
   };
 
@@ -282,7 +346,7 @@ export function ChatPage({ user, onLogout, themeLabel, onThemeToggle }: Props) {
       setPrompts(rows);
       setError("");
     } catch (e) {
-      await handleApiError(e, "加载提示词模板失败");
+      await handleApiError(e, "Failed to load prompt templates");
     } finally {
       if (!silent) setPromptsLoading(false);
     }
@@ -292,7 +356,7 @@ export function ChatPage({ user, onLogout, themeLabel, onThemeToggle }: Props) {
     const title = promptTitle.trim();
     const content = promptContent.trim();
     if (!title || !content) {
-      notify("请填写标题和内容", "warn");
+      notify("Title and content are required", "warn");
       return;
     }
     try {
@@ -303,10 +367,10 @@ export function ChatPage({ user, onLogout, themeLabel, onThemeToggle }: Props) {
       setEditingPromptId(null);
       setPromptTitle("");
       setPromptContent("");
-      notify("提示词已保存", "success");
+      notify("Prompt saved", "success");
       await refreshPrompts();
     } catch (e) {
-      await handleApiError(e, "保存提示词失败");
+      await handleApiError(e, "Failed to save prompt");
     }
   };
 
@@ -314,28 +378,28 @@ export function ChatPage({ user, onLogout, themeLabel, onThemeToggle }: Props) {
     const title = promptTitle.trim();
     const content = promptContent.trim();
     if (!title || !content) {
-      notify("请先填写标题和内容", "warn");
+      notify("Fill in title and content first", "warn");
       return;
     }
     try {
-      setPromptCheckInfo("检查中...");
+      setPromptCheckInfo("Checking...");
       const res = await appApi.promptCheck(title, content, useReasoning);
       const suggestions = (res.suggestions || []).filter(Boolean);
       const suggestionBlock = suggestions.length
-        ? `\n\n[建议补充]\n${suggestions.map((x, i) => `${i + 1}. ${x}`).join("\n")}`
+        ? `\n\n[Suggestions]\n${suggestions.map((x, i) => `${i + 1}. ${x}`).join("\n")}`
         : "";
       setPromptTitle(res.title || title);
       setPromptContent(`${(res.content || content).trim()}${suggestionBlock}`);
-      setPromptCheckInfo(`检查完成。${(res.issues || []).slice(0, 3).join("；")}`);
-      notify("提示词检查完成", "success");
+      setPromptCheckInfo(`Check done. ${(res.issues || []).slice(0, 3).join(";")}`);
+      notify("Prompt check completed", "success");
     } catch (e) {
       setPromptCheckInfo("");
-      await handleApiError(e, "检查提示词失败");
+      await handleApiError(e, "Failed to check prompt");
     }
   };
 
   const deletePrompt = async (item: PromptTemplate) => {
-    if (!window.confirm(`确认删除模板：${item.title} ？`)) return;
+    if (!window.confirm(`Delete template: ${item.title}?`)) return;
     try {
       await appApi.promptDelete(item.prompt_id);
       if (editingPromptId === item.prompt_id) {
@@ -343,20 +407,20 @@ export function ChatPage({ user, onLogout, themeLabel, onThemeToggle }: Props) {
         setPromptTitle("");
         setPromptContent("");
       }
-      notify("提示词已删除", "success");
+      notify("Prompt deleted", "success");
       await refreshPrompts();
     } catch (e) {
-      await handleApiError(e, "删除提示词失败");
+      await handleApiError(e, "Failed to delete prompt");
     }
   };
 
   const editMessage = async (msg: SessionMessage) => {
     if (!currentSessionId) return;
-    const next = window.prompt("编辑消息内容", msg.content || "");
+    const next = window.prompt("Edit message content", msg.content || "");
     if (next === null) return;
     try {
       const rerun = msg.role === "user";
-      if (rerun) setRunStatus("重新执行中");
+      if (rerun) setRunStatus("Re-running");
       const detail = await appApi.messageUpdate(
         currentSessionId,
         msg.message_id,
@@ -367,9 +431,9 @@ export function ChatPage({ user, onLogout, themeLabel, onThemeToggle }: Props) {
       );
       setMessages(detail.messages || []);
       await refreshSessions();
-      notify("消息已更新", "success");
+      notify("Message updated", "success");
     } catch (e) {
-      await handleApiError(e, "更新消息失败");
+      await handleApiError(e, "Failed to update message");
     } finally {
       setRunStatus("");
     }
@@ -377,14 +441,14 @@ export function ChatPage({ user, onLogout, themeLabel, onThemeToggle }: Props) {
 
   const removeMessage = async (msg: SessionMessage) => {
     if (!currentSessionId) return;
-    if (!window.confirm("确认删除这条消息吗？")) return;
+    if (!window.confirm("Delete this message?")) return;
     try {
       const detail = await appApi.messageDelete(currentSessionId, msg.message_id);
       setMessages(detail.messages || []);
       await refreshSessions();
-      notify("消息已删除", "success");
+      notify("Message deleted", "success");
     } catch (e) {
-      await handleApiError(e, "删除消息失败");
+      await handleApiError(e, "Failed to delete message");
     }
   };
 
@@ -401,7 +465,7 @@ export function ChatPage({ user, onLogout, themeLabel, onThemeToggle }: Props) {
 
     setIsSending(true);
     setQuestion("");
-    setRunStatus("处理中");
+    setRunStatus("Processing");
     setMessages((prev) => [
       ...prev,
       { message_id: `local-user-${Date.now()}`, role: "user", content: q },
@@ -409,6 +473,8 @@ export function ChatPage({ user, onLogout, themeLabel, onThemeToggle }: Props) {
     ]);
 
     try {
+      const runStartedAt = performance.now();
+      const elapsedMs = () => Math.max(1, Math.round(performance.now() - runStartedAt));
       const res = await appApi.streamQuery({
         question: q,
         useWebFallback: useWeb,
@@ -418,7 +484,15 @@ export function ChatPage({ user, onLogout, themeLabel, onThemeToggle }: Props) {
       });
       if (!res.ok || !res.body) {
         const raw = await res.text();
-        const detail = raw ? JSON.parse(raw).detail || raw : "流式请求失败";
+        let detail = "Stream request failed";
+        if (raw) {
+          try {
+            const parsed = JSON.parse(raw);
+            detail = String(parsed?.detail || raw);
+          } catch {
+            detail = raw;
+          }
+        }
         throw new Error(String(detail));
       }
       const reader = res.body.getReader();
@@ -427,9 +501,27 @@ export function ChatPage({ user, onLogout, themeLabel, onThemeToggle }: Props) {
       let answer = "";
       let thoughts: string[] = [];
       let meta = { ...EMPTY_METADATA };
+      let executionSteps = [...(EMPTY_METADATA.execution_steps || [])];
+      let finalStreamMetadata = { ...EMPTY_METADATA };
+
+      const pushExecutionStep = (kind: string, label: string, detail = "") => {
+        const step = {
+          kind,
+          label,
+          detail,
+          at: new Date().toISOString(),
+        };
+        executionSteps = [...executionSteps, step].slice(-24);
+        meta = {
+          ...meta,
+          current_status: label,
+          execution_steps: executionSteps,
+        };
+      };
 
       const patchStreamMessage = (nextContent: string, nextMeta?: Partial<typeof meta>) => {
         if (nextMeta) meta = { ...meta, ...nextMeta };
+        finalStreamMetadata = { ...meta, thoughts: thoughts.slice(-8) };
         setMessages((prev) =>
           prev.map((m) =>
             m.message_id === "local-assistant-stream"
@@ -449,29 +541,94 @@ export function ChatPage({ user, onLogout, themeLabel, onThemeToggle }: Props) {
           const line = part.split("\n").find((x) => x.startsWith("data: "));
           if (!line) continue;
           const evt = JSON.parse(line.slice(6));
-          if (evt.type === "status") setRunStatus(mapRunStatus(evt.message || ""));
-          else if (evt.type === "route") patchStreamMessage(answer, { route: evt.route || "", agent_class: evt.agent_class || "" });
+          if (evt.type === "status") {
+            const nextStatus = mapRunStatus(evt.message || "");
+            setRunStatus(nextStatus);
+            if (nextStatus) pushExecutionStep("status", nextStatus, String(evt.message || ""));
+            patchStreamMessage(answer, { current_status: nextStatus, execution_steps: executionSteps });
+          } else if (evt.type === "route") {
+            const routeLabel = `路由完成: ${evt.route || "unknown"}`;
+            pushExecutionStep(
+              "route",
+              routeLabel,
+              [evt.reason, evt.skill ? `skill=${evt.skill}` : "", evt.agent_class ? `agent=${evt.agent_class}` : ""]
+                .filter(Boolean)
+                .join(" | "),
+            );
+            patchStreamMessage(answer, {
+              route: evt.route || "",
+              agent_class: evt.agent_class || "",
+              execution_steps: executionSteps,
+              current_status: routeLabel,
+            });
+          }
           else if (evt.type === "thought") {
             if (evt.content) thoughts = [...thoughts, String(evt.content)];
-            patchStreamMessage(answer);
-          } else if (evt.type === "graph_result") patchStreamMessage(answer, { graph_entities: Array.isArray(evt.entities) ? evt.entities : [] });
-          else if (evt.type === "web_result") patchStreamMessage(answer, { web_used: !!evt.used });
+            if (evt.content) pushExecutionStep("thought", "分析判断", String(evt.content));
+            patchStreamMessage(answer, { execution_steps: executionSteps, current_status: meta.current_status });
+          } else if (evt.type === "error") {
+            const reason = String(evt.message || evt.error || "stream error");
+            const cost = elapsedMs();
+            pushExecutionStep("error", "执行失败", `${reason} | duration_ms=${cost}`);
+            patchStreamMessage(answer, { execution_steps: executionSteps, current_status: "执行失败", latency_ms: cost });
+            throw new Error(reason);
+          } else if (evt.type === "vector_result") {
+            const retrievedCount = Number(evt.retrieved_count || 0);
+            pushExecutionStep("vector", "向量检索完成", `命中片段 ${retrievedCount} 条`);
+            patchStreamMessage(answer, {
+              execution_steps: executionSteps,
+              current_status: "向量检索完成",
+            });
+          } else if (evt.type === "graph_result") {
+            const entities = Array.isArray(evt.entities) ? evt.entities : [];
+            pushExecutionStep("graph", "图谱检索完成", `命中实体 ${entities.length} 个`);
+            patchStreamMessage(answer, {
+              graph_entities: entities,
+              execution_steps: executionSteps,
+              current_status: "图谱检索完成",
+            });
+          } else if (evt.type === "web_result") {
+            const webLabel = !!evt.used ? "联网补充完成" : "未触发联网补充";
+            pushExecutionStep("web", webLabel, `web_used=${!!evt.used}`);
+            patchStreamMessage(answer, {
+              web_used: !!evt.used,
+              execution_steps: executionSteps,
+              current_status: webLabel,
+            });
+          }
           else if (evt.type === "answer_chunk") {
             answer += String(evt.content || "");
             patchStreamMessage(answer);
           } else if (evt.type === "answer_reset") {
+            pushExecutionStep("rewrite", "答案已校正", "系统对流式答案做了一次重写或修正");
             answer = String(evt.content || "");
-            patchStreamMessage(answer);
+            patchStreamMessage(answer, { execution_steps: executionSteps, current_status: "答案已校正" });
           } else if (evt.type === "done") {
             const result = evt.result || {};
             const finalAnswer = String(result.answer || answer || "");
             answer = finalAnswer;
+            const cost = elapsedMs();
+            pushExecutionStep(
+              "done",
+              "执行完成",
+              [
+                result.route ? `route=${result.route}` : "",
+                result.agent_class ? `agent=${result.agent_class}` : "",
+                result.web_result ? `web=${!!result.web_result.used}` : "",
+                `duration_ms=${cost}`,
+              ]
+                .filter(Boolean)
+                .join(" | "),
+            );
             patchStreamMessage(finalAnswer, {
               route: result.route || meta.route,
               agent_class: result.agent_class || meta.agent_class,
               web_used: !!(result.web_result && result.web_result.used),
+              latency_ms: cost,
               thoughts: Array.isArray(result.thoughts) ? result.thoughts : thoughts,
               graph_entities: (result.graph_result && result.graph_result.entities) || meta.graph_entities || [],
+              current_status: "执行完成",
+              execution_steps: executionSteps,
               citations: [
                 ...(((result.vector_result && result.vector_result.citations) || []) as Citation[]),
                 ...(((result.web_result && result.web_result.citations) || []) as Citation[]),
@@ -482,14 +639,28 @@ export function ChatPage({ user, onLogout, themeLabel, onThemeToggle }: Props) {
       }
       const detail = await appApi.sessionDetail(sid);
       setCurrentSessionId(detail.session_id);
-      setMessages(detail.messages || []);
+      const nextMessages = [...(detail.messages || [])];
+      for (let i = nextMessages.length - 1; i >= 0; i -= 1) {
+        if (nextMessages[i]?.role !== "assistant") continue;
+        nextMessages[i] = {
+          ...nextMessages[i],
+          metadata: {
+            ...(nextMessages[i].metadata || {}),
+            ...finalStreamMetadata,
+          },
+        };
+        break;
+      }
+      setMessages(nextMessages);
       await refreshSessions();
     } catch (e) {
-      await handleApiError(e, "请求失败，请检查后端或模型状态");
+      const fallback = "Request failed. Please check backend/model status.";
+      await handleApiError(e, fallback);
+      const visibleError = e instanceof Error && e.message ? e.message : fallback;
       setMessages((prev) =>
         prev.map((m) =>
           m.message_id === "local-assistant-stream"
-            ? { ...m, content: "请求失败，请检查 API、模型服务和向量索引状态。" }
+            ? { ...m, content: visibleError }
             : m,
         ),
       );
@@ -543,22 +714,22 @@ export function ChatPage({ user, onLogout, themeLabel, onThemeToggle }: Props) {
   return (
     <div className="page-shell">
       <aside className={`sidebar ${sidebarOpen ? "open" : ""}`}>
-        <div className="brand">CyberSec RAG</div>
-        <p className="muted">React 全功能迁移版</p>
+        <div className="brand">RAG Operations Deck</div>
+        <p className="muted">Frontend + Agent + PDF + Testing workspace.</p>
         <section className="panel">
           <div className="section-head">
-            <strong>会话</strong>
+            <strong>Sessions</strong>
             <button
               type="button"
               className="secondary tiny-btn"
               onClick={() => void createSession()}
               disabled={sessionLoading}
             >
-              新建
+              New
             </button>
           </div>
           {sessionLoading && <div className="skeleton-list" />}
-          {!sessionLoading && sessions.length === 0 && <div className="muted">暂无会话</div>}
+          {!sessionLoading && sessions.length === 0 && <div className="muted">No sessions yet</div>}
           {!sessionLoading && sessions.length > 0 && (
             <ul className="list">
               {sessions.map((s) => (
@@ -569,22 +740,93 @@ export function ChatPage({ user, onLogout, themeLabel, onThemeToggle }: Props) {
                     onClick={() => void loadSession(s.session_id)}
                     disabled={busySessionId === s.session_id}
                   >
-                    <span>{s.title || "新会话"}</span>
-                    <small>{s.message_count || 0} 条消息</small>
+                    <span>{s.title || "Untitled"}</span>
+                    <small>{s.message_count || 0} msgs</small>
                   </button>
                   <button type="button" className="danger tiny-btn" onClick={() => void deleteSession(s.session_id)}>
-                    删除
+                    Delete
                   </button>
                 </li>
               ))}
             </ul>
           )}
         </section>
+
         <section className="panel">
           <div className="section-head">
-            <strong>文档</strong>
+            <strong>Agent Workbench</strong>
+            <small className="muted">current: {agentClassHint || "auto"}</small>
+          </div>
+          <div className="agent-mode-grid">
+            {AGENT_MODES.map((mode) => (
+              <button
+                key={mode.title}
+                type="button"
+                className={`agent-mode-card ${agentClassHint === mode.key ? "active" : ""}`}
+                onClick={() => switchAgentMode(mode.key)}
+              >
+                <strong>{mode.title}</strong>
+                <span>{mode.desc}</span>
+              </button>
+            ))}
+          </div>
+          <div className="agent-stats">
+            {agentDistribution.length === 0 && <span className="muted">No indexed docs yet</span>}
+            {agentDistribution.map((item) => (
+              <span key={item.agent} className="chip">
+                {item.agent}: {item.count}
+              </span>
+            ))}
+          </div>
+        </section>
+
+        <section className="panel">
+          <div className="section-head">
+            <strong>PDF Workbench</strong>
+            <button type="button" className="secondary tiny-btn" onClick={draftPdfQuestion}>
+              Draft Question
+            </button>
+          </div>
+          <div className="pdf-kpi-grid">
+            <div className="pdf-kpi-card">
+              <span>PDF/Image Docs</span>
+              <strong>{pdfDocuments.length}</strong>
+            </div>
+            <div className="pdf-kpi-card">
+              <span>Need Reindex</span>
+              <strong>{pdfNeedingReindex.length}</strong>
+            </div>
+          </div>
+          <select
+            value={pdfTargetFile}
+            onChange={(e) => setPdfTargetFile(e.target.value)}
+            disabled={!pdfDocuments.length}
+          >
+            {!pdfDocuments.length && <option value="">No PDF docs</option>}
+            {pdfDocuments.map((doc) => (
+              <option key={doc.source} value={doc.filename}>
+                {doc.filename} (chunks={doc.chunks || 0})
+              </option>
+            ))}
+          </select>
+          <div className="row-actions wrap">
+            <button type="button" className="secondary tiny-btn" onClick={() => switchAgentMode("pdf_text")}>
+              Force pdf_text
+            </button>
+            <button type="button" className="secondary tiny-btn" onClick={() => switchAgentMode("")}>
+              Back to auto
+            </button>
+          </div>
+          {pdfNeedingReindex.length > 0 && (
+            <div className="hint">Some PDF docs have 0 chunks. Reindex before asking detailed questions.</div>
+          )}
+        </section>
+
+        <section className="panel">
+          <div className="section-head">
+            <strong>Documents</strong>
             <button type="button" className="secondary tiny-btn" onClick={() => void refreshDocuments()}>
-              刷新
+              Refresh
             </button>
           </div>
           {canUploadAndManageDocs && (
@@ -594,8 +836,8 @@ export function ChatPage({ user, onLogout, themeLabel, onThemeToggle }: Props) {
                   value={uploadVisibility}
                   onChange={(e) => setUploadVisibility((e.target.value as "private" | "public") || "private")}
                 >
-                  <option value="private">私有</option>
-                  <option value="public">公开</option>
+                  <option value="private">private</option>
+                  <option value="public">public</option>
                 </select>
               )}
               <input
@@ -605,14 +847,14 @@ export function ChatPage({ user, onLogout, themeLabel, onThemeToggle }: Props) {
                 onChange={(evt) => void onMainUploadChange(evt)}
                 accept=".md,.txt,.pdf,.png,.jpg,.jpeg,.bmp,.tif,.tiff,.webp"
               />
-              <div className="muted">{uploading ? "上传中..." : "支持 .md/.txt/.pdf/图片"}</div>
+              <div className="muted">{uploading ? "Uploading..." : "Supports .md/.txt/.pdf/images"}</div>
               {uploadInfo && <div className="hint">{uploadInfo}</div>}
               {(uploading || uploadProgress > 0) && (
                 <div className="progress-wrap">
                   <div className="progress-bar">
                     <div className="progress-fill" style={{ width: `${Math.round(uploadProgress)}%` }} />
                   </div>
-                  <div className="progress-text">{uploadProgressText || `上传中 ${Math.round(uploadProgress)}%`}</div>
+                  <div className="progress-text">{uploadProgressText || `Uploading ${Math.round(uploadProgress)}%`}</div>
                 </div>
               )}
             </div>
@@ -637,31 +879,58 @@ export function ChatPage({ user, onLogout, themeLabel, onThemeToggle }: Props) {
               }}
               onDrop={(evt) => void onDocsDrop(evt)}
             >
-              拖拽文件到这里（.md / .txt / .pdf / 图片）
+              Drop docs here (.md / .txt / .pdf / images)
             </div>
           )}
           {docsLoading && <div className="skeleton-list" />}
-          {!docsLoading && documents.length === 0 && <div className="muted">暂无已索引文档</div>}
+          {!docsLoading && documents.length === 0 && <div className="muted">No indexed documents</div>}
+          {!docsLoading && pdfDocuments.length > 0 && <div className="doc-subtitle">PDF/Image ({pdfDocuments.length})</div>}
           {!docsLoading &&
-            documents.map((doc) => (
+            pdfDocuments.map((doc) => (
               <div key={`${doc.filename}-${doc.source}`} className="doc-row">
                 <div>
                   <div>{doc.filename}</div>
                   <small className="muted">
-                    分块={doc.chunks} | 可见性={doc.visibility || "private"} | 在磁盘={doc.exists_on_disk ? "是" : "否"} |
-                    上传目录={doc.in_uploads ? "是" : "否"} | agent={doc.agent_class || "general"}
+                    chunks={doc.chunks} | visibility={doc.visibility || "private"} | disk={doc.exists_on_disk ? "yes" : "no"} |
+                    uploads={doc.in_uploads ? "yes" : "no"} | agent={doc.agent_class || "general"}
                   </small>
                 </div>
                 {(canUploadAndManageDocs && (isAdmin || doc.owner_user_id === user?.user_id)) && (
                   <div className="row-actions">
                     <button type="button" className="secondary tiny-btn" onClick={() => void reindexDocument(doc)}>
-                      重建索引
+                      Reindex
                     </button>
                     <button type="button" className="danger tiny-btn" onClick={() => void deleteDocument(doc, false)}>
-                      删除索引
+                      Del Index
                     </button>
                     <button type="button" className="danger tiny-btn" onClick={() => void deleteDocument(doc, true)}>
-                      删除文件
+                      Del File
+                    </button>
+                  </div>
+                )}
+              </div>
+            ))}
+          {!docsLoading && nonPdfDocuments.length > 0 && <div className="doc-subtitle">Other Docs ({nonPdfDocuments.length})</div>}
+          {!docsLoading &&
+            nonPdfDocuments.map((doc) => (
+              <div key={`${doc.filename}-${doc.source}`} className="doc-row">
+                <div>
+                  <div>{doc.filename}</div>
+                  <small className="muted">
+                    chunks={doc.chunks} | visibility={doc.visibility || "private"} | disk={doc.exists_on_disk ? "yes" : "no"} |
+                    uploads={doc.in_uploads ? "yes" : "no"} | agent={doc.agent_class || "general"}
+                  </small>
+                </div>
+                {(canUploadAndManageDocs && (isAdmin || doc.owner_user_id === user?.user_id)) && (
+                  <div className="row-actions">
+                    <button type="button" className="secondary tiny-btn" onClick={() => void reindexDocument(doc)}>
+                      Reindex
+                    </button>
+                    <button type="button" className="danger tiny-btn" onClick={() => void deleteDocument(doc, false)}>
+                      Del Index
+                    </button>
+                    <button type="button" className="danger tiny-btn" onClick={() => void deleteDocument(doc, true)}>
+                      Del File
                     </button>
                   </div>
                 )}
@@ -670,29 +939,29 @@ export function ChatPage({ user, onLogout, themeLabel, onThemeToggle }: Props) {
         </section>
         <section className="panel">
           <div className="section-head">
-            <strong>提示词模板</strong>
+            <strong>Prompt Templates</strong>
             <button type="button" className="secondary tiny-btn" onClick={() => void refreshPrompts()}>
-              刷新
+              Refresh
             </button>
           </div>
-          <input value={promptTitle} onChange={(e) => setPromptTitle(e.target.value)} placeholder="模板标题" />
+          <input value={promptTitle} onChange={(e) => setPromptTitle(e.target.value)} placeholder="Template title" />
           <textarea
             value={promptContent}
             onChange={(e) => setPromptContent(e.target.value)}
-            placeholder="在这里编写提示词模板..."
+            placeholder="Write your prompt template..."
             rows={4}
           />
           <div className="row-actions">
             <button type="button" className="secondary tiny-btn" onClick={() => void checkPrompt()}>
-              检查并补全
+              Check
             </button>
             <button type="button" className="tiny-btn" onClick={() => void savePrompt()}>
-              {editingPromptId ? "更新模板" : "保存模板"}
+              {editingPromptId ? "Update" : "Save"}
             </button>
           </div>
           {promptCheckInfo && <div className="hint">{promptCheckInfo}</div>}
           {promptsLoading && <div className="skeleton-list" />}
-          {!promptsLoading && prompts.length === 0 && <div className="muted">暂无模板</div>}
+          {!promptsLoading && prompts.length === 0 && <div className="muted">No templates yet</div>}
           {!promptsLoading &&
             prompts.map((p) => (
               <div key={p.prompt_id} className="prompt-row">
@@ -711,7 +980,7 @@ export function ChatPage({ user, onLogout, themeLabel, onThemeToggle }: Props) {
                       if (p.agent_class) setAgentClassHint((p.agent_class as AgentClassHint) || "");
                     }}
                   >
-                    使用
+                    Use
                   </button>
                   <button
                     type="button"
@@ -722,10 +991,10 @@ export function ChatPage({ user, onLogout, themeLabel, onThemeToggle }: Props) {
                       setPromptContent(p.content || "");
                     }}
                   >
-                    编辑
+                    Edit
                   </button>
                   <button type="button" className="danger tiny-btn" onClick={() => void deletePrompt(p)}>
-                    删除
+                    Delete
                   </button>
                 </div>
               </div>
@@ -738,15 +1007,9 @@ export function ChatPage({ user, onLogout, themeLabel, onThemeToggle }: Props) {
         <ChatTopbar
           userBadge={userBadge}
           themeLabel={themeLabel}
-          useWeb={useWeb}
-          useReasoning={useReasoning}
-          agentClassHint={agentClassHint}
           isAdmin={isAdmin}
           onToggleSidebar={() => setSidebarOpen((v) => !v)}
           onThemeToggle={onThemeToggle}
-          onUseWebChange={setUseWeb}
-          onUseReasoningChange={setUseReasoning}
-          onAgentClassHintChange={(v) => setAgentClassHint((v as AgentClassHint) || "")}
           onLogout={onLogout}
         />
 
@@ -766,10 +1029,16 @@ export function ChatPage({ user, onLogout, themeLabel, onThemeToggle }: Props) {
           quickPrompts={QUICK_PROMPTS}
           runStatus={runStatus}
           error={error}
+          useWeb={useWeb}
+          useReasoning={useReasoning}
+          agentClassHint={agentClassHint}
           onQuestionChange={setQuestion}
           onAsk={ask}
           onClearQuestion={() => setQuestion("")}
           onPromptPick={setQuestion}
+          onUseWebChange={setUseWeb}
+          onUseReasoningChange={setUseReasoning}
+          onAgentClassHintChange={(v) => setAgentClassHint((v as AgentClassHint) || "")}
           onComposerDragEnter={(evt) => {
             evt.preventDefault();
             evt.stopPropagation();

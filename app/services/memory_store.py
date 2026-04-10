@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any
 
 from app.core.config import get_settings
+from app.services.history import validate_session_id
 
 try:
     from rank_bm25 import BM25Okapi
@@ -194,6 +195,7 @@ class MemoryStore:
         self.base_dir.mkdir(parents=True, exist_ok=True)
 
     def get_session_payload(self, session_id: str) -> dict[str, Any]:
+        session_id = validate_session_id(session_id)
         path = self.base_dir / f"{session_id}.json"
         if not path.exists():
             return self._new_payload(session_id)
@@ -205,6 +207,7 @@ class MemoryStore:
         return data
 
     def list_long_term(self, session_id: str) -> list[dict[str, Any]]:
+        session_id = validate_session_id(session_id)
         data = self.get_session_payload(session_id)
         valid = {
             str(item.get("candidate_id")): item
@@ -219,6 +222,7 @@ class MemoryStore:
         return out
 
     def add_candidate(self, session_id: str, question: str, answer: str, signals: dict[str, Any] | None = None) -> dict[str, Any] | None:
+        session_id = validate_session_id(session_id)
         if not _is_candidate_answer_usable(answer, signals):
             return None
         score, normalized_signals = score_memory_candidate(answer=answer, signals=signals)
@@ -244,6 +248,7 @@ class MemoryStore:
         return candidate
 
     def delete_long_term(self, session_id: str, candidate_id: str) -> bool:
+        session_id = validate_session_id(session_id)
         data = self.get_session_payload(session_id)
         hit = False
         for item in data.get("candidates", []):
@@ -271,6 +276,7 @@ class MemoryStore:
         }
 
     def _write(self, session_id: str, payload: dict[str, Any]) -> None:
+        session_id = validate_session_id(session_id)
         path = self.base_dir / f"{session_id}.json"
         temp_path = path.with_suffix(".json.tmp")
         temp_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")

@@ -147,7 +147,11 @@ def test_query_guard_redis_waiting_limit(monkeypatch: pytest.MonkeyPatch):
 
 
 def test_vector_store_lock_serializes_operations(monkeypatch: pytest.MonkeyPatch):
-    if importlib.util.find_spec("langchain_core") is None:
+    try:
+        found = importlib.util.find_spec("langchain_core")
+    except ValueError:
+        found = None
+    if found is None:
         pytest.skip("langchain_core not installed in current test environment")
     from app.retrievers import vector_store as vs
 

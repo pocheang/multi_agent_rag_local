@@ -8,10 +8,11 @@ import type {
   BenchmarkTrendItem,
   OpsOverview,
   RetrievalProfileState,
+  SystemLogEntry,
 } from "@/types/api";
 
 type Props = { user: AuthUser | null; onLogout: () => Promise<void>; themeLabel: string; onThemeToggle: () => void };
-type Section = "ops" | "rag" | "admins" | "users" | "audit";
+type Section = "ops" | "rag" | "admins" | "users" | "audit" | "syslog";
 
 const ROLE_OPTIONS = ["viewer", "analyst"];
 const STATUS_OPTIONS = ["active", "disabled"];
@@ -38,12 +39,14 @@ export function AdminPage({ user, onLogout, themeLabel, onThemeToggle }: Props) 
   const [section, setSection] = useState<Section>("ops");
   const [users, setUsers] = useState<AdminUserSummary[]>([]);
   const [logs, setLogs] = useState<AuditLogEntry[]>([]);
+  const [systemLogs, setSystemLogs] = useState<SystemLogEntry[]>([]);
   const [ops, setOps] = useState<OpsOverview | null>(null);
   const [statusText, setStatusText] = useState("");
   const [error, setError] = useState("");
 
   const [loadingUsers, setLoadingUsers] = useState(false);
   const [loadingLogs, setLoadingLogs] = useState(false);
+  const [loadingSystemLogs, setLoadingSystemLogs] = useState(false);
   const [loadingOps, setLoadingOps] = useState(false);
   const [creatingAdmin, setCreatingAdmin] = useState(false);
   const [savingClass, setSavingClass] = useState(false);
@@ -59,6 +62,10 @@ export function AdminPage({ user, onLogout, themeLabel, onThemeToggle }: Props) 
   const [auditEventCategory, setAuditEventCategory] = useState("");
   const [auditSeverity, setAuditSeverity] = useState("");
   const [auditResult, setAuditResult] = useState("");
+  const [systemLogLimit, setSystemLogLimit] = useState(200);
+  const [systemLogLevel, setSystemLogLevel] = useState("");
+  const [systemLogLogger, setSystemLogLogger] = useState("");
+  const [systemLogKeyword, setSystemLogKeyword] = useState("");
 
   const [opsHours, setOpsHours] = useState(24);
   const [opsActorUserId, setOpsActorUserId] = useState("");
@@ -145,6 +152,8 @@ export function AdminPage({ user, onLogout, themeLabel, onThemeToggle }: Props) 
   const resourceMax = useMemo(() => Math.max(1, ...(ops?.top_resource_types || []).map((x) => x.count)), [ops]);
   const errorMax = useMemo(() => Math.max(1, ...(ops?.top_error_reasons || []).map((x) => x.count)), [ops]);
   const hourlyMax = useMemo(() => Math.max(1, ...(ops?.hourly || []).map((x) => x.count)), [ops]);
+  const recentFailures = ops?.diagnostics?.recent_failures ?? [];
+  const recentErrors = ops?.diagnostics?.recent_errors ?? [];
 
   const handleApiError = async (e: unknown, fallback: string) => {
     if (e instanceof ApiError && e.status === 401) return onLogout();
@@ -195,6 +204,25 @@ export function AdminPage({ user, onLogout, themeLabel, onThemeToggle }: Props) 
       await handleApiError(e, "加载审计日志失败");
     } finally {
       setLoadingLogs(false);
+    }
+  };
+
+  const loadSystemLogs = async () => {
+    if (!isAdmin) return;
+    setLoadingSystemLogs(true);
+    try {
+      const res = await appApi.adminSystemLogs({
+        limit: systemLogLimit,
+        level: systemLogLevel.trim() || undefined,
+        logger: systemLogLogger.trim() || undefined,
+        keyword: systemLogKeyword.trim() || undefined,
+      });
+      setSystemLogs(res.items || []);
+      setError("");
+    } catch (e) {
+      await handleApiError(e, "加载系统日志失败");
+    } finally {
+      setLoadingSystemLogs(false);
     }
   };
 
@@ -469,6 +497,7 @@ export function AdminPage({ user, onLogout, themeLabel, onThemeToggle }: Props) 
   useEffect(() => {
     void loadUsers();
     void loadLogs();
+    void loadSystemLogs();
     void loadOps();
     void loadRagOps();
     // eslint-disable-next-line
@@ -483,6 +512,11 @@ export function AdminPage({ user, onLogout, themeLabel, onThemeToggle }: Props) 
     if (isAdmin) void loadOps();
     // eslint-disable-next-line
   }, [opsHours, opsActorUserId, opsActionKeyword]);
+
+  useEffect(() => {
+    if (isAdmin) void loadSystemLogs();
+    // eslint-disable-next-line
+  }, [systemLogLimit, systemLogLevel, systemLogLogger, systemLogKeyword]);
 
   useEffect(() => {
     if (!isAdmin || section !== "ops" || !opsAutoRefresh) return;
@@ -512,6 +546,7 @@ export function AdminPage({ user, onLogout, themeLabel, onThemeToggle }: Props) 
               <button type="button" className={section === "admins" ? "" : "secondary"} onClick={() => setSection("admins")}>创建管理员</button>
               <button type="button" className={section === "users" ? "" : "secondary"} onClick={() => setSection("users")}>用户管理</button>
               <button type="button" className={section === "audit" ? "" : "secondary"} onClick={() => setSection("audit")}>审计日志</button>
+              <button type="button" className={section === "syslog" ? "" : "secondary"} onClick={() => setSection("syslog")}>系统日志</button>
             </div>
           </main>
 
@@ -604,6 +639,82 @@ export function AdminPage({ user, onLogout, themeLabel, onThemeToggle }: Props) 
                   ))}
                 </div>
               </div>
+              <div className="section-head" style={{ marginTop: 4 }}>
+                <strong>运行诊断</strong>
+              </div>
+              <p className="muted" style={{ marginTop: -2, marginBottom: 8 }}>
+                用于排查“后端进程 / 环境 / 连接中断”类问题，直接展示当前解释器、Conda 环境、模型配置和最近错误。
+              </p>
+              <div className="ops-two-col">
+                <div className="ops-trend-list">
+                  <strong>环境与模型</strong>
+                  <div className="ops-diagnostic-list">
+                    <div><span>Python</span><code>{ops.diagnostics?.python_executable || "-"}</code></div>
+                    <div><span>Python 版本</span><code>{ops.diagnostics?.python_version || "-"}</code></div>
+                    <div><span>Conda 环境</span><code>{ops.diagnostics?.conda_env || "-"}</code></div>
+                    <div><span>Conda Prefix</span><code>{ops.diagnostics?.conda_prefix || "-"}</code></div>
+                    <div><span>模型后端</span><code>{ops.diagnostics?.model_backend || "-"}</code></div>
+                    <div><span>推理后端</span><code>{ops.diagnostics?.reasoning_model_backend || "-"}</code></div>
+                    <div><span>Ollama URL</span><code>{ops.diagnostics?.ollama_base_url || "-"}</code></div>
+                    <div><span>聊天模型</span><code>{ops.diagnostics?.ollama_chat_model || "-"}</code></div>
+                    <div><span>Embedding</span><code>{ops.diagnostics?.ollama_embed_model || "-"}</code></div>
+                  </div>
+                </div>
+                <div className="ops-trend-list">
+                  <strong>关键服务细节</strong>
+                  <div className="ops-diagnostic-list">
+                    {Object.entries(ops.services || {}).map(([name, svc]) => (
+                      <div key={`svc-detail-${name}`}>
+                        <span>{name}</span>
+                        <code>
+                          {svc.ok ? "ok" : `error=${svc.error || "unknown"}`}
+                          {svc.path ? ` | ${svc.path}` : ""}
+                          {svc.models && svc.models.length > 0 ? ` | models=${svc.models.join(", ")}` : ""}
+                        </code>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+              <div className="section-head" style={{ marginTop: 4 }}>
+                <strong>最近失败请求</strong>
+              </div>
+              <table className="table">
+                <thead><tr><th>时间</th><th>路径</th><th>状态码</th><th>耗时</th><th>错误</th></tr></thead>
+                <tbody>
+                  {(recentFailures.length > 0 ? recentFailures : []).map((x, idx) => (
+                    <tr key={`${x.ts}-${idx}`}>
+                      <td>{x.ts}</td>
+                      <td>{x.path}</td>
+                      <td>{x.status_code}</td>
+                      <td>{x.duration_ms}</td>
+                      <td>{x.error || "-"}</td>
+                    </tr>
+                  ))}
+                  {recentFailures.length === 0 && (
+                    <tr><td colSpan={5}>暂无失败请求</td></tr>
+                  )}
+                </tbody>
+              </table>
+              <div className="section-head" style={{ marginTop: 4 }}>
+                <strong>最近严重错误</strong>
+              </div>
+              <table className="table">
+                <thead><tr><th>时间</th><th>Logger</th><th>消息</th><th>异常</th></tr></thead>
+                <tbody>
+                  {(recentErrors.length > 0 ? recentErrors : []).map((x, idx) => (
+                    <tr key={`${x.created_at}-${idx}`}>
+                      <td>{formatAuditTime(x.created_at)}</td>
+                      <td>{x.logger || "-"}</td>
+                      <td>{x.message || "-"}</td>
+                      <td title={x.exception || "-"}>{x.exception || "-"}</td>
+                    </tr>
+                  ))}
+                  {recentErrors.length === 0 && (
+                    <tr><td colSpan={4}>暂无严重错误</td></tr>
+                  )}
+                </tbody>
+              </table>
               <div className="ops-trend-list"><strong>按小时趋势</strong>{ops.hourly.map((x) => <div key={x.bucket} className="ops-trend-row"><span>{x.bucket.slice(11, 16)}</span><div className="ops-trend-bar"><div className="ops-trend-fill" style={{ width: `${Math.max(4, (x.count / hourlyMax) * 100)}%` }} /></div><strong>{x.count}/{x.errors}</strong></div>)}</div>
               <div className="section-head" style={{ marginTop: 4 }}>
                 <strong>慢请求列表</strong>
@@ -849,6 +960,92 @@ export function AdminPage({ user, onLogout, themeLabel, onThemeToggle }: Props) 
                         <td className="audit-ip">{x.ip || "-"}</td>
                         <td className="audit-user-agent" title={x.user_agent || "-"}>{x.user_agent || "-"}</td>
                         <td className="audit-detail" title={x.detail || "-"}>{x.detail || "-"}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </main>}
+
+          {section === "syslog" && <main className="panel admin-audit-panel">
+            <div className="section-head">
+              <strong>系统日志</strong>
+              <div className="row-actions admin-audit-head-actions">
+                <select value={systemLogLimit} onChange={(e) => setSystemLogLimit(Number(e.target.value) || 200)}>
+                  <option value={100}>最近 100 条</option>
+                  <option value={200}>最近 200 条</option>
+                  <option value={500}>最近 500 条</option>
+                </select>
+                <button type="button" className="secondary tiny-btn" onClick={() => void loadSystemLogs()}>刷新</button>
+              </div>
+            </div>
+            <p className="muted admin-audit-hint">展示应用运行日志（含错误堆栈），用于管理层查看系统健康与异常。</p>
+            <div className="ops-two-col admin-filter-grid">
+              <label className="admin-field">
+                <span>级别</span>
+                <select value={systemLogLevel} onChange={(e) => setSystemLogLevel(e.target.value)}>
+                  <option value="">全部级别</option>
+                  <option value="INFO">INFO</option>
+                  <option value="WARNING">WARNING</option>
+                  <option value="ERROR">ERROR</option>
+                  <option value="CRITICAL">CRITICAL</option>
+                </select>
+              </label>
+              <label className="admin-field">
+                <span>Logger</span>
+                <input placeholder="例如 app.graph.streaming" value={systemLogLogger} onChange={(e) => setSystemLogLogger(e.target.value)} />
+              </label>
+            </div>
+            <div className="ops-two-col admin-filter-grid">
+              <label className="admin-field">
+                <span>关键词</span>
+                <input placeholder="关键字（message/exception）" value={systemLogKeyword} onChange={(e) => setSystemLogKeyword(e.target.value)} />
+              </label>
+              <div className="row-actions admin-audit-quick-actions">
+                <button
+                  type="button"
+                  className="secondary tiny-btn"
+                  onClick={() => {
+                    setSystemLogLevel("");
+                    setSystemLogLogger("");
+                    setSystemLogKeyword("");
+                  }}
+                >
+                  清空
+                </button>
+              </div>
+            </div>
+            {loadingSystemLogs && <div className="skeleton-list" />}
+            {!loadingSystemLogs && systemLogs.length === 0 && <div className="status">未命中系统日志。</div>}
+            {!loadingSystemLogs && systemLogs.length > 0 && (
+              <div className="audit-table-wrap">
+                <table className="table admin-audit-table">
+                  <thead>
+                    <tr>
+                      <th>时间</th>
+                      <th>级别</th>
+                      <th>Logger</th>
+                      <th>位置</th>
+                      <th>消息</th>
+                      <th>异常</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {systemLogs.map((x, idx) => (
+                      <tr key={`${x.created_at}-${idx}`}>
+                        <td className="audit-time">{formatAuditTime(x.created_at)}</td>
+                        <td>
+                          <span className={`audit-badge audit-severity-${String(x.level || "info").toLowerCase() === "error" ? "high" : "info"}`}>
+                            {x.level || "-"}
+                          </span>
+                        </td>
+                        <td className="audit-code" title={x.logger || "-"}>{x.logger || "-"}</td>
+                        <td className="audit-code" title={`${x.module || "-"}:${x.line || 0}`}>
+                          {(x.module || "-") + ":" + String(x.line || 0)}
+                        </td>
+                        <td className="audit-detail" title={x.message || "-"}>{x.message || "-"}</td>
+                        <td className="audit-detail" title={x.exception || "-"}>{x.exception || "-"}</td>
                       </tr>
                     ))}
                   </tbody>

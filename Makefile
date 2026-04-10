@@ -10,7 +10,7 @@ ingest:
 	python scripts/ingest.py
 
 api:
-	uvicorn app.api.main:app --host 0.0.0.0 --port 8000 --reload
+	uvicorn app.api.main:app --host 0.0.0.0 --port 8000 --reload --reload-dir app --reload-include "*.py" --reload-exclude "data/*" --reload-exclude "artifacts/*" --reload-exclude "frontend/*"
 
 cli:
 	python scripts/query_cli.py "请总结系统架构"

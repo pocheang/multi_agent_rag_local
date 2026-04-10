@@ -9,8 +9,22 @@ from app.ingestion.graph_extractor import extract_triplets
 from app.ingestion.loaders import load_documents
 from app.retrievers.bm25_retriever import reset_bm25_cache
 from app.retrievers.corpus_store import documents_to_records, read_corpus_records, write_corpus_records
+from app.retrievers.hybrid_retriever import clear_retrieval_cache
 from app.retrievers.parent_store import read_parent_records, write_parent_records
-from app.retrievers.vector_store import add_documents, get_vector_store
+from app.retrievers.vector_store import add_documents, clear_vector_store_cache, get_vector_store
+
+
+def _merge_records_by_id(existing: list[dict], incoming: list[dict]) -> list[dict]:
+    merged: dict[str, dict] = {}
+    order: list[str] = []
+    for row in existing + incoming:
+        row_id = str(row.get("id", "") or "").strip()
+        if not row_id:
+            continue
+        if row_id not in merged:
+            order.append(row_id)
+        merged[row_id] = row
+    return [merged[row_id] for row_id in order]
 
 
 def ingest_paths(
@@ -35,11 +49,11 @@ def ingest_paths(
         chunk.metadata = record["metadata"]
 
     existing = [] if reset_vector_store else read_corpus_records()
-    merged_records = existing + records
+    merged_records = _merge_records_by_id(existing, records)
     write_corpus_records(merged_records)
 
     existing_parents = [] if reset_vector_store else read_parent_records()
-    merged_parents = existing_parents + parent_records
+    merged_parents = _merge_records_by_id(existing_parents, parent_records)
     write_parent_records(merged_parents)
 
     reset_bm25_cache()
@@ -50,8 +64,10 @@ def ingest_paths(
             store.delete_collection()
         except Exception:
             pass
+        clear_vector_store_cache()
         store = get_vector_store()
     add_documents(chunks, ids=[record["id"] for record in records])
+    clear_retrieval_cache()
 
     count_triplets = 0
     client = None

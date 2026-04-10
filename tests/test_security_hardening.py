@@ -94,3 +94,127 @@ def test_upload_rejects_too_many_files(monkeypatch):
         assert "too many files" in (res.json().get("detail", "") or "")
     finally:
         api_main.app.dependency_overrides.clear()
+
+
+def test_query_rejects_nonexistent_session_id(monkeypatch):
+    client = TestClient(api_main.app)
+    monkeypatch.setattr(api_main, "_audit", lambda *args, **kwargs: None)
+    api_main.app.dependency_overrides[api_main._require_user] = lambda: {
+        "user_id": "u3",
+        "username": "viewer",
+        "role": "viewer",
+        "status": "active",
+    }
+    try:
+        res = client.post(
+            "/query",
+            json={"question": "hello", "session_id": "session-not-found"},
+        )
+        assert res.status_code == 404
+        assert "session not found" in (res.json().get("detail", "") or "")
+    finally:
+        api_main.app.dependency_overrides.clear()
+
+
+def test_stream_query_rejects_invalid_session_id_format(monkeypatch):
+    client = TestClient(api_main.app)
+    monkeypatch.setattr(api_main, "_audit", lambda *args, **kwargs: None)
+    api_main.app.dependency_overrides[api_main._require_user] = lambda: {
+        "user_id": "u4",
+        "username": "viewer",
+        "role": "viewer",
+        "status": "active",
+    }
+    try:
+        res = client.post(
+            "/query/stream",
+            data={"question": "hello", "session_id": "../escape"},
+        )
+        assert res.status_code == 400
+        assert "invalid session_id format" in (res.json().get("detail", "") or "")
+    finally:
+        api_main.app.dependency_overrides.clear()
+
+
+def test_get_session_rejects_invalid_session_id_format(monkeypatch):
+    client = TestClient(api_main.app)
+    monkeypatch.setattr(api_main, "_audit", lambda *args, **kwargs: None)
+    api_main.app.dependency_overrides[api_main._require_user] = lambda: {
+        "user_id": "u5",
+        "username": "viewer",
+        "role": "viewer",
+        "status": "active",
+    }
+    try:
+        res = client.get("/sessions/bad.id")
+        assert res.status_code == 400
+        assert "invalid session_id format" in (res.json().get("detail", "") or "")
+    finally:
+        api_main.app.dependency_overrides.clear()
+
+
+def test_list_long_term_memories_rejects_invalid_session_id_format(monkeypatch):
+    client = TestClient(api_main.app)
+    monkeypatch.setattr(api_main, "_audit", lambda *args, **kwargs: None)
+    api_main.app.dependency_overrides[api_main._require_user] = lambda: {
+        "user_id": "u6",
+        "username": "viewer",
+        "role": "viewer",
+        "status": "active",
+    }
+    try:
+        res = client.get("/sessions/bad.id/memories/long")
+        assert res.status_code == 400
+        assert "invalid session_id format" in (res.json().get("detail", "") or "")
+    finally:
+        api_main.app.dependency_overrides.clear()
+
+
+def test_cookie_auth_blocks_cross_origin_mutation(monkeypatch):
+    client = TestClient(api_main.app)
+    monkeypatch.setattr(api_main, "_audit", lambda *args, **kwargs: None)
+    monkeypatch.setattr(
+        api_main.auth_service,
+        "get_user_by_token",
+        lambda _token: {
+            "user_id": "u7",
+            "username": "viewer",
+            "role": "viewer",
+            "status": "active",
+        },
+    )
+    monkeypatch.setattr(api_main.auth_service, "touch_session", lambda _token: None)
+
+    res = client.post(
+        "/auth/logout",
+        cookies={str(api_main.settings.auth_cookie_name): "tok_cookie"},
+        headers={"Origin": "http://evil.example"},
+    )
+    assert res.status_code == 403
+    assert "csrf validation failed" in (res.json().get("detail", "") or "")
+
+
+def test_cookie_auth_allows_same_origin_mutation(monkeypatch):
+    client = TestClient(api_main.app)
+    monkeypatch.setattr(api_main, "_audit", lambda *args, **kwargs: None)
+    monkeypatch.setattr(
+        api_main.auth_service,
+        "get_user_by_token",
+        lambda _token: {
+            "user_id": "u8",
+            "username": "viewer",
+            "role": "viewer",
+            "status": "active",
+        },
+    )
+    monkeypatch.setattr(api_main.auth_service, "touch_session", lambda _token: None)
+    monkeypatch.setattr(api_main.auth_service, "logout", lambda _token: None)
+
+    origin = api_main.settings.cors_origins[0] if api_main.settings.cors_origins else "http://localhost:5173"
+    res = client.post(
+        "/auth/logout",
+        cookies={str(api_main.settings.auth_cookie_name): "tok_cookie"},
+        headers={"Origin": origin},
+    )
+    assert res.status_code == 200
+    assert res.json().get("ok") is True

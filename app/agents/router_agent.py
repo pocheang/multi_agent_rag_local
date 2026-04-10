@@ -60,7 +60,7 @@ def _normalize_agent_class_hint(agent_class_hint: str | None) -> str | None:
     return None
 
 
-def decide_route(question: str, use_reasoning: bool = True, agent_class_hint: str | None = None) -> RouteDecision:
+def decide_route(question: str, use_reasoning: bool = False, agent_class_hint: str | None = None) -> RouteDecision:
     forced = _normalize_agent_class_hint(agent_class_hint)
     agent_class = forced or classify_agent_class(question)
     forced_reason = f" | forced_agent_class={forced}" if forced else ""

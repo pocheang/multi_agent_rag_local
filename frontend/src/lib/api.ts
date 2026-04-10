@@ -9,6 +9,7 @@ import type {
   PromptTemplate,
   OpsOverview,
   RetrievalProfileState,
+  SystemLogEntry,
   SessionDetail,
   SessionSummary,
   UploadResponse,
@@ -30,42 +31,83 @@ export class ApiError extends Error {
 }
 
 function getToken() {
-  return localStorage.getItem(TOKEN_KEY) || "";
+  const legacy = localStorage.getItem(TOKEN_KEY) || "";
+  if (legacy) localStorage.removeItem(TOKEN_KEY);
+  return "";
 }
 
 function toUrl(path: string) {
   return `${API_BASE}${path}`;
 }
 
+function sleep(ms: number) {
+  return new Promise((resolve) => window.setTimeout(resolve, ms));
+}
+
+function isTransientNetworkError(err: unknown): boolean {
+  if (!(err instanceof Error)) return false;
+  const msg = String(err.message || "").toLowerCase();
+  return (
+    err.name === "TypeError" ||
+    msg.includes("failed to fetch") ||
+    msg.includes("networkerror") ||
+    msg.includes("network error")
+  );
+}
+
+function safeParsePayload(text: string): any {
+  if (!text) return {};
+  try {
+    return JSON.parse(text);
+  } catch {
+    return { detail: text };
+  }
+}
+
 async function request<T = Json>(path: string, init: RequestInit = {}): Promise<T> {
-  const token = getToken();
+  getToken();
   const headers = new Headers(init.headers || {});
-  if (token) headers.set("Authorization", `Bearer ${token}`);
-  const res = await fetch(toUrl(path), { ...init, headers });
+  const res = await fetch(toUrl(path), { ...init, headers, credentials: "include" });
 
   const text = await res.text();
-  const payload = text ? JSON.parse(text) : {};
+  const payload = safeParsePayload(text);
   if (!res.ok) {
     throw new ApiError(res.status, String((payload as any).detail || "request failed"));
   }
   return payload as T;
 }
 
-export async function authFetch(path: string, init: RequestInit = {}) {
-  const token = getToken();
-  const headers = new Headers(init.headers || {});
-  if (token) headers.set("Authorization", `Bearer ${token}`);
-  const res = await fetch(toUrl(path), { ...init, headers });
-  if (res.status === 401) {
-    authApi.setToken("");
-    throw new ApiError(401, "unauthorized");
+export async function authFetch(
+  path: string,
+  init: RequestInit = {},
+  opts: { networkRetry?: number; retryDelayMs?: number } = {},
+) {
+  const retries = Math.max(0, Number(opts.networkRetry || 0));
+  const delayMs = Math.max(50, Number(opts.retryDelayMs || 300));
+  let attempt = 0;
+  while (true) {
+    try {
+      getToken();
+      const headers = new Headers(init.headers || {});
+      const res = await fetch(toUrl(path), { ...init, headers, credentials: "include" });
+      if (res.status === 401) {
+        authApi.setToken("");
+        throw new ApiError(401, "unauthorized");
+      }
+      return res;
+    } catch (e) {
+      if (attempt >= retries || !isTransientNetworkError(e)) {
+        throw e;
+      }
+      attempt += 1;
+      await sleep(delayMs * attempt);
+    }
   }
-  return res;
 }
 
 async function parseOrThrow<T>(res: Response): Promise<T> {
   const text = await res.text();
-  const payload = text ? JSON.parse(text) : {};
+  const payload = safeParsePayload(text);
   if (!res.ok) {
     throw new ApiError(res.status, String((payload as any).detail || "request failed"));
   }
@@ -97,9 +139,9 @@ export const authApi = {
       // ignore logout error
     }
   },
-  setToken(token: string) {
-    if (token) localStorage.setItem(TOKEN_KEY, token);
-    else localStorage.removeItem(TOKEN_KEY);
+  setToken(_token: string) {
+    // Keep for backward compatibility, but avoid persisting auth tokens in localStorage.
+    localStorage.removeItem(TOKEN_KEY);
   },
   token() {
     return getToken();
@@ -163,7 +205,7 @@ export const appApi = {
     form.append("use_reasoning", input.useReasoning ? "1" : "0");
     form.append("session_id", input.sessionId);
     if (input.agentClassHint) form.append("agent_class_hint", input.agentClassHint);
-    return authFetch("/query/stream", { method: "POST", body: form });
+    return authFetch("/query/stream", { method: "POST", body: form }, { networkRetry: 2, retryDelayMs: 350 });
   },
   upload(
     files: File[],
@@ -187,8 +229,8 @@ export const appApi = {
 
       const xhr = new XMLHttpRequest();
       xhr.open("POST", toUrl("/upload"));
-      const token = getToken();
-      if (token) xhr.setRequestHeader("Authorization", `Bearer ${token}`);
+      xhr.withCredentials = true;
+      getToken();
 
       xhr.upload.onprogress = (evt) => {
         if (evt.lengthComputable && evt.total > 0) {
@@ -205,12 +247,7 @@ export const appApi = {
 
       xhr.onload = () => {
         const text = xhr.responseText || "";
-        let payload: any = {};
-        try {
-          payload = text ? JSON.parse(text) : {};
-        } catch {
-          payload = {};
-        }
+        const payload = safeParsePayload(text);
 
         if (xhr.status === 401) {
           authApi.setToken("");
@@ -406,12 +443,7 @@ export const appApi = {
     const res = await authFetch(`/admin/ops/export.csv?${qs.toString()}`, { method: "GET" });
     if (!res.ok) {
       const text = await res.text();
-      let payload: any = {};
-      try {
-        payload = text ? JSON.parse(text) : {};
-      } catch {
-        payload = {};
-      }
+      const payload = safeParsePayload(text);
       throw new ApiError(res.status, String(payload?.detail || "request failed"));
     }
     return res.text();
@@ -475,5 +507,13 @@ export const appApi = {
     if (input.strategy) qs.set("strategy", input.strategy);
     const res = await authFetch(`/admin/ops/benchmark/run?${qs.toString()}`, { method: "POST" });
     return parseOrThrow<{ ok: boolean; result: BenchmarkTrendItem }>(res);
+  },
+  adminSystemLogs(input: { limit?: number; level?: string; logger?: string; keyword?: string } = {}) {
+    const qs = new URLSearchParams();
+    qs.set("limit", String(input.limit ?? 200));
+    if (input.level) qs.set("level", input.level);
+    if (input.logger) qs.set("logger", input.logger);
+    if (input.keyword) qs.set("keyword", input.keyword);
+    return request<{ items: SystemLogEntry[]; count: number }>(`/admin/system-logs?${qs.toString()}`);
   },
 };

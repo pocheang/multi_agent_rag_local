@@ -1,10 +1,10 @@
 import type { ChatMetadata } from "@/pages/chat/types";
 
 export const QUICK_PROMPTS = [
-  "分析这次告警可能的攻击链，并给出 P0/P1/P2 处置优先级",
-  "针对暴露在公网的 Web 服务，给一份分层防护加固清单",
-  "给出勒索事件的应急响应流程，包含证据保全和恢复步骤",
-  "解释 SQL 注入的原理、常见检测信号和修复方案",
+  "对这次告警做攻击链复盘，并按 P0/P1/P2 给出处置优先级",
+  "切换到 pdf_text 模式：总结这份 PDF 的关键信息、风险和证据页码",
+  "切换到 cybersecurity 模式：给互联网暴露服务输出分层加固清单",
+  "用 general 模式做管理摘要：用 5 条要点汇报当前风险状态",
 ];
 
 export const SUPPORTED_DOC_RE = /\.(md|txt|pdf|png|jpe?g|bmp|tiff?|webp)$/i;
@@ -14,9 +14,12 @@ export const EMPTY_METADATA: ChatMetadata = {
   route: "",
   agent_class: "",
   web_used: false,
+  latency_ms: 0,
   thoughts: [],
   graph_entities: [],
   citations: [],
+  current_status: "",
+  execution_steps: [],
 };
 
 export function isMobile() {

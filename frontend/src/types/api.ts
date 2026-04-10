@@ -28,9 +28,17 @@ export type SessionMessageMetadata = {
   route?: string;
   agent_class?: string;
   web_used?: boolean;
+  latency_ms?: number;
   thoughts?: string[];
   graph_entities?: string[];
   citations?: Citation[];
+  current_status?: string;
+  execution_steps?: Array<{
+    kind: string;
+    label: string;
+    detail?: string;
+    at?: string;
+  }>;
 };
 
 export type SessionMessage = {
@@ -134,6 +142,7 @@ export type OpsServiceHealth = {
   latency_ms?: number;
   error?: string;
   path?: string;
+  models?: string[];
 };
 
 export type OpsOverview = {
@@ -171,6 +180,31 @@ export type OpsOverview = {
   }>;
   hourly: Array<{ bucket: string; count: number; errors: number }>;
   services: Record<string, OpsServiceHealth>;
+  diagnostics?: {
+    python_executable: string;
+    python_version: string;
+    conda_prefix?: string;
+    conda_env?: string;
+    model_backend?: string;
+    reasoning_model_backend?: string;
+    ollama_base_url?: string;
+    ollama_chat_model?: string;
+    ollama_embed_model?: string;
+    recent_errors?: Array<{
+      created_at: string;
+      level: string;
+      logger: string;
+      message: string;
+      exception?: string;
+    }>;
+    recent_failures?: Array<{
+      ts: string;
+      path: string;
+      status_code: number;
+      error?: string;
+      duration_ms: number;
+    }>;
+  };
   filters?: {
     actor_user_id?: string;
     action_keyword?: string;
@@ -208,4 +242,16 @@ export type BenchmarkTrendItem = {
     avg: number;
     max: number;
   };
+};
+
+export type SystemLogEntry = {
+  created_at: string;
+  level: string;
+  logger: string;
+  message: string;
+  module?: string;
+  func?: string;
+  line?: number;
+  thread?: string;
+  exception?: string;
 };

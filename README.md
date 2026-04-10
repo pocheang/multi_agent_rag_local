@@ -1,6 +1,6 @@
 # Multi-Agent Local RAG
 
-Current version: `0.2.2`
+Current version: `0.2.2.1`
 
 Local-first multi-agent RAG system with:
 
@@ -11,7 +11,7 @@ Local-first multi-agent RAG system with:
 - Session/prompt/document management
 - Admin ops for RAG/Agent governance and runtime resilience
 
-## What's New in 0.2.2
+## What's New in 0.2.2.1
 
 ### Added
 - Runtime resilience modules: alerting, background queue, bulkhead isolation, hybrid executor, query guard, quota guard, and query-result cache.
@@ -25,7 +25,7 @@ Local-first multi-agent RAG system with:
 
 ### Release Notes
 - Changelog entry: [`CHANGELOG.md`](./CHANGELOG.md)
-- GitHub release (`v0.2.2`): <https://github.com/pocheang/multi_agent_rag_local/releases/tag/v0.2.2>
+- GitHub release (`v0.2.2.1`): <https://github.com/pocheang/multi_agent_rag_local/releases/tag/v0.2.2.1>
 
 ## Core Features
 
@@ -47,7 +47,7 @@ pip install -U pip
 pip install -e .
 cp .env.example .env
 docker compose up -d neo4j
-uvicorn app.api.main:app --host 127.0.0.1 --port 8000 --reload
+uvicorn app.api.main:app --host 127.0.0.1 --port 8000 --reload --reload-dir app --reload-include "*.py" --reload-exclude "data/*" --reload-exclude "artifacts/*" --reload-exclude "frontend/*"
 ```
 
 ### Frontend (dev)

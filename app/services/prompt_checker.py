@@ -28,7 +28,7 @@ def _contains_any(text: str, words: list[str]) -> bool:
     return any(w.lower() in low for w in words)
 
 
-def check_and_enhance_prompt(title: str, content: str, use_reasoning: bool = True) -> dict[str, Any]:
+def check_and_enhance_prompt(title: str, content: str, use_reasoning: bool = False) -> dict[str, Any]:
     t = normalize_user_question(title or "未命名模板")
     c = normalize_user_question(content or "")
     issues: list[str] = []

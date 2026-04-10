@@ -31,3 +31,46 @@ def test_split_documents_returns_child_chunks_and_parent_records(monkeypatch):
     for child in children:
         assert child.metadata.get("parent_id") in parent_ids
         assert child.metadata.get("source") == "demo.md"
+
+
+def test_split_documents_sanitizes_invalid_overlap_in_fallback_splitter(monkeypatch):
+    monkeypatch.setattr(chunker, "RecursiveCharacterTextSplitter", None)
+    monkeypatch.setattr(
+        chunker,
+        "get_settings",
+        lambda: SimpleNamespace(
+            parent_chunk_size=20,
+            parent_chunk_overlap=999,
+            child_chunk_size=10,
+            child_chunk_overlap=999,
+        ),
+    )
+    text = ("abcdefg " * 120).strip()
+    docs = [_Doc(page_content=text, metadata={"source": "demo.md"})]
+
+    children, parents = chunker.split_documents(docs)
+
+    assert parents
+    assert children
+    assert len(parents) < len(text) // 2
+    assert len(children) < len(text)
+
+
+def test_split_documents_parent_ids_are_stable_for_same_source(monkeypatch):
+    monkeypatch.setattr(
+        chunker,
+        "get_settings",
+        lambda: SimpleNamespace(
+            parent_chunk_size=80,
+            parent_chunk_overlap=10,
+            child_chunk_size=40,
+            child_chunk_overlap=8,
+        ),
+    )
+    text = ("稳定切分测试文本。 " * 50).strip()
+    docs = [_Doc(page_content=text, metadata={"source": "stable.md"})]
+
+    _children1, parents1 = chunker.split_documents(docs)
+    _children2, parents2 = chunker.split_documents(docs)
+
+    assert [x["id"] for x in parents1] == [x["id"] for x in parents2]

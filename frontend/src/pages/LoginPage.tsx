@@ -4,7 +4,7 @@ import { authApi } from "@/lib/api";
 import type { AuthUser } from "@/types/api";
 
 type Props = {
-  onLogin: (token: string, user: AuthUser) => void;
+  onLogin: (user: AuthUser) => void;
   themeLabel: string;
   onThemeToggle: () => void;
 };
@@ -42,7 +42,7 @@ export function LoginPage({ onLogin, themeLabel, onThemeToggle }: Props) {
       const data = await authApi.login(username.trim(), password);
       if (rememberMe) localStorage.setItem("remembered_username", username.trim());
       else localStorage.removeItem("remembered_username");
-      onLogin(data.token, data.user);
+      onLogin(data.user);
     } catch (e) {
       setError(e instanceof Error ? e.message : "登录失败");
     } finally {

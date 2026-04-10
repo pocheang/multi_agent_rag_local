@@ -18,9 +18,17 @@ export type ChatMetadata = {
   route: string;
   agent_class: string;
   web_used: boolean;
+  latency_ms?: number;
   thoughts: string[];
   graph_entities: string[];
   citations: Citation[];
+  current_status?: string;
+  execution_steps?: Array<{
+    kind: string;
+    label: string;
+    detail?: string;
+    at?: string;
+  }>;
 };
 
 export type SetString = React.Dispatch<React.SetStateAction<string>>;

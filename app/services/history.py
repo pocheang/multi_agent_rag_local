@@ -1,4 +1,5 @@
 import json
+import re
 import sqlite3
 import threading
 import uuid
@@ -9,6 +10,16 @@ from typing import Any
 from app.core.config import get_settings
 
 DEFAULT_TITLE = "新会话"
+
+
+_SESSION_ID_RE = re.compile(r"^[A-Za-z0-9_-]{1,128}$")
+
+
+def validate_session_id(session_id: str) -> str:
+    value = str(session_id or "").strip()
+    if not _SESSION_ID_RE.fullmatch(value):
+        raise ValueError("invalid session_id format")
+    return value
 
 
 class HistoryStore:
@@ -30,7 +41,7 @@ class HistoryStore:
             self._init_sqlite()
 
     def create_session(self, title: str | None = None, session_id: str | None = None) -> dict[str, Any]:
-        session_id = session_id or uuid.uuid4().hex
+        session_id = validate_session_id(session_id) if session_id else uuid.uuid4().hex
         now = self._now()
         data = {
             "session_id": session_id,
@@ -45,6 +56,7 @@ class HistoryStore:
 
     def get_or_create_session(self, session_id: str | None = None) -> dict[str, Any]:
         if session_id:
+            session_id = validate_session_id(session_id)
             existing = self.get_session(session_id)
             if existing is not None:
                 return existing
@@ -67,6 +79,10 @@ class HistoryStore:
         return items
 
     def get_session(self, session_id: str) -> dict[str, Any] | None:
+        try:
+            session_id = validate_session_id(session_id)
+        except ValueError:
+            return None
         data = self._read(session_id)
         if data is None:
             return None
@@ -83,6 +99,10 @@ class HistoryStore:
         return value or None
 
     def set_session_strategy_lock(self, session_id: str, strategy: str | None) -> dict[str, Any] | None:
+        try:
+            session_id = validate_session_id(session_id)
+        except ValueError:
+            return None
         data = self.get_session(session_id)
         if data is None:
             return None
@@ -94,6 +114,10 @@ class HistoryStore:
         return data
 
     def delete_session(self, session_id: str) -> bool:
+        try:
+            session_id = validate_session_id(session_id)
+        except ValueError:
+            return False
         if self._backend == "sqlite":
             with self._lock, self._connect() as conn:
                 cur = conn.execute("DELETE FROM sessions WHERE namespace=? AND session_id=?", (self._namespace, session_id))
@@ -106,6 +130,7 @@ class HistoryStore:
         return True
 
     def append_message(self, session_id: str, role: str, content: str, metadata: dict[str, Any] | None = None) -> dict[str, Any]:
+        session_id = validate_session_id(session_id)
         data = self.get_or_create_session(session_id)
         if not data.get("messages") and role == "user":
             title = (content or DEFAULT_TITLE).strip().replace("\n", " ")[:40]
@@ -124,6 +149,10 @@ class HistoryStore:
         return data
 
     def update_message(self, session_id: str, message_id: str, content: str) -> dict[str, Any] | None:
+        try:
+            session_id = validate_session_id(session_id)
+        except ValueError:
+            return None
         data = self.get_session(session_id)
         if data is None:
             return None
@@ -135,6 +164,10 @@ class HistoryStore:
         return data
 
     def get_message(self, session_id: str, message_id: str) -> dict[str, Any] | None:
+        try:
+            session_id = validate_session_id(session_id)
+        except ValueError:
+            return None
         data = self.get_session(session_id)
         if data is None:
             return None
@@ -151,6 +184,10 @@ class HistoryStore:
         assistant_content: str,
         metadata: dict[str, Any] | None = None,
     ) -> dict[str, Any] | None:
+        try:
+            session_id = validate_session_id(session_id)
+        except ValueError:
+            return None
         data = self.get_session(session_id)
         if data is None:
             return None
@@ -183,6 +220,10 @@ class HistoryStore:
         return None
 
     def delete_message(self, session_id: str, message_id: str) -> dict[str, Any] | None:
+        try:
+            session_id = validate_session_id(session_id)
+        except ValueError:
+            return None
         data = self.get_session(session_id)
         if data is None:
             return None
@@ -224,6 +265,7 @@ class HistoryStore:
         return changed
 
     def _write(self, session_id: str, data: dict[str, Any]) -> None:
+        session_id = validate_session_id(session_id)
         if self._backend == "sqlite":
             created_at = str(data.get("created_at") or self._now())
             updated_at = str(data.get("updated_at") or self._now())
@@ -250,6 +292,10 @@ class HistoryStore:
         self._tier_cold_files_if_needed()
 
     def _read(self, session_id: str) -> dict[str, Any] | None:
+        try:
+            session_id = validate_session_id(session_id)
+        except ValueError:
+            return None
         if self._backend == "sqlite":
             with self._lock, self._connect() as conn:
                 row = conn.execute(

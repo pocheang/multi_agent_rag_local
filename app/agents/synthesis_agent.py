@@ -7,7 +7,6 @@ from app.core.models import get_chat_model, get_reasoning_model
 from app.services.bulkhead import bulkhead
 from app.services.query_intent import is_casual_chat_query
 from app.services.request_context import deadline_exceeded, overload_mode_enabled
-from app.skills.registry import get_skill
 
 SYNTHESIS_FALLBACK_MESSAGE = "抱歉，当前答案生成服务暂时不可用。请稍后重试，或先缩小问题范围后再试。"
 CASUAL_CHAT_HIGH_TEMPERATURE = 2.0
@@ -56,11 +55,8 @@ def _build_prompt(
     graph_context: str = "",
     web_context: str = "",
 ) -> str:
-    skill = get_skill(skill_name)
     return (
-        f"技能: {skill.name}\n"
-        f"技能描述: {skill.description}\n"
-        f"技能指令: {skill.instruction}\n\n"
+        f"技能: {skill_name}\n\n"
         f"用户问题:\n{question}\n\n"
         f"记忆上下文:\n{memory_context or '无'}\n\n"
         f"向量检索上下文:\n{vector_context or '无'}\n\n"
@@ -166,7 +162,7 @@ def _refine_answer(
         return SYNTHESIS_FALLBACK_MESSAGE
 
     settings = get_settings()
-    max_rounds = int(getattr(settings, "synthesis_refine_max_rounds", 3) or 3)
+    max_rounds = int(getattr(settings, "synthesis_refine_max_rounds", 5) or 5)
     if overload_mode_enabled():
         max_rounds = min(max_rounds, int(getattr(settings, "synthesis_refine_overload_rounds", 1) or 1))
     max_rounds = max(0, max_rounds)
@@ -203,7 +199,7 @@ def synthesize_answer(
     vector_context: str = "",
     graph_context: str = "",
     web_context: str = "",
-    use_reasoning: bool = True,
+    use_reasoning: bool = False,
 ) -> str:
     prompt = _build_prompt(question, skill_name, memory_context, vector_context, graph_context, web_context)
     try:
@@ -234,7 +230,7 @@ def stream_synthesize_answer(
     vector_context: str = "",
     graph_context: str = "",
     web_context: str = "",
-    use_reasoning: bool = True,
+    use_reasoning: bool = False,
 ) -> Iterable[dict[str, str]]:
     prompt = _build_prompt(question, skill_name, memory_context, vector_context, graph_context, web_context)
     try:
@@ -269,4 +265,5 @@ def stream_synthesize_answer(
         if final != initial:
             yield {"type": "reset", "content": final}
     except Exception:
-        yield {"type": "reset", "content": SYNTHESIS_FALLBACK_MESSAGE}
+        # Keep backward compatibility for callers/tests that expect plain-string fallback chunks.
+        yield SYNTHESIS_FALLBACK_MESSAGE

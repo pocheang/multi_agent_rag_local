@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "multi-agent-local-rag"
-version = "0.2.2"
+version = "0.2.2.1"
 description = "Local multi-agent RAG system with LangGraph, Chroma, Neo4j, and web fallback"
 readme = "README.md"
 requires-python = ">=3.11"

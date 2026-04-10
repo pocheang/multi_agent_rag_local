@@ -5,9 +5,9 @@ from pydantic import BaseModel, Field
 
 class QueryRequest(BaseModel):
     question: str = Field(..., description="User question")
-    use_web_fallback: bool = Field(default=True)
-    use_reasoning: bool = Field(default=True)
-    session_id: str | None = None
+    use_web_fallback: bool = Field(default=False)
+    use_reasoning: bool = Field(default=False)
+    session_id: str | None = Field(default=None, pattern=r"^[A-Za-z0-9_-]{1,128}$")
     request_id: str | None = None
     agent_class_hint: str | None = None
     retrieval_strategy: str | None = None  # baseline|advanced|safe
@@ -91,7 +91,7 @@ class PromptTemplateUpdateRequest(BaseModel):
 class PromptCheckRequest(BaseModel):
     title: str
     content: str
-    use_reasoning: bool = True
+    use_reasoning: bool = False
 
 
 class PromptCheckResponse(BaseModel):

@@ -1,5 +1,6 @@
 ﻿from __future__ import annotations
 
+import hashlib
 import uuid
 from typing import Any
 
@@ -16,10 +17,17 @@ def _clone_document(doc: Any, text: str, metadata: dict[str, Any]):
     return cls(page_content=text, metadata=metadata)
 
 
+def _sanitize_chunk_params(chunk_size: int, chunk_overlap: int) -> tuple[int, int]:
+    size = max(1, int(chunk_size))
+    overlap = max(0, int(chunk_overlap))
+    if overlap >= size:
+        overlap = min(size - 1, size // 5)
+    return size, overlap
+
+
 class _SimpleTextSplitter:
     def __init__(self, chunk_size: int, chunk_overlap: int):
-        self.chunk_size = max(1, int(chunk_size))
-        self.chunk_overlap = max(0, int(chunk_overlap))
+        self.chunk_size, self.chunk_overlap = _sanitize_chunk_params(chunk_size, chunk_overlap)
 
     def split_text(self, text: str) -> list[str]:
         source = str(text or "")
@@ -39,11 +47,12 @@ class _SimpleTextSplitter:
 
 
 def _build_splitter(chunk_size: int, chunk_overlap: int, separators: list[str]):
+    size, overlap = _sanitize_chunk_params(chunk_size, chunk_overlap)
     if RecursiveCharacterTextSplitter is None:
-        return _SimpleTextSplitter(chunk_size=chunk_size, chunk_overlap=chunk_overlap)
+        return _SimpleTextSplitter(chunk_size=size, chunk_overlap=overlap)
     return RecursiveCharacterTextSplitter(
-        chunk_size=chunk_size,
-        chunk_overlap=chunk_overlap,
+        chunk_size=size,
+        chunk_overlap=overlap,
         separators=separators,
     )
 
@@ -71,6 +80,7 @@ def split_documents(documents):
         raw_text = str(getattr(doc, "page_content", "") or "").strip()
         if not raw_text:
             continue
+        source = str(base_metadata.get("source", "") or "")
 
         parent_texts = parent_splitter.split_text(raw_text) or [raw_text]
         for parent_idx, parent_text in enumerate(parent_texts):
@@ -78,7 +88,12 @@ def split_documents(documents):
             if not parent_text:
                 continue
 
-            parent_id = f"parent-{doc_idx}-{parent_idx}-{uuid.uuid4().hex[:8]}"
+            if source:
+                text_hash = hashlib.sha1(parent_text.encode("utf-8")).hexdigest()[:12]
+                parent_seed = f"{source}|{doc_idx}|{parent_idx}|{text_hash}"
+                parent_id = f"parent-{hashlib.sha1(parent_seed.encode('utf-8')).hexdigest()[:16]}"
+            else:
+                parent_id = f"parent-{doc_idx}-{parent_idx}-{uuid.uuid4().hex[:8]}"
             parent_meta = dict(base_metadata)
             parent_meta.update({"parent_id": parent_id, "parent_index": parent_idx})
             parent_records.append({"id": parent_id, "text": parent_text, "metadata": parent_meta})

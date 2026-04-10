@@ -393,8 +393,8 @@ def build_workflow():
 
 def run_query(
     question: str,
-    use_web_fallback: bool = True,
-    use_reasoning: bool = True,
+    use_web_fallback: bool = False,
+    use_reasoning: bool = False,
     memory_context: str = "",
     allowed_sources: list[str] | None = None,
     agent_class_hint: str | None = None,

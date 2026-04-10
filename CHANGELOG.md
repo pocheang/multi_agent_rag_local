@@ -4,6 +4,14 @@ All notable changes to this project will be documented in this file.
 
 The format is based on Keep a Changelog and this project follows Semantic Versioning.
 
+## [0.2.2.1] - 2026-04-10
+
+### Changed
+- Improved non-smalltalk streaming reliability and error handling for `/query/stream`.
+- Strengthened smalltalk fast-path routing behavior and intent recognition.
+- Hardened RAG indexing/retrieval internals: chunk parameter sanitization, cache invalidation hooks, and deterministic chunk/parent identifiers.
+- Updated development startup guidance to reduce `uvicorn --reload` interruption impact.
+
 ## [0.2.2] - 2026-04-09
 
 ### Added

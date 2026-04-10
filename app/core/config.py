@@ -25,7 +25,7 @@ class Settings(BaseSettings):
 
     neo4j_uri: str = Field(default="bolt://localhost:7687", alias="NEO4J_URI")
     neo4j_username: str = Field(default="neo4j", alias="NEO4J_USERNAME")
-    neo4j_password: str = Field(default="neo4j_password", alias="NEO4J_PASSWORD")
+    neo4j_password: str = Field(default="", alias="NEO4J_PASSWORD")
 
     chroma_collection: str = Field(default="local_rag_collection", alias="CHROMA_COLLECTION")
     chroma_persist_dir: str = Field(default="./data/chroma", alias="CHROMA_PERSIST_DIR")
@@ -98,6 +98,10 @@ class Settings(BaseSettings):
     users_file: str = Field(default="./data/security/users.json", alias="USERS_FILE")
     auth_sessions_file: str = Field(default="./data/security/auth_sessions.json", alias="AUTH_SESSIONS_FILE")
     auth_token_ttl_hours: int = Field(default=24, alias="AUTH_TOKEN_TTL_HOURS")
+    auth_expose_token_in_response: bool = Field(default=False, alias="AUTH_EXPOSE_TOKEN_IN_RESPONSE")
+    auth_cookie_name: str = Field(default="auth_token", alias="AUTH_COOKIE_NAME")
+    auth_cookie_secure: bool = Field(default=False, alias="AUTH_COOKIE_SECURE")
+    auth_cookie_samesite: str = Field(default="lax", alias="AUTH_COOKIE_SAMESITE")  # strict|lax|none
     app_db_path_str: str = Field(default="./data/app.db", alias="APP_DB_PATH")
 
     auth_login_max_failures: int = Field(default=8, alias="AUTH_LOGIN_MAX_FAILURES")
@@ -121,7 +125,7 @@ class Settings(BaseSettings):
     stream_replay_cache_max_events: int = Field(default=1200, alias="STREAM_REPLAY_CACHE_MAX_EVENTS")
     shadow_queue_workers: int = Field(default=2, alias="SHADOW_QUEUE_WORKERS")
     shadow_queue_maxsize: int = Field(default=200, alias="SHADOW_QUEUE_MAXSIZE")
-    synthesis_refine_max_rounds: int = Field(default=3, alias="SYNTHESIS_REFINE_MAX_ROUNDS")
+    synthesis_refine_max_rounds: int = Field(default=5, alias="SYNTHESIS_REFINE_MAX_ROUNDS")
     synthesis_refine_overload_rounds: int = Field(default=1, alias="SYNTHESIS_REFINE_OVERLOAD_ROUNDS")
     history_backend: str = Field(default="file", alias="HISTORY_BACKEND")  # file|sqlite
     history_sqlite_path_str: str = Field(default="./data/history.db", alias="HISTORY_SQLITE_PATH")

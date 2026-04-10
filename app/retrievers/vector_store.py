@@ -12,7 +12,13 @@ _VECTOR_OP_LOCK = threading.RLock()
 
 
 @lru_cache(maxsize=4)
-def _get_vector_store_cached(collection_name: str, persist_directory: str) -> Chroma:
+def _get_vector_store_cached(
+    collection_name: str,
+    persist_directory: str,
+    embedding_backend: str,
+    embedding_model: str,
+    embedding_base_url: str,
+) -> Chroma:
     return Chroma(
         collection_name=collection_name,
         embedding_function=get_embedding_model(),
@@ -22,9 +28,19 @@ def _get_vector_store_cached(collection_name: str, persist_directory: str) -> Ch
 
 def get_vector_store() -> Chroma:
     settings = get_settings()
+    backend = str(getattr(settings, "model_backend", "ollama") or "ollama").strip().lower()
+    if backend == "openai":
+        embed_model = str(getattr(settings, "openai_embed_model", "") or "")
+        embed_base_url = str(getattr(settings, "openai_base_url", "") or "")
+    else:
+        embed_model = str(getattr(settings, "ollama_embed_model", "") or "")
+        embed_base_url = str(getattr(settings, "ollama_base_url", "") or "")
     return _get_vector_store_cached(
         collection_name=settings.chroma_collection,
         persist_directory=str(settings.chroma_path),
+        embedding_backend=backend,
+        embedding_model=embed_model,
+        embedding_base_url=embed_base_url,
     )
 
 

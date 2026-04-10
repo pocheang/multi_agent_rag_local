@@ -1,5 +1,7 @@
 import json
+import hashlib
 import uuid
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -23,7 +25,22 @@ def documents_to_records(documents: list["Document"]) -> list[dict[str, Any]]:
     records: list[dict[str, Any]] = []
     for i, doc in enumerate(documents):
         metadata = normalize_metadata(dict(doc.metadata))
-        chunk_id = metadata.get("chunk_id") or f"chunk-{i}-{uuid.uuid4().hex[:8]}"
+        if not metadata.get("ingested_at"):
+            metadata["ingested_at"] = datetime.now(timezone.utc).isoformat()
+        chunk_id = metadata.get("chunk_id")
+        if not chunk_id:
+            source = str(metadata.get("source", "") or "")
+            parent_id = str(metadata.get("parent_id", "") or "")
+            parent_index = str(metadata.get("parent_index", "") or "")
+            child_index = str(metadata.get("child_index", "") or "")
+            page = str(metadata.get("page", "") or "")
+            image_index = str(metadata.get("image_index", "") or "")
+            text_hash = hashlib.sha1(str(doc.page_content or "").encode("utf-8")).hexdigest()[:16]
+            if source:
+                stable_seed = f"{source}|{page}|{parent_id}|{parent_index}|{child_index}|{image_index}|{text_hash}"
+                chunk_id = f"chunk-{hashlib.sha1(stable_seed.encode('utf-8')).hexdigest()[:16]}"
+            else:
+                chunk_id = f"chunk-{i}-{uuid.uuid4().hex[:8]}"
         metadata["chunk_id"] = chunk_id
         records.append({"id": chunk_id, "text": doc.page_content, "metadata": metadata})
     return records

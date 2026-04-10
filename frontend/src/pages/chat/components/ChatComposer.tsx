@@ -9,10 +9,16 @@ type Props = {
   quickPrompts: string[];
   runStatus: string;
   error: string;
+  useWeb: boolean;
+  useReasoning: boolean;
+  agentClassHint: string;
   onQuestionChange: (value: string) => void;
   onAsk: () => Promise<void>;
   onClearQuestion: () => void;
   onPromptPick: (prompt: string) => void;
+  onUseWebChange: (next: boolean) => void;
+  onUseReasoningChange: (next: boolean) => void;
+  onAgentClassHintChange: (value: string) => void;
   onComposerDragEnter: (evt: React.DragEvent<HTMLElement>) => void;
   onComposerDragOver: (evt: React.DragEvent<HTMLElement>) => void;
   onComposerDragLeave: (evt: React.DragEvent<HTMLElement>) => void;
@@ -29,16 +35,28 @@ export function ChatComposer({
   quickPrompts,
   runStatus,
   error,
+  useWeb,
+  useReasoning,
+  agentClassHint,
   onQuestionChange,
   onAsk,
   onClearQuestion,
   onPromptPick,
+  onUseWebChange,
+  onUseReasoningChange,
+  onAgentClassHintChange,
   onComposerDragEnter,
   onComposerDragOver,
   onComposerDragLeave,
   onComposerDrop,
   onChatUploadChange,
 }: Props) {
+  const modeHint = !useWeb && !useReasoning
+    ? "本地快速模式：适合闲聊与低延迟问答。"
+    : useWeb
+      ? "联网增强已开启：结果更新，但可能更慢且受网络影响。"
+      : "推理增强已开启：回答更细致，但响应可能变慢。";
+
   return (
     <section
       className={`panel composer-panel ${composerDropActive ? "dragover" : ""}`}
@@ -51,7 +69,7 @@ export function ChatComposer({
         ref={questionRef}
         value={question}
         onChange={(e) => onQuestionChange(e.target.value)}
-        placeholder="输入安全问题，例如：如何检测疑似横向移动？Ctrl/⌘ + Enter 发送"
+        placeholder="输入问题，例如：总结最新上传 PDF 的安全风险并给出证据来源。Ctrl/Cmd + Enter 发送"
         rows={3}
         onKeyDown={(e) => {
           if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
@@ -60,9 +78,44 @@ export function ChatComposer({
           }
         }}
       />
+
+      <div className="chat-options-bar" aria-label="chat options">
+        <div className="option-group">
+          <span className="option-label">联网检索</span>
+          <button
+            type="button"
+            className={`option-chip ${useWeb ? "active" : ""}`}
+            onClick={() => onUseWebChange(!useWeb)}
+          >
+            {useWeb ? "开启" : "关闭"}
+          </button>
+        </div>
+        <div className="option-group">
+          <span className="option-label">推理增强</span>
+          <button
+            type="button"
+            className={`option-chip ${useReasoning ? "active" : ""}`}
+            onClick={() => onUseReasoningChange(!useReasoning)}
+          >
+            {useReasoning ? "开启" : "关闭"}
+          </button>
+        </div>
+        <div className="option-group option-agent">
+          <span className="option-label">Agent</span>
+          <select value={agentClassHint} onChange={(e) => onAgentClassHintChange(e.target.value)}>
+            <option value="">auto</option>
+            <option value="cybersecurity">cybersecurity</option>
+            <option value="artificial_intelligence">artificial_intelligence</option>
+            <option value="pdf_text">pdf_text</option>
+            <option value="general">general</option>
+          </select>
+        </div>
+      </div>
+      <div className="option-hint">{modeHint}</div>
+
       <div className="row-actions">
         <button type="button" onClick={() => void onAsk()} disabled={isSending}>
-          {isSending ? "分析中..." : "分析"}
+          {isSending ? "处理中..." : "开始分析"}
         </button>
         <label className="secondary link-btn">
           上传 PDF/图片

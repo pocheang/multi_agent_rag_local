@@ -186,4 +186,8 @@ class Neo4jClient:
             return count
 
         with self.driver.session() as session:
-            return int(session.execute_write(_tx_work))
+            if hasattr(session, "execute_write"):
+                return int(session.execute_write(_tx_work))
+            if hasattr(session, "write_transaction"):
+                return int(session.write_transaction(_tx_work))
+            return int(_tx_work(session))

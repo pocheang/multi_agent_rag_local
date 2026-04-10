@@ -10,19 +10,22 @@ import { NotFoundPage } from "@/pages/NotFoundPage";
 import type { AuthUser } from "@/types/api";
 
 function Protected({
-  token,
+  user,
+  authReady,
   children,
 }: {
-  token: string;
+  user: AuthUser | null;
+  authReady: boolean;
   children: React.ReactNode;
 }) {
-  if (!token) return <Navigate to="/app/login" replace />;
+  if (!authReady) return null;
+  if (!user) return <Navigate to="/app/login" replace />;
   return <>{children}</>;
 }
 
 export function App() {
-  const [token, setToken] = useState(authApi.token());
   const [user, setUser] = useState<AuthUser | null>(null);
+  const [authReady, setAuthReady] = useState(false);
   const [theme, setTheme] = useState<ThemeMode>(getSavedTheme());
   const location = useLocation();
   const navigate = useNavigate();
@@ -33,18 +36,15 @@ export function App() {
   }, [theme]);
 
   useEffect(() => {
-    if (!token) {
-      setUser(null);
-      return;
-    }
     authApi
       .me()
       .then(setUser)
       .catch(() => {
         authApi.setToken("");
-        setToken("");
-      });
-  }, [token]);
+        setUser(null);
+      })
+      .finally(() => setAuthReady(true));
+  }, []);
 
   useEffect(() => {
     const mq = window.matchMedia("(prefers-color-scheme: dark)");
@@ -65,14 +65,11 @@ export function App() {
   const logout = async () => {
     await authApi.logout();
     authApi.setToken("");
-    setToken("");
     setUser(null);
     navigate("/app/login");
   };
 
-  const loginSuccess = (nextToken: string, nextUser: AuthUser) => {
-    authApi.setToken(nextToken);
-    setToken(nextToken);
+  const loginSuccess = (nextUser: AuthUser) => {
     setUser(nextUser);
     navigate("/app");
   };
@@ -82,7 +79,7 @@ export function App() {
       <Route
         path="/app/login"
         element={
-          token ? (
+          user ? (
             <Navigate to="/app" replace />
           ) : (
             <LoginPage
@@ -96,7 +93,7 @@ export function App() {
       <Route
         path="/app"
         element={
-          <Protected token={token}>
+          <Protected user={user} authReady={authReady}>
             <ChatPage
               user={user}
               onLogout={logout}
@@ -109,7 +106,7 @@ export function App() {
       <Route
         path="/app/admin"
         element={
-          <Protected token={token}>
+          <Protected user={user} authReady={authReady}>
             <AdminPage
               user={user}
               onLogout={logout}
@@ -123,13 +120,13 @@ export function App() {
         path="/app/architecture"
         element={
           <ArchitecturePage
-            isLoggedIn={!!token}
+            isLoggedIn={!!user}
             themeLabel={themeLabel}
             onThemeToggle={() => setTheme((prev) => nextTheme(prev))}
           />
         }
       />
-      <Route path="/" element={<Navigate to={token ? "/app" : "/app/login"} replace />} />
+      <Route path="/" element={<Navigate to={user ? "/app" : "/app/login"} replace />} />
       <Route path="*" element={<NotFoundPage pathname={location.pathname} />} />
     </Routes>
   );
