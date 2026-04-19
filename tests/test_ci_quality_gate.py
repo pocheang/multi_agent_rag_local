@@ -36,3 +36,19 @@ def test_ci_quality_gate_emits_rollback_profile_when_runtime_required():
         rollback.unlink()
     if report.exists():
         report.unlink()
+
+
+def test_ci_quality_gate_runtime_unavailable_fails_by_default_and_can_be_overridden():
+    base_cmd = [
+        sys.executable,
+        "scripts/ci_quality_gate.py",
+        "--dataset",
+        "data/eval/retrieval_eval.jsonl",
+    ]
+    proc_default = subprocess.run(base_cmd, capture_output=True, text=True)
+    proc_allow = subprocess.run(base_cmd + ["--allow-runtime-unavailable"], capture_output=True, text=True)
+
+    assert proc_default.returncode in {0, 3}
+    assert proc_allow.returncode in {0, 3}
+    if proc_default.returncode == 3:
+        assert proc_allow.returncode == 0

@@ -1,8 +1,10 @@
 from pathlib import Path
+import asyncio
 import logging
 import os
 import threading
 import re
+import inspect
 from collections import Counter
 from collections import deque
 import csv
@@ -84,7 +86,7 @@ from app.services.pdf_agent_guard import (
 )
 from app.services.prompt_store import PromptStore
 from app.services.prompt_checker import check_and_enhance_prompt
-from app.services.query_intent import is_casual_chat_query, quick_smalltalk_reply
+from app.services.query_intent import is_casual_chat_query
 from app.services.query_guard import QueryLoadGuard, QueryOverloadedError, QueryRateLimitedError
 from app.services.query_result_cache import QueryResultCache
 from app.services.quota_guard import QuotaExceededError, QuotaGuard
@@ -337,6 +339,17 @@ def _query_cache_key(
 
 def _trace_id(request: Request) -> str:
     return str(getattr(request.state, "trace_id", "") or "").strip() or uuid.uuid4().hex
+
+
+def _call_with_supported_kwargs(fn, /, *args, **kwargs):
+    try:
+        sig = inspect.signature(fn)
+    except (TypeError, ValueError):
+        return fn(*args, **kwargs)
+    if any(p.kind == inspect.Parameter.VAR_KEYWORD for p in sig.parameters.values()):
+        return fn(*args, **kwargs)
+    filtered_kwargs = {k: v for k, v in kwargs.items() if k in sig.parameters}
+    return fn(*args, **filtered_kwargs)
 
 
 def _maybe_sign_response(
@@ -1136,6 +1149,11 @@ def _is_valid_admin_approval_token(input_token: str) -> tuple[bool, str]:
     token_plain_cfg = (settings.admin_create_approval_token or "").strip()
     token = (input_token or "").strip()
 
+    if token_hash_cfg and token_plain_cfg:
+        digest = hashlib.sha256(token.encode("utf-8")).hexdigest()
+        if hmac.compare_digest(digest, token_hash_cfg):
+            return True, "hash"
+        return hmac.compare_digest(token, token_plain_cfg), "plain"
     if token_hash_cfg:
         digest = hashlib.sha256(token.encode("utf-8")).hexdigest()
         return hmac.compare_digest(digest, token_hash_cfg), "hash"
@@ -1950,6 +1968,12 @@ def admin_list_users(request: Request, user: dict[str, Any] = Depends(_require_u
     return [AdminUserSummary(**x) for x in rows]
 
 
+@app.get("/admin")
+def admin_page(request: Request, user: dict[str, Any] = Depends(_require_user)):
+    _require_permission(user, "admin:user_manage", request, "admin")
+    return {"ok": True, "message": "admin portal"}
+
+
 @app.patch("/admin/users/{user_id}/role", response_model=AdminUserSummary)
 def admin_update_user_role(user_id: str, req: AdminRoleUpdateRequest, request: Request, user: dict[str, Any] = Depends(_require_user)):
     _require_permission(user, "admin:user_manage", request, "admin", resource_id=user_id)
@@ -2759,33 +2783,6 @@ def query(req: QueryRequest, request: Request, user: dict[str, Any] = Depends(_r
             debug={"reason": "user_file_inventory_only"},
         )
 
-    smalltalk_answer = quick_smalltalk_reply(normalized_question)
-    if smalltalk_answer:
-        if req.session_id:
-            history_store = _history_store_for_user(user)
-            history_store.append_message(req.session_id, "user", original_question)
-            history_store.append_message(
-                req.session_id,
-                "assistant",
-                smalltalk_answer,
-                metadata={
-                    "route": "smalltalk_fast",
-                    "agent_class": "general",
-                    "web_used": False,
-                    "graph_entities": [],
-                    "citations": [],
-                    "reason": "smalltalk_quick_reply",
-                },
-            )
-        return QueryResponse(
-            answer=smalltalk_answer,
-            route="smalltalk_fast",
-            citations=[],
-            graph_entities=[],
-            web_used=False,
-            debug={"reason": "smalltalk_quick_reply", "use_reasoning": False},
-        )
-
     if effective_agent_class == "pdf_text":
         pdf_names = _list_visible_pdf_names_for_user(user)
         if not pdf_names:
@@ -2927,7 +2924,7 @@ def query(req: QueryRequest, request: Request, user: dict[str, Any] = Depends(_r
             runtime_kwargs["use_web_fallback"] = False
             runtime_kwargs["use_reasoning"] = False
             runtime_kwargs.setdefault("retrieval_strategy", "baseline")
-        result_local = run_query(effective_question, **runtime_kwargs)
+        result_local = _call_with_supported_kwargs(run_query, effective_question, **runtime_kwargs)
         result_local = _enforce_result_source_scope(result_local, allowed_sources=allowed_sources, request=request, user=user)
         consistency_local = {"checked": False}
         if bool(settings.consistency_guard_enabled) and (not is_fast_smalltalk):
@@ -2943,7 +2940,7 @@ def query(req: QueryRequest, request: Request, user: dict[str, Any] = Depends(_r
                     stabilize_kwargs = dict(runtime_kwargs)
                     stabilize_kwargs["retrieval_strategy"] = "baseline"
                     stabilize_kwargs["use_reasoning"] = False
-                    retried = run_query(effective_question, **stabilize_kwargs)
+                    retried = _call_with_supported_kwargs(run_query, effective_question, **stabilize_kwargs)
                     retried = _enforce_result_source_scope(retried, allowed_sources=allowed_sources, request=request, user=user)
                     retried_sim = text_similarity(prev_answer, retried.get("answer", ""))
                     if retried_sim > sim:
@@ -3053,6 +3050,18 @@ def query(req: QueryRequest, request: Request, user: dict[str, Any] = Depends(_r
     return response
 
 
+def _sse_response(generator: Any) -> StreamingResponse:
+    return StreamingResponse(
+        generator,
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache, no-transform",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )
+
+
 @app.post("/query/stream")
 async def stream_query(
     question: Annotated[str, Form(...)],
@@ -3115,48 +3124,7 @@ async def stream_query(
                 }
             )
 
-        return StreamingResponse(event_gen_file_inventory(), media_type="text/event-stream")
-
-    smalltalk_answer = quick_smalltalk_reply(normalized_question)
-    if smalltalk_answer:
-        if session_id:
-            history_store = _history_store_for_user(user)
-            history_store.append_message(session_id, "user", original_question)
-            history_store.append_message(
-                session_id,
-                "assistant",
-                smalltalk_answer,
-                metadata={
-                    "route": "smalltalk_fast",
-                    "agent_class": "general",
-                    "web_used": False,
-                    "graph_entities": [],
-                    "citations": [],
-                    "reason": "smalltalk_quick_reply",
-                },
-            )
-
-        def event_gen_smalltalk():
-            yield encode_sse({"type": "status", "message": "smalltalk_fast"})
-            yield encode_sse({"type": "answer_chunk", "content": smalltalk_answer})
-            yield encode_sse(
-                {
-                    "type": "done",
-                    "result": {
-                        "answer": smalltalk_answer,
-                        "route": "smalltalk_fast",
-                        "reason": "smalltalk_quick_reply",
-                        "skill": "answer_with_citations",
-                        "agent_class": "general",
-                        "vector_result": {},
-                        "graph_result": {},
-                        "web_result": {"used": False, "citations": [], "context": ""},
-                        "thoughts": ["检测到闲聊，直接本地快速回复。"],
-                    },
-                }
-            )
-
-        return StreamingResponse(event_gen_smalltalk(), media_type="text/event-stream")
+        return _sse_response(event_gen_file_inventory())
 
     if effective_agent_class == "pdf_text":
         pdf_names = _list_visible_pdf_names_for_user(user)
@@ -3193,7 +3161,7 @@ async def stream_query(
                     }
                 )
 
-            return StreamingResponse(event_gen_pdf_upload_needed(), media_type="text/event-stream")
+            return _sse_response(event_gen_pdf_upload_needed())
         if len(pdf_names) > 1 and not selected_pdfs:
             answer = build_choose_pdf_hint(pdf_names)
             _audit(request, action="query.stream", resource_type="query", result="success", user=user, detail="pdf_agent_need_selection")
@@ -3226,7 +3194,7 @@ async def stream_query(
                     }
                 )
 
-            return StreamingResponse(event_gen_pdf_select_needed(), media_type="text/event-stream")
+            return _sse_response(event_gen_pdf_select_needed())
         if selected_pdfs:
             chunks_map = _visible_doc_chunks_by_filename_for_user(user)
             selected_with_chunks = [x for x in selected_pdfs if chunks_map.get(x, 0) > 0]
@@ -3265,7 +3233,7 @@ async def stream_query(
                         }
                     )
 
-                return StreamingResponse(event_gen_pdf_chunks_zero(), media_type="text/event-stream")
+                return _sse_response(event_gen_pdf_chunks_zero())
             normalized_question = apply_pdf_focus_to_question(normalized_question, selected_with_chunks)
 
     is_fast_smalltalk = is_casual_chat_query(normalized_question)
@@ -3330,7 +3298,7 @@ async def stream_query(
                         yield encode_sse(ev)
                 if not replay_done:
                     yield encode_sse({"type": "status", "message": "replay_partial", "trace_id": _trace_id(request)})
-            return StreamingResponse(event_gen_replay(), media_type="text/event-stream")
+            return _sse_response(event_gen_replay())
 
     cached_stream = query_result_cache.get(stream_cache_key, session_id=session_id)
     if isinstance(cached_stream, dict) and cached_stream.get("result"):
@@ -3344,7 +3312,7 @@ async def stream_query(
                 yield encode_sse({"type": "answer_chunk", "content": answer_text})
             yield encode_sse({"type": "done", "result": done_result})
 
-        return StreamingResponse(event_gen_cached(), media_type="text/event-stream")
+        return _sse_response(event_gen_cached())
     if not query_result_cache.mark_inflight(stream_cache_key):
         runtime_metrics.inc("query_stream_duplicate_total")
         emit_alert(
@@ -3384,11 +3352,42 @@ async def stream_query(
                     if replay_enabled:
                         query_result_cache.append_stream_event(stream_cache_key, hello_event, done=False)
                     yield encode_sse(hello_event)
-                    for event in run_query_stream(
-                        effective_question,
-                        **runtime_stream_kwargs,
-                    ):
+                    loop = asyncio.get_running_loop()
+                    done_marker: dict[str, Any] = {"type": "__producer_done__"}
+                    queue: asyncio.Queue[dict[str, Any]] = asyncio.Queue(maxsize=256)
+                    producer_stop = threading.Event()
+                    producer_error: dict[str, Exception] = {}
+
+                    def _stream_producer() -> None:
+                        try:
+                            for _event in _call_with_supported_kwargs(
+                                run_query_stream,
+                                effective_question,
+                                **runtime_stream_kwargs,
+                            ):
+                                if producer_stop.is_set():
+                                    break
+                                fut = asyncio.run_coroutine_threadsafe(queue.put(_event), loop)
+                                fut.result()
+                        except Exception as ex:
+                            producer_error["error"] = ex
+                        finally:
+                            producer_stop.set()
+                            asyncio.run_coroutine_threadsafe(queue.put(done_marker), loop).result()
+
+                    threading.Thread(target=_stream_producer, daemon=True).start()
+                    heartbeat_s = max(2.0, float(getattr(settings, "stream_heartbeat_seconds", 8.0) or 8.0))
+
+                    while True:
                         if await request.is_disconnected():
+                            producer_stop.set()
+                            break
+                        try:
+                            event = await asyncio.wait_for(queue.get(), timeout=heartbeat_s)
+                        except asyncio.TimeoutError:
+                            yield encode_sse({"type": "status", "message": "heartbeat", "trace_id": trace_id})
+                            continue
+                        if event is done_marker:
                             break
                         if event.get("type") == "done":
                             final_result = _enforce_result_source_scope(
@@ -3426,6 +3425,9 @@ async def stream_query(
                             if replay_enabled:
                                 query_result_cache.append_stream_event(stream_cache_key, event, done=False)
                         yield encode_sse(event)
+
+                    if producer_error.get("error") is not None:
+                        raise producer_error["error"]
         except QueryRateLimitedError as e:
             runtime_metrics.inc("query_stream_rate_limited_total")
             emit_alert(
@@ -3494,4 +3496,4 @@ async def stream_query(
             query_result_cache.set(stream_cache_key, {"result": final_result}, session_id=session_id)
             runtime_metrics.inc("query_stream_success_total")
 
-    return StreamingResponse(event_gen(), media_type="text/event-stream")
+    return _sse_response(event_gen())

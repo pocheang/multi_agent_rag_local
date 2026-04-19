@@ -116,7 +116,7 @@ def test_admin_create_admin_uses_hash_token_when_configured(monkeypatch):
     monkeypatch.setattr(
         api_main.settings,
         "admin_create_approval_token_hash",
-        "f3632fc7606f37418217d1d68fbe9590afd000f79ec5f594200b2d8fcb7f7648",
+        "23d1a45715db9e670b5421dd041ee95b108022f19ea000716a1b8377f237ddc4",
     )
     monkeypatch.setattr(api_main.settings, "admin_create_approval_token", "")
     monkeypatch.setattr(

@@ -37,6 +37,17 @@ Local-first multi-agent RAG system with:
 
 ## Quick Start
 
+### Use Codex (OpenAI Backend)
+
+Set these in `.env`:
+
+```bash
+MODEL_BACKEND=openai
+OPENAI_API_KEY=your_api_key
+OPENAI_CHAT_MODEL=gpt-5.4-codex
+OPENAI_REASONING_MODEL=gpt-5.4-codex
+```
+
 ### Backend
 
 ```bash
@@ -90,6 +101,7 @@ Open: `http://127.0.0.1:5173/app`
 
 - Workflow visual + n8n: [`docs/workflow_lowcode_setup.md`](./docs/workflow_lowcode_setup.md)
 - Production checklist: [`docs/production_readiness_checklist.md`](./docs/production_readiness_checklist.md)
+- Runtime speed profiles (fast/balanced/deep): [`docs/runtime_speed_profiles.md`](./docs/runtime_speed_profiles.md)
 
 ## Test
 

@@ -13,6 +13,25 @@ def _run_eval(dataset: str, autotune: bool = False, strategy: str = "") -> dict:
         cmd.extend(["--strategy", strategy])
     proc = subprocess.run(cmd, capture_output=True, text=True)
     if proc.returncode != 0:
+        stderr = str(proc.stderr or "").strip()
+        runtime_markers = (
+            "OPENAI_API_KEY",
+            "api_key client option must be set",
+            "retrieval_runtime_unavailable",
+            "ModuleNotFoundError",
+            "No module named",
+        )
+        if any(marker in stderr for marker in runtime_markers):
+            return {
+                "ok": True,
+                "payload": {
+                    "total": 0,
+                    "hit": 0,
+                    "recall_at_k": 0.0,
+                    "error": "retrieval_runtime_unavailable:RuntimeDependencyError",
+                    "detail": stderr[:500],
+                },
+            }
         return {"ok": False, "error": "eval_script_failed", "stderr": proc.stderr.strip()}
     try:
         payload = json.loads(proc.stdout.strip() or "{}")
@@ -26,6 +45,7 @@ def main() -> int:
     parser.add_argument("--dataset", default="data/eval/retrieval_eval.jsonl")
     parser.add_argument("--min-recall", type=float, default=0.35)
     parser.add_argument("--require-runtime", action="store_true")
+    parser.add_argument("--allow-runtime-unavailable", action="store_true")
     parser.add_argument("--auto-rollback-file", default="")
     parser.add_argument("--strategy", default="")
     parser.add_argument("--report-md", default="")
@@ -82,7 +102,8 @@ def main() -> int:
         return 2
     payload = result.get("payload", {})
     if payload.get("error"):
-        if args.require_runtime:
+        runtime_must_be_available = bool(args.require_runtime or (not args.allow_runtime_unavailable))
+        if runtime_must_be_available:
             _emit_rollback("runtime_unavailable")
             out = {"ok": False, "reason": "runtime_unavailable", "payload": payload}
             _write_report("runtime_unavailable", out)

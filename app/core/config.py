@@ -9,7 +9,7 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
     app_env: str = Field(default="dev", alias="APP_ENV")
-    model_backend: str = Field(default="ollama", alias="MODEL_BACKEND")
+    model_backend: str = Field(default="openai", alias="MODEL_BACKEND")
     reasoning_model_backend: str = Field(default="", alias="REASONING_MODEL_BACKEND")
 
     ollama_base_url: str = Field(default="http://localhost:11434", alias="OLLAMA_BASE_URL")
@@ -19,9 +19,9 @@ class Settings(BaseSettings):
 
     openai_api_key: str | None = Field(default=None, alias="OPENAI_API_KEY")
     openai_base_url: str | None = Field(default=None, alias="OPENAI_BASE_URL")
-    openai_chat_model: str = Field(default="gpt-4.1-mini", alias="OPENAI_CHAT_MODEL")
+    openai_chat_model: str = Field(default="gpt-5.4-codex", alias="OPENAI_CHAT_MODEL")
     openai_embed_model: str = Field(default="text-embedding-3-small", alias="OPENAI_EMBED_MODEL")
-    openai_reasoning_model: str = Field(default="gpt-5.2", alias="OPENAI_REASONING_MODEL")
+    openai_reasoning_model: str = Field(default="gpt-5.4-codex", alias="OPENAI_REASONING_MODEL")
 
     neo4j_uri: str = Field(default="bolt://localhost:7687", alias="NEO4J_URI")
     neo4j_username: str = Field(default="neo4j", alias="NEO4J_USERNAME")
@@ -123,6 +123,7 @@ class Settings(BaseSettings):
     query_result_session_ttl_seconds: int = Field(default=300, alias="QUERY_RESULT_SESSION_TTL_SECONDS")
     stream_replay_cache_ttl_seconds: int = Field(default=600, alias="STREAM_REPLAY_CACHE_TTL_SECONDS")
     stream_replay_cache_max_events: int = Field(default=1200, alias="STREAM_REPLAY_CACHE_MAX_EVENTS")
+    stream_heartbeat_seconds: float = Field(default=8.0, alias="STREAM_HEARTBEAT_SECONDS")
     shadow_queue_workers: int = Field(default=2, alias="SHADOW_QUEUE_WORKERS")
     shadow_queue_maxsize: int = Field(default=200, alias="SHADOW_QUEUE_MAXSIZE")
     synthesis_refine_max_rounds: int = Field(default=5, alias="SYNTHESIS_REFINE_MAX_ROUNDS")

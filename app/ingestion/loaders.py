@@ -479,13 +479,15 @@ def _load_single_path(path: Path) -> list[Document]:
     if suffix in IMAGE_EXTENSIONS:
         return _load_image_file(path)
 
-    loader = TextLoader(str(path), encoding="utf-8")
-    try:
-        return loader.load()
-    except UnicodeDecodeError:
-        # Fallback for common non-UTF8 text files.
-        loader = TextLoader(str(path), encoding="gb18030")
-        return loader.load()
+    for enc in ("utf-8", "gb18030"):
+        try:
+            text = path.read_text(encoding=enc)
+            return [Document(page_content=text, metadata={"source": str(path)})]
+        except UnicodeDecodeError:
+            continue
+    # Keep compatibility with custom/legacy TextLoader behavior in tests.
+    loader = TextLoader(str(path), encoding="gb18030")
+    return loader.load()
 
 
 def load_documents(data_dir: Path | None = None, paths: list[Path] | None = None) -> list[Document]:

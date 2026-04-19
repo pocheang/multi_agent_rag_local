@@ -207,6 +207,30 @@ export const appApi = {
     if (input.agentClassHint) form.append("agent_class_hint", input.agentClassHint);
     return authFetch("/query/stream", { method: "POST", body: form }, { networkRetry: 2, retryDelayMs: 350 });
   },
+  async query(input: {
+    question: string;
+    useWebFallback: boolean;
+    useReasoning: boolean;
+    sessionId: string;
+    agentClassHint?: string;
+  }) {
+    const res = await authFetch(
+      "/query",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          question: input.question,
+          use_web_fallback: input.useWebFallback,
+          use_reasoning: input.useReasoning,
+          session_id: input.sessionId,
+          agent_class_hint: input.agentClassHint || null,
+        }),
+      },
+      { networkRetry: 2, retryDelayMs: 350 },
+    );
+    return parseOrThrow<{ answer: string; route?: string }>(res);
+  },
   upload(
     files: File[],
     onProgress?: (percent: number) => void,

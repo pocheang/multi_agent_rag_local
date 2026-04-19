@@ -1,0 +1,78 @@
+{
+  "repo": "C:\\Users\\pocheang\\Desktop\\llm\\multi_agent_rag_local_v4",
+  "mode": "static",
+  "findings": [
+    {
+      "severity": "P2",
+      "title": "缺少 pre-commit 质量闸",
+      "detail": "未检测到 .pre-commit-config.yaml。",
+      "evidence": "C:\\Users\\pocheang\\Desktop\\llm\\multi_agent_rag_local_v4\\.pre-commit-config.yaml",
+      "fix": "增加 pre-commit（ruff/format/yaml checks）降低低级问题进入主干。"
+    }
+  ],
+  "blocked": [],
+  "checks": {
+    "static": {
+      "missing_required_paths": [],
+      "missing_env_keys": [],
+      "test_file_count": 41
+    },
+    "runtime_runs": []
+  },
+  "feature_suggestions": [
+    {
+      "name": "引入 pre-commit 统一质量门禁",
+      "value": "减少低级格式/静态检查问题进入主分支，提升交付稳定性。",
+      "complexity": "S",
+      "dependency": "Python tooling (ruff/format/yaml checks)"
+    },
+    {
+      "name": "建立基线性能趋势看板",
+      "value": "将 quality/perf 结果沉淀为趋势，便于容量规划与回归定位。",
+      "complexity": "M",
+      "dependency": "现有 scripts/perf_gate.py 与管理端报表接口"
+    }
+  ],
+  "roadmap": [
+    {
+      "window": "7天",
+      "goal": "风险止血与基线稳定",
+      "items": [
+        "修复 P0/P1 问题并确保 pytest + quality gate 可稳定执行",
+        "补齐环境阻塞项（依赖安装、数据集与命令可用性）"
+      ],
+      "priority": "最高",
+      "effort": "S",
+      "dependency": "开发环境与测试数据可用"
+    },
+    {
+      "window": "30天",
+      "goal": "质量体系增强",
+      "items": [
+        "落地 pre-commit 与 CI 规则收敛",
+        "前端关键路径测试覆盖"
+      ],
+      "priority": "高",
+      "effort": "M",
+      "dependency": "团队统一代码规范"
+    },
+    {
+      "window": "90天",
+      "goal": "工程化与治理升级",
+      "items": [
+        "建设质量与性能趋势看板",
+        "将审计结果接入自动化 issue/治理流程"
+      ],
+      "priority": "中",
+      "effort": "L",
+      "dependency": "管理端指标与流程平台对接"
+    }
+  ],
+  "summary": "本次审计完成模式: static。发现问题 1 项（P0=0, P1=0, P2=1），环境阻塞 0 项。建议先完成 7 天止血任务，再推进 30/90 天治理建设。",
+  "output_contract": [
+    "发现问题",
+    "可新增功能",
+    "实施计划",
+    "执行摘要"
+  ]
+}

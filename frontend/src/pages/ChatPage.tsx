@@ -540,7 +540,12 @@ export function ChatPage({ user, onLogout, themeLabel, onThemeToggle }: Props) {
         for (const part of parts) {
           const line = part.split("\n").find((x) => x.startsWith("data: "));
           if (!line) continue;
-          const evt = JSON.parse(line.slice(6));
+          let evt: any;
+          try {
+            evt = JSON.parse(line.slice(6));
+          } catch {
+            continue;
+          }
           if (evt.type === "status") {
             const nextStatus = mapRunStatus(evt.message || "");
             setRunStatus(nextStatus);
@@ -656,7 +661,30 @@ export function ChatPage({ user, onLogout, themeLabel, onThemeToggle }: Props) {
     } catch (e) {
       const fallback = "Request failed. Please check backend/model status.";
       await handleApiError(e, fallback);
-      const visibleError = e instanceof Error && e.message ? e.message : fallback;
+      const rawError = e instanceof Error && e.message ? e.message : fallback;
+      const lowered = String(rawError).toLowerCase();
+      const isNetworkDisconnect = (
+        lowered.includes("networkerror") ||
+        lowered.includes("failed to fetch") ||
+        lowered.includes("network error")
+      );
+      let visibleError = isNetworkDisconnect
+        ? "NetworkError: stream disconnected. Retrying with non-stream mode..."
+        : rawError;
+      if (isNetworkDisconnect && sid) {
+        try {
+          const fallbackRes = await appApi.query({
+            question: q,
+            useWebFallback: useWeb,
+            useReasoning,
+            sessionId: sid,
+            agentClassHint: agentClassHint || undefined,
+          });
+          visibleError = String(fallbackRes.answer || "No answer returned");
+        } catch {
+          visibleError = "NetworkError: stream disconnected. Please verify backend(8000), Ollama(11434), then retry.";
+        }
+      }
       setMessages((prev) =>
         prev.map((m) =>
           m.message_id === "local-assistant-stream"

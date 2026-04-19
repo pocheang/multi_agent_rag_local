@@ -1,0 +1,12 @@
+
+> multi-agent-rag-frontend@0.1.0 preview
+> vite preview --host 0.0.0.0 --port 4173
+
+Port 4173 is in use, trying another one...
+Port 4174 is in use, trying another one...
+  [32m➜[39m  [1mLocal[22m:   [36mhttp://localhost:[1m4175[22m/app/[39m
+  [32m➜[39m  [1mNetwork[22m: [36mhttp://198.18.0.1:[1m4175[22m/app/[39m
+  [32m➜[39m  [1mNetwork[22m: [36mhttp://172.28.160.1:[1m4175[22m/app/[39m
+  [32m➜[39m  [1mNetwork[22m: [36mhttp://192.168.89.1:[1m4175[22m/app/[39m
+  [32m➜[39m  [1mNetwork[22m: [36mhttp://192.168.6.1:[1m4175[22m/app/[39m
+  [32m➜[39m  [1mNetwork[22m: [36mhttp://192.168.8.161:[1m4175[22m/app/[39m
