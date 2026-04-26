@@ -26,6 +26,18 @@ def test_adaptive_plan_keeps_simple_vector_with_lower_threshold():
     assert plan.level == "simple"
     assert plan.route == "vector"
     assert plan.min_vector_hits == 1
+    assert plan.prefer_web is False
+
+
+def test_adaptive_plan_does_not_prefer_web_when_toggle_off():
+    plan = build_adaptive_plan(
+        question="vpn 端口是多少",
+        initial_route="vector",
+        skill="answer_with_citations",
+        use_web_fallback=False,
+        force_web=False,
+    )
+    assert plan.prefer_web is False
 
 
 def test_adaptive_plan_prefers_web_when_forced():
@@ -37,4 +49,3 @@ def test_adaptive_plan_prefers_web_when_forced():
         force_web=True,
     )
     assert plan.prefer_web is True
-

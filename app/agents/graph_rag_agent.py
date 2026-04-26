@@ -1,8 +1,24 @@
+import logging
+
 from app.tools.graph_tools import graph_lookup
+
+logger = logging.getLogger(__name__)
 
 
 def run_graph_rag(question: str, allowed_sources: list[str] | None = None) -> dict:
-    graph_result = graph_lookup(question, allowed_sources=allowed_sources)
+    try:
+        graph_result = graph_lookup(question, allowed_sources=allowed_sources)
+    except Exception as e:
+        logger.exception(f"Graph lookup failed for question: {question}")
+        return {
+            "context": "",
+            "entities": [],
+            "neighbors": [],
+            "paths": [],
+            "graph_signal_score": 0.0,
+            "error": f"graph_lookup_error:{type(e).__name__}",
+        }
+
     entities = graph_result.get("entities", [])
     neighbors = graph_result.get("neighbors", [])
     paths = graph_result.get("paths", [])

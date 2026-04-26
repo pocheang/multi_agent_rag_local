@@ -16,7 +16,7 @@ from app.services.citation_grounding import apply_sentence_grounding
 from app.services.evidence_scoring import evidence_is_sufficient
 from app.services.explainability import build_explainability_report
 from app.services.hybrid_executor import HybridExecutorRejectedError, submit_hybrid
-from app.services.query_intent import is_casual_chat_query, should_force_web_research
+from app.services.query_intent import is_casual_chat_query, quick_smalltalk_reply, should_force_web_research
 from app.services.request_context import deadline_exceeded, remaining_seconds
 from app.services.retry_policy import call_with_retry
 from app.services.resilience import call_with_circuit_breaker
@@ -31,7 +31,7 @@ def _safe_vector_result(
     retrieval_strategy: str | None = None,
 ) -> dict[str, Any]:
     try:
-        with bulkhead("llm"):
+        with bulkhead("retrieval"):
             return call_with_retry(
                 "stream.vector_rag",
                 lambda: call_with_circuit_breaker(
@@ -156,11 +156,39 @@ def run_query_stream(
     did_parallel_hybrid = False
 
     if casual_chat:
+        state["route"] = "smalltalk_fast"
+        state["reason"] = "smalltalk_fast_path"
+        state["skill"] = "smalltalk"
         state["vector_result"] = {"context": "", "citations": [], "retrieved_count": 0}
         state["graph_result"] = {"context": "", "entities": [], "neighbors": []}
         state["web_result"] = {"used": False, "citations": [], "context": ""}
         thoughts.append("[执行阶段] 检测到问候/日常闲聊，跳过检索与引用，仅进行自然对话回复。")
         yield {"type": "thought", "content": thoughts[-1]}
+
+        # Early return for casual chat - skip all retrieval and web logic
+        yield {"type": "status", "message": "smalltalk_fast"}
+        answer = quick_smalltalk_reply(question) or "你好，我在。"
+        yield {"type": "answer_chunk", "content": answer}
+        state["answer"] = answer
+        state["grounding"] = {"checked": False, "reason": "smalltalk_fast_path"}
+        state["answer_safety"] = {}
+        explainability = build_explainability_report(state)
+        final_payload = {
+            "answer": answer,
+            "route": "smalltalk_fast",
+            "reason": "smalltalk_fast_path",
+            "skill": "smalltalk",
+            "agent_class": state.get("agent_class", "general"),
+            "vector_result": state.get("vector_result", {}),
+            "graph_result": state.get("graph_result", {}),
+            "web_result": state.get("web_result", {}),
+            "grounding": state["grounding"],
+            "answer_safety": state["answer_safety"],
+            "explainability": explainability,
+            "thoughts": thoughts,
+        }
+        yield {"type": "done", "result": final_payload}
+        return final_payload
 
     if (not casual_chat) and route == "hybrid" and (not deadline_exceeded()):
         did_parallel_hybrid = True
@@ -168,38 +196,38 @@ def run_query_stream(
         timeout_s = remaining_seconds()
         if timeout_s is None:
             timeout_s = 15.0
-        timeout_s = max(0.05, float(timeout_s))
+        timeout_s = max(0.1, float(timeout_s))
         deadline = time.monotonic() + timeout_s
         fut_vector = None
         fut_graph = None
+        vector_result = {"context": "", "citations": [], "retrieved_count": 0, "error": "vector_error:Timeout"}
+        graph_result = {"context": "", "entities": [], "neighbors": [], "error": "graph_error:Timeout"}
         try:
             fut_vector = submit_hybrid(_safe_vector_result, question, allowed_sources, retrieval_strategy)
             fut_graph = submit_hybrid(_safe_graph_result, question, allowed_sources)
             try:
-                left = max(0.05, deadline - time.monotonic())
-                state["vector_result"] = fut_vector.result(timeout=left)
+                left = max(0.1, deadline - time.monotonic())
+                vector_result = fut_vector.result(timeout=left)
             except FutureTimeoutError:
                 fut_vector.cancel()
-                state["vector_result"] = {
-                    "context": "",
-                    "citations": [],
-                    "retrieved_count": 0,
-                    "error": "vector_error:Timeout",
-                }
+            except Exception as e:
+                logger.exception(f"Vector RAG failed in streaming for question: {question}")
+                vector_result = {"context": "", "citations": [], "retrieved_count": 0, "error": f"vector_error:{type(e).__name__}"}
+            state["vector_result"] = vector_result
             try:
-                left = max(0.05, deadline - time.monotonic())
-                state["graph_result"] = fut_graph.result(timeout=left)
+                left = max(0.1, deadline - time.monotonic())
+                graph_result = fut_graph.result(timeout=left)
             except FutureTimeoutError:
                 fut_graph.cancel()
-                state["graph_result"] = {
-                    "context": "",
-                    "entities": [],
-                    "neighbors": [],
-                    "error": "graph_error:Timeout",
-                }
+            except Exception as e:
+                logger.exception(f"Graph RAG failed in streaming for question: {question}")
+                graph_result = {"context": "", "entities": [], "neighbors": [], "error": f"graph_error:{type(e).__name__}"}
+            state["graph_result"] = graph_result
         except HybridExecutorRejectedError:
             if fut_vector is not None:
                 fut_vector.cancel()
+            if fut_graph is not None:
+                fut_graph.cancel()
             state["vector_result"] = {
                 "context": "",
                 "citations": [],
@@ -238,11 +266,16 @@ def run_query_stream(
             thoughts.append(f"本地图谱检索异常，已降级继续: {state['graph_result']['error']}")
             yield {"type": "thought", "content": thoughts[-1]}
         entity_count = len(state["graph_result"].get("entities", []))
-        thoughts.append(f"[执行阶段] 本地图谱实体命中: {entity_count} 个。")
+        neighbor_count = len(state["graph_result"].get("neighbors", []))
+        path_count = len(state["graph_result"].get("paths", []))
+        thoughts.append(f"[执行阶段] 本地图谱命中: {entity_count} 个实体, {neighbor_count} 个邻居关系, {path_count} 条路径。")
         yield {"type": "thought", "content": thoughts[-1]}
         yield {
             "type": "graph_result",
             "entities": state["graph_result"].get("entities", []),
+            "neighbors": state["graph_result"].get("neighbors", []),
+            "paths": state["graph_result"].get("paths", []),
+            "context": state["graph_result"].get("context", ""),
         }
 
     if (not casual_chat) and route in {"vector", "hybrid"} and (not did_parallel_hybrid) and (not deadline_exceeded()):
@@ -282,42 +315,61 @@ def run_query_stream(
             thoughts.append(f"本地图谱检索异常，已降级继续: {state['graph_result']['error']}")
             yield {"type": "thought", "content": thoughts[-1]}
         entity_count = len(state["graph_result"].get("entities", []))
-        thought = f"[执行阶段] 本地图谱实体命中: {entity_count} 个。"
+        neighbor_count = len(state["graph_result"].get("neighbors", []))
+        path_count = len(state["graph_result"].get("paths", []))
+        thought = f"[执行阶段] 本地图谱命中: {entity_count} 个实体, {neighbor_count} 个邻居关系, {path_count} 条路径。"
         thoughts.append(thought)
         yield {"type": "thought", "content": thought}
         yield {
             "type": "graph_result",
             "entities": state["graph_result"].get("entities", []),
+            "neighbors": state["graph_result"].get("neighbors", []),
+            "paths": state["graph_result"].get("paths", []),
+            "context": state["graph_result"].get("context", ""),
         }
 
     need_web = False
     force_web = bool(state.get("adaptive_prefer_web", False))
     if casual_chat:
         need_web = False
-    elif use_web_fallback and force_web:
+    elif force_web:
+        # User explicitly enabled web or query has time-sensitive intent
         need_web = True
-        thoughts.append("[执行阶段] 检测到用户明确联网/时效性意图，优先触发联网补充。")
+        thoughts.append("[执行阶段] 用户开启联网增强或检测到时效性意图，强制触发联网补充。")
         yield {"type": "thought", "content": thoughts[-1]}
     elif route == "vector":
         min_hits = int(state.get("adaptive_min_vector_hits", 2) or 2)
-        vector_result = state.get("vector_result", {})
-        need_web = (not evidence_is_sufficient(vector_result, {}, route="vector", min_hits=min_hits)) and use_web_fallback
+        vector_result = state.get("vector_result")
+        if vector_result:
+            need_web = (not evidence_is_sufficient(vector_result, {}, route="vector", min_hits=min_hits)) and use_web_fallback
+        else:
+            need_web = use_web_fallback
     elif route == "graph":
-        need_web = (
-            not evidence_is_sufficient({}, state.get("graph_result", {}), route="graph", min_hits=2)
-            and use_web_fallback
-        )
+        min_hits = int(state.get("adaptive_min_vector_hits", 2) or 2)
+        graph_result = state.get("graph_result")
+        if graph_result:
+            need_web = (
+                not evidence_is_sufficient({}, graph_result, route="graph", min_hits=min_hits)
+                and use_web_fallback
+            )
+        else:
+            need_web = use_web_fallback
     elif route == "hybrid":
         min_hits = int(state.get("adaptive_min_vector_hits", 2) or 2)
-        need_web = (
-            not evidence_is_sufficient(
-                state.get("vector_result", {}),
-                state.get("graph_result", {}),
-                route="hybrid",
-                min_hits=min_hits,
+        vector_result = state.get("vector_result")
+        graph_result = state.get("graph_result")
+        if vector_result or graph_result:
+            need_web = (
+                not evidence_is_sufficient(
+                    vector_result or {},
+                    graph_result or {},
+                    route="hybrid",
+                    min_hits=min_hits,
+                )
+                and use_web_fallback
             )
-            and use_web_fallback
-        )
+        else:
+            need_web = use_web_fallback
 
     if deadline_exceeded():
         state.setdefault("web_result", {"used": False, "citations": [], "context": ""})
@@ -388,6 +440,7 @@ def run_query_stream(
     except Exception as e:
         logger.exception(f"Streaming synthesis crashed for question: {question}")
         stream_failed = True
+        answer_parts = []  # Clear potentially corrupted partial answer
         thoughts.append(f"生成阶段异常，已降级返回兜底答案: {type(e).__name__}")
         yield {"type": "thought", "content": thoughts[-1]}
 

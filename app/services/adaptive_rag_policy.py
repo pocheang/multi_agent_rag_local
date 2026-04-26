@@ -37,9 +37,10 @@ def _estimate_complexity_level(question: str) -> str:
         if re.search(pattern, q, flags=re.IGNORECASE):
             return "medium"
     token_count = len(re.findall(r"[A-Za-z0-9_]+|[\u4e00-\u9fff]", q))
-    if token_count >= 40:
+    # Align with hybrid_retriever complexity detection threshold
+    if token_count >= 28:
         return "complex"
-    if token_count >= 18:
+    if token_count >= 15:
         return "medium"
     return "simple"
 
@@ -66,7 +67,10 @@ def build_adaptive_plan(
     else:
         min_hits = 3
 
-    prefer_web = bool(use_web_fallback and (force_web or skill == "web_fact_check"))
+    # When user explicitly enables web fallback, treat it as "always use web"
+    # force_web is for time-sensitive queries detected by router
+    # use_web_fallback is the user's explicit toggle
+    prefer_web = bool(use_web_fallback or force_web)
     reason = (
         f"adaptive_level={level}"
         f" | adaptive_route={route}"

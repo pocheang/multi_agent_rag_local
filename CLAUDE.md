@@ -4,14 +4,15 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Multi-Agent Local RAG system (v0.2.2.1) - A production-grade retrieval-augmented generation platform with FastAPI backend, React frontend, and Neo4j graph database integration.
+Multi-Agent Local RAG system (v0.2.4) - A production-grade retrieval-augmented generation platform with FastAPI backend, React frontend, and Neo4j graph database integration.
 
 **Core Architecture:**
 - **Backend**: FastAPI with LangGraph-based multi-agent workflow orchestration
 - **Frontend**: React + Vite + TypeScript
 - **Retrieval**: Hybrid system combining vector search (ChromaDB), BM25, and reranking
 - **Graph**: Neo4j for knowledge graph extraction and traversal
-- **LLM Backends**: Supports both OpenAI (default: gpt-5.4-codex) and Ollama
+- **LLM Backends**: Supports OpenAI (default: gpt-5.4-codex), Anthropic Claude, and Ollama
+- **Tiered Execution**: Query complexity classification with latency budget enforcement (fast/balanced/deep tiers)
 
 ## Development Commands
 
@@ -104,6 +105,32 @@ Located in `app/retrievers/hybrid_retriever.py`:
 - **Parent-Child Chunking**: Small chunks for retrieval, large parent chunks for context
 - **Dynamic Retrieval**: Adjusts top_k based on query complexity
 - **Retrieval Caching**: TTL-based cache (memory or Redis) for repeated queries
+- **Tier-Aware Execution**: Budget enforcement per tier (fast: 5/3, balanced: 10/5, deep: 20/10 for top_k/rerank)
+
+### Tiered Execution System (v0.2.4)
+
+The system implements intelligent query routing with latency budget enforcement:
+
+**Tier Classification** (`app/services/tier_classifier.py` - planned):
+- **Fast Tier**: Simple factual queries, single-entity lookup, high doc hit likelihood (>0.8), query length <50 tokens
+- **Balanced Tier**: Default for most queries, moderate complexity
+- **Deep Tier**: Multi-hop reasoning, low doc hit likelihood (<0.3), explicit comprehensive answer requests
+
+**Latency Budget Manager** (`app/services/budget_policy.py` - planned):
+- **Fast**: retrieval_top_k=5, rerank_top_k=3, max_retrieval_time=800ms, max_synthesis_tokens=300, web_fallback=disabled
+- **Balanced**: retrieval_top_k=10, rerank_top_k=5, max_retrieval_time=2000ms, max_synthesis_tokens=800, web_fallback=conditional
+- **Deep**: retrieval_top_k=20, rerank_top_k=10, max_retrieval_time=5000ms, max_synthesis_tokens=1500, web_fallback=enabled
+
+**Load-Based Degradation**:
+- System load >80%: Automatic tier downgrade by one level
+- System load >95%: Force all queries to fast tier
+
+**UX Telemetry**:
+- First token latency tracking (P50 ≤ 2s, P95 ≤ 4s targets)
+- Tier distribution monitoring (fast/balanced/deep percentages)
+- Tier confidence scoring and misclassification detection
+- Citation coverage per tier
+- Re-ask rate tracking (query similarity >0.7 within 5min window)
 
 ### Runtime Resilience Modules
 
@@ -130,7 +157,7 @@ The system includes production-grade resilience patterns in `app/services/`:
 
 Settings loaded from `.env` via Pydantic (`app/core/config.py`):
 
-- **Model Backends**: Switch between OpenAI and Ollama via `MODEL_BACKEND`
+- **Model Backends**: Switch between OpenAI, Anthropic Claude, and Ollama via `MODEL_BACKEND`
 - **Retrieval Profiles**: `baseline`, `advanced`, `safe` - control retrieval aggressiveness
 - **Feature Flags**: Enable/disable query rewriting, decomposition, dynamic retrieval, etc.
 - **Observability**: OpenTelemetry tracing, Prometheus metrics at `/metrics`
@@ -158,11 +185,13 @@ React SPA in `frontend/src/`:
 ## Key Design Patterns
 
 1. **Adaptive RAG**: System adjusts retrieval strategy based on query complexity and available evidence
-2. **Evidence Grounding**: Answers are grounded with citations and conflict detection
-3. **Safety Scanning**: Answer safety checks before returning to user
-4. **Explainability**: Each response includes reasoning trace and retrieval metadata
-5. **Source Allowlisting**: Users can restrict retrieval to specific document sources
-6. **Consistency Guard**: Detects and flags inconsistent responses across retries
+2. **Tiered Execution**: Query complexity classification with hard latency budgets (fast/balanced/deep)
+3. **Evidence Grounding**: Answers are grounded with citations and conflict detection
+4. **Safety Scanning**: Answer safety checks before returning to user
+5. **Explainability**: Each response includes reasoning trace and retrieval metadata
+6. **Source Allowlisting**: Users can restrict retrieval to specific document sources
+7. **Consistency Guard**: Detects and flags inconsistent responses across retries
+8. **Load-Based Degradation**: Automatic tier downgrade under high system load (>80%)
 
 ## Testing Strategy
 
@@ -177,7 +206,7 @@ Tests in `tests/` directory:
 ## Important Notes
 
 - **Neo4j Required**: Backend will not start without Neo4j connection
-- **Model Backend**: Default is OpenAI (requires `OPENAI_API_KEY`). Set `MODEL_BACKEND=ollama` for local models
+- **Model Backend**: Default is Anthropic Claude (requires `ANTHROPIC_API_KEY`). Set `MODEL_BACKEND=openai` for OpenAI or `MODEL_BACKEND=ollama` for local models
 - **Data Directories**: `data/docs` (source documents), `data/chroma` (vector store), `data/sessions` (chat history)
 - **Chunk Stores**: `data/chunks/chunks.jsonl` (child chunks), `data/chunks/parents.jsonl` (parent chunks)
 - **Auto-Ingestion**: When enabled, watches `data/docs` and `data/uploads` for new files

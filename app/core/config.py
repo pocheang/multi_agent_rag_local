@@ -23,6 +23,10 @@ class Settings(BaseSettings):
     openai_embed_model: str = Field(default="text-embedding-3-small", alias="OPENAI_EMBED_MODEL")
     openai_reasoning_model: str = Field(default="gpt-5.4-codex", alias="OPENAI_REASONING_MODEL")
 
+    anthropic_api_key: str | None = Field(default=None, alias="ANTHROPIC_API_KEY")
+    anthropic_chat_model: str = Field(default="claude-sonnet-4-6", alias="ANTHROPIC_CHAT_MODEL")
+    anthropic_reasoning_model: str = Field(default="claude-sonnet-4-6", alias="ANTHROPIC_REASONING_MODEL")
+
     neo4j_uri: str = Field(default="bolt://localhost:7687", alias="NEO4J_URI")
     neo4j_username: str = Field(default="neo4j", alias="NEO4J_USERNAME")
     neo4j_password: str = Field(default="", alias="NEO4J_PASSWORD")
@@ -145,6 +149,10 @@ class Settings(BaseSettings):
     response_signing_secret: str = Field(default="", alias="RESPONSE_SIGNING_SECRET")
     response_signing_active_kid: str = Field(default="v1", alias="RESPONSE_SIGNING_ACTIVE_KID")
     response_signing_keys: str = Field(default="", alias="RESPONSE_SIGNING_KEYS")  # kid:secret;kid2:secret2
+    api_settings_encryption_key: str = Field(default="", alias="API_SETTINGS_ENCRYPTION_KEY")
+    api_base_url_allowlist: str = Field(default="", alias="API_BASE_URL_ALLOWLIST")  # csv host suffixes
+    api_base_url_allow_private: bool = Field(default=False, alias="API_BASE_URL_ALLOW_PRIVATE")
+    api_base_url_dns_check: bool = Field(default=True, alias="API_BASE_URL_DNS_CHECK")
     quota_enabled: bool = Field(default=False, alias="QUOTA_ENABLED")
     quota_query_max_per_minute: int = Field(default=120, alias="QUOTA_QUERY_MAX_PER_MINUTE")
     quota_web_max_per_minute: int = Field(default=30, alias="QUOTA_WEB_MAX_PER_MINUTE")

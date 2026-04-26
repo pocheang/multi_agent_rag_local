@@ -42,9 +42,9 @@ Latency targets:
 - End-to-end answer latency: P50 <= 12s (balanced target)
 
 Quality guardrails:
-- Citation coverage must not regress vs current baseline
-- Re-ask rate for same intent within 5 minutes must not increase
-- Factual error rate must not increase
+- Citation coverage must not regress vs current baseline (≥85% of answers must include at least one citation)
+- Re-ask rate: <15% of queries result in follow-up clarification within 5 minutes (measured via session continuity and query similarity >0.7 using embedding distance)
+- Factual error rate: <2% based on automated fact-checking against source documents and manual spot-checks (sample 100 queries per week)
 
 Perceived UX improvements:
 - User sees current execution tier and expected timing range
@@ -75,10 +75,22 @@ Input:
 - Session context
 - Intent/routing signal
 - Evidence hints (doc hit likelihood)
+- Current system load signal
 
 Output:
 - `tier`: `fast | balanced | deep`
 - `tier_reason`: structured reason string(s) for observability
+- `tier_confidence`: float [0.0-1.0] for monitoring misclassification
+
+Classification Logic:
+- **Fast tier triggers**: Simple factual queries, single-entity lookup, high doc hit likelihood (>0.8), query length <50 tokens
+- **Deep tier triggers**: Multi-hop reasoning required, low doc hit likelihood (<0.3), explicit user request for comprehensive answer, query contains "explain in detail/compare/analyze"
+- **Balanced tier**: Default fallback for all other cases
+
+Security:
+- Rate limit tier classification to prevent DoS via repeated deep tier triggers (max 3 deep queries per user per minute)
+- Input sanitization before classification to prevent prompt injection
+- Tier override requires explicit user action (not automatic escalation)
 
 Placement:
 - After intent/router inference, before retrieval execution.
@@ -91,7 +103,37 @@ Input:
 - Request toggles (`use_web_fallback`, `use_reasoning`)
 
 Output:
-- Per-request budget contract (e.g., retrieval depth, rerank intensity, web timeout, token caps, retry caps)
+- Per-request budget contract with concrete limits:
+
+**Fast Tier Budget:**
+- `retrieval_top_k`: 5
+- `rerank_top_k`: 3
+- `max_retrieval_time_ms`: 800
+- `max_synthesis_tokens`: 300
+- `web_fallback_enabled`: false
+- `max_retry_attempts`: 1
+
+**Balanced Tier Budget:**
+- `retrieval_top_k`: 10
+- `rerank_top_k`: 5
+- `max_retrieval_time_ms`: 2000
+- `max_synthesis_tokens`: 800
+- `web_fallback_enabled`: true (conditional)
+- `web_fallback_timeout_ms`: 3000
+- `max_retry_attempts`: 2
+
+**Deep Tier Budget:**
+- `retrieval_top_k`: 20
+- `rerank_top_k`: 10
+- `max_retrieval_time_ms`: 5000
+- `max_synthesis_tokens`: 1500
+- `web_fallback_enabled`: true
+- `web_fallback_timeout_ms`: 8000
+- `max_retry_attempts`: 3
+
+Load-based Degradation:
+- When system load >80%, automatically downgrade tier by one level
+- When load >95%, force all queries to fast tier
 
 Purpose:
 - Enforce predictable latency with hard limits instead of soft heuristics.
@@ -99,9 +141,15 @@ Purpose:
 ### 5.3 RetrievalExecutor (enhanced)
 
 Behavior by tier:
-- `fast`: shallow retrieval, light rerank, web fallback mostly off
-- `balanced`: moderate retrieval and rerank, conditional web fallback
-- `deep`: richer retrieval and stronger synthesis depth
+- `fast`: shallow retrieval, light rerank, web fallback disabled
+- `balanced`: moderate retrieval and rerank, conditional web fallback (only when local evidence score <0.5)
+- `deep`: richer retrieval and stronger synthesis depth, web fallback enabled
+
+Web Fallback Trigger Logic (balanced/deep tiers):
+- Local evidence confidence score <0.5
+- Query contains temporal keywords ("latest", "recent", "current", "2026")
+- Explicit user request for web search
+- Document corpus last updated >30 days ago for time-sensitive queries
 
 Reuse existing modules:
 - `hybrid_retriever`, `reranker`, `adaptive_rag_policy`, `query_guard`
@@ -116,25 +164,33 @@ Tier-aligned answer framing:
 ### 5.5 UX Telemetry (new)
 
 Frontend:
-- Display current tier
-- Display stage status and expected latency band
+- Display current tier with visual indicator (fast=green, balanced=blue, deep=purple)
+- Display stage status and expected latency band (e.g., "Retrieving documents: 1-3s expected")
+- Allow user manual tier override via settings (persisted per session)
+- Show tier confidence score when <0.7 to indicate uncertainty
 
 Backend metrics:
-- first_token_ms, full_answer_ms
-- tier distribution
-- fallback trigger reasons
-- citation coverage
-- re-ask signal
+- first_token_ms, full_answer_ms (P50, P95, P99)
+- tier distribution (fast/balanced/deep percentages)
+- tier_misclassification_rate (user manual overrides / total queries)
+- tier_confidence_distribution
+- fallback trigger reasons and frequency
+- citation coverage per tier
+- re-ask signal (query similarity >0.7 within 5min window)
+- budget_exceeded_count per tier and component
+- load_based_degradation_count
 
 ## 6. End-to-End Request Flow
 
-1. User sends query; UI immediately shows "classifying query complexity" status.
-2. Backend computes `tier + budget` and returns early metadata.
-3. Retrieval executes under budget contract.
-4. If local evidence is insufficient and conditions match, web fallback runs with strict timeout.
-5. Streaming output sends answer skeleton first, then evidence/citations.
-6. If later evidence conflicts with earlier conclusion, explicit correction note is emitted.
-7. Final metadata persists for analytics and tuning.
+1. User sends query; UI immediately shows "classifying query complexity" status with tier icon placeholder.
+2. Backend computes `tier + budget` and returns early metadata via response headers (`X-Query-Tier`, `X-Tier-Confidence`).
+3. UI updates to show confirmed tier (fast=green, balanced=blue, deep=purple) and expected latency range.
+4. Retrieval executes under budget contract with timeout enforcement.
+5. If local evidence confidence <0.5 and tier allows, web fallback runs with strict timeout (non-blocking).
+6. Streaming output sends answer skeleton first, then evidence/citations progressively.
+7. If later evidence conflicts with earlier conclusion, explicit correction note is emitted with conflict explanation.
+8. Final metadata (tier, confidence, actual latency, citation count, fallback status) persists for analytics and A/B testing.
+9. If user manually overrides tier during session, preference is saved and applied to subsequent queries in same session.
 
 ## 7. Failure Handling and Degradation
 
@@ -185,19 +241,47 @@ Backend metrics:
 
 - Must be incremental over current `v0.2.4` architecture.
 - Must preserve existing auth/rbac and admin governance boundaries.
-- Must keep `/query` streaming behavior contract backward-compatible.
-- Must keep current runtime profile mechanism usable by ops.
+- Must keep `/query` streaming behavior contract backward-compatible:
+  - Response format remains unchanged for clients not requesting tier metadata
+  - New tier metadata added as optional fields in response headers: `X-Query-Tier`, `X-Tier-Confidence`
+  - Existing clients ignore new headers; new clients can opt-in to tier awareness
+- Must keep current runtime profile mechanism usable by ops:
+  - New tier system operates independently from existing `fast/balanced/deep` profiles
+  - Profiles control retrieval strategy; tiers control latency budgets
+  - When both are specified, tier budget takes precedence for timeout/token limits
+  - Migration path: profiles will be deprecated in v0.3.0 after tier system stabilizes
 
 ## 10. Risks and Mitigation
 
 Risk 1: Over-optimization for speed reduces answer quality
-- Mitigation: hard quality guardrails and release gates
+- Mitigation: Hard quality guardrails (citation ≥85%, factual error <2%) and release gates
+- Mitigation: A/B testing framework to compare tier performance against baseline
+- Mitigation: Weekly quality spot-checks (100 samples) with human review
 
 Risk 2: Tier policy drift over time
-- Mitigation: tier reason logging + periodic replay validation
+- Mitigation: Tier reason logging + periodic replay validation
+- Mitigation: Monthly tier classification audit using held-out test set
+- Mitigation: Alert when tier distribution shifts >15% week-over-week
 
 Risk 3: User confusion when behavior differs by query
-- Mitigation: clear tier/status cues in chat UI
+- Mitigation: Clear tier/status cues in chat UI with visual indicators
+- Mitigation: User education tooltip on first tier display
+- Mitigation: Allow manual tier override with preference persistence
+
+Risk 4: Tier classifier exploitation (DoS via deep tier abuse)
+- Mitigation: Rate limiting (max 3 deep queries per user per minute)
+- Mitigation: Load-based automatic tier degradation (>80% load → downgrade one level)
+- Mitigation: Admin dashboard to monitor tier abuse patterns
+
+Risk 5: Budget timeout causing incomplete answers
+- Mitigation: Graceful degradation with partial results + "incomplete" flag
+- Mitigation: Suggest tier upgrade when timeout occurs repeatedly
+- Mitigation: Log timeout patterns for budget tuning
+
+Risk 6: Backward compatibility break for existing API clients
+- Mitigation: Tier metadata in optional response headers only
+- Mitigation: Existing clients ignore new headers without breaking
+- Mitigation: Versioned API endpoint (/v2/query) for tier-aware clients if needed
 
 ## 11. Deliverables for Next Phase
 

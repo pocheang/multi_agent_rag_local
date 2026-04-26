@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "multi-agent-local-rag"
-version = "0.2.2.1"
+version = "0.2.4"
 description = "Local multi-agent RAG system with LangGraph, Chroma, Neo4j, and web fallback"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -22,6 +22,7 @@ dependencies = [
   "chromadb>=0.5.5",
   "neo4j>=5.24.0",
   "langchain-openai>=0.2.0",
+  "langchain-anthropic>=0.3.0",
   "langchain-ollama>=0.2.0",
   "pypdf>=5.0.0",
   "Pillow>=10.0.0",

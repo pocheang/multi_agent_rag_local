@@ -1,4 +1,4 @@
-﻿from pathlib import Path
+from pathlib import Path
 
 
 def detect_selected_pdfs(question: str, pdf_names: list[str]) -> list[str]:

@@ -1,5 +1,7 @@
+import base64
 import hashlib
 import hmac
+import json
 import secrets
 import sqlite3
 import threading
@@ -10,6 +12,8 @@ from typing import Any
 
 from app.core.config import get_settings
 from app.services.alerting import resolve_signing_secret, sign_payload
+
+_API_KEY_ENC_PREFIX = "enc:v1:"
 
 
 def _now() -> datetime:
@@ -99,6 +103,47 @@ def _classify_audit_event(action: str, result: str) -> tuple[str, str]:
     return category, severity
 
 
+def _stream_xor(data: bytes, key: bytes, nonce: bytes) -> bytes:
+    out = bytearray()
+    counter = 0
+    while len(out) < len(data):
+        block = hmac.new(key, nonce + counter.to_bytes(8, "big"), hashlib.sha256).digest()
+        out.extend(block)
+        counter += 1
+    return bytes(a ^ b for a, b in zip(data, out[: len(data)]))
+
+
+def _encrypt_secret_text(plaintext: str, key: bytes) -> str:
+    if not plaintext:
+        return ""
+    nonce = secrets.token_bytes(16)
+    cipher = _stream_xor(plaintext.encode("utf-8"), key, nonce)
+    tag = hmac.new(key, nonce + cipher, hashlib.sha256).digest()[:16]
+    token = base64.urlsafe_b64encode(nonce + tag + cipher).decode("ascii")
+    return f"{_API_KEY_ENC_PREFIX}{token}"
+
+
+def _decrypt_secret_text(value: str, key: bytes) -> str:
+    text = str(value or "")
+    if not text:
+        return ""
+    if not text.startswith(_API_KEY_ENC_PREFIX):
+        # Backward-compatible read path for legacy plaintext.
+        return text
+    raw = text[len(_API_KEY_ENC_PREFIX) :]
+    decoded = base64.urlsafe_b64decode(raw.encode("ascii"))
+    if len(decoded) < 32:
+        raise ValueError("invalid encrypted payload")
+    nonce = decoded[:16]
+    tag = decoded[16:32]
+    cipher = decoded[32:]
+    expected = hmac.new(key, nonce + cipher, hashlib.sha256).digest()[:16]
+    if not hmac.compare_digest(tag, expected):
+        raise ValueError("encrypted payload integrity check failed")
+    plain = _stream_xor(cipher, key, nonce)
+    return plain.decode("utf-8")
+
+
 class AuthDBService:
     def __init__(self, db_path: Path | None = None, token_ttl_hours: int | None = None):
         settings = get_settings()
@@ -106,7 +151,53 @@ class AuthDBService:
         self.token_ttl_hours = token_ttl_hours or settings.auth_token_ttl_hours
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
         self._audit_lock = threading.Lock()
+        self._api_settings_key_lock = threading.Lock()
+        self._api_settings_key: bytes | None = None
         self._init_schema()
+
+    def _api_settings_key_path(self) -> Path:
+        return self.db_path.parent / ".api_settings.key"
+
+    def _api_settings_data_key(self) -> bytes:
+        if self._api_settings_key is not None:
+            return self._api_settings_key
+        with self._api_settings_key_lock:
+            if self._api_settings_key is not None:
+                return self._api_settings_key
+            settings = get_settings()
+            seed = str(getattr(settings, "api_settings_encryption_key", "") or "").strip()
+            if not seed:
+                key_path = self._api_settings_key_path()
+                if key_path.exists():
+                    seed = str(key_path.read_text(encoding="utf-8") or "").strip()
+                if not seed:
+                    seed = secrets.token_urlsafe(48)
+                    key_path.write_text(seed, encoding="utf-8")
+            self._api_settings_key = hashlib.sha256(seed.encode("utf-8")).digest()
+            return self._api_settings_key
+
+    def _encrypt_api_settings_payload(self, payload: dict[str, Any]) -> dict[str, Any]:
+        out = dict(payload)
+        api_key = str(out.get("api_key", "") or "").strip()
+        if not api_key:
+            out["api_key"] = ""
+            return out
+        if api_key.startswith(_API_KEY_ENC_PREFIX):
+            return out
+        out["api_key"] = _encrypt_secret_text(api_key, self._api_settings_data_key())
+        return out
+
+    def _decrypt_api_settings_payload(self, payload: dict[str, Any]) -> dict[str, Any]:
+        out = dict(payload)
+        raw_key = str(out.get("api_key", "") or "")
+        if not raw_key:
+            out["api_key"] = ""
+            return out
+        try:
+            out["api_key"] = _decrypt_secret_text(raw_key, self._api_settings_data_key())
+        except Exception:
+            out["api_key"] = ""
+        return out
 
     def _connect(self) -> sqlite3.Connection:
         settings = get_settings()
@@ -177,6 +268,15 @@ class AuthDBService:
             self._ensure_audit_columns(conn)
             conn.execute("CREATE INDEX IF NOT EXISTS idx_audit_logs_actor ON audit_logs(actor_user_id)")
             conn.execute("CREATE INDEX IF NOT EXISTS idx_audit_logs_created ON audit_logs(created_at)")
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS system_settings (
+                  key TEXT PRIMARY KEY,
+                  value TEXT NOT NULL,
+                  updated_at TEXT NOT NULL
+                )
+                """
+            )
 
     def _ensure_users_columns(self, conn: sqlite3.Connection) -> None:
         rows = conn.execute("PRAGMA table_info(users)").fetchall()
@@ -201,6 +301,8 @@ class AuthDBService:
             conn.execute("ALTER TABLE users ADD COLUMN user_type TEXT")
         if "data_scope" not in existing:
             conn.execute("ALTER TABLE users ADD COLUMN data_scope TEXT")
+        if "settings" not in existing:
+            conn.execute("ALTER TABLE users ADD COLUMN settings TEXT")
 
     def _ensure_audit_columns(self, conn: sqlite3.Connection) -> None:
         rows = conn.execute("PRAGMA table_info(audit_logs)").fetchall()
@@ -753,3 +855,76 @@ class AuthDBService:
         with self._connect() as conn:
             row = conn.execute("SELECT COUNT(*) AS c FROM auth_sessions WHERE expires_at > ?", (now,)).fetchone()
             return int(row["c"]) if row else 0
+
+    def get_user_metadata(self, user_id: str, key: str) -> dict[str, Any] | None:
+        """Get user metadata by key from settings JSON column"""
+        with self._connect() as conn:
+            row = conn.execute("SELECT settings FROM users WHERE user_id = ?", (user_id,)).fetchone()
+            if not row or not row["settings"]:
+                return None
+            try:
+                settings_data = json.loads(row["settings"])
+                value = settings_data.get(key)
+                if key == "api_settings" and isinstance(value, dict):
+                    return self._decrypt_api_settings_payload(value)
+                return value
+            except (json.JSONDecodeError, AttributeError):
+                return None
+
+    def set_user_metadata(self, user_id: str, key: str, value: dict[str, Any]) -> None:
+        """Set user metadata by key in settings JSON column"""
+        with self._connect() as conn:
+            row = conn.execute("SELECT settings FROM users WHERE user_id = ?", (user_id,)).fetchone()
+            if not row:
+                raise ValueError("user not found")
+
+            # Load existing settings or create new dict
+            try:
+                settings = json.loads(row["settings"]) if row["settings"] else {}
+            except (json.JSONDecodeError, AttributeError):
+                settings = {}
+
+            # Update the key
+            to_store = dict(value)
+            if key == "api_settings":
+                to_store = self._encrypt_api_settings_payload(to_store)
+            settings[key] = to_store
+
+            # Save back to database
+            conn.execute(
+                "UPDATE users SET settings = ? WHERE user_id = ?",
+                (json.dumps(settings), user_id)
+            )
+            conn.commit()
+
+    def get_system_metadata(self, key: str) -> dict[str, Any] | None:
+        """Get encrypted application-level metadata by key."""
+        with self._connect() as conn:
+            row = conn.execute("SELECT value FROM system_settings WHERE key = ?", (key,)).fetchone()
+            if not row or not row["value"]:
+                return None
+            try:
+                value = json.loads(row["value"])
+                if key == "global_model_settings" and isinstance(value, dict):
+                    return self._decrypt_api_settings_payload(value)
+                return value
+            except (json.JSONDecodeError, AttributeError):
+                return None
+
+    def set_system_metadata(self, key: str, value: dict[str, Any]) -> None:
+        """Set encrypted application-level metadata by key."""
+        to_store = dict(value)
+        if key == "global_model_settings":
+            to_store = self._encrypt_api_settings_payload(to_store)
+        with self._connect() as conn:
+            conn.execute(
+                """
+                INSERT INTO system_settings (key, value, updated_at)
+                VALUES (?, ?, ?)
+                ON CONFLICT(key) DO UPDATE SET
+                  value = excluded.value,
+                  updated_at = excluded.updated_at
+                """,
+                (key, json.dumps(to_store), _iso(_now())),
+            )
+            conn.commit()

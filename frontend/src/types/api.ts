@@ -26,6 +26,8 @@ export type Citation = {
 
 export type SessionMessageMetadata = {
   route?: string;
+  execution_route?: string;
+  retrieval_strategy?: string;
   agent_class?: string;
   web_used?: boolean;
   latency_ms?: number;
@@ -190,6 +192,7 @@ export type OpsOverview = {
     ollama_base_url?: string;
     ollama_chat_model?: string;
     ollama_embed_model?: string;
+    global_model_settings?: AdminModelSettingsView;
     recent_errors?: Array<{
       created_at: string;
       level: string;
@@ -209,6 +212,20 @@ export type OpsOverview = {
     actor_user_id?: string;
     action_keyword?: string;
   };
+};
+
+export type AdminModelSettingsView = {
+  enabled: boolean;
+  provider: string;
+  api_key_masked: string;
+  base_url: string;
+  chat_model: string;
+  reasoning_model: string;
+  embedding_model: string;
+  temperature: number;
+  max_tokens: number;
+  embedding_reindexed?: boolean;
+  records_reindexed?: number;
 };
 
 export type RetrievalProfileState = {

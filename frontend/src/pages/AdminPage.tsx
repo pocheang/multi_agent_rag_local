@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { ApiError, appApi } from "@/lib/api";
 import type {
   AdminUserSummary,
+  AdminModelSettingsView,
   AuditLogEntry,
   AuthUser,
   BenchmarkTrendItem,
@@ -12,10 +13,20 @@ import type {
 } from "@/types/api";
 
 type Props = { user: AuthUser | null; onLogout: () => Promise<void>; themeLabel: string; onThemeToggle: () => void };
-type Section = "ops" | "rag" | "admins" | "users" | "audit" | "syslog";
+type Section = "ops" | "rag" | "models" | "admins" | "users" | "audit" | "syslog";
+type ModelProvider = "local" | "ollama" | "openai" | "deepseek" | "anthropic" | "custom";
 
 const ROLE_OPTIONS = ["viewer", "analyst"];
 const STATUS_OPTIONS = ["active", "disabled"];
+const MODEL_PROVIDERS: ModelProvider[] = ["local", "ollama", "openai", "deepseek", "anthropic", "custom"];
+const MODEL_DEFAULTS: Record<ModelProvider, Pick<AdminModelSettingsView, "base_url" | "chat_model" | "reasoning_model" | "embedding_model">> = {
+  local: { base_url: "", chat_model: "local-evidence", reasoning_model: "local-evidence", embedding_model: "local-hash-384" },
+  ollama: { base_url: "http://localhost:11434", chat_model: "qwen2.5:7b-instruct", reasoning_model: "qwen2.5:7b-instruct", embedding_model: "nomic-embed-text" },
+  openai: { base_url: "https://api.openai.com/v1", chat_model: "gpt-5.4-codex", reasoning_model: "gpt-5.4-codex", embedding_model: "text-embedding-3-small" },
+  deepseek: { base_url: "https://api.deepseek.com/v1", chat_model: "deepseek-chat", reasoning_model: "deepseek-reasoner", embedding_model: "text-embedding-3-small" },
+  anthropic: { base_url: "https://api.anthropic.com/v1", chat_model: "claude-sonnet-4-6", reasoning_model: "claude-sonnet-4-6", embedding_model: "" },
+  custom: { base_url: "", chat_model: "", reasoning_model: "", embedding_model: "" },
+};
 const ACTION_KEYWORD_OPTIONS = [
   "auth.login",
   "auth.logout",
@@ -74,6 +85,12 @@ export function AdminPage({ user, onLogout, themeLabel, onThemeToggle }: Props) 
   const [profileState, setProfileState] = useState<RetrievalProfileState | null>(null);
   const [benchmarkTrends, setBenchmarkTrends] = useState<BenchmarkTrendItem[]>([]);
   const [benchmarkRunning, setBenchmarkRunning] = useState(false);
+  const [modelSettings, setModelSettings] = useState<AdminModelSettingsView | null>(null);
+  const [modelApiKey, setModelApiKey] = useState("");
+  const [modelLoading, setModelLoading] = useState(false);
+  const [modelSaving, setModelSaving] = useState(false);
+  const [modelTesting, setModelTesting] = useState(false);
+  const [modelTestResult, setModelTestResult] = useState<{ type: "success" | "error"; message: string } | null>(null);
   const [canaryEnabled, setCanaryEnabled] = useState(false);
   const [canaryBaseline, setCanaryBaseline] = useState(0);
   const [canarySafe, setCanarySafe] = useState(0);
@@ -257,6 +274,121 @@ export function AdminPage({ user, onLogout, themeLabel, onThemeToggle }: Props) 
       setError("");
     } catch (e) {
       await handleApiError(e, "加载 RAG 运维配置失败");
+    }
+  };
+
+  const loadModelSettings = async () => {
+    if (!isAdmin) return;
+    setModelLoading(true);
+    try {
+      const res = await appApi.adminModelSettings();
+      setModelSettings(res.settings);
+      setModelApiKey("");
+      setModelTestResult(null);
+      setError("");
+    } catch (e) {
+      await handleApiError(e, "加载模型配置失败");
+    } finally {
+      setModelLoading(false);
+    }
+  };
+
+  const patchModelSettings = (patch: Partial<AdminModelSettingsView>) => {
+    setModelSettings((prev) => ({ ...(prev || {
+      enabled: false,
+      provider: "ollama",
+      api_key_masked: "",
+      base_url: "http://localhost:11434",
+      chat_model: "qwen2.5:7b-instruct",
+      reasoning_model: "qwen2.5:7b-instruct",
+      embedding_model: "nomic-embed-text",
+      temperature: 0.7,
+      max_tokens: 2048,
+    }), ...patch }));
+    setModelTestResult(null);
+  };
+
+  const changeModelProvider = (provider: ModelProvider) => {
+    const defaults = MODEL_DEFAULTS[provider];
+    patchModelSettings({
+      provider,
+      api_key_masked: "",
+      base_url: defaults.base_url,
+      chat_model: defaults.chat_model,
+      reasoning_model: defaults.reasoning_model,
+      embedding_model: defaults.embedding_model,
+    });
+    setModelApiKey("");
+  };
+
+  const modelPayload = () => {
+    const settings = modelSettings || {
+      enabled: false,
+      provider: "ollama",
+      api_key_masked: "",
+      base_url: "http://localhost:11434",
+      chat_model: "qwen2.5:7b-instruct",
+      reasoning_model: "qwen2.5:7b-instruct",
+      embedding_model: "nomic-embed-text",
+      temperature: 0.7,
+      max_tokens: 2048,
+    };
+    return {
+      enabled: Boolean(settings.enabled),
+      provider: settings.provider,
+      api_key: modelApiKey.trim(),
+      base_url: settings.base_url.trim(),
+      chat_model: settings.chat_model.trim(),
+      reasoning_model: (settings.reasoning_model || settings.chat_model).trim(),
+      embedding_model: settings.embedding_model.trim(),
+      temperature: Math.min(2, Math.max(0, Number(settings.temperature || 0.7))),
+      max_tokens: Math.min(8192, Math.max(256, Number(settings.max_tokens || 2048))),
+    };
+  };
+
+  const validateModelSettings = () => {
+    const payload = modelPayload();
+    if (!payload.provider) return "请选择模型后端";
+    if (payload.provider !== "local" && !payload.base_url) return "Base URL 不能为空";
+    if (!payload.chat_model) return "聊天模型不能为空";
+    if (payload.provider !== "anthropic" && !payload.embedding_model) return "Embedding 模型不能为空";
+    if (!["local", "ollama"].includes(payload.provider) && !payload.api_key && !modelSettings?.api_key_masked) return "云端/API 后端需要 API Key";
+    return "";
+  };
+
+  const saveModelSettings = async () => {
+    const message = validateModelSettings();
+    if (message) return setModelTestResult({ type: "error", message });
+    setModelSaving(true);
+    try {
+      const saved = await appApi.adminSaveModelSettings(modelPayload());
+      setModelSettings(saved.settings);
+      setModelApiKey("");
+      setModelTestResult({ type: "success", message: "全局模型配置已保存，新请求将按优先级生效。" });
+      setError("");
+      await loadOps();
+    } catch (e) {
+      await handleApiError(e, "保存模型配置失败");
+    } finally {
+      setModelSaving(false);
+    }
+  };
+
+  const testModelSettings = async () => {
+    const message = validateModelSettings();
+    if (message) return setModelTestResult({ type: "error", message });
+    setModelTesting(true);
+    try {
+      const res = await appApi.adminTestModelSettings(modelPayload());
+      setModelTestResult({
+        type: res.reachable ? "success" : "error",
+        message: res.reachable ? `连接成功 (${res.latency_ms}ms)${res.preview ? ` | ${res.preview}` : ""}` : res.message || "连接失败",
+      });
+      setError("");
+    } catch (e) {
+      await handleApiError(e, "测试模型配置失败");
+    } finally {
+      setModelTesting(false);
     }
   };
 
@@ -500,6 +632,7 @@ export function AdminPage({ user, onLogout, themeLabel, onThemeToggle }: Props) 
     void loadSystemLogs();
     void loadOps();
     void loadRagOps();
+    void loadModelSettings();
     // eslint-disable-next-line
   }, [isAdmin]);
 
@@ -543,6 +676,7 @@ export function AdminPage({ user, onLogout, themeLabel, onThemeToggle }: Props) 
             <div className="row-actions wrap admin-section-tabs">
               <button type="button" className={section === "ops" ? "" : "secondary"} onClick={() => setSection("ops")}>系统运维</button>
               <button type="button" className={section === "rag" ? "" : "secondary"} onClick={() => setSection("rag")}>RAG/Agent 运维</button>
+              <button type="button" className={section === "models" ? "" : "secondary"} onClick={() => setSection("models")}>模型配置</button>
               <button type="button" className={section === "admins" ? "" : "secondary"} onClick={() => setSection("admins")}>创建管理员</button>
               <button type="button" className={section === "users" ? "" : "secondary"} onClick={() => setSection("users")}>用户管理</button>
               <button type="button" className={section === "audit" ? "" : "secondary"} onClick={() => setSection("audit")}>审计日志</button>
@@ -723,6 +857,110 @@ export function AdminPage({ user, onLogout, themeLabel, onThemeToggle }: Props) 
                 展示当前时间窗口内耗时较高的接口请求，用于排查性能瓶颈。时间为服务器记录时间，耗时单位为毫秒（ms）。
               </p>
               <table className="table"><thead><tr><th>时间</th><th>方法</th><th>路径</th><th>状态码</th><th>耗时</th><th>错误</th></tr></thead><tbody>{ops.slow_requests.map((x, idx) => <tr key={`${x.ts}-${idx}`}><td>{x.ts}</td><td>{x.method}</td><td>{x.path}</td><td>{x.status_code}</td><td>{x.duration_ms}</td><td>{x.error || "-"}</td></tr>)}</tbody></table>
+            </>}
+          </main>}
+
+          {section === "models" && <main className="panel ops-wrap">
+            <div className="section-head">
+              <strong>全局模型配置</strong>
+              <div className="row-actions">
+                <button type="button" className="secondary tiny-btn" onClick={() => void loadModelSettings()}>刷新</button>
+                <button type="button" className="secondary tiny-btn" onClick={() => void testModelSettings()} disabled={modelTesting || modelSaving}>
+                  {modelTesting ? "测试中..." : "连接测试"}
+                </button>
+                <button type="button" className="tiny-btn" onClick={() => void saveModelSettings()} disabled={modelSaving || modelTesting}>
+                  {modelSaving ? "保存中..." : "保存配置"}
+                </button>
+              </div>
+            </div>
+            <p className="muted">
+              生效顺序：用户个人模型设置优先，其次使用这里的全局配置，最后回退到后端 .env。Embedding 模型变更后需要重建索引，避免新旧向量维度不一致。
+            </p>
+            {modelLoading && <div className="skeleton-list" />}
+            {!modelLoading && modelSettings && <>
+              <div className="ops-kpi-grid ops-kpi-grid-secondary">
+                <div className="ops-kpi-card"><span>全局覆盖</span><strong>{modelSettings.enabled ? "启用" : "停用"}</strong></div>
+                <div className="ops-kpi-card"><span>后端</span><strong>{modelSettings.provider}</strong></div>
+                <div className="ops-kpi-card"><span>聊天模型</span><strong>{modelSettings.chat_model || "-"}</strong></div>
+                <div className="ops-kpi-card"><span>Embedding</span><strong>{modelSettings.embedding_model || "沿用 .env"}</strong></div>
+              </div>
+
+              <div className="section-head" style={{ marginTop: 6 }}>
+                <strong>运行开关</strong>
+              </div>
+              <div className="ops-two-col">
+                <label className="ops-auto-refresh">
+                  <input type="checkbox" checked={Boolean(modelSettings.enabled)} onChange={(e) => patchModelSettings({ enabled: e.target.checked })} />
+                  <span>启用全局模型覆盖</span>
+                </label>
+                <label className="admin-field">
+                  <span>后端类型</span>
+                  <select value={modelSettings.provider} onChange={(e) => changeModelProvider(e.target.value as ModelProvider)}>
+                    {MODEL_PROVIDERS.map((provider) => <option key={provider} value={provider}>{provider}</option>)}
+                  </select>
+                </label>
+              </div>
+
+              {modelSettings.provider !== "local" && <div className="ops-two-col">
+                <label className="admin-field">
+                  <span>Base URL</span>
+                  <input placeholder="https://api.example.com/v1" value={modelSettings.base_url} onChange={(e) => patchModelSettings({ base_url: e.target.value })} />
+                </label>
+                <label className="admin-field">
+                  <span>API Key</span>
+                  <input
+                    type="password"
+                    placeholder={modelSettings.api_key_masked ? `已保存：${modelSettings.api_key_masked}` : modelSettings.provider === "ollama" ? "Ollama 通常留空" : "输入后本地加密保存"}
+                    value={modelApiKey}
+                    onChange={(e) => setModelApiKey(e.target.value)}
+                  />
+                </label>
+              </div>}
+
+              <div className="ops-two-col">
+                <label className="admin-field">
+                  <span>聊天模型</span>
+                  <input placeholder="chat model" value={modelSettings.chat_model} onChange={(e) => patchModelSettings({ chat_model: e.target.value })} />
+                </label>
+                <label className="admin-field">
+                  <span>推理模型</span>
+                  <input placeholder="reasoning model" value={modelSettings.reasoning_model} onChange={(e) => patchModelSettings({ reasoning_model: e.target.value })} />
+                </label>
+              </div>
+
+              <div className="ops-two-col">
+                <label className="admin-field">
+                  <span>Embedding 模型</span>
+                  <input
+                    placeholder={modelSettings.provider === "anthropic" ? "Anthropic 不提供 Embedding，留空沿用 .env" : "embedding model"}
+                    value={modelSettings.embedding_model}
+                    onChange={(e) => patchModelSettings({ embedding_model: e.target.value })}
+                  />
+                </label>
+                <label className="admin-field">
+                  <span>Max Tokens</span>
+                  <input type="number" min={256} max={8192} step={256} value={modelSettings.max_tokens} onChange={(e) => patchModelSettings({ max_tokens: Number(e.target.value) || 2048 })} />
+                </label>
+              </div>
+
+              <div className="section-head" style={{ marginTop: 6 }}>
+                <strong>生成参数</strong>
+              </div>
+              <label className="admin-field">
+                <span>Temperature：{Number(modelSettings.temperature || 0).toFixed(1)}</span>
+                <input type="range" min={0} max={2} step={0.1} value={modelSettings.temperature} onChange={(e) => patchModelSettings({ temperature: Number(e.target.value) })} />
+              </label>
+
+              {modelTestResult && <div className={`status ${modelTestResult.type === "error" ? "error" : ""}`}>{modelTestResult.message}</div>}
+
+              <div className="ops-trend-list">
+                <strong>当前安全边界</strong>
+                <div className="ops-diagnostic-list">
+                  <div><span>密钥回显</span><code>仅显示掩码，不返回明文</code></div>
+                  <div><span>私网 URL</span><code>默认拦截；Ollama 本地地址例外</code></div>
+                  <div><span>个人设置</span><code>用户保存的模型配置优先于全局配置</code></div>
+                </div>
+              </div>
             </>}
           </main>}
 

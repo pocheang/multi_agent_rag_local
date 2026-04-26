@@ -1,5 +1,6 @@
 from collections.abc import Iterable
 import json
+import logging
 import re
 
 from app.core.config import get_settings
@@ -7,6 +8,8 @@ from app.core.models import get_chat_model, get_reasoning_model
 from app.services.bulkhead import bulkhead
 from app.services.query_intent import is_casual_chat_query
 from app.services.request_context import deadline_exceeded, overload_mode_enabled
+
+logger = logging.getLogger(__name__)
 
 SYNTHESIS_FALLBACK_MESSAGE = "抱歉，当前答案生成服务暂时不可用。请稍后重试，或先缩小问题范围后再试。"
 CASUAL_CHAT_HIGH_TEMPERATURE = 2.0
@@ -264,6 +267,6 @@ def stream_synthesize_answer(
         )
         if final != initial:
             yield {"type": "reset", "content": final}
-    except Exception:
-        # Keep backward compatibility for callers/tests that expect plain-string fallback chunks.
-        yield SYNTHESIS_FALLBACK_MESSAGE
+    except Exception as e:
+        logger.exception(f"Stream synthesis failed for question: {question}")
+        yield {"type": "reset", "content": SYNTHESIS_FALLBACK_MESSAGE}

@@ -55,16 +55,19 @@ def run_vector_rag(question: str, allowed_sources: list[str] | None = None, retr
         dense_score = item.get("dense_score")
         bm25_score = item.get("bm25_score")
         rerank_score = item.get("rerank_score")
-        if isinstance(rerank_score, (int, float)):
-            if float(rerank_score) > 0:
-                effective_hit_count += 1
-        elif isinstance(dense_score, (int, float)):
-            if float(dense_score) >= 0.2:
-                effective_hit_count += 1
-        elif isinstance(bm25_score, (int, float)):
-            if float(bm25_score) > 0:
-                effective_hit_count += 1
-        else:
+        has_valid_score = False
+        if isinstance(rerank_score, (int, float)) and float(rerank_score) > 0:
+            effective_hit_count += 1
+            has_valid_score = True
+        elif isinstance(dense_score, (int, float)) and float(dense_score) >= 0.2:
+            effective_hit_count += 1
+            has_valid_score = True
+        elif isinstance(bm25_score, (int, float)) and float(bm25_score) > 0:
+            effective_hit_count += 1
+            has_valid_score = True
+
+        # Only count unknown-score items if they have valid text content
+        if not has_valid_score and chunk.strip():
             effective_hit_count += 1
 
     return {

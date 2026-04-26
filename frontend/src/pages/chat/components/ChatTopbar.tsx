@@ -5,6 +5,7 @@ type Props = {
   themeLabel: string;
   isAdmin: boolean;
   onToggleSidebar: () => void;
+  onOpenSettings: () => void;
   onThemeToggle: () => void;
   onLogout: () => Promise<void>;
 };
@@ -14,19 +15,25 @@ export function ChatTopbar({
   themeLabel,
   isAdmin,
   onToggleSidebar,
+  onOpenSettings,
   onThemeToggle,
   onLogout,
 }: Props) {
   return (
     <header className="topbar">
-      <div>
-        <h2>Agentic RAG Studio</h2>
-        <p className="muted">统一管理会话、路由策略、PDF 知识与提示词。</p>
+      <div className="topbar-copy">
+        <span className="workspace-kicker">Local RAG Command Center</span>
+        <h2>Evidence Chat</h2>
+        <p className="muted">统一调度会话、PDF 证据、混合检索和 Agent 路由。</p>
       </div>
       <div className="top-actions">
         <span className="user-badge">{userBadge}</span>
-        <button type="button" className="secondary" onClick={onToggleSidebar}>
+        <button type="button" className="secondary mobile-menu-btn" onClick={onToggleSidebar}>
           菜单
+        </button>
+        <button type="button" className="secondary settings-action-btn" onClick={onOpenSettings} title="API 设置">
+          <span aria-hidden="true">⚙︎</span>
+          <span>设置</span>
         </button>
         <button type="button" className="secondary" onClick={onThemeToggle}>
           {themeLabel}
@@ -39,7 +46,7 @@ export function ChatTopbar({
             管理页
           </Link>
         )}
-        <button type="button" onClick={() => void onLogout()}>
+        <button type="button" className="logout-btn" onClick={() => void onLogout()}>
           退出
         </button>
       </div>

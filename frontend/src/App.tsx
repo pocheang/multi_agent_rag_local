@@ -71,7 +71,6 @@ export function App() {
 
   const loginSuccess = (nextUser: AuthUser) => {
     setUser(nextUser);
-    navigate("/app");
   };
 
   return (

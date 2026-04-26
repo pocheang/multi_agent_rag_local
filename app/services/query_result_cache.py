@@ -77,8 +77,10 @@ class QueryResultCache:
         use_reasoning: bool,
         retrieval_strategy: str,
         agent_class_hint: str,
+        mode: str = "query",
         request_id: str = "",
         include_request_id: bool = False,
+        index_fingerprint: str = "",
     ) -> str:
         payload: dict[str, Any] = {
             "u": user_id,
@@ -88,6 +90,8 @@ class QueryResultCache:
             "r": bool(use_reasoning),
             "st": retrieval_strategy,
             "a": agent_class_hint,
+            "m": str(mode or "query"),
+            "idx": str(index_fingerprint or ""),
         }
         if include_request_id:
             payload["rid"] = request_id

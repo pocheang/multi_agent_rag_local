@@ -1,7 +1,10 @@
+import logging
 from urllib.parse import urlparse
 
 from app.core.config import get_settings
 from app.tools.web_search import search_web
+
+logger = logging.getLogger(__name__)
 
 
 def _parse_allowlist(raw: str) -> list[str]:
@@ -30,7 +33,18 @@ def run_web_research(question: str) -> dict:
     settings = get_settings()
     allowlist = _parse_allowlist(getattr(settings, "web_domain_allowlist", ""))
     min_score = float(getattr(settings, "web_min_source_score", 0.2) or 0.2)
-    results = search_web(question, max_results=5)
+
+    try:
+        results = search_web(question, max_results=5)
+    except Exception as e:
+        logger.exception(f"Web search failed for question: {question}")
+        return {
+            "context": "",
+            "citations": [],
+            "used": False,
+            "error": f"web_search_error:{type(e).__name__}",
+        }
+
     lines = []
     citations = []
     for item in results:

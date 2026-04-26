@@ -32,11 +32,15 @@ Choose one skill from:
 - cyber_defense_hardening
 - incident_response_playbook
 - ai_knowledge_assistant
+- pdf_text_reader
 
 Cyber skill hints:
 - exploitation, attack chain, lateral movement, privilege escalation, C2 => cyber_attack_analysis
 - defense architecture, detection rules, hardening checklist, zero trust => cyber_defense_hardening
 - incident triage, containment, forensic trace, emergency drill => incident_response_playbook
+
+PDF skill hints:
+- reading PDF content, extracting text from PDF => pdf_text_reader
 
 Output JSON only:
 {"route":"vector|graph|hybrid","reason":"...","skill":"..."}
@@ -72,15 +76,6 @@ def decide_route(question: str, use_reasoning: bool = False, agent_class_hint: s
             agent_class=agent_class,
         )
 
-    # Early skill selection for special agent classes
-    if agent_class == "pdf_text":
-        return RouteDecision(
-            route="vector",
-            reason=f"pdf_text_direct_route | agent_class={agent_class}{forced_reason}",
-            skill="pdf_text_reader",
-            agent_class=agent_class,
-        )
-
     try:
         model = get_reasoning_model() if use_reasoning else get_chat_model()
         result = model.invoke([("system", ROUTER_PROMPT), ("human", question)])
@@ -96,8 +91,7 @@ def decide_route(question: str, use_reasoning: bool = False, agent_class_hint: s
     route = data.get("route", "vector")
     reason_raw = data.get("reason", "fallback")
     if route not in {"vector", "graph", "hybrid"}:
-        if route == "web":
-            reason_raw = f"{reason_raw} | web_downgraded_to_local_first"
+        reason_raw = f"{reason_raw} | invalid_route_fallback_to_vector"
         route = "vector"
 
     skill = data.get("skill", "answer_with_citations")
@@ -119,6 +113,9 @@ def decide_route(question: str, use_reasoning: bool = False, agent_class_hint: s
             skill = pick_cyber_skill(question)
     elif agent_class == "artificial_intelligence":
         skill = "ai_knowledge_assistant"
+    elif agent_class == "pdf_text":
+        if skill not in {"pdf_text_reader"}:
+            skill = "pdf_text_reader"
 
     reason = f"{reason_raw} | agent_class={agent_class}"
     if forced:

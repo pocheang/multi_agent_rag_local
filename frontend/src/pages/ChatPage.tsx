@@ -15,8 +15,10 @@ import { ChatTopbar } from "@/pages/chat/components/ChatTopbar";
 import { ChatMessages } from "@/pages/chat/components/ChatMessages";
 import { ChatComposer } from "@/pages/chat/components/ChatComposer";
 import { ToastStack } from "@/pages/chat/components/ToastStack";
+import { ApiSettings } from "@/components/ApiSettings";
 
 type AgentClassHint = "" | "general" | "cybersecurity" | "artificial_intelligence" | "pdf_text";
+type RetrievalStrategy = "baseline" | "advanced" | "safe";
 const PDF_FILE_RE = /\.(pdf|png|jpe?g|bmp|tiff?|webp)$/i;
 
 const AGENT_MODES: Array<{
@@ -43,6 +45,7 @@ export function ChatPage({ user, onLogout, themeLabel, onThemeToggle }: Props) {
   const [useWeb, setUseWeb] = useState(false);
   const [useReasoning, setUseReasoning] = useState(false);
   const [agentClassHint, setAgentClassHint] = useState<AgentClassHint>("");
+  const [retrievalStrategy, setRetrievalStrategy] = useState<RetrievalStrategy>("advanced");
   const [pdfTargetFile, setPdfTargetFile] = useState("");
 
   const [documents, setDocuments] = useState<IndexedFileSummary[]>([]);
@@ -65,11 +68,14 @@ export function ChatPage({ user, onLogout, themeLabel, onThemeToggle }: Props) {
 
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [error, setError] = useState("");
+  const [settingsOpen, setSettingsOpen] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const chatUploadInputRef = useRef<HTMLInputElement | null>(null);
   const questionRef = useRef<HTMLTextAreaElement | null>(null);
   const chatScrollRef = useRef<HTMLDivElement | null>(null);
+  const streamAbortRef = useRef<AbortController | null>(null);
+  const streamStoppedRef = useRef(false);
 
   const role = (user?.role || "viewer").toLowerCase();
   const isAdmin = role === "admin";
@@ -457,9 +463,21 @@ export function ChatPage({ user, onLogout, themeLabel, onThemeToggle }: Props) {
     return createSession();
   };
 
+  const stopCurrentRun = () => {
+    if (!isSending) return;
+    streamStoppedRef.current = true;
+    setRunStatus("Stopping...");
+    try {
+      streamAbortRef.current?.abort();
+    } catch {
+      // ignore abort errors
+    }
+  };
+
   const ask = async () => {
     const q = question.trim();
     if (!q || isSending) return;
+    streamStoppedRef.current = false;
     const sid = await ensureSessionForAsk();
     if (!sid) return;
 
@@ -475,12 +493,16 @@ export function ChatPage({ user, onLogout, themeLabel, onThemeToggle }: Props) {
     try {
       const runStartedAt = performance.now();
       const elapsedMs = () => Math.max(1, Math.round(performance.now() - runStartedAt));
+      const streamAbort = new AbortController();
+      streamAbortRef.current = streamAbort;
       const res = await appApi.streamQuery({
         question: q,
         useWebFallback: useWeb,
         useReasoning,
         sessionId: sid,
         agentClassHint: agentClassHint || undefined,
+        retrievalStrategy,
+        signal: streamAbort.signal,
       });
       if (!res.ok || !res.body) {
         const raw = await res.text();
@@ -586,9 +608,22 @@ export function ChatPage({ user, onLogout, themeLabel, onThemeToggle }: Props) {
             });
           } else if (evt.type === "graph_result") {
             const entities = Array.isArray(evt.entities) ? evt.entities : [];
-            pushExecutionStep("graph", "图谱检索完成", `命中实体 ${entities.length} 个`);
+            const neighbors = Array.isArray(evt.neighbors) ? evt.neighbors : [];
+            const paths = Array.isArray(evt.paths) ? evt.paths : [];
+            const context = evt.context || "";
+            pushExecutionStep(
+              "graph",
+              "图谱检索完成",
+              `命中 ${entities.length} 个实体, ${neighbors.length} 个邻居关系, ${paths.length} 条路径`
+            );
             patchStreamMessage(answer, {
               graph_entities: entities,
+              graph_result: {
+                entities,
+                neighbors,
+                paths,
+                context,
+              },
               execution_steps: executionSteps,
               current_status: "图谱检索完成",
             });
@@ -627,6 +662,8 @@ export function ChatPage({ user, onLogout, themeLabel, onThemeToggle }: Props) {
             );
             patchStreamMessage(finalAnswer, {
               route: result.route || meta.route,
+              execution_route: result.execution_route || result.debug?.execution_route || meta.execution_route,
+              retrieval_strategy: result.retrieval_strategy || result.debug?.retrieval_strategy || retrievalStrategy,
               agent_class: result.agent_class || meta.agent_class,
               web_used: !!(result.web_result && result.web_result.used),
               latency_ms: cost,
@@ -659,10 +696,26 @@ export function ChatPage({ user, onLogout, themeLabel, onThemeToggle }: Props) {
       setMessages(nextMessages);
       await refreshSessions();
     } catch (e) {
+      const rawError = e instanceof Error && e.message ? e.message : "request aborted";
+      const isAbortError =
+        streamStoppedRef.current ||
+        (e instanceof DOMException && e.name === "AbortError") ||
+        String(rawError).toLowerCase().includes("abort");
+      if (isAbortError) {
+        setMessages((prev) =>
+          prev.map((m) =>
+            m.message_id === "local-assistant-stream"
+              ? { ...m, content: (m.content || "").trim() || "[Stopped by user]" }
+              : m,
+          ),
+        );
+        notify("Generation stopped", "info");
+        return;
+      }
       const fallback = "Request failed. Please check backend/model status.";
       await handleApiError(e, fallback);
-      const rawError = e instanceof Error && e.message ? e.message : fallback;
-      const lowered = String(rawError).toLowerCase();
+      const rawErrorText = e instanceof Error && e.message ? e.message : fallback;
+      const lowered = String(rawErrorText).toLowerCase();
       const isNetworkDisconnect = (
         lowered.includes("networkerror") ||
         lowered.includes("failed to fetch") ||
@@ -670,7 +723,7 @@ export function ChatPage({ user, onLogout, themeLabel, onThemeToggle }: Props) {
       );
       let visibleError = isNetworkDisconnect
         ? "NetworkError: stream disconnected. Retrying with non-stream mode..."
-        : rawError;
+        : rawErrorText;
       if (isNetworkDisconnect && sid) {
         try {
           const fallbackRes = await appApi.query({
@@ -679,6 +732,7 @@ export function ChatPage({ user, onLogout, themeLabel, onThemeToggle }: Props) {
             useReasoning,
             sessionId: sid,
             agentClassHint: agentClassHint || undefined,
+            retrievalStrategy,
           });
           visibleError = String(fallbackRes.answer || "No answer returned");
         } catch {
@@ -693,6 +747,8 @@ export function ChatPage({ user, onLogout, themeLabel, onThemeToggle }: Props) {
         ),
       );
     } finally {
+      streamAbortRef.current = null;
+      streamStoppedRef.current = false;
       setIsSending(false);
       setRunStatus("");
     }
@@ -736,6 +792,17 @@ export function ChatPage({ user, onLogout, themeLabel, onThemeToggle }: Props) {
     return () => {
       window.removeEventListener("dragover", preventDefault);
       window.removeEventListener("drop", preventDefault);
+    };
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      streamStoppedRef.current = true;
+      try {
+        streamAbortRef.current?.abort();
+      } catch {
+        // ignore abort errors
+      }
     };
   }, []);
 
@@ -1037,6 +1104,7 @@ export function ChatPage({ user, onLogout, themeLabel, onThemeToggle }: Props) {
           themeLabel={themeLabel}
           isAdmin={isAdmin}
           onToggleSidebar={() => setSidebarOpen((v) => !v)}
+          onOpenSettings={() => setSettingsOpen(true)}
           onThemeToggle={onThemeToggle}
           onLogout={onLogout}
         />
@@ -1060,13 +1128,16 @@ export function ChatPage({ user, onLogout, themeLabel, onThemeToggle }: Props) {
           useWeb={useWeb}
           useReasoning={useReasoning}
           agentClassHint={agentClassHint}
+          retrievalStrategy={retrievalStrategy}
           onQuestionChange={setQuestion}
           onAsk={ask}
+          onStop={stopCurrentRun}
           onClearQuestion={() => setQuestion("")}
           onPromptPick={setQuestion}
           onUseWebChange={setUseWeb}
           onUseReasoningChange={setUseReasoning}
           onAgentClassHintChange={(v) => setAgentClassHint((v as AgentClassHint) || "")}
+          onRetrievalStrategyChange={(v) => setRetrievalStrategy((v as RetrievalStrategy) || "advanced")}
           onComposerDragEnter={(evt) => {
             evt.preventDefault();
             evt.stopPropagation();
@@ -1088,6 +1159,7 @@ export function ChatPage({ user, onLogout, themeLabel, onThemeToggle }: Props) {
       </main>
 
       <ToastStack toasts={toasts} />
+      <ApiSettings isOpen={settingsOpen} onClose={() => setSettingsOpen(false)} />
     </div>
   );
 }

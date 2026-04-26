@@ -4,6 +4,7 @@ import types
 
 import app.agents.router_agent as router_agent
 import app.agents.synthesis_agent as synthesis_agent
+from app.core.models import LocalEvidenceChatModel
 
 
 def test_router_falls_back_when_model_invoke_fails(monkeypatch):
@@ -180,6 +181,42 @@ def test_stream_prefers_effective_hit_count_for_web_fallback(monkeypatch):
     assert web_events[0].get("used") is True
 
 
+def test_stream_does_not_use_web_when_fallback_enabled_and_local_evidence_sufficient(monkeypatch):
+    fake_graph_agent = types.ModuleType("app.agents.graph_rag_agent")
+    fake_graph_agent.run_graph_rag = lambda _q: {"entities": [], "context": "", "neighbors": []}
+    fake_router_agent = types.ModuleType("app.agents.router_agent")
+    fake_router_agent.decide_route = lambda _q, use_reasoning=True: types.SimpleNamespace(
+        route="vector", reason="test", skill="answer_with_citations", agent_class="general"
+    )
+    fake_synthesis_agent = types.ModuleType("app.agents.synthesis_agent")
+    fake_synthesis_agent.stream_synthesize_answer = lambda **kwargs: iter(["ok"])
+    fake_synthesis_agent.synthesize_answer = lambda **kwargs: "ok"
+    fake_vector_agent = types.ModuleType("app.agents.vector_rag_agent")
+    fake_vector_agent.run_vector_rag = lambda _q, **_kwargs: {"retrieved_count": 3, "effective_hit_count": 3, "context": "local", "citations": []}
+    fake_web_agent = types.ModuleType("app.agents.web_research_agent")
+    web_calls = {"n": 0}
+
+    def _web(_q):
+        web_calls["n"] += 1
+        return {"used": True, "citations": [{"source": "web", "content": "x", "metadata": {}}], "context": "web ctx"}
+
+    fake_web_agent.run_web_research = _web
+
+    monkeypatch.setitem(sys.modules, "app.agents.graph_rag_agent", fake_graph_agent)
+    monkeypatch.setitem(sys.modules, "app.agents.router_agent", fake_router_agent)
+    monkeypatch.setitem(sys.modules, "app.agents.synthesis_agent", fake_synthesis_agent)
+    monkeypatch.setitem(sys.modules, "app.agents.vector_rag_agent", fake_vector_agent)
+    monkeypatch.setitem(sys.modules, "app.agents.web_research_agent", fake_web_agent)
+
+    graph_streaming = importlib.import_module("app.graph.streaming")
+    graph_streaming = importlib.reload(graph_streaming)
+
+    events = list(graph_streaming.run_query_stream("test", use_web_fallback=True, use_reasoning=True))
+    assert [e for e in events if e.get("type") == "done"]
+    assert [e for e in events if e.get("type") == "web_result"] == []
+    assert web_calls["n"] == 0
+
+
 def test_stream_emits_thought_events(monkeypatch):
     fake_graph_agent = types.ModuleType("app.agents.graph_rag_agent")
     fake_graph_agent.run_graph_rag = lambda _q: {"entities": [], "context": "", "neighbors": []}
@@ -330,6 +367,25 @@ def test_synthesize_uses_high_temperature_for_casual_chat(monkeypatch):
     out = synthesis_agent.synthesize_answer("你是谁", "answer_with_citations", use_reasoning=False)
     assert out == "ok"
     assert synthesis_agent.CASUAL_CHAT_HIGH_TEMPERATURE in seen["temps"]
+
+
+def test_local_evidence_model_does_not_expose_memory_context():
+    model = LocalEvidenceChatModel()
+    prompt = (
+        "技能: answer_with_citations\n\n"
+        "用户问题:\nhi\n\n"
+        "记忆上下文:\n"
+        "Short-term memory (latest rounds):\n[Round 1]\nQ: hi\nA: internal prior answer\n\n"
+        "向量检索上下文:\n无\n\n"
+        "图谱上下文:\n无\n\n"
+        "联网补充上下文:\n无\n"
+    )
+
+    result = model.invoke([("system", synthesis_agent.ANSWER_PROMPT), ("human", prompt)])
+
+    assert "Short-term memory" not in result.content
+    assert "internal prior answer" not in result.content
+    assert "当前本地知识库没有检索到足够证据" in result.content
 
 
 def test_synthesize_refine_stops_after_max_5_rounds(monkeypatch):

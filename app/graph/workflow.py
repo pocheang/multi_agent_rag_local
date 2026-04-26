@@ -18,7 +18,7 @@ from app.services.citation_grounding import apply_sentence_grounding
 from app.services.evidence_scoring import evidence_is_sufficient
 from app.services.explainability import build_explainability_report
 from app.services.hybrid_executor import HybridExecutorRejectedError, submit_hybrid
-from app.services.query_intent import is_casual_chat_query, should_force_web_research
+from app.services.query_intent import is_casual_chat_query, quick_smalltalk_reply, should_force_web_research
 from app.services.request_context import deadline_exceeded, remaining_seconds
 from app.services.retry_policy import call_with_retry
 from app.services.resilience import call_with_circuit_breaker
@@ -175,10 +175,12 @@ def vector_node(state: GraphState) -> GraphState:
         timeout_s = remaining_seconds()
         if timeout_s is None:
             timeout_s = 15.0
-        timeout_s = max(0.05, float(timeout_s))
+        timeout_s = max(0.1, float(timeout_s))
         deadline = time.monotonic() + timeout_s
         fut_vector = None
         fut_graph = None
+        vector_result = {"context": "", "citations": [], "retrieved_count": 0, "error": "vector_error:Timeout"}
+        graph_result = {"context": "", "entities": [], "neighbors": [], "error": "graph_error:Timeout"}
         try:
             fut_vector = submit_hybrid(
                 _safe_vector_result,
@@ -206,20 +208,21 @@ def vector_node(state: GraphState) -> GraphState:
                 },
             }
         try:
-            left = max(0.05, deadline - time.monotonic())
+            left = max(0.1, deadline - time.monotonic())
             vector_result = fut_vector.result(timeout=left)
         except FutureTimeoutError:
             fut_vector.cancel()
-            vector_result = {"context": "", "citations": [], "retrieved_count": 0, "error": "vector_error:Timeout"}
         except Exception as e:
             logger.exception(f"Vector RAG failed for question: {state.get('question', '')}")
             vector_result = {"context": "", "citations": [], "retrieved_count": 0, "error": f"vector_error:{type(e).__name__}"}
         try:
-            left = max(0.05, deadline - time.monotonic())
+            left = max(0.1, deadline - time.monotonic())
             graph_result = fut_graph.result(timeout=left)
         except FutureTimeoutError:
             fut_graph.cancel()
-            graph_result = {"context": "", "entities": [], "neighbors": [], "error": "graph_error:Timeout"}
+        except Exception as e:
+            logger.exception(f"Graph RAG failed for question: {state.get('question', '')}")
+            graph_result = {"context": "", "entities": [], "neighbors": [], "error": f"graph_error:{type(e).__name__}"}
         return {**state, "vector_result": vector_result, "graph_result": graph_result}
     try:
         with traced_span("workflow.vector_node", {"strategy": str(state.get("retrieval_strategy", "") or "default")}):
@@ -266,6 +269,22 @@ def synthesis_node(state: GraphState) -> GraphState:
             "vector_result": state.get("vector_result", {}),
             "graph_result": state.get("graph_result", {}),
             "web_result": state.get("web_result", {"used": False, "citations": [], "context": ""}),
+        }
+        next_state["explainability"] = build_explainability_report(next_state)
+        return next_state
+    if is_casual_chat_query(state.get("question", "")):
+        answer = quick_smalltalk_reply(state.get("question", "")) or "你好，我在。"
+        next_state = {
+            **state,
+            "answer": answer,
+            "route": "smalltalk_fast",
+            "reason": "smalltalk_fast_path",
+            "skill": "smalltalk",
+            "vector_result": {"context": "", "citations": [], "retrieved_count": 0},
+            "graph_result": {"context": "", "entities": [], "neighbors": []},
+            "web_result": {"used": False, "citations": [], "context": ""},
+            "grounding": {"checked": False, "reason": "smalltalk_fast_path"},
+            "answer_safety": {},
         }
         next_state["explainability"] = build_explainability_report(next_state)
         return next_state

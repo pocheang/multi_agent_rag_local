@@ -12,13 +12,16 @@ type Props = {
   useWeb: boolean;
   useReasoning: boolean;
   agentClassHint: string;
+  retrievalStrategy: string;
   onQuestionChange: (value: string) => void;
   onAsk: () => Promise<void>;
+  onStop: () => void;
   onClearQuestion: () => void;
   onPromptPick: (prompt: string) => void;
   onUseWebChange: (next: boolean) => void;
   onUseReasoningChange: (next: boolean) => void;
   onAgentClassHintChange: (value: string) => void;
+  onRetrievalStrategyChange: (value: string) => void;
   onComposerDragEnter: (evt: React.DragEvent<HTMLElement>) => void;
   onComposerDragOver: (evt: React.DragEvent<HTMLElement>) => void;
   onComposerDragLeave: (evt: React.DragEvent<HTMLElement>) => void;
@@ -38,24 +41,32 @@ export function ChatComposer({
   useWeb,
   useReasoning,
   agentClassHint,
+  retrievalStrategy,
   onQuestionChange,
   onAsk,
+  onStop,
   onClearQuestion,
   onPromptPick,
   onUseWebChange,
   onUseReasoningChange,
   onAgentClassHintChange,
+  onRetrievalStrategyChange,
   onComposerDragEnter,
   onComposerDragOver,
   onComposerDragLeave,
   onComposerDrop,
   onChatUploadChange,
 }: Props) {
+  const strategyLabel = retrievalStrategy === "baseline"
+    ? "基础"
+    : retrievalStrategy === "safe"
+      ? "安全"
+      : "高级";
   const modeHint = !useWeb && !useReasoning
-    ? "本地快速模式：适合闲聊与低延迟问答。"
+    ? `本地快速模式，${strategyLabel}检索：适合低延迟问答和已入库资料分析。`
     : useWeb
-      ? "联网增强已开启：结果更新，但可能更慢且受网络影响。"
-      : "推理增强已开启：回答更细致，但响应可能变慢。";
+      ? `联网增强已开启，${strategyLabel}检索：适合需要最新资料的问题，响应可能稍慢。`
+      : `推理增强已开启，${strategyLabel}检索：适合复杂分析、审计和多步骤归纳。`;
 
   return (
     <section
@@ -65,19 +76,27 @@ export function ChatComposer({
       onDragLeave={onComposerDragLeave}
       onDrop={(evt) => void onComposerDrop(evt)}
     >
-      <textarea
-        ref={questionRef}
-        value={question}
-        onChange={(e) => onQuestionChange(e.target.value)}
-        placeholder="输入问题，例如：总结最新上传 PDF 的安全风险并给出证据来源。Ctrl/Cmd + Enter 发送"
-        rows={3}
-        onKeyDown={(e) => {
-          if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
-            e.preventDefault();
-            void onAsk();
-          }
-        }}
-      />
+      <div className="composer-main">
+        <label className="composer-label">Ask the RAG system</label>
+        <textarea
+          ref={questionRef}
+          value={question}
+          onChange={(e) => onQuestionChange(e.target.value)}
+          placeholder="输入问题，例如：总结最新上传 PDF 的安全风险并给出证据来源。Ctrl/Cmd + Enter 发送"
+          rows={3}
+          onKeyDown={(e) => {
+            if (e.key === "Escape" && isSending) {
+              e.preventDefault();
+              onStop();
+              return;
+            }
+            if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
+              e.preventDefault();
+              void onAsk();
+            }
+          }}
+        />
+      </div>
 
       <div className="chat-options-bar" aria-label="chat options">
         <div className="option-group">
@@ -101,6 +120,14 @@ export function ChatComposer({
           </button>
         </div>
         <div className="option-group option-agent">
+          <span className="option-label">检索策略</span>
+          <select value={retrievalStrategy} onChange={(e) => onRetrievalStrategyChange(e.target.value)}>
+            <option value="advanced">advanced</option>
+            <option value="baseline">baseline</option>
+            <option value="safe">safe</option>
+          </select>
+        </div>
+        <div className="option-group option-agent">
           <span className="option-label">Agent</span>
           <select value={agentClassHint} onChange={(e) => onAgentClassHintChange(e.target.value)}>
             <option value="">auto</option>
@@ -113,10 +140,15 @@ export function ChatComposer({
       </div>
       <div className="option-hint">{modeHint}</div>
 
-      <div className="row-actions">
-        <button type="button" onClick={() => void onAsk()} disabled={isSending}>
+      <div className="composer-actions">
+        <button type="button" className="primary-action" onClick={() => void onAsk()} disabled={isSending}>
           {isSending ? "处理中..." : "开始分析"}
         </button>
+        {isSending && (
+          <button type="button" className="danger" onClick={onStop}>
+            Stop
+          </button>
+        )}
         <label className="secondary link-btn">
           上传 PDF/图片
           <input
@@ -132,7 +164,7 @@ export function ChatComposer({
           清空
         </button>
       </div>
-      <div className="row-actions wrap">
+      <div className="quick-prompt-row">
         {quickPrompts.map((x) => (
           <button key={x} type="button" className="secondary tiny-btn" onClick={() => onPromptPick(x)}>
             {x}

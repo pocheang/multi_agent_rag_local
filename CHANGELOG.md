@@ -4,6 +4,33 @@ All notable changes to this project will be documented in this file.
 
 The format is based on Keep a Changelog and this project follows Semantic Versioning.
 
+## [0.2.4] - 2026-04-26
+
+### Added
+- Query-to-answer UX speed optimization framework with tiered execution policy (fast/balanced/deep tiers).
+- `TierClassifier` module for intelligent query complexity classification based on query characteristics, session context, and system load.
+- `LatencyBudgetManager` for enforcing hard runtime limits per tier (retrieval timeout, synthesis token limits, retry attempts).
+- Tier-aware retrieval executor with budget enforcement and conditional web fallback triggers.
+- Enhanced synthesis agent with tier-aligned answer framing (fast: conclusion-first, balanced: evidence + uncertainty, deep: complete narrative).
+- UX telemetry system for tracking first token latency (P50/P95/P99), tier distribution, tier confidence, and citation coverage per tier.
+- Load-based automatic tier degradation (>80% load → downgrade one tier, >95% load → force fast tier).
+- Frontend tier display with visual indicators (fast=green, balanced=blue, deep=purple) and expected latency ranges.
+- Response headers for tier metadata (`X-Query-Tier`, `X-Tier-Confidence`) for backward-compatible tier awareness.
+- User manual tier override capability with session-level preference persistence.
+
+### Changed
+- Improved first token latency targets: P50 ≤ 2s, P95 ≤ 4s (from previous best-effort approach).
+- Enhanced streaming response flow with progressive evidence delivery and tier-specific answer depth.
+- Web fallback trigger logic now conditional on local evidence confidence score (<0.5), temporal keywords, and tier budget.
+- Retrieval top_k and rerank parameters now dynamically adjusted per tier (fast: 5/3, balanced: 10/5, deep: 20/10).
+- Synthesis token limits enforced per tier (fast: 300, balanced: 800, deep: 1500 tokens).
+- Timeout handling improved with graceful degradation and partial result delivery with "incomplete" flag.
+
+### Fixed
+- Tier classifier failure now falls back to balanced tier with explicit `tier_fallback=classifier_error` flag.
+- Streaming interruption recovery now auto-falls back to non-stream completion without duplicate answer artifacts.
+- Web fallback timeout no longer blocks main answer delivery; returns local-evidence answer with supplementation incomplete marker.
+
 ## [0.2.2.1] - 2026-04-10
 
 ### Changed

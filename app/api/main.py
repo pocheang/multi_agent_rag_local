@@ -1,5 +1,6 @@
 from pathlib import Path
 import asyncio
+import json
 import logging
 import os
 import threading
@@ -8,6 +9,7 @@ import inspect
 from collections import Counter
 from collections import deque
 import csv
+import contextvars
 import hashlib
 import hmac
 import statistics
@@ -29,11 +31,13 @@ from fastapi.staticfiles import StaticFiles
 import httpx
 
 from app.core.config import get_settings, reload_settings
-from app.core.models import clear_model_caches
+from app.core.models import clear_model_caches, get_chat_model
 from app.ingestion.loaders import IMAGE_EXTENSIONS
 from app.core.schemas import (
     AdminRoleUpdateRequest,
     AdminResetPasswordRequest,
+    AdminModelSettings,
+    AdminModelSettingsResponse,
     AdminResetApprovalTokenRequest,
     AdminStatusUpdateRequest,
     AdminUserClassificationUpdateRequest,
@@ -58,10 +62,15 @@ from app.core.schemas import (
     SessionDetail,
     SessionSummary,
     UploadResponse,
+    UserApiSettings,
+    UserApiSettingsResponse,
+    UserApiSettingsView,
+    UserApiSettingsTestResponse,
 )
 from app.graph.streaming import encode_sse, run_query_stream
 from app.graph.workflow import run_query
 from app.graph.neo4j_client import Neo4jClient
+from app.agents.synthesis_agent import synthesize_answer
 from app.services.auth_db import AuthDBService
 from app.services.background_queue import BackgroundTaskQueue
 from app.services.alerting import emit_alert, sign_payload, resolve_signing_secret
@@ -70,6 +79,7 @@ from app.services.history import HistoryStore, validate_session_id
 from app.services.memory_store import MemoryStore, build_memory_context
 from app.services.ingest_service import ingest_paths
 from app.services.index_manager import delete_file_index, list_indexed_files, rebuild_file_index
+from app.services.index_manager import rebuild_all_vector_index
 from app.services.auto_ingest_watcher import AutoIngestWatcher
 from app.retrievers.vector_store import clear_vector_store_cache
 from app.services.agent_classifier import classify_agent_class
@@ -95,6 +105,12 @@ from app.services.retry_policy import call_with_retry
 from app.services.consistency_guard import should_stabilize, text_similarity
 from app.services.evidence_conflict import detect_evidence_conflict
 from app.services.retrieval_profiles import normalize_retrieval_profile, profile_force_local_only, profile_to_strategy
+from app.services.rag_runtime_scope import (
+    embedding_settings_signature,
+    execution_route_from_result,
+    is_under_path,
+    query_model_fingerprint,
+)
 from app.services.rate_limiter import SlidingWindowLimiter
 from app.services.rbac import can
 from app.services.runtime_ops import (
@@ -118,6 +134,13 @@ from app.services.runtime_ops import (
 )
 from app.services.runtime_metrics import RuntimeMetrics
 from app.services.log_buffer import list_captured_logs, setup_log_capture
+from app.services.network_security import OutboundURLValidationError, validate_api_base_url_for_provider
+from app.services.model_config_store import (
+    get_global_model_settings,
+    normalize_global_model_settings,
+    public_global_model_settings,
+    save_global_model_settings,
+)
 
 app = FastAPI(title="Multi-Agent Local RAG")
 settings = get_settings()
@@ -323,7 +346,16 @@ def _query_cache_key(
     agent_class_hint: str | None,
     request_id: str | None,
     mode: str = "query",
-    ) -> str:
+) -> str:
+    index_fingerprint = _visible_index_fingerprint_for_user(user)
+    model_fingerprint = _query_model_fingerprint_for_user(user)
+    cache_fingerprint = hashlib.sha256(
+        json.dumps(
+            {"index": index_fingerprint, "model": model_fingerprint},
+            ensure_ascii=False,
+            sort_keys=True,
+        ).encode("utf-8")
+    ).hexdigest()
     return QueryResultCache.build_key(
         user_id=str(user.get("user_id", "")),
         session_id=str(session_id or ""),
@@ -332,8 +364,10 @@ def _query_cache_key(
         use_reasoning=bool(use_reasoning),
         retrieval_strategy=str(retrieval_strategy or ""),
         agent_class_hint=str(agent_class_hint or ""),
-        request_id=f"{mode}:{str(request_id or '')}",
+        mode=mode,
+        request_id=str(request_id or ""),
         include_request_id=False,
+        index_fingerprint=cache_fingerprint,
     )
 
 
@@ -386,10 +420,24 @@ def _run_with_query_runtime(
 ):
     limiter_key = _query_limiter_key(user, request)
     try:
+        api_settings = _user_api_settings_for_runtime(user)
+    except OutboundURLValidationError as e:
+        runtime_metrics.inc("query_invalid_api_settings_total")
+        emit_alert(
+            "query_invalid_api_settings",
+            {
+                "trace_id": _trace_id(request),
+                "user_id": str(user.get("user_id", "")),
+                "reason": str(e),
+            },
+        )
+        raise HTTPException(status_code=400, detail=f"invalid api settings: {e}")
+    try:
         with query_guard.acquire(limiter_key):
             with request_context(
                 timeout_ms=int(getattr(settings, "query_request_timeout_ms", 20000) or 20000),
                 overload_mode=_is_overload_mode(),
+                api_settings=api_settings,
             ):
                 return call_with_retry("query.runtime", fn)
     except QueryRateLimitedError as e:
@@ -414,6 +462,46 @@ def _run_with_query_runtime(
             },
         )
         raise HTTPException(status_code=503, detail=str(e))
+
+
+def _user_api_settings_for_runtime(user: dict[str, Any]) -> dict[str, Any] | None:
+    user_id = str(user.get("user_id", "") or "").strip()
+    if not user_id:
+        return None
+    settings_data = auth_service.get_user_metadata(user_id, "api_settings")
+    if not isinstance(settings_data, dict):
+        return None
+    provider = str(settings_data.get("provider", "") or "").strip().lower()
+    if provider:
+        settings_data["provider"] = provider
+    base_url = str(settings_data.get("base_url", "") or "").strip()
+    if base_url and provider:
+        settings_data["base_url"] = validate_api_base_url_for_provider(base_url, provider=provider)
+    return dict(settings_data)
+
+
+def _mask_api_key(api_key: str) -> str:
+    value = str(api_key or "").strip()
+    if not value:
+        return ""
+    if len(value) <= 8:
+        return "*" * len(value)
+    return f"{value[:4]}{'*' * (len(value) - 8)}{value[-4:]}"
+
+
+def _api_settings_view(settings_data: UserApiSettings) -> UserApiSettingsView:
+    return UserApiSettingsView(
+        provider=str(settings_data.provider or "").strip().lower() or "ollama",
+        api_key_masked=_mask_api_key(settings_data.api_key),
+        base_url=str(settings_data.base_url or "").strip(),
+        model=str(settings_data.model or "").strip(),
+        temperature=float(settings_data.temperature),
+        max_tokens=int(settings_data.max_tokens),
+    )
+
+
+def _admin_model_settings_view(settings_data: dict[str, Any]) -> AdminModelSettingsResponse:
+    return AdminModelSettingsResponse(ok=True, settings=public_global_model_settings(settings_data))
 
 
 def _memory_store_for_user(user: dict[str, Any]) -> MemoryStore:
@@ -504,6 +592,7 @@ def _is_source_manageable_for_user(source: str | None, user: dict[str, Any]) -> 
 
 def _list_visible_documents_for_user(user: dict[str, Any]) -> list[dict[str, Any]]:
     user_upload_root = (settings.uploads_path / user["user_id"]).resolve()
+    docs_root = settings.docs_path.resolve()
     user_id = str(user.get("user_id", ""))
     items: list[dict[str, Any]] = []
     for row in list_indexed_files():
@@ -511,6 +600,10 @@ def _list_visible_documents_for_user(user: dict[str, Any]) -> list[dict[str, Any
         if not source:
             continue
         source_path = Path(source).resolve()
+        # Treat curated data/docs content as a shared knowledge base.
+        if is_under_path(source_path, docs_root):
+            items.append(row)
+            continue
         owner_user_id = str(row.get("owner_user_id", "") or "")
         visibility = str(row.get("visibility", "private") or "private").lower()
         if visibility == "public":
@@ -534,10 +627,115 @@ def _allowed_sources_for_user(user: dict[str, Any]) -> list[str]:
     return allowed
 
 
+def _allowed_sources_for_visible_filenames(user: dict[str, Any], filenames: list[str]) -> list[str]:
+    wanted = {str(x or "").strip() for x in filenames if str(x or "").strip()}
+    if not wanted:
+        return []
+    allowed: list[str] = []
+    for row in _list_visible_documents_for_user(user):
+        if str(row.get("filename", "") or "") not in wanted:
+            continue
+        source = str(row.get("source", "") or "").strip()
+        if source and source not in allowed:
+            allowed.append(source)
+    return allowed
+
+
+def _source_mtime_ns(source: str) -> int:
+    try:
+        path = Path(source)
+        if path.exists() and path.is_file():
+            return int(path.stat().st_mtime_ns)
+    except Exception:
+        return 0
+    return 0
+
+
+def _visible_index_fingerprint_for_user(user: dict[str, Any]) -> str:
+    rows = []
+    for row in _list_visible_documents_for_user(user):
+        source = str(row.get("source", "") or "").strip()
+        rows.append(
+            {
+                "source": source,
+                "chunks": int(row.get("chunks", 0) or 0),
+                "owner_user_id": str(row.get("owner_user_id", "") or ""),
+                "visibility": str(row.get("visibility", "") or ""),
+                "agent_class": str(row.get("agent_class", "") or ""),
+                "mtime_ns": _source_mtime_ns(source),
+            }
+        )
+    raw = json.dumps(sorted(rows, key=lambda x: x["source"]), ensure_ascii=False, sort_keys=True)
+    return hashlib.sha256(raw.encode("utf-8")).hexdigest()
+
+
+def _query_model_fingerprint_for_user(user: dict[str, Any]) -> str:
+    user_id = str(user.get("user_id", "") or "").strip()
+    user_api_settings = auth_service.get_user_metadata(user_id, "api_settings") if user_id else None
+    return query_model_fingerprint(
+        user_api_settings=user_api_settings if isinstance(user_api_settings, dict) else None,
+        global_model_settings=get_global_model_settings(),
+        app_settings=settings,
+    )
+
+
+def _vector_context_from_citations(citations: list[dict[str, Any]]) -> str:
+    blocks = []
+    for citation in citations:
+        metadata = citation.get("metadata", {}) or {}
+        source = str(citation.get("source", "") or Path(str(metadata.get("source", "") or "unknown")).name)
+        retrieval_sources = metadata.get("retrieval_sources", [])
+        if not isinstance(retrieval_sources, list):
+            retrieval_sources = [str(retrieval_sources)]
+        retrieval_label = ",".join(str(x) for x in retrieval_sources if str(x).strip()) or "filtered"
+        blocks.append(
+            f"[SOURCE: {source or 'unknown'}]\n"
+            f"[RETRIEVAL: {retrieval_label}]\n"
+            f"{str(citation.get('content', '') or '')}"
+        )
+    return "\n\n".join(blocks)
+
+
 def _enforce_result_source_scope(result: dict[str, Any], allowed_sources: list[str], request: Request, user: dict[str, Any]) -> dict[str, Any]:
     allowed_set = set(allowed_sources)
+    source_scope = dict(result.get("source_scope", {}) or {})
     if not allowed_set:
-        return result
+        vector_result = dict(result.get("vector_result", {}) or {})
+        denied = len(list(vector_result.get("citations", []) or []))
+        vector_result["citations"] = []
+        vector_result["context"] = ""
+        vector_result["retrieved_count"] = 0
+        vector_result["effective_hit_count"] = 0
+        graph_result = dict(result.get("graph_result", {}) or {})
+        graph_filtered = bool(
+            graph_result.get("context")
+            or graph_result.get("entities")
+            or graph_result.get("neighbors")
+            or graph_result.get("paths")
+        )
+        if graph_filtered:
+            graph_result.update({"context": "", "entities": [], "neighbors": [], "paths": []})
+        source_scope.update(
+            {
+                "checked": True,
+                "allowed_source_count": 0,
+                "filtered_vector_citations": denied,
+                "filtered_graph": graph_filtered,
+            }
+        )
+        out = dict(result)
+        out["vector_result"] = vector_result
+        out["graph_result"] = graph_result
+        out["source_scope"] = source_scope
+        _audit(
+            request,
+            action="query.source_scope",
+            resource_type="query",
+            result="denied",
+            user=user,
+            detail=f"no_allowed_sources; filtered_citations={denied}",
+        )
+        return out
     vector_result = dict(result.get("vector_result", {}) or {})
     citations = list(vector_result.get("citations", []) or [])
     kept = []
@@ -569,8 +767,53 @@ def _enforce_result_source_scope(result: dict[str, Any], allowed_sources: list[s
         )
     vector_result["citations"] = kept
     vector_result["retrieved_count"] = len(kept)
+    vector_result["effective_hit_count"] = min(int(vector_result.get("effective_hit_count", len(kept)) or 0), len(kept))
+    vector_result["context"] = _vector_context_from_citations(kept)
+    source_scope.update(
+        {
+            "checked": True,
+            "allowed_source_count": len(allowed_set),
+            "filtered_vector_citations": denied,
+            "filtered_graph": False,
+        }
+    )
     out = dict(result)
     out["vector_result"] = vector_result
+    out["source_scope"] = source_scope
+    return out
+
+
+def _source_scope_needs_resynthesis(result: dict[str, Any]) -> bool:
+    scope = result.get("source_scope", {}) or {}
+    return bool(scope.get("filtered_vector_citations", 0) or scope.get("filtered_graph", False))
+
+
+def _resynthesize_after_source_scope(
+    result: dict[str, Any],
+    *,
+    question: str,
+    memory_context: str,
+    use_reasoning: bool,
+) -> dict[str, Any]:
+    if not _source_scope_needs_resynthesis(result):
+        return result
+    vector_context = str((result.get("vector_result", {}) or {}).get("context", "") or "")
+    graph_context = str((result.get("graph_result", {}) or {}).get("context", "") or "")
+    web_context = str((result.get("web_result", {}) or {}).get("context", "") or "")
+    answer = synthesize_answer(
+        question=question,
+        skill_name=str(result.get("skill", "") or "answer_with_citations"),
+        memory_context=memory_context,
+        vector_context=vector_context,
+        graph_context=graph_context,
+        web_context=web_context,
+        use_reasoning=use_reasoning,
+    )
+    out = dict(result)
+    out["answer"] = answer
+    source_scope = dict(out.get("source_scope", {}) or {})
+    source_scope["answer_resynthesized"] = True
+    out["source_scope"] = source_scope
     return out
 
 
@@ -745,6 +988,8 @@ def _auth_cookie_name() -> str:
 def _auth_cookie_samesite() -> str:
     raw = str(getattr(settings, "auth_cookie_samesite", "lax") or "lax").strip().lower()
     if raw not in {"lax", "strict", "none"}:
+        return "lax"
+    if raw == "none" and not bool(getattr(settings, "auth_cookie_secure", False)):
         return "lax"
     return raw
 
@@ -931,6 +1176,7 @@ def _runtime_diagnostics_summary() -> dict[str, Any]:
     conda_prefix = str(os.environ.get("CONDA_PREFIX", "") or "").strip()
     conda_env = str(os.environ.get("CONDA_DEFAULT_ENV", "") or "").strip()
     recent_errors = list_captured_logs(limit=20, level="ERROR")
+    global_model_settings = public_global_model_settings(get_global_model_settings())
     recent_failures = []
     with _request_metrics_lock:
         for row in reversed(list(_request_metrics)):
@@ -959,6 +1205,7 @@ def _runtime_diagnostics_summary() -> dict[str, Any]:
         "ollama_base_url": str(settings.ollama_base_url or ""),
         "ollama_chat_model": str(settings.ollama_chat_model or ""),
         "ollama_embed_model": str(settings.ollama_embed_model or ""),
+        "global_model_settings": global_model_settings,
         "recent_errors": recent_errors[:5],
         "recent_failures": recent_failures,
     }
@@ -1493,6 +1740,151 @@ def admin_ops_set_feature_flags(payload: dict[str, Any], request: Request, user:
     return state
 
 
+@app.get("/admin/model-settings", response_model=AdminModelSettingsResponse)
+def admin_get_model_settings(request: Request, user: dict[str, Any] = Depends(_require_user)):
+    _require_permission(user, "admin:ops_manage", request, "admin")
+    return _admin_model_settings_view(get_global_model_settings())
+
+
+@app.post("/admin/model-settings", response_model=AdminModelSettingsResponse)
+def admin_save_model_settings(
+    req: AdminModelSettings,
+    request: Request,
+    user: dict[str, Any] = Depends(_require_user),
+):
+    _require_permission(user, "admin:ops_manage", request, "admin")
+    payload = req.model_dump()
+    current = get_global_model_settings()
+    embedding_before = embedding_settings_signature(current)
+    provider = str(payload.get("provider", "") or "").strip().lower()
+    incoming_api_key = str(payload.get("api_key", "") or "").strip()
+    if not incoming_api_key and provider == str(current.get("provider", "") or "").strip().lower():
+        payload["api_key"] = str(current.get("api_key", "") or "")
+    try:
+        saved = save_global_model_settings(payload)
+    except OutboundURLValidationError as e:
+        raise HTTPException(status_code=400, detail=f"unsafe base_url: {e}")
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    clear_model_caches()
+    clear_vector_store_cache()
+    embedding_after = embedding_settings_signature(saved)
+    reindex_result: dict[str, Any] | None = None
+    if embedding_after != embedding_before:
+        try:
+            reindex_result = rebuild_all_vector_index()
+            runtime_metrics.inc("admin_model_settings_embedding_reindex_total")
+        except Exception as e:
+            runtime_metrics.inc("admin_model_settings_embedding_reindex_failed_total")
+            emit_alert(
+                "admin_model_settings_embedding_reindex_failed",
+                {
+                    "trace_id": _trace_id(request),
+                    "message": f"{type(e).__name__}: {e}",
+                    "provider": str(saved.get("provider", "")),
+                    "embedding_model": str(saved.get("embedding_model", "")),
+                },
+            )
+            raise HTTPException(status_code=500, detail="model settings saved, but embedding reindex failed")
+    _audit(
+        request,
+        action="admin.model_settings.save",
+        resource_type="admin",
+        result="success",
+        user=user,
+        detail=(
+            f"enabled={saved['enabled']}; provider={saved['provider']}; chat_model={saved['chat_model']}; "
+            f"embedding_reindexed={bool(reindex_result)}; records_reindexed={int((reindex_result or {}).get('records_reindexed', 0) or 0)}"
+        ),
+    )
+    response = _admin_model_settings_view(saved)
+    if reindex_result is not None:
+        response.settings.embedding_reindexed = True
+        response.settings.records_reindexed = int(reindex_result.get("records_reindexed", 0) or 0)
+    return response
+
+
+@app.post("/admin/model-settings/test", response_model=UserApiSettingsTestResponse)
+def admin_test_model_settings(
+    req: AdminModelSettings,
+    request: Request,
+    user: dict[str, Any] = Depends(_require_user),
+):
+    _require_permission(user, "admin:ops_manage", request, "admin")
+    payload = req.model_dump()
+    current = get_global_model_settings()
+    provider = str(payload.get("provider", "") or "").strip().lower()
+    if not str(payload.get("api_key", "") or "").strip() and provider == str(current.get("provider", "") or "").strip().lower():
+        payload["api_key"] = str(current.get("api_key", "") or "")
+    try:
+        normalized = normalize_global_model_settings({**payload, "enabled": bool(payload.get("enabled", False))})
+    except OutboundURLValidationError as e:
+        raise HTTPException(status_code=400, detail=f"unsafe base_url: {e}")
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    started = time.perf_counter()
+    api_settings_payload = {
+        "provider": normalized["provider"],
+        "api_key": normalized["api_key"],
+        "base_url": normalized["base_url"],
+        "model": normalized["chat_model"],
+        "temperature": normalized["temperature"],
+        "max_tokens": normalized["max_tokens"],
+    }
+    try:
+        with request_context(timeout_ms=12000, overload_mode=False, api_settings=api_settings_payload):
+            model = get_chat_model(temperature=float(normalized["temperature"]))
+            probe_result = model.invoke(
+                [
+                    ("system", "You are a connectivity probe. Reply with exactly OK."),
+                    ("human", "Reply with OK."),
+                ]
+            )
+        latency_ms = int((time.perf_counter() - started) * 1000)
+        preview = str(getattr(probe_result, "content", probe_result) or "").strip().replace("\n", " ")
+        if len(preview) > 180:
+            preview = preview[:177] + "..."
+        _audit(
+            request,
+            action="admin.model_settings.test",
+            resource_type="admin",
+            result="success",
+            user=user,
+            detail=f"provider={normalized['provider']}; model={normalized['chat_model']}; latency_ms={latency_ms}",
+        )
+        return UserApiSettingsTestResponse(
+            ok=True,
+            reachable=True,
+            provider=normalized["provider"],
+            model=normalized["chat_model"],
+            latency_ms=latency_ms,
+            message="Model connectivity test succeeded",
+            preview=preview,
+        )
+    except Exception as e:
+        latency_ms = int((time.perf_counter() - started) * 1000)
+        reason = str(e) or type(e).__name__
+        if len(reason) > 240:
+            reason = reason[:237] + "..."
+        _audit(
+            request,
+            action="admin.model_settings.test",
+            resource_type="admin",
+            result="failed",
+            user=user,
+            detail=f"provider={normalized['provider']}; model={normalized['chat_model']}; latency_ms={latency_ms}; reason={reason}",
+        )
+        return UserApiSettingsTestResponse(
+            ok=False,
+            reachable=False,
+            provider=normalized["provider"],
+            model=normalized["chat_model"],
+            latency_ms=latency_ms,
+            message=reason,
+            preview="",
+        )
+
+
 @app.post("/admin/config/reload")
 def admin_reload_config(request: Request, user: dict[str, Any] = Depends(_require_user)):
     _require_permission(user, "admin:ops_manage", request, "admin")
@@ -1545,6 +1937,7 @@ def admin_reload_config(request: Request, user: dict[str, Any] = Depends(_requir
             "query_rewrite_enabled": settings.query_rewrite_enabled,
             "query_decompose_enabled": settings.query_decompose_enabled,
             "rank_feature_enabled": settings.rank_feature_enabled,
+            "global_model_settings": public_global_model_settings(get_global_model_settings()),
         },
     }
 
@@ -1959,6 +2352,181 @@ def logout(request: Request, response: Response, auth: tuple[dict[str, Any], str
 @app.get("/auth/me", response_model=AuthUser)
 def auth_me(user: dict[str, Any] = Depends(_require_user)):
     return AuthUser(**user)
+
+
+@app.get("/user/api-settings", response_model=UserApiSettingsResponse)
+def get_user_api_settings(user: dict[str, Any] = Depends(_require_user)):
+    """Get user's API settings"""
+    user_id = user["user_id"]
+    settings_data = auth_service.get_user_metadata(user_id, "api_settings")
+
+    if settings_data:
+        user_settings = UserApiSettings(**settings_data)
+    else:
+        # Return default settings
+        user_settings = UserApiSettings(
+            provider="ollama",
+            api_key="",
+            base_url="http://localhost:11434",
+            model="qwen2.5:7b",
+            temperature=0.7,
+            max_tokens=2048
+        )
+
+    return UserApiSettingsResponse(ok=True, settings=_api_settings_view(user_settings))
+
+
+@app.post("/user/api-settings", response_model=UserApiSettingsResponse)
+def save_user_api_settings(
+    req_settings: UserApiSettings,
+    user: dict[str, Any] = Depends(_require_user)
+):
+    """Save user's API settings"""
+    user_id = user["user_id"]
+
+    provider = str(req_settings.provider or "").strip().lower()
+    allowed_providers = {"local", "openai", "anthropic", "deepseek", "ollama", "custom"}
+    if provider not in allowed_providers:
+        raise HTTPException(status_code=400, detail="unsupported provider")
+    normalized_base_url = str(req_settings.base_url or "").strip().rstrip("/")
+    if provider == "ollama":
+        normalized_base_url = re.sub(r"/v1$", "", normalized_base_url, flags=re.IGNORECASE)
+    if provider == "local":
+        normalized_base_url = ""
+    else:
+        if not normalized_base_url:
+            raise HTTPException(status_code=400, detail="base_url is required")
+        try:
+            normalized_base_url = validate_api_base_url_for_provider(normalized_base_url, provider=provider)
+        except OutboundURLValidationError as e:
+            raise HTTPException(status_code=400, detail=f"unsafe base_url: {e}")
+    existing = auth_service.get_user_metadata(user_id, "api_settings")
+    incoming_api_key = str(req_settings.api_key or "").strip()
+    existing_api_key = ""
+    existing_provider = ""
+    if isinstance(existing, dict):
+        existing_api_key = str(existing.get("api_key", "") or "").strip()
+        existing_provider = str(existing.get("provider", "") or "").strip().lower()
+    effective_api_key = incoming_api_key
+    if (not effective_api_key) and provider != "ollama" and existing_provider == provider:
+        effective_api_key = existing_api_key
+    if provider not in {"local", "ollama"} and not effective_api_key:
+        raise HTTPException(status_code=400, detail="api_key is required for this provider")
+    if provider in {"local", "ollama"} and not incoming_api_key:
+        effective_api_key = ""
+    normalized_settings = req_settings.model_copy(
+        update={"provider": provider, "base_url": normalized_base_url, "api_key": effective_api_key}
+    )
+
+    # Store settings in user metadata
+    auth_service.set_user_metadata(user_id, "api_settings", normalized_settings.model_dump())
+
+    return UserApiSettingsResponse(ok=True, settings=_api_settings_view(normalized_settings))
+
+
+@app.post("/user/api-settings/test", response_model=UserApiSettingsTestResponse)
+def test_user_api_settings(
+    req: UserApiSettings,
+    request: Request,
+    user: dict[str, Any] = Depends(_require_user),
+):
+    provider = str(req.provider or "").strip().lower()
+    model_name = str(req.model or "").strip()
+    base_url = str(req.base_url or "").strip().rstrip("/")
+    api_key = str(req.api_key or "").strip()
+    allowed_providers = {"local", "openai", "anthropic", "deepseek", "ollama", "custom"}
+    if provider not in allowed_providers:
+        raise HTTPException(status_code=400, detail="unsupported provider")
+    if provider != "local" and not base_url:
+        raise HTTPException(status_code=400, detail="base_url is required")
+    if not model_name:
+        raise HTTPException(status_code=400, detail="model is required")
+    if provider not in {"local", "ollama"} and not api_key:
+        raise HTTPException(status_code=400, detail="api_key is required for this provider")
+    if provider == "ollama":
+        base_url = re.sub(r"/v1$", "", base_url, flags=re.IGNORECASE)
+    if provider == "local":
+        base_url = ""
+    else:
+        try:
+            base_url = validate_api_base_url_for_provider(base_url, provider=provider)
+        except OutboundURLValidationError as e:
+            raise HTTPException(status_code=400, detail=f"unsafe base_url: {e}")
+    if provider == "anthropic":
+        host = str(urlparse(base_url).hostname or "").lower()
+        if host and ("anthropic.com" not in host):
+            return UserApiSettingsTestResponse(
+                ok=False,
+                reachable=False,
+                provider=provider,
+                model=model_name,
+                latency_ms=0,
+                message="provider=anthropic currently expects official Anthropic endpoint. Use provider=custom for OpenAI-compatible proxy URLs.",
+                preview="",
+            )
+
+    started = time.perf_counter()
+    api_settings_payload = {
+        "provider": provider,
+        "api_key": api_key,
+        "base_url": base_url,
+        "model": model_name,
+        "temperature": float(req.temperature),
+        "max_tokens": int(req.max_tokens),
+    }
+
+    try:
+        with request_context(timeout_ms=12000, overload_mode=False, api_settings=api_settings_payload):
+            model = get_chat_model(temperature=float(req.temperature))
+            probe_result = model.invoke(
+                [
+                    ("system", "You are a connectivity probe. Reply with exactly OK."),
+                    ("human", "Reply with OK."),
+                ]
+            )
+        latency_ms = int((time.perf_counter() - started) * 1000)
+        preview = str(getattr(probe_result, "content", probe_result) or "").strip().replace("\n", " ")
+        if len(preview) > 180:
+            preview = preview[:177] + "..."
+        _audit(
+            request,
+            action="user.api_settings.test",
+            resource_type="settings",
+            result="success",
+            user=user,
+            detail=f"provider={provider}; model={model_name}; latency_ms={latency_ms}",
+        )
+        return UserApiSettingsTestResponse(
+            ok=True,
+            reachable=True,
+            provider=provider,
+            model=model_name,
+            latency_ms=latency_ms,
+            message="API connectivity test succeeded",
+            preview=preview,
+        )
+    except Exception as e:
+        latency_ms = int((time.perf_counter() - started) * 1000)
+        reason = str(e) or type(e).__name__
+        if len(reason) > 240:
+            reason = reason[:237] + "..."
+        _audit(
+            request,
+            action="user.api_settings.test",
+            resource_type="settings",
+            result="failed",
+            user=user,
+            detail=f"provider={provider}; model={model_name}; latency_ms={latency_ms}; reason={reason}",
+        )
+        return UserApiSettingsTestResponse(
+            ok=False,
+            reachable=False,
+            provider=provider,
+            model=model_name,
+            latency_ms=latency_ms,
+            message=reason,
+            preview="",
+        )
 
 
 @app.get("/admin/users", response_model=list[AdminUserSummary])
@@ -2723,6 +3291,7 @@ async def upload_files(
         raise HTTPException(status_code=500, detail="upload ingest failed")
     ingest_elapsed = (time.perf_counter() - ingest_started)
     per_file = ingest_elapsed / max(1, len(saved_paths))
+    chunks_by_source = {str(row.get("source", "") or ""): int(row.get("chunks", 0) or 0) for row in list_indexed_files()}
     for p in saved_paths:
         append_index_freshness(
             {
@@ -2730,7 +3299,7 @@ async def upload_files(
                 "filename": p.name,
                 "source": str(p),
                 "freshness_seconds": round(per_file, 4),
-                "chunks_indexed": int(result.get("chunks_indexed", 0) or 0),
+                "chunks_indexed": int(chunks_by_source.get(str(p), 0) or 0),
             }
         )
     _audit(request, action="document.upload", resource_type="document", result="success", user=user, detail=",".join(filenames))
@@ -2762,6 +3331,7 @@ def query(req: QueryRequest, request: Request, user: dict[str, Any] = Depends(_r
         raise HTTPException(status_code=400, detail=str(e))
     original_question = normalized_question
     effective_agent_class = _resolve_effective_agent_class(normalized_question, req.agent_class_hint)
+    pdf_allowed_sources: list[str] | None = None
 
     if _is_file_inventory_question(normalized_question):
         answer = _build_user_file_inventory_answer(user)
@@ -2853,11 +3423,16 @@ def query(req: QueryRequest, request: Request, user: dict[str, Any] = Depends(_r
                     debug={"reason": "pdf_agent_chunks_zero", "skill": "pdf_text_reader", "agent_class": "pdf_text", "use_reasoning": req.use_reasoning},
                 )
             normalized_question = apply_pdf_focus_to_question(normalized_question, selected_with_chunks)
+            pdf_allowed_sources = _allowed_sources_for_visible_filenames(user, selected_with_chunks)
 
     is_fast_smalltalk = is_casual_chat_query(normalized_question)
     effective_question = normalized_question if is_fast_smalltalk else enhance_user_question_for_completion(normalized_question)
-    memory_context = _build_memory_context_for_session(user=user, session_id=req.session_id, question=effective_question)
-    allowed_sources = _allowed_sources_for_user(user)
+    memory_context = "" if is_fast_smalltalk else _build_memory_context_for_session(
+        user=user,
+        session_id=req.session_id,
+        question=effective_question,
+    )
+    allowed_sources = pdf_allowed_sources if pdf_allowed_sources is not None else _allowed_sources_for_user(user)
     retrieval_strategy, strategy_meta = _effective_strategy_for_session(
         req_strategy=req.retrieval_strategy,
         user=user,
@@ -2904,15 +3479,30 @@ def query(req: QueryRequest, request: Request, user: dict[str, Any] = Depends(_r
         request_id=req.request_id,
         mode="query",
     )
-    cached_response = query_result_cache.get(cache_key, session_id=req.session_id)
+    cached_response = None if is_fast_smalltalk else query_result_cache.get(cache_key, session_id=req.session_id)
     if isinstance(cached_response, dict) and cached_response:
-        runtime_metrics.inc("query_cache_hit_total")
-        return QueryResponse(**cached_response)
+        try:
+            cached = QueryResponse.model_validate(cached_response)
+        except Exception:
+            runtime_metrics.inc("query_cache_invalid_total")
+            emit_alert(
+                "query_cache_invalid_payload",
+                {
+                    "trace_id": _trace_id(request),
+                    "session_id": str(req.session_id or ""),
+                },
+            )
+        else:
+            runtime_metrics.inc("query_cache_hit_total")
+            return cached
     if not query_result_cache.mark_inflight(cache_key):
         runtime_metrics.inc("query_duplicate_total")
-        hot_cached = query_result_cache.get(cache_key, session_id=req.session_id)
+        hot_cached = None if is_fast_smalltalk else query_result_cache.get(cache_key, session_id=req.session_id)
         if isinstance(hot_cached, dict) and hot_cached:
-            return QueryResponse(**hot_cached)
+            try:
+                return QueryResponse.model_validate(hot_cached)
+            except Exception:
+                runtime_metrics.inc("query_cache_invalid_total")
         emit_alert(
             "query_duplicate_inflight",
             {"trace_id": _trace_id(request), "session_id": str(req.session_id or "")},
@@ -2926,6 +3516,12 @@ def query(req: QueryRequest, request: Request, user: dict[str, Any] = Depends(_r
             runtime_kwargs.setdefault("retrieval_strategy", "baseline")
         result_local = _call_with_supported_kwargs(run_query, effective_question, **runtime_kwargs)
         result_local = _enforce_result_source_scope(result_local, allowed_sources=allowed_sources, request=request, user=user)
+        result_local = _resynthesize_after_source_scope(
+            result_local,
+            question=effective_question,
+            memory_context=memory_context,
+            use_reasoning=bool(runtime_kwargs.get("use_reasoning", False)),
+        )
         consistency_local = {"checked": False}
         if bool(settings.consistency_guard_enabled) and (not is_fast_smalltalk):
             prev_answer = _latest_answer_for_same_question(user=user, session_id=req.session_id, question=original_question)
@@ -2942,6 +3538,12 @@ def query(req: QueryRequest, request: Request, user: dict[str, Any] = Depends(_r
                     stabilize_kwargs["use_reasoning"] = False
                     retried = _call_with_supported_kwargs(run_query, effective_question, **stabilize_kwargs)
                     retried = _enforce_result_source_scope(retried, allowed_sources=allowed_sources, request=request, user=user)
+                    retried = _resynthesize_after_source_scope(
+                        retried,
+                        question=effective_question,
+                        memory_context=memory_context,
+                        use_reasoning=bool(stabilize_kwargs.get("use_reasoning", False)),
+                    )
                     retried_sim = text_similarity(prev_answer, retried.get("answer", ""))
                     if retried_sim > sim:
                         result_local = retried
@@ -2965,6 +3567,7 @@ def query(req: QueryRequest, request: Request, user: dict[str, Any] = Depends(_r
     )
     if conflict_report.get("conflict"):
         result["answer"] = f"[evidence-conflict-warning]\n{result.get('answer', '')}"
+    execution_route = execution_route_from_result(result)
     if req.session_id:
         history_store = _history_store_for_user(user)
         history_store.append_message(req.session_id, "user", original_question)
@@ -2974,6 +3577,7 @@ def query(req: QueryRequest, request: Request, user: dict[str, Any] = Depends(_r
             result.get("answer", ""),
             metadata={
                 "route": result.get("route", "unknown"),
+                "execution_route": execution_route,
                 "agent_class": result.get("agent_class", "general"),
                 "web_used": result.get("web_result", {}).get("used", False),
                 "thoughts": result.get("thoughts", []),
@@ -2985,6 +3589,7 @@ def query(req: QueryRequest, request: Request, user: dict[str, Any] = Depends(_r
                 "answer_safety": result.get("answer_safety", {}),
                 "consistency": consistency_info,
                 "evidence_conflict": conflict_report,
+                "source_scope": result.get("source_scope", {}),
             },
         )
         _promote_long_term_memory(user=user, session_id=req.session_id, question=original_question, result=result)
@@ -2998,6 +3603,7 @@ def query(req: QueryRequest, request: Request, user: dict[str, Any] = Depends(_r
             "reason": result.get("reason", ""),
             "skill": result.get("skill", ""),
             "agent_class": result.get("agent_class", "general"),
+            "execution_route": execution_route,
             "vector_retrieved": result.get("vector_result", {}).get("retrieved_count", 0),
             "vector_effective_hits": result.get("vector_result", {}).get("effective_hit_count", 0),
             "retrieval_diagnostics": result.get("vector_result", {}).get("retrieval_diagnostics", {}),
@@ -3012,6 +3618,7 @@ def query(req: QueryRequest, request: Request, user: dict[str, Any] = Depends(_r
             "retrieval_strategy_reason": strategy_meta.get("reason"),
             "retrieval_strategy_bucket": strategy_meta.get("bucket"),
             "evidence_conflict": conflict_report,
+            "source_scope": result.get("source_scope", {}),
             "trace_id": _trace_id(request),
         },
     }
@@ -3091,6 +3698,7 @@ async def stream_query(
         raise HTTPException(status_code=400, detail=str(e))
     original_question = normalized_question
     effective_agent_class = _resolve_effective_agent_class(normalized_question, agent_class_hint)
+    pdf_allowed_sources: list[str] | None = None
 
     if _is_file_inventory_question(normalized_question):
         answer = _build_user_file_inventory_answer(user)
@@ -3235,12 +3843,17 @@ async def stream_query(
 
                 return _sse_response(event_gen_pdf_chunks_zero())
             normalized_question = apply_pdf_focus_to_question(normalized_question, selected_with_chunks)
+            pdf_allowed_sources = _allowed_sources_for_visible_filenames(user, selected_with_chunks)
 
     is_fast_smalltalk = is_casual_chat_query(normalized_question)
     effective_question = normalized_question if is_fast_smalltalk else enhance_user_question_for_completion(normalized_question)
     history_store = _history_store_for_user(user)
-    memory_context = _build_memory_context_for_session(user=user, session_id=session_id, question=effective_question)
-    allowed_sources = _allowed_sources_for_user(user)
+    memory_context = "" if is_fast_smalltalk else _build_memory_context_for_session(
+        user=user,
+        session_id=session_id,
+        question=effective_question,
+    )
+    allowed_sources = pdf_allowed_sources if pdf_allowed_sources is not None else _allowed_sources_for_user(user)
     normalized_strategy, strategy_meta = _effective_strategy_for_session(
         req_strategy=retrieval_strategy,
         user=user,
@@ -3249,6 +3862,12 @@ async def stream_query(
     )
     effective_use_web_fallback = bool(use_web_fallback and (not profile_force_local_only(normalized_strategy)))
     effective_use_reasoning = bool(use_reasoning)
+    logger.info(
+        f"[WEB_FALLBACK_DEBUG] use_web_fallback={use_web_fallback}, "
+        f"normalized_strategy={normalized_strategy}, "
+        f"profile_force_local_only={profile_force_local_only(normalized_strategy)}, "
+        f"effective_use_web_fallback={effective_use_web_fallback}"
+    )
     if is_fast_smalltalk:
         effective_use_web_fallback = False
         effective_use_reasoning = False
@@ -3287,7 +3906,7 @@ async def stream_query(
         session_id=str(session_id or ""),
         question=effective_question,
     )
-    if replay_enabled:
+    if replay_enabled and not is_fast_smalltalk:
         stream_replay = query_result_cache.get_stream_events(stream_cache_key)
         replay_events = list(stream_replay.get("events", []) or [])
         replay_done = bool(stream_replay.get("done", False))
@@ -3300,7 +3919,7 @@ async def stream_query(
                     yield encode_sse({"type": "status", "message": "replay_partial", "trace_id": _trace_id(request)})
             return _sse_response(event_gen_replay())
 
-    cached_stream = query_result_cache.get(stream_cache_key, session_id=session_id)
+    cached_stream = None if is_fast_smalltalk else query_result_cache.get(stream_cache_key, session_id=session_id)
     if isinstance(cached_stream, dict) and cached_stream.get("result"):
         runtime_metrics.inc("query_stream_cache_hit_total")
         done_result = dict(cached_stream.get("result", {}) or {})
@@ -3322,6 +3941,20 @@ async def stream_query(
         raise HTTPException(status_code=409, detail="duplicate request in progress")
     if session_id:
         history_store.append_message(session_id, "user", original_question)
+    try:
+        runtime_api_settings = _user_api_settings_for_runtime(user)
+    except OutboundURLValidationError as e:
+        runtime_metrics.inc("query_stream_invalid_api_settings_total")
+        emit_alert(
+            "query_stream_invalid_api_settings",
+            {
+                "trace_id": _trace_id(request),
+                "user_id": str(user.get("user_id", "")),
+                "reason": str(e),
+            },
+        )
+        query_result_cache.clear_inflight(stream_cache_key)
+        raise HTTPException(status_code=400, detail=f"invalid api settings: {e}")
 
     async def event_gen():
         final_result = None
@@ -3342,6 +3975,7 @@ async def stream_query(
                 with request_context(
                     timeout_ms=int(getattr(settings, "query_request_timeout_ms", 20000) or 20000),
                     overload_mode=_is_overload_mode(),
+                    api_settings=runtime_api_settings,
                 ):
                     runtime_stream_kwargs = dict(stream_kwargs)
                     if overload_mode_enabled():
@@ -3375,7 +4009,8 @@ async def stream_query(
                             producer_stop.set()
                             asyncio.run_coroutine_threadsafe(queue.put(done_marker), loop).result()
 
-                    threading.Thread(target=_stream_producer, daemon=True).start()
+                    producer_context = contextvars.copy_context()
+                    threading.Thread(target=lambda: producer_context.run(_stream_producer), daemon=True).start()
                     heartbeat_s = max(2.0, float(getattr(settings, "stream_heartbeat_seconds", 8.0) or 8.0))
 
                     while True:
@@ -3396,6 +4031,18 @@ async def stream_query(
                                 request=request,
                                 user=user,
                             )
+                            original_stream_answer = str(final_result.get("answer", "") or "")
+                            final_result = _resynthesize_after_source_scope(
+                                final_result,
+                                question=effective_question,
+                                memory_context=memory_context,
+                                use_reasoning=bool(runtime_stream_kwargs.get("use_reasoning", False)),
+                            )
+                            if str(final_result.get("answer", "") or "") != original_stream_answer:
+                                reset_event = {"type": "answer_reset", "content": final_result.get("answer", "")}
+                                if replay_enabled:
+                                    query_result_cache.append_stream_event(stream_cache_key, reset_event, done=False)
+                                yield encode_sse(reset_event)
                             conflict_report = detect_evidence_conflict(
                                 list(final_result.get("vector_result", {}).get("citations", []) or [])
                                 + list(final_result.get("web_result", {}).get("citations", []) or [])
@@ -3403,6 +4050,8 @@ async def stream_query(
                             final_result["evidence_conflict"] = conflict_report
                             if conflict_report.get("conflict"):
                                 final_result["answer"] = f"[evidence-conflict-warning]\n{final_result.get('answer', '')}"
+                            final_result["execution_route"] = execution_route_from_result(final_result)
+                            final_result["retrieval_strategy"] = normalized_strategy or "advanced"
                             final_result["trace_id"] = trace_id
                             sig, sig_kid = _maybe_sign_response(
                                 {
@@ -3470,6 +4119,7 @@ async def stream_query(
                 final_result.get("answer", ""),
                 metadata={
                     "route": final_result.get("route", "unknown"),
+                    "execution_route": final_result.get("execution_route", ""),
                     "agent_class": final_result.get("agent_class", "general"),
                     "web_used": final_result.get("web_result", {}).get("used", False),
                     "thoughts": final_result.get("thoughts", []),
@@ -3483,6 +4133,7 @@ async def stream_query(
                     "retrieval_strategy_reason": strategy_meta.get("reason"),
                     "retrieval_strategy_bucket": strategy_meta.get("bucket"),
                     "evidence_conflict": final_result.get("evidence_conflict", {}),
+                    "source_scope": final_result.get("source_scope", {}),
                 },
             )
             _promote_long_term_memory(user=user, session_id=session_id, question=original_question, result=final_result)

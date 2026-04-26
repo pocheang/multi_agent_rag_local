@@ -14,9 +14,32 @@ import type {
   SessionSummary,
   UploadResponse,
   BenchmarkTrendItem,
+  AdminModelSettingsView,
 } from "@/types/api";
 
-const API_BASE = import.meta.env.VITE_API_BASE_URL || "";
+function resolveApiBase() {
+  const raw = String(import.meta.env.VITE_API_BASE_URL || "").trim();
+  if (!raw) return "";
+  const cleaned = raw.replace(/\/+$/, "");
+
+  // Local dev hardening: avoid localhost/127.0.0.1 host mismatch that can break cookie auth.
+  if (typeof window === "undefined") return cleaned;
+  try {
+    const parsed = new URL(cleaned);
+    const pageHost = window.location.hostname;
+    const apiHost = parsed.hostname;
+    const isLoopbackPair =
+      (apiHost === "localhost" || apiHost === "127.0.0.1") &&
+      (pageHost === "localhost" || pageHost === "127.0.0.1");
+    if (!isLoopbackPair || apiHost === pageHost) return cleaned;
+    parsed.hostname = pageHost;
+    return parsed.toString().replace(/\/+$/, "");
+  } catch {
+    return cleaned;
+  }
+}
+
+const API_BASE = resolveApiBase();
 const TOKEN_KEY = "auth_token";
 
 type Json = Record<string, unknown> | Array<unknown>;
@@ -198,6 +221,8 @@ export const appApi = {
     useReasoning: boolean;
     sessionId: string;
     agentClassHint?: string;
+    retrievalStrategy?: string;
+    signal?: AbortSignal;
   }) {
     const form = new FormData();
     form.append("question", input.question);
@@ -205,7 +230,12 @@ export const appApi = {
     form.append("use_reasoning", input.useReasoning ? "1" : "0");
     form.append("session_id", input.sessionId);
     if (input.agentClassHint) form.append("agent_class_hint", input.agentClassHint);
-    return authFetch("/query/stream", { method: "POST", body: form }, { networkRetry: 2, retryDelayMs: 350 });
+    if (input.retrievalStrategy) form.append("retrieval_strategy", input.retrievalStrategy);
+    return authFetch(
+      "/query/stream",
+      { method: "POST", body: form, signal: input.signal },
+      { networkRetry: 2, retryDelayMs: 350 },
+    );
   },
   async query(input: {
     question: string;
@@ -213,6 +243,7 @@ export const appApi = {
     useReasoning: boolean;
     sessionId: string;
     agentClassHint?: string;
+    retrievalStrategy?: string;
   }) {
     const res = await authFetch(
       "/query",
@@ -225,6 +256,7 @@ export const appApi = {
           use_reasoning: input.useReasoning,
           session_id: input.sessionId,
           agent_class_hint: input.agentClassHint || null,
+          retrieval_strategy: input.retrievalStrategy || null,
         }),
       },
       { networkRetry: 2, retryDelayMs: 350 },
@@ -507,6 +539,54 @@ export const appApi = {
       snapshot: Record<string, unknown>;
     }>(res);
   },
+  async adminModelSettings() {
+    const res = await authFetch("/admin/model-settings", { method: "GET" });
+    return parseOrThrow<{ ok: boolean; settings: AdminModelSettingsView }>(res);
+  },
+  async adminSaveModelSettings(settings: {
+    enabled: boolean;
+    provider: string;
+    api_key: string;
+    base_url: string;
+    chat_model: string;
+    reasoning_model: string;
+    embedding_model: string;
+    temperature: number;
+    max_tokens: number;
+  }) {
+    const res = await authFetch("/admin/model-settings", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(settings),
+    });
+    return parseOrThrow<{ ok: boolean; settings: AdminModelSettingsView }>(res);
+  },
+  async adminTestModelSettings(settings: {
+    enabled: boolean;
+    provider: string;
+    api_key: string;
+    base_url: string;
+    chat_model: string;
+    reasoning_model: string;
+    embedding_model: string;
+    temperature: number;
+    max_tokens: number;
+  }) {
+    const res = await authFetch("/admin/model-settings/test", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(settings),
+    });
+    return parseOrThrow<{
+      ok: boolean;
+      reachable: boolean;
+      provider: string;
+      model: string;
+      latency_ms: number;
+      message: string;
+      preview: string;
+    }>(res);
+  },
   async adminOpsRollback() {
     const res = await authFetch("/admin/ops/rollback", { method: "POST" });
     return parseOrThrow<{ ok: boolean; state: RetrievalProfileState }>(res);
@@ -539,5 +619,67 @@ export const appApi = {
     if (input.logger) qs.set("logger", input.logger);
     if (input.keyword) qs.set("keyword", input.keyword);
     return request<{ items: SystemLogEntry[]; count: number }>(`/admin/system-logs?${qs.toString()}`);
+  },
+  async getUserApiSettings() {
+    const res = await authFetch("/user/api-settings", { method: "GET" });
+    return parseOrThrow<{
+      ok: boolean;
+      settings: {
+        provider: string;
+        api_key_masked: string;
+        base_url: string;
+        model: string;
+        temperature: number;
+        max_tokens: number;
+      };
+    }>(res);
+  },
+  async saveUserApiSettings(settings: {
+    provider: string;
+    api_key: string;
+    base_url: string;
+    model: string;
+    temperature: number;
+    max_tokens: number;
+  }) {
+    const res = await authFetch("/user/api-settings", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(settings),
+    });
+    return parseOrThrow<{
+      ok: boolean;
+      settings: {
+        provider: string;
+        api_key_masked: string;
+        base_url: string;
+        model: string;
+        temperature: number;
+        max_tokens: number;
+      };
+    }>(res);
+  },
+  async testUserApiSettings(settings: {
+    provider: string;
+    api_key: string;
+    base_url: string;
+    model: string;
+    temperature: number;
+    max_tokens: number;
+  }) {
+    const res = await authFetch("/user/api-settings/test", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(settings),
+    });
+    return parseOrThrow<{
+      ok: boolean;
+      reachable: boolean;
+      provider: string;
+      model: string;
+      latency_ms: number;
+      message: string;
+      preview: string;
+    }>(res);
   },
 };

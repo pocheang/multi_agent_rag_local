@@ -32,11 +32,17 @@ def get_vector_store() -> Chroma:
     if backend == "openai":
         embed_model = str(getattr(settings, "openai_embed_model", "") or "")
         embed_base_url = str(getattr(settings, "openai_base_url", "") or "")
+    elif backend == "local":
+        embed_model = "local-hash-384"
+        embed_base_url = ""
     else:
         embed_model = str(getattr(settings, "ollama_embed_model", "") or "")
         embed_base_url = str(getattr(settings, "ollama_base_url", "") or "")
+    collection_name = settings.chroma_collection
+    if backend == "local" and not collection_name.endswith("_local"):
+        collection_name = f"{collection_name}_local"
     return _get_vector_store_cached(
-        collection_name=settings.chroma_collection,
+        collection_name=collection_name,
         persist_directory=str(settings.chroma_path),
         embedding_backend=backend,
         embedding_model=embed_model,

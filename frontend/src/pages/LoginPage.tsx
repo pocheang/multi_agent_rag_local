@@ -25,14 +25,15 @@ export function LoginPage({ onLogin, themeLabel, onThemeToggle }: Props) {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
-  const formValid = useMemo(
+  const loginValid = useMemo(() => validateUsername(username) && password.length > 0, [username, password]);
+  const registerValid = useMemo(
     () => validateUsername(username) && validatePassword(password),
     [username, password],
   );
 
   const login = async () => {
-    if (!formValid) {
-      setError("请先修正输入");
+    if (!loginValid) {
+      setError("请输入有效用户名和密码");
       return;
     }
     setLoading(true);
@@ -52,7 +53,7 @@ export function LoginPage({ onLogin, themeLabel, onThemeToggle }: Props) {
   };
 
   const register = async () => {
-    if (!formValid) {
+    if (!registerValid) {
       setError("请先修正输入");
       return;
     }
@@ -115,7 +116,7 @@ export function LoginPage({ onLogin, themeLabel, onThemeToggle }: Props) {
             }}
           />
           <div className={`hint ${validatePassword(password) ? "ok" : "error"}`}>
-            {validatePassword(password) ? "密码复杂度达标" : "至少8位，含大小写和数字"}
+            {validatePassword(password) ? "密码复杂度达标" : "注册至少8位，含大小写和数字"}
           </div>
 
           <div className="action-grid">

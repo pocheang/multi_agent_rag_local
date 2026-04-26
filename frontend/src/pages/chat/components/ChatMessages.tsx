@@ -20,7 +20,15 @@ function formatLatency(ms?: number) {
 export function ChatMessages({ messages, containerRef, onEditMessage, onRemoveMessage }: Props) {
   return (
     <section className="chat-window panel" ref={containerRef}>
-      {messages.length === 0 && <div className="muted">还没有消息，先从一个问题开始。</div>}
+      {messages.length === 0 && (
+        <div className="empty-chat-state">
+          <span className="empty-chat-label">Ready</span>
+          <h3>开始一次有证据链的分析</h3>
+          <p>
+            你可以上传 PDF/图片，指定 Agent 模式，选择检索策略，或直接询问知识库。回答会展示路由、检索来源、执行过程和引用片段。
+          </p>
+        </div>
+      )}
       {messages.map((msg) => {
         const isAssistant = msg.role === "assistant";
         const md = msg.metadata || EMPTY_METADATA;
@@ -28,7 +36,7 @@ export function ChatMessages({ messages, containerRef, onEditMessage, onRemoveMe
         return (
           <article key={msg.message_id} className={`bubble ${isAssistant ? "assistant" : "user"}`}>
             <div className="message-head">
-              <span>{isAssistant ? "助手" : "用户"}</span>
+              <span className="message-role">{isAssistant ? "Assistant" : "You"}</span>
               {msg.message_id.startsWith("local-") ? null : (
                 <div className="row-actions">
                   <button type="button" className="secondary tiny-btn" onClick={() => void onEditMessage(msg)}>
@@ -47,6 +55,8 @@ export function ChatMessages({ messages, containerRef, onEditMessage, onRemoveMe
               <>
                 <div className="chips">
                   {md.route && <span className="chip">route: {md.route}</span>}
+                  {md.execution_route && <span className="chip">exec: {md.execution_route}</span>}
+                  {md.retrieval_strategy && <span className="chip">strategy: {md.retrieval_strategy}</span>}
                   {md.route === "smalltalk_fast" && <span className="chip">smalltalk-fast</span>}
                   {md.agent_class && <span className="chip">agent: {md.agent_class}</span>}
                   <span className="chip">web: {md.web_used ? "yes" : "no"}</span>
@@ -60,7 +70,7 @@ export function ChatMessages({ messages, containerRef, onEditMessage, onRemoveMe
                 </div>
                 {(md.execution_steps || []).length > 0 && (
                   <details open={msg.message_id === "local-assistant-stream"} className="process-panel">
-                    <summary>查看执行过程</summary>
+                    <summary>执行过程</summary>
                     <div className="process-timeline">
                       {(md.execution_steps || []).map((step, i) => (
                         <div key={`${msg.message_id}-step-${i}`} className="process-step">
@@ -79,7 +89,7 @@ export function ChatMessages({ messages, containerRef, onEditMessage, onRemoveMe
                 )}
                 {(md.thoughts || []).length > 0 && (
                   <details>
-                    <summary>查看思考过程</summary>
+                    <summary>思考摘要</summary>
                     <ul className="compact-list">
                       {(md.thoughts || []).slice(-8).map((x, i) => (
                         <li key={`${msg.message_id}-thought-${i}`}>{x}</li>
@@ -89,7 +99,7 @@ export function ChatMessages({ messages, containerRef, onEditMessage, onRemoveMe
                 )}
                 {(md.citations || []).length > 0 && (
                   <details>
-                    <summary>查看引用</summary>
+                    <summary>引用证据</summary>
                     <div className="citation-grid">
                       {(md.citations || []).slice(0, 8).map((c, i) => (
                         <div key={`${msg.message_id}-cit-${i}`} className="citation-card">
@@ -97,6 +107,48 @@ export function ChatMessages({ messages, containerRef, onEditMessage, onRemoveMe
                           <MarkdownBlock text={c.content || ""} />
                         </div>
                       ))}
+                    </div>
+                  </details>
+                )}
+                {md.graph_result && (md.graph_result.neighbors.length > 0 || md.graph_result.paths.length > 0) && (
+                  <details>
+                    <summary>图谱关系</summary>
+                    <div className="graph-result-panel">
+                      {md.graph_result.neighbors.length > 0 && (
+                        <div className="graph-section">
+                          <strong>邻居关系 ({md.graph_result.neighbors.length})</strong>
+                          <ul className="compact-list">
+                            {md.graph_result.neighbors.slice(0, 10).map((n, i) => (
+                              <li key={`${msg.message_id}-neighbor-${i}`}>
+                                {n.entity} -[{n.relation}]- {n.direction === "out" ? "→" : "←"}
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+                      {md.graph_result.paths.length > 0 && (
+                        <div className="graph-section">
+                          <strong>推理路径 ({md.graph_result.paths.length})</strong>
+                          <ul className="compact-list">
+                            {md.graph_result.paths.slice(0, 5).map((p, i) => (
+                              <li key={`${msg.message_id}-path-${i}`}>
+                                {p.entities.map((e, j) => (
+                                  <span key={j}>
+                                    {e}
+                                    {j < p.relations.length && ` -[${p.relations[j]}]→ `}
+                                  </span>
+                                ))}
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+                      {md.graph_result.context && (
+                        <div className="graph-section">
+                          <strong>图谱上下文</strong>
+                          <pre className="graph-context">{md.graph_result.context}</pre>
+                        </div>
+                      )}
                     </div>
                   </details>
                 )}

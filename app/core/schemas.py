@@ -223,3 +223,67 @@ class FileIndexActionResponse(BaseModel):
     loaded_documents: int = 0
     chunks_indexed: int = 0
     triplets_written: int = 0
+
+
+class UserApiSettings(BaseModel):
+    provider: str = Field(default="ollama", description="API provider: local, openai, anthropic, deepseek, ollama, custom")
+    api_key: str = Field(default="", description="API key (encrypted in storage)")
+    base_url: str = Field(default="", description="Base URL for API")
+    model: str = Field(default="", description="Model name")
+    temperature: float = Field(default=0.7, ge=0.0, le=2.0, description="Temperature")
+    max_tokens: int = Field(default=2048, ge=256, le=8192, description="Max tokens")
+
+
+class UserApiSettingsView(BaseModel):
+    provider: str = Field(default="ollama", description="API provider: local, openai, anthropic, deepseek, ollama, custom")
+    api_key_masked: str = Field(default="", description="Masked API key")
+    base_url: str = Field(default="", description="Base URL for API")
+    model: str = Field(default="", description="Model name")
+    temperature: float = Field(default=0.7, ge=0.0, le=2.0, description="Temperature")
+    max_tokens: int = Field(default=2048, ge=256, le=8192, description="Max tokens")
+
+
+class UserApiSettingsResponse(BaseModel):
+    ok: bool = True
+    settings: UserApiSettingsView
+
+
+class UserApiSettingsTestResponse(BaseModel):
+    ok: bool = True
+    reachable: bool = False
+    provider: str
+    model: str
+    latency_ms: int = 0
+    message: str = ""
+    preview: str = ""
+
+
+class AdminModelSettings(BaseModel):
+    enabled: bool = Field(default=False, description="Apply this global model config to users without personal overrides")
+    provider: str = Field(default="ollama", description="API provider: local, openai, anthropic, deepseek, ollama, custom")
+    api_key: str = Field(default="", description="API key (encrypted in storage)")
+    base_url: str = Field(default="", description="Base URL for API")
+    chat_model: str = Field(default="", description="Chat model name")
+    reasoning_model: str = Field(default="", description="Reasoning model name")
+    embedding_model: str = Field(default="", description="Embedding model name")
+    temperature: float = Field(default=0.7, ge=0.0, le=2.0, description="Temperature")
+    max_tokens: int = Field(default=2048, ge=256, le=8192, description="Max tokens")
+
+
+class AdminModelSettingsView(BaseModel):
+    enabled: bool = False
+    provider: str = "ollama"
+    api_key_masked: str = ""
+    base_url: str = ""
+    chat_model: str = ""
+    reasoning_model: str = ""
+    embedding_model: str = ""
+    temperature: float = Field(default=0.7, ge=0.0, le=2.0)
+    max_tokens: int = Field(default=2048, ge=256, le=8192)
+    embedding_reindexed: bool = False
+    records_reindexed: int = 0
+
+
+class AdminModelSettingsResponse(BaseModel):
+    ok: bool = True
+    settings: AdminModelSettingsView

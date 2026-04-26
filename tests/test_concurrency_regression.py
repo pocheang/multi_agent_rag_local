@@ -94,6 +94,23 @@ def test_query_result_cache_distributed_inflight_lock(monkeypatch: pytest.Monkey
     assert c2.mark_inflight(key) is True
 
 
+def test_query_result_cache_key_isolated_by_mode():
+    common = dict(
+        user_id="u1",
+        session_id="s1",
+        question="hello",
+        use_web_fallback=True,
+        use_reasoning=True,
+        retrieval_strategy="advanced",
+        agent_class_hint="general",
+        request_id="rid-1",
+        include_request_id=False,
+    )
+    q_key = QueryResultCache.build_key(**common, mode="query")
+    s_key = QueryResultCache.build_key(**common, mode="stream")
+    assert q_key != s_key
+
+
 def test_query_guard_redis_waiting_limit(monkeypatch: pytest.MonkeyPatch):
     fake = _FakeRedis()
     monkeypatch.setattr("app.services.query_guard._get_redis_client", lambda: fake)

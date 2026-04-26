@@ -1,5 +1,6 @@
 import uuid
 import hashlib
+import json
 from pathlib import Path
 
 import pytest
@@ -165,3 +166,61 @@ def test_auth_db_update_user_password_forces_relogin():
         service.login("resetpwd01", "Password123")
     new_login = service.login("resetpwd01", "Password456")
     assert new_login["user"]["username"] == "resetpwd01"
+
+
+def test_auth_db_encrypts_api_settings_key_at_rest():
+    root = _mk("auth-db-api-settings")
+    service = AuthDBService(db_path=root / "app.db", token_ttl_hours=1)
+    user = service.register("apikeyuser01", "Password123")
+
+    service.set_user_metadata(
+        user["user_id"],
+        "api_settings",
+        {
+            "provider": "openai",
+            "api_key": "sk-plain-demo-123456",
+            "base_url": "https://api.openai.com/v1",
+            "model": "gpt-5.4-codex",
+            "temperature": 0.7,
+            "max_tokens": 2048,
+        },
+    )
+    loaded = service.get_user_metadata(user["user_id"], "api_settings")
+    assert loaded is not None
+    assert loaded.get("api_key") == "sk-plain-demo-123456"
+
+    with service._connect() as conn:
+        row = conn.execute("SELECT settings FROM users WHERE user_id=?", (user["user_id"],)).fetchone()
+    raw = str(row["settings"] if row else "")
+    assert "sk-plain-demo-123456" not in raw
+    assert "enc:v1:" in raw
+
+
+def test_auth_db_api_settings_read_legacy_plaintext_and_rewrite_encrypted():
+    root = _mk("auth-db-api-settings-legacy")
+    service = AuthDBService(db_path=root / "app.db", token_ttl_hours=1)
+    user = service.register("legacyapi01", "Password123")
+    legacy_payload = {
+        "api_settings": {
+            "provider": "openai",
+            "api_key": "sk-legacy-plaintext",
+            "base_url": "https://api.openai.com/v1",
+            "model": "gpt-5.4-codex",
+            "temperature": 0.7,
+            "max_tokens": 2048,
+        }
+    }
+    with service._connect() as conn:
+        conn.execute("UPDATE users SET settings=? WHERE user_id=?", (json.dumps(legacy_payload), user["user_id"]))
+        conn.commit()
+
+    loaded = service.get_user_metadata(user["user_id"], "api_settings")
+    assert loaded is not None
+    assert loaded.get("api_key") == "sk-legacy-plaintext"
+
+    service.set_user_metadata(user["user_id"], "api_settings", loaded)
+    with service._connect() as conn:
+        row = conn.execute("SELECT settings FROM users WHERE user_id=?", (user["user_id"],)).fetchone()
+    raw = str(row["settings"] if row else "")
+    assert "sk-legacy-plaintext" not in raw
+    assert "enc:v1:" in raw

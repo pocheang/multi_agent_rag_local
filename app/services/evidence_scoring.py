@@ -37,11 +37,24 @@ def evidence_is_sufficient(
     route: str,
     min_hits: int,
 ) -> bool:
-    # Map old "min hits" semantics into normalized evidence threshold.
+    score = local_evidence_score(vector_result, graph_result, route=route)
+
+    # Progressive threshold based on min_hits requirement
     if min_hits <= 1:
-        threshold = 0.34
+        threshold = 0.25  # ~0.75 effective hits
     elif min_hits == 2:
-        threshold = 0.55
+        threshold = 0.55  # ~1.65 effective hits
+    elif min_hits == 3:
+        threshold = 0.75  # ~2.25 effective hits
     else:
-        threshold = 0.72
-    return local_evidence_score(vector_result, graph_result, route=route) >= threshold
+        threshold = 0.85  # ~2.55+ effective hits
+
+    # For hybrid route, be more lenient if either vector or graph has strong signal
+    if route == "hybrid":
+        v_score = vector_evidence_score(vector_result)
+        g_score = graph_evidence_score(graph_result)
+        # If either source is strong, lower the combined threshold
+        if v_score >= 0.7 or g_score >= 0.7:
+            threshold = max(0.4, threshold - 0.15)
+
+    return score >= threshold

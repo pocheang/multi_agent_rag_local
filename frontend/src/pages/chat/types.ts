@@ -14,13 +14,40 @@ export type Toast = {
   kind: "info" | "success" | "warn" | "error";
 };
 
+export type GraphEntity = {
+  name: string;
+  type: string;
+  description?: string;
+};
+
+export type GraphNeighbor = {
+  entity: string;
+  relation: string;
+  direction: "in" | "out";
+};
+
+export type GraphPath = {
+  entities: string[];
+  relations: string[];
+};
+
+export type GraphResult = {
+  entities: GraphEntity[];
+  neighbors: GraphNeighbor[];
+  paths: GraphPath[];
+  context?: string;
+};
+
 export type ChatMetadata = {
   route: string;
+  execution_route?: string;
+  retrieval_strategy?: string;
   agent_class: string;
   web_used: boolean;
   latency_ms?: number;
   thoughts: string[];
   graph_entities: string[];
+  graph_result?: GraphResult;
   citations: Citation[];
   current_status?: string;
   execution_steps?: Array<{

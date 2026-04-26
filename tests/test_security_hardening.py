@@ -218,3 +218,39 @@ def test_cookie_auth_allows_same_origin_mutation(monkeypatch):
     )
     assert res.status_code == 200
     assert res.json().get("ok") is True
+
+
+def test_query_rejects_runtime_private_base_url_in_user_settings(monkeypatch):
+    client = TestClient(api_main.app)
+    monkeypatch.setattr(api_main, "_audit", lambda *args, **kwargs: None)
+    api_main.app.dependency_overrides[api_main._require_user] = lambda: {
+        "user_id": "u9",
+        "username": "viewer",
+        "role": "viewer",
+        "status": "active",
+    }
+    monkeypatch.setattr(
+        api_main.auth_service,
+        "get_user_metadata",
+        lambda _user_id, key: (
+            {
+                "provider": "custom",
+                "api_key": "sk-custom-x",
+                "base_url": "http://127.0.0.1:9000/v1",
+                "model": "custom-model",
+                "temperature": 0.7,
+                "max_tokens": 512,
+            }
+            if key == "api_settings"
+            else None
+        ),
+    )
+    try:
+        res = client.post(
+            "/query",
+            json={"question": "hello", "use_web_fallback": False, "use_reasoning": False},
+        )
+        assert res.status_code == 400
+        assert "invalid api settings" in (res.json().get("detail", "") or "")
+    finally:
+        api_main.app.dependency_overrides.clear()

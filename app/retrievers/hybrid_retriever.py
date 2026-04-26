@@ -59,6 +59,7 @@ def _collect_candidates(
     allowed_sources: list[str] | None,
     vector_threshold: float,
     retrieval_strategy: str | None = None,
+    precomputed_vector_results: dict[str, list] | None = None,
 ) -> tuple[list[dict], dict]:
     settings = get_settings()
     rrf_k = int(getattr(settings, "hybrid_rrf_k", 60) or 60)
@@ -90,7 +91,10 @@ def _collect_candidates(
     }
 
     for variant in variants:
-        vector_results = _safe_similarity_search(variant, k=vector_top_k, allowed_sources=allowed_sources)
+        if precomputed_vector_results and variant in precomputed_vector_results:
+            vector_results = precomputed_vector_results[variant]
+        else:
+            vector_results = _safe_similarity_search(variant, k=vector_top_k, allowed_sources=allowed_sources)
         vector_results = _filter_vector_results(vector_results, score_threshold=vector_threshold)
         diag["vector_hits_by_rewrite"][variant] = len(vector_results)
         for idx, (doc, score) in enumerate(vector_results, start=1):
@@ -143,6 +147,10 @@ def _collect_candidates(
     for item_id, item in merged.items():
         candidate = dict(item)
         candidate["hybrid_score"] = float(scores[item_id])
+        # Apply rank feature score immediately during candidate collection
+        feature_score = _rank_feature_score(candidate, settings) if flags["rank_feature"] else 0.0
+        candidate["rank_feature_score"] = feature_score
+        candidate["hybrid_score"] = float(candidate["hybrid_score"] + feature_score)
         fused.append(candidate)
     fused.sort(key=lambda x: x.get("hybrid_score", 0.0), reverse=True)
     diag["candidate_count"] = len(fused)
@@ -308,7 +316,16 @@ def _expand_to_parent_context(candidates: list[dict]) -> list[dict]:
             if parent_id and current_score > parent_score_map.get(parent_id, 0.0):
                 for idx, existing in enumerate(expanded):
                     if existing.get("metadata", {}).get("parent_id") == parent_id:
-                        expanded[idx] = item
+                        # Update with higher-scored item, preserving parent text expansion
+                        updated = dict(item)
+                        updated["child_text"] = item.get("text", "")
+                        if parent_map.get(parent_id):
+                            updated["text"] = parent_map[parent_id]
+                            metadata["context_granularity"] = "parent"
+                        else:
+                            metadata["context_granularity"] = "child"
+                        updated["metadata"] = metadata
+                        expanded[idx] = updated
                         parent_score_map[parent_id] = current_score
                         break
             continue
@@ -348,18 +365,18 @@ def hybrid_search_with_diagnostics(
         degraded = False
 
         cache_key = json.dumps(
-        {
-            "q": query,
-            "allowed": sorted(allowed_sources) if allowed_sources is not None else None,
-            "strict": strict_threshold,
-            "relaxed": relaxed_threshold,
-            "rrf": getattr(settings, "hybrid_rrf_k", 60),
-            "rerank_n": getattr(settings, "reranker_top_n", 5),
-            "strategy": retrieval_strategy or "advanced",
-        },
-        ensure_ascii=False,
-        sort_keys=True,
-    )
+            {
+                "q": query,
+                "allowed": sorted(allowed_sources) if allowed_sources is not None else None,
+                "strict": strict_threshold,
+                "relaxed": relaxed_threshold,
+                "rrf": getattr(settings, "hybrid_rrf_k", 60),
+                "rerank_n": getattr(settings, "reranker_top_n", 5),
+                "strategy": retrieval_strategy or "advanced",
+            },
+            ensure_ascii=False,
+            sort_keys=True,
+        )
         backend = _cache_backend(settings)
         use_cache = bool(getattr(settings, "retrieval_cache_enabled", True)) and backend != "off"
         if use_cache:
@@ -377,8 +394,10 @@ def hybrid_search_with_diagnostics(
                             out_diag["cache_hit"] = True
                             out_diag["cache_backend"] = "redis"
                             return list(payload.get("results", [])), out_diag
-                    except Exception:
-                        pass
+                    except Exception as e:
+                        # Redis cache lookup failed, fall back to memory cache
+                        import logging
+                        logging.getLogger(__name__).debug(f"Redis cache lookup failed, falling back to memory: {type(e).__name__}")
                 cached = _RETRIEVAL_CACHE.get(cache_key)
                 if cached:
                     results, diagnostics = cached
@@ -394,20 +413,34 @@ def hybrid_search_with_diagnostics(
                 vector_threshold=strict_threshold,
                 retrieval_strategy=retrieval_strategy,
             )
+
+        precomputed_vector_cache = {}
         if not fused and relaxed_threshold < strict_threshold:
-            # RAGFlow-like degradation path: relax dense gate when strict retrieval is empty.
+            settings_obj = get_settings()
+            flags = _strategy_flags(retrieval_strategy)
+            vector_top_k = int(getattr(settings_obj, "vector_top_k", 6) or 6)
+            variants = build_rewrite_queries(
+                query,
+                enable_llm=bool(flags["rewrite"] and getattr(settings_obj, "query_rewrite_enabled", True) and getattr(settings_obj, "query_rewrite_with_llm", False)),
+                use_reasoning=False,
+                enable_decompose=bool(flags["decompose"] and getattr(settings_obj, "query_decompose_enabled", True)),
+                max_variants=int(getattr(settings_obj, "query_rewrite_max_variants", 6) or 6),
+            )
+            if not variants:
+                variants = [query]
+            for variant in variants:
+                vector_results = _safe_similarity_search(variant, k=vector_top_k, allowed_sources=allowed_sources)
+                precomputed_vector_cache[variant] = vector_results
             fused, diag = _collect_candidates(
                 query,
                 allowed_sources=allowed_sources,
                 vector_threshold=relaxed_threshold,
                 retrieval_strategy=retrieval_strategy,
+                precomputed_vector_results=precomputed_vector_cache,
             )
             degraded = True
 
-        for item in fused:
-            feature_score = _rank_feature_score(item, settings) if flags["rank_feature"] else 0.0
-            item["rank_feature_score"] = feature_score
-            item["hybrid_score"] = float(item.get("hybrid_score", 0.0) + feature_score)
+        # rank_feature_score already applied in _collect_candidates, just re-sort
         fused.sort(key=lambda x: x.get("hybrid_score", 0.0), reverse=True)
 
         rerank_top_n = int(diag.get("reranker_top_n", getattr(settings, "reranker_top_n", 5)) or 5)

@@ -8,8 +8,11 @@ __pycache__/
 *.pyc
 .pytest_cache/
 .pytest_tmp/
+.pytest_*/
+pytest_tmp*/
 .venv/
 venv/
+.pydeps/
 
 # Node
 node_modules/
@@ -33,3 +36,5 @@ Thumbs.db
 # Temp/debug artifacts
 .tmp_*.txt
 tests/.tmp/
+artifacts/
+!artifacts/.gitkeep

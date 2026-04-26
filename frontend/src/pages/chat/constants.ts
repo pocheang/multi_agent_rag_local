@@ -12,6 +12,8 @@ export const SUPPORTED_CHAT_RE = /\.(pdf|png|jpe?g|bmp|tiff?|webp)$/i;
 
 export const EMPTY_METADATA: ChatMetadata = {
   route: "",
+  execution_route: "",
+  retrieval_strategy: "",
   agent_class: "",
   web_used: false,
   latency_ms: 0,
@@ -36,6 +38,9 @@ export function mapRunStatus(statusKey: string) {
     pdf_upload_required: "需要先上传文档",
     pdf_selection_required: "需要选择文档",
     pdf_reindex_required: "需要重建索引",
+    cache_hit: "命中缓存",
+    heartbeat: "保持连接",
+    trace: "建立追踪",
   };
   return map[statusKey] || statusKey || "";
 }
