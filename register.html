@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>用户注册 - RAG System</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+        .container {
+            background: white;
+            border-radius: 16px;
+            padding: 40px;
+            max-width: 400px;
+            width: 100%;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+        }
+        h1 {
+            font-size: 28px;
+            margin-bottom: 10px;
+            color: #333;
+        }
+        .subtitle {
+            color: #666;
+            margin-bottom: 30px;
+            font-size: 14px;
+        }
+        .form-group {
+            margin-bottom: 20px;
+        }
+        label {
+            display: block;
+            margin-bottom: 8px;
+            color: #333;
+            font-weight: 500;
+            font-size: 14px;
+        }
+        input, select {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            font-size: 14px;
+            transition: border-color 0.3s;
+        }
+        input:focus, select:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+        button {
+            width: 100%;
+            padding: 14px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 20px rgba(102, 126, 234, 0.4);
+        }
+        button:active {
+            transform: translateY(0);
+        }
+        button:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+        .message {
+            margin-top: 20px;
+            padding: 12px;
+            border-radius: 8px;
+            font-size: 14px;
+            display: none;
+        }
+        .message.success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        .message.error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        .login-link {
+            margin-top: 20px;
+            text-align: center;
+            font-size: 14px;
+            color: #666;
+        }
+        .login-link a {
+            color: #667eea;
+            text-decoration: none;
+            font-weight: 600;
+        }
+        .login-link a:hover {
+            text-decoration: underline;
+        }
+        .quick-create {
+            margin-top: 20px;
+            padding: 15px;
+            background: #f8f9fa;
+            border-radius: 8px;
+            border: 2px dashed #dee2e6;
+        }
+        .quick-create h3 {
+            font-size: 14px;
+            margin-bottom: 10px;
+            color: #495057;
+        }
+        .quick-create button {
+            background: #6c757d;
+            margin-top: 10px;
+        }
+        .quick-create button:hover {
+            box-shadow: 0 8px 20px rgba(108, 117, 125, 0.4);
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🚀 创建账号</h1>
+        <p class="subtitle">注册新用户以访问 RAG 系统</p>
+
+        <form id="registerForm">
+            <div class="form-group">
+                <label for="username">用户名</label>
+                <input type="text" id="username" name="username" required placeholder="输入用户名">
+            </div>
+
+            <div class="form-group">
+                <label for="password">密码</label>
+                <input type="password" id="password" name="password" required placeholder="输入密码">
+            </div>
+
+            <button type="submit" id="submitBtn">创建账号</button>
+        </form>
+
+        <div class="quick-create">
+            <h3>⚡ 快速创建测试账号</h3>
+            <p style="font-size: 13px; color: #6c757d; margin-bottom: 8px;">
+                用户名: <strong>admin</strong><br>
+                密码: <strong>admin</strong>
+            </p>
+            <button onclick="quickCreate()">一键创建 admin/admin</button>
+        </div>
+
+        <div id="message" class="message"></div>
+
+        <div class="login-link">
+            已有账号？<a href="http://127.0.0.1:5173/app/login">立即登录</a>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = 'http://127.0.0.1:8000';
+
+        document.getElementById('registerForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+
+            const username = document.getElementById('username').value;
+            const password = document.getElementById('password').value;
+            const submitBtn = document.getElementById('submitBtn');
+            const message = document.getElementById('message');
+
+            submitBtn.disabled = true;
+            submitBtn.textContent = '创建中...';
+            message.style.display = 'none';
+
+            try {
+                const response = await fetch(`${API_BASE}/auth/register`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ username, password }),
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    message.className = 'message success';
+                    message.textContent = `✅ 账号创建成功！用户名: ${data.username}`;
+                    message.style.display = 'block';
+
+                    setTimeout(() => {
+                        window.location.href = 'http://127.0.0.1:5173/app/login';
+                    }, 2000);
+                } else {
+                    throw new Error(data.detail || '创建失败');
+                }
+            } catch (error) {
+                message.className = 'message error';
+                message.textContent = `❌ ${error.message}`;
+                message.style.display = 'block';
+            } finally {
+                submitBtn.disabled = false;
+                submitBtn.textContent = '创建账号';
+            }
+        });
+
+        async function quickCreate() {
+            const message = document.getElementById('message');
+            message.style.display = 'none';
+
+            try {
+                const response = await fetch(`${API_BASE}/auth/register`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        username: 'admin',
+                        password: 'admin'
+                    }),
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    message.className = 'message success';
+                    message.textContent = '✅ admin/admin 账号创建成功！正在跳转登录...';
+                    message.style.display = 'block';
+
+                    setTimeout(() => {
+                        window.location.href = 'http://127.0.0.1:5173/app/login';
+                    }, 2000);
+                } else {
+                    throw new Error(data.detail || '创建失败');
+                }
+            } catch (error) {
+                message.className = 'message error';
+                message.textContent = `❌ ${error.message}`;
+                message.style.display = 'block';
+            }
+        }
+    </script>
+</body>
+</html>

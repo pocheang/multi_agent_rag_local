@@ -38,3 +38,16 @@ Thumbs.db
 tests/.tmp/
 artifacts/
 !artifacts/.gitkeep
+.tmp/
+
+# Logs
+*.log
+backend.log
+frontend-dev.log
+
+# Temporary scripts
+capture_*.py
+test_web_functionality.py
+
+# Claude local settings
+.claude/settings.local.json
