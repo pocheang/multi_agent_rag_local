@@ -128,16 +128,13 @@ Queries are automatically classified into three tiers based on complexity:
 ![Login Page](docs/images/01-login-page.png)
 
 ### Chat Interface
-![Chat Interface](docs/images/02-chat-page.png)
+![Chat Interface](docs/images/02-chat-interface.png)
 
 ### Admin Panel
-![Admin Panel](docs/images/05-admin-page.png)
+![Admin Panel](docs/images/03-admin-panel.png)
 
 ### API Documentation (FastAPI Swagger)
-![API Docs](docs/images/06-api-docs.png)
-
-### Prometheus Metrics
-![Metrics](docs/images/07-metrics.png)
+![API Docs](docs/images/04-api-docs.png)
 
 ## 🚀 Quick Start
 
