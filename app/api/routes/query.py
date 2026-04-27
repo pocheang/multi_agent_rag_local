@@ -8,6 +8,7 @@ from app.api.dependencies import (    auth_service,    query_guard,    query_res
 from app.core.schemas import QueryRequest, QueryResponse
 from app.graph.streaming import encode_sse, run_query_stream
 from app.graph.workflow import run_query
+from app.services.alerting import emit_alert
 from app.services.consistency_guard import should_stabilize, text_similarity
 from app.services.input_normalizer import (    enhance_user_question_for_completion,    normalize_and_validate_user_question,    normalize_user_question,)
 from app.services.pdf_agent_guard import (    apply_pdf_focus_to_question,    build_choose_pdf_hint,    build_upload_pdf_hint,    choose_pdf_targets,)

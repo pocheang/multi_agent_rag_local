@@ -10,10 +10,11 @@ from pathlib import Path
 from typing import Any
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import Response, StreamingResponse
-from app.api.dependencies import (    auth_service,    query_result_cache,    runtime_metrics,    settings,    shadow_queue,    _require_user,    _audit,    _require_permission,    _parse_audit_ts,    _filter_audit_rows,    _parse_request_ts,    _extract_grounding_support_from_detail,    _load_benchmark_queries,)
+from app.api.dependencies import (    auth_service,    query_result_cache,    runtime_metrics,    settings,    shadow_queue,    _require_user,    _audit,    _require_permission,    _parse_audit_ts,    _filter_audit_rows,    _parse_request_ts,    _extract_grounding_support_from_detail,    _load_benchmark_queries,    _check_ollama_ready,    _check_chroma_ready,    _runtime_diagnostics_summary,    _history_store_for_user,)
 from app.api.middleware import get_request_metrics
 from app.graph.workflow import run_query
 from app.services.index_manager import rebuild_all_vector_index
+from app.services.retrieval_profiles import normalize_retrieval_profile
 from app.services.runtime_ops import (    append_benchmark_trend,    append_index_freshness,    append_replay_trend,    append_shadow_run,    apply_rollback_profile,    choose_shadow,    get_runtime_state,    read_benchmark_trends,    read_index_freshness,    read_replay_trends,    read_shadow_runs,    set_active_profile,    set_canary,    set_feature_flags,    set_shadow,)
 
 router = APIRouter(prefix="/admin/ops", tags=["admin", "ops"])
