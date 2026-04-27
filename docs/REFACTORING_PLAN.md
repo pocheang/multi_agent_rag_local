@@ -243,16 +243,21 @@ app/graph/
 
 ### Step 1: 准备工作
 1. ✅ 创建重构计划文档
-2. ⬜ 运行所有测试确保基线通过
-3. ⬜ 创建重构分支 `refactor/modularize-codebase`
+2. ✅ 运行所有测试确保基线通过
+3. ✅ 创建重构分支 `refactor/modularize-codebase`
 
-### Step 2: 拆分 API 路由 (最高优先级)
-1. ⬜ 创建新目录结构 `app/api/routes/` 和 `app/api/utils/`
-2. ⬜ 提取共享依赖到 `dependencies.py`
-3. ⬜ 提取中间件到 `middleware.py`
-4. ⬜ 拆分路由到各个模块
-5. ⬜ 更新 `main.py` 导入和注册路由
-6. ⬜ 运行测试验证
+### Step 2: 拆分 API 路由 (最高优先级) ✅ 已完成
+1. ✅ 创建新目录结构 `app/api/routes/` 和 `app/api/utils/`
+2. ✅ 提取共享依赖到 `dependencies.py`
+3. ✅ 提取中间件到 `middleware.py`
+4. ✅ 拆分路由到各个模块
+5. ✅ 更新 `main.py` 导入和注册路由
+6. ✅ 运行测试验证
+
+**成果**: 
+- main.py: 4150 行 → 140 行 (减少 96.6%)
+- 创建 9 个路由模块，2 个工具模块
+- 所有测试通过（与基线相同）
 
 ### Step 3: 拆分认证服务
 1. ⬜ 创建 `app/services/auth/` 目录
@@ -348,4 +353,4 @@ app/graph/
 ---
 
 **最后更新**: 2026-04-27  
-**状态**: [计划中]
+**状态**: [Step 2 已完成 - API 路由模块化]
