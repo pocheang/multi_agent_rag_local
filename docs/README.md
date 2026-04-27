@@ -1,9 +1,11 @@
 # 技术文档中心
 
-**文档版本**: v1.0.0  
-**最后更新**: 2026-04-26  
+**文档版本**: v1.2.0  
+**最后更新**: 2026-04-27  
 **维护团队**: 技术文档组  
-**项目版本**: v0.2.4
+**项目版本**: v0.2.5
+
+> 📖 **多语言支持**: [English](README.md) | [中文](README_CN.md)
 
 ---
 
@@ -13,15 +15,18 @@
 
 | 文档 | 描述 | 状态 | 最后更新 |
 |------|------|------|----------|
-| [CLAUDE.md](../CLAUDE.md) | 项目总体说明和开发指南 | ✅ 最新 | 2026-04-26 |
-| [README.md](../README.md) | 项目介绍和快速开始 | ✅ 最新 | 2026-04-26 |
-| [CHANGELOG.md](../CHANGELOG.md) | 版本变更历史 | ✅ 最新 | 2026-04-26 |
+| [CLAUDE.md](../CLAUDE.md) | 项目总体说明和开发指南 | ✅ 最新 | 2026-04-27 |
+| [README.md](../README.md) | 项目介绍和快速开始 | ✅ 最新 | 2026-04-27 |
+| [CHANGELOG.md](../CHANGELOG.md) | 版本变更历史 | ✅ 最新 | 2026-04-27 |
+| [VERSION_HISTORY.md](VERSION_HISTORY.md) | 完整版本历史记录 | ✅ 最新 | 2026-04-27 |
 
 ### 规范文档
 
 | 文档 | 描述 | 状态 | 最后更新 |
 |------|------|------|----------|
 | [DOCUMENTATION_STANDARD.md](DOCUMENTATION_STANDARD.md) | 文档标准规范 | ✅ 最新 | 2026-04-26 |
+| [DOCUMENT_VERSION_CONTROL.md](DOCUMENT_VERSION_CONTROL.md) | 文档版本控制规范 | ✅ 最新 | 2026-04-26 |
+| [DOCUMENTATION_MAINTENANCE.md](DOCUMENTATION_MAINTENANCE.md) | 文档维护指南 | ✅ 最新 | 2026-04-27 |
 
 ### 技术规范
 
@@ -29,11 +34,25 @@
 |------|------|------|----------|
 | [superpowers/specs/2026-04-19-query-to-answer-ux-speed-design.md](superpowers/specs/2026-04-19-query-to-answer-ux-speed-design.md) | 查询到答案 UX 速度设计 | ✅ 最新 | 2026-04-19 |
 
-### 修复报告
+### 版本修复文档 (v0.2.5 - 2026-04-27)
 
 | 文档 | 描述 | 状态 | 最后更新 |
 |------|------|------|----------|
-| [fixes/2026-04-26-routing-rag-fixes.md](fixes/2026-04-26-routing-rag-fixes.md) | 路由和RAG系统修复报告 | ✅ 最新 | 2026-04-26 |
+| [FIXES_INDEX.md](FIXES_INDEX.md) | 修复文档索引和快速导航 | ✅ 最新 | 2026-04-27 |
+| [CHANGELOG_2026-04-27.md](CHANGELOG_2026-04-27.md) | v0.2.5 完整变更日志 | ✅ 最新 | 2026-04-27 |
+| [FINAL_FIXES_SUMMARY_2026-04-27.md](FINAL_FIXES_SUMMARY_2026-04-27.md) | 修复总结和统计 | ✅ 最新 | 2026-04-27 |
+| [DEEP_CODE_REVIEW_2026-04-27.md](DEEP_CODE_REVIEW_2026-04-27.md) | 深度代码审查报告 | ✅ 最新 | 2026-04-27 |
+| [LOGIC_FIXES_2026-04-27.md](LOGIC_FIXES_2026-04-27.md) | 第一轮修复 (8个问题) | ✅ 最新 | 2026-04-27 |
+| [FIXES_ROUND2_2026-04-27.md](FIXES_ROUND2_2026-04-27.md) | 第二轮修复 (6个问题) | ✅ 最新 | 2026-04-27 |
+| [FIXES_ROUND3_2026-04-27.md](FIXES_ROUND3_2026-04-27.md) | 第三轮修复 (3个问题) | ✅ 最新 | 2026-04-27 |
+| [FIXES_ROUND4_2026-04-27.md](FIXES_ROUND4_2026-04-27.md) | 第四轮修复 (1个问题) | ✅ 最新 | 2026-04-27 |
+
+### 历史修复报告
+
+| 文档 | 描述 | 状态 | 最后更新 |
+|------|------|------|----------|
+| [fixes/2026-04-26-routing-rag-fixes.md](fixes/2026-04-26-routing-rag-fixes.md) | 路由和RAG系统修复报告 | 📋 已归档 | 2026-04-26 |
+| [2026-04-26-documentation-update-summary.md](2026-04-26-documentation-update-summary.md) | 文档更新总结 | 📋 已归档 | 2026-04-26 |
 
 ### 测试报告
 
@@ -84,10 +103,10 @@ pie title 文档类型分布
 
 | 状态 | 数量 | 占比 |
 |------|------|------|
-| ✅ 最新 | 13 | 100% |
+| ✅ 最新 | 22 | 92% |
 | 🔄 更新中 | 0 | 0% |
 | ⚠️ 待更新 | 0 | 0% |
-| 📋 已归档 | 0 | 0% |
+| 📋 已归档 | 2 | 8% |
 
 ---
 
@@ -98,7 +117,8 @@ pie title 文档类型分布
 **开发人员**:
 - [CLAUDE.md](../CLAUDE.md) - 开发指南
 - [API_SETTINGS_GUIDE.md](API_SETTINGS_GUIDE.md) - API 配置
-- [fixes/2026-04-26-routing-rag-fixes.md](fixes/2026-04-26-routing-rag-fixes.md) - 最新修复
+- [CHANGELOG_2026-04-27.md](CHANGELOG_2026-04-27.md) - 最新修复 (v0.2.5)
+- [FIXES_INDEX.md](FIXES_INDEX.md) - 修复快速导航
 
 **运维人员**:
 - [production_readiness_checklist.md](production_readiness_checklist.md) - 生产检查清单
@@ -107,11 +127,12 @@ pie title 文档类型分布
 
 **测试人员**:
 - [网络功能检查报告.md](网络功能检查报告.md) - 功能测试报告
-- [fixes/2026-04-26-routing-rag-fixes.md](fixes/2026-04-26-routing-rag-fixes.md) - 修复验证
+- [CHANGELOG_2026-04-27.md](CHANGELOG_2026-04-27.md) - 修复验证 (29/29 通过)
 
 **产品经理**:
 - [README.md](../README.md) - 产品介绍
-- [CHANGELOG.md](../CHANGELOG.md) - 版本历史
+- [VERSION_HISTORY.md](VERSION_HISTORY.md) - 完整版本历史
+- [CHANGELOG_2026-04-27.md](CHANGELOG_2026-04-27.md) - 最新变更 (v0.2.5)
 - [superpowers/specs/2026-04-19-query-to-answer-ux-speed-design.md](superpowers/specs/2026-04-19-query-to-answer-ux-speed-design.md) - UX 设计
 
 ### 按主题查找
@@ -133,7 +154,8 @@ pie title 文档类型分布
 **质量保证**:
 - [网络功能检查报告.md](网络功能检查报告.md) - 功能测试
 - [production_readiness_checklist.md](production_readiness_checklist.md) - 生产检查
-- [fixes/2026-04-26-routing-rag-fixes.md](fixes/2026-04-26-routing-rag-fixes.md) - 修复验证
+- [DEEP_CODE_REVIEW_2026-04-27.md](DEEP_CODE_REVIEW_2026-04-27.md) - 深度代码审查
+- [CHANGELOG_2026-04-27.md](CHANGELOG_2026-04-27.md) - 修复验证 (18个问题)
 
 ---
 
@@ -199,9 +221,11 @@ graph LR
 
 | 版本 | 日期 | 作者 | 变更说明 |
 |------|------|------|----------|
+| v1.2.0 | 2026-04-27 | 文档组 | 更新至 v0.2.5，同步核心文档版本信息 |
+| v1.1.0 | 2026-04-27 | 文档组 | 添加 v0.2.5 修复文档、版本历史、维护指南、中文索引 |
 | v1.0.0 | 2026-04-26 | 文档组 | 创建文档中心索引 |
 
 ---
 
-**最后更新**: 2026-04-26  
+**最后更新**: 2026-04-27  
 **文档状态**: [已发布]
