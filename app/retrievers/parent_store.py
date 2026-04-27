@@ -39,4 +39,7 @@ def get_parent_text_map(parent_ids: list[str]) -> dict[str, str]:
         parent_id = str(row.get("id", ""))
         if parent_id in wanted:
             out[parent_id] = str(row.get("text", ""))
+            # Early exit optimization: stop scanning if we found all wanted IDs
+            if len(out) == len(wanted):
+                break
     return out

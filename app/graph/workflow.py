@@ -129,17 +129,43 @@ def router_node(state: GraphState) -> GraphState:
 
 def adaptive_planner_node(state: GraphState) -> GraphState:
     force_web = should_force_web_research(state["question"]) or state.get("skill") == "web_fact_check"
+    initial_route = state.get("route", "vector")
     plan = build_adaptive_plan(
         question=state["question"],
-        initial_route=state.get("route", "vector"),
+        initial_route=initial_route,
         skill=state.get("skill", "answer_with_citations"),
         use_web_fallback=state.get("use_web_fallback", True),
         force_web=force_web,
     )
-    reason = f"{state.get('reason', '')} | {plan.reason}".strip()
+
+    # Preserve router's decision unless adaptive planner has strong reason to override
+    # Route upgrade rules:
+    # 1. vector -> hybrid: allowed if complexity is high
+    # 2. vector -> graph: allowed if prefer_graph is set
+    # 3. graph -> hybrid: allowed if complexity is high
+    # 4. Never downgrade (hybrid/graph -> vector)
+    final_route = initial_route
+
+    if initial_route == "vector":
+        if plan.route == "hybrid":
+            final_route = "hybrid"
+        elif plan.route == "graph" and plan.prefer_graph:
+            final_route = "graph"
+    elif initial_route == "graph":
+        if plan.route == "hybrid":
+            final_route = "hybrid"
+        # graph stays graph if plan suggests vector (no downgrade)
+    # initial_route == "hybrid" stays hybrid (no downgrade)
+
+    reason_parts = [state.get("reason", "")]
+    if final_route != initial_route:
+        reason_parts.append(f"adaptive_override: {initial_route}->{final_route}")
+    reason_parts.append(plan.reason)
+    reason = " | ".join([p for p in reason_parts if p]).strip()
+
     return {
         **state,
-        "route": plan.route,
+        "route": final_route,
         "adaptive_level": plan.level,
         "adaptive_min_vector_hits": plan.min_vector_hits,
         "adaptive_prefer_graph": plan.prefer_graph,
@@ -181,6 +207,8 @@ def vector_node(state: GraphState) -> GraphState:
         fut_graph = None
         vector_result = {"context": "", "citations": [], "retrieved_count": 0, "error": "vector_error:Timeout"}
         graph_result = {"context": "", "entities": [], "neighbors": [], "error": "graph_error:Timeout"}
+        vector_success = False
+        graph_success = False
         try:
             fut_vector = submit_hybrid(
                 _safe_vector_result,
@@ -190,8 +218,11 @@ def vector_node(state: GraphState) -> GraphState:
             )
             fut_graph = submit_hybrid(_safe_graph_result, state["question"], state.get("allowed_sources"))
         except HybridExecutorRejectedError:
+            # Cancel both futures if submission fails
             if fut_vector is not None:
                 fut_vector.cancel()
+            if fut_graph is not None:
+                fut_graph.cancel()
             return {
                 **state,
                 "vector_result": {
@@ -210,19 +241,27 @@ def vector_node(state: GraphState) -> GraphState:
         try:
             left = max(0.1, deadline - time.monotonic())
             vector_result = fut_vector.result(timeout=left)
+            vector_success = not vector_result.get("error")
         except FutureTimeoutError:
             fut_vector.cancel()
+            vector_result["timeout"] = True
         except Exception as e:
             logger.exception(f"Vector RAG failed for question: {state.get('question', '')}")
             vector_result = {"context": "", "citations": [], "retrieved_count": 0, "error": f"vector_error:{type(e).__name__}"}
         try:
             left = max(0.1, deadline - time.monotonic())
             graph_result = fut_graph.result(timeout=left)
+            graph_success = not graph_result.get("error")
         except FutureTimeoutError:
             fut_graph.cancel()
+            graph_result["timeout"] = True
         except Exception as e:
             logger.exception(f"Graph RAG failed for question: {state.get('question', '')}")
             graph_result = {"context": "", "entities": [], "neighbors": [], "error": f"graph_error:{type(e).__name__}"}
+
+        # Mark hybrid execution status for routing decisions
+        vector_result["hybrid_execution_success"] = vector_success
+        graph_result["hybrid_execution_success"] = graph_success
         return {**state, "vector_result": vector_result, "graph_result": graph_result}
     try:
         with traced_span("workflow.vector_node", {"strategy": str(state.get("retrieval_strategy", "") or "default")}):
@@ -235,9 +274,7 @@ def vector_node(state: GraphState) -> GraphState:
                             state["question"],
                             allowed_sources=state.get("allowed_sources"),
                             retrieval_strategy=state.get("retrieval_strategy"),
-                        )
-                        if state.get("retrieval_strategy")
-                        else run_vector_rag(state["question"], allowed_sources=state.get("allowed_sources")),
+                        ),
                     ),
                 )
     except Exception as e:
@@ -280,9 +317,9 @@ def synthesis_node(state: GraphState) -> GraphState:
             "route": "smalltalk_fast",
             "reason": "smalltalk_fast_path",
             "skill": "smalltalk",
-            "vector_result": {"context": "", "citations": [], "retrieved_count": 0},
-            "graph_result": {"context": "", "entities": [], "neighbors": []},
-            "web_result": {"used": False, "citations": [], "context": ""},
+            "vector_result": {"context": "", "citations": [], "retrieved_count": 0, "fast_path": True},
+            "graph_result": {"context": "", "entities": [], "neighbors": [], "fast_path": True},
+            "web_result": {"used": False, "citations": [], "context": "", "fast_path": True},
             "grounding": {"checked": False, "reason": "smalltalk_fast_path"},
             "answer_safety": {},
         }
@@ -334,19 +371,62 @@ def route_after_vector(state: GraphState):
         return "synthesis"
     route = state.get("route", "vector")
     use_web = state.get("use_web_fallback", True)
-    if use_web and state.get("adaptive_prefer_web", False):
-        return "web"
-    if route == "hybrid" and state.get("graph_result"):
+
+    # For hybrid route, both vector and graph are already executed in parallel
+    if route == "hybrid":
+        vector_result = state.get("vector_result", {})
+        graph_result = state.get("graph_result", {})
+
+        # Check if both executions failed or timed out
+        vector_failed = vector_result.get("error") or vector_result.get("timeout")
+        graph_failed = graph_result.get("error") or graph_result.get("timeout")
+
+        # If both failed, skip evidence check and go to web or synthesis
+        if vector_failed and graph_failed:
+            if use_web:
+                return "web"
+            return "synthesis"
+
+        # Normal evidence sufficiency check
+        if graph_result:
+            min_hits = int(state.get("adaptive_min_vector_hits", 2) or 2)
+            if (not evidence_is_sufficient(vector_result, graph_result, route="hybrid", min_hits=min_hits)) and use_web:
+                return "web"
+            return "synthesis"
+        # This should not happen in normal flow, but fallback to synthesis if missing
+        logger.warning("Hybrid route missing graph_result, falling back to synthesis")
+        return "synthesis"
+
+    # For vector-only route, check if we need web fallback or graph
+    if route == "vector":
+        vector_result = state.get("vector_result", {})
+
+        # If vector failed, decide next step based on preferences
+        if vector_result.get("error") or vector_result.get("timeout"):
+            if state.get("adaptive_prefer_graph", False):
+                return "graph"
+            if use_web:
+                return "web"
+            return "synthesis"
+
+        # Prefer web over graph if explicitly set
+        if use_web and state.get("adaptive_prefer_web", False):
+            return "web"
+
+        # Check if we should go to graph for additional evidence
+        if state.get("adaptive_prefer_graph", False):
+            return "graph"
+
+        # Check evidence sufficiency
         min_hits = int(state.get("adaptive_min_vector_hits", 2) or 2)
-        if (not evidence_is_sufficient(state.get("vector_result", {}), state.get("graph_result", {}), route="hybrid", min_hits=min_hits)) and use_web:
+        if (not evidence_is_sufficient(vector_result, {}, route="vector", min_hits=min_hits)) and use_web:
             return "web"
         return "synthesis"
-    if route == "hybrid" or state.get("adaptive_prefer_graph", False):
+
+    # For graph route, go to graph node
+    if route == "graph":
         return "graph"
-    vector_result = state.get("vector_result", {})
-    min_hits = int(state.get("adaptive_min_vector_hits", 2) or 2)
-    if (not evidence_is_sufficient(vector_result, {}, route="vector", min_hits=min_hits)) and use_web:
-        return "web"
+
     return "synthesis"
 
 
@@ -358,16 +438,18 @@ def route_after_graph(state: GraphState):
         return "synthesis"
     route = state.get("route", "graph")
     use_web = state.get("use_web_fallback", True)
+
+    # Check if web is preferred
     if use_web and state.get("adaptive_prefer_web", False):
         return "web"
+
     graph_result = state.get("graph_result", {})
-    if route == "hybrid":
-        min_hits = int(state.get("adaptive_min_vector_hits", 2) or 2)
-        if (not evidence_is_sufficient(state.get("vector_result", {}), graph_result, route="hybrid", min_hits=min_hits)) and use_web:
-            return "web"
-        return "synthesis"
-    if (not evidence_is_sufficient({}, graph_result, route="graph", min_hits=2)) and use_web:
+    min_hits = int(state.get("adaptive_min_vector_hits", 2) or 2)
+
+    # For graph-only route, check graph evidence sufficiency
+    if (not evidence_is_sufficient({}, graph_result, route="graph", min_hits=min_hits)) and use_web:
         return "web"
+
     return "synthesis"
 
 
@@ -425,6 +507,11 @@ def run_query(
             if _WORKFLOW_APP is None:
                 _WORKFLOW_APP = build_workflow()
     app = _WORKFLOW_APP
+
+    # Validate required fields
+    if not question or not isinstance(question, str):
+        raise ValueError("question is required and must be a non-empty string")
+
     with traced_span("workflow.run_query", {"strategy": str(retrieval_strategy or "default")}):
         return app.invoke(
             {

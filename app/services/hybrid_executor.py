@@ -45,6 +45,7 @@ def submit_hybrid(fn: Callable[..., Any], *args: Any, **kwargs: Any) -> Future:
             raise HybridExecutorRejectedError("hybrid executor queue full")
         _PENDING += 1
 
+    future = None
     try:
         future = get_hybrid_executor().submit(fn, *args, **kwargs)
     except Exception:

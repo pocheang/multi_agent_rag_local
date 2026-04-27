@@ -60,6 +60,7 @@ def _collect_candidates(
     vector_threshold: float,
     retrieval_strategy: str | None = None,
     precomputed_vector_results: dict[str, list] | None = None,
+    precomputed_raw_vector_results: dict[str, list] | None = None,
 ) -> tuple[list[dict], dict]:
     settings = get_settings()
     rrf_k = int(getattr(settings, "hybrid_rrf_k", 60) or 60)
@@ -76,6 +77,17 @@ def _collect_candidates(
     )
     if not variants:
         variants = [query]
+
+    # Deduplicate variants while preserving order
+    seen_variants = set()
+    unique_variants = []
+    for v in variants:
+        v_normalized = v.strip().lower()
+        if v_normalized not in seen_variants:
+            seen_variants.add(v_normalized)
+            unique_variants.append(v)
+    variants = unique_variants
+
     merged: dict[str, dict] = {}
     scores = defaultdict(float)
     allowed_set = set(allowed_sources) if allowed_sources is not None else None
@@ -91,11 +103,16 @@ def _collect_candidates(
     }
 
     for variant in variants:
+        # Use precomputed filtered results if available
         if precomputed_vector_results and variant in precomputed_vector_results:
             vector_results = precomputed_vector_results[variant]
+        # Use precomputed raw results and re-filter with new threshold
+        elif precomputed_raw_vector_results and variant in precomputed_raw_vector_results:
+            vector_results = _filter_vector_results(precomputed_raw_vector_results[variant], score_threshold=vector_threshold)
+        # Fetch fresh results
         else:
             vector_results = _safe_similarity_search(variant, k=vector_top_k, allowed_sources=allowed_sources)
-        vector_results = _filter_vector_results(vector_results, score_threshold=vector_threshold)
+            vector_results = _filter_vector_results(vector_results, score_threshold=vector_threshold)
         diag["vector_hits_by_rewrite"][variant] = len(vector_results)
         for idx, (doc, score) in enumerate(vector_results, start=1):
             metadata = dict(doc.metadata)
@@ -118,12 +135,11 @@ def _collect_candidates(
                 merged[item_id]["dense_score"] = float(score)
             scores[item_id] += vector_weight * _rrf_score(idx, rrf_k)
 
-        if allowed_sources is None:
-            sparse = bm25_search(variant, k=bm25_top_k)
-        else:
-            sparse = bm25_search(variant, k=bm25_top_k, allowed_sources=allowed_sources)
+        sparse = bm25_search(variant, k=bm25_top_k, allowed_sources=allowed_sources)
         diag["bm25_hits_by_rewrite"][variant] = len(sparse)
         for idx, item in enumerate(sparse, start=1):
+            # Note: bm25_search should already filter by allowed_sources,
+            # but we keep this check for defensive programming and test compatibility
             source = str((item.get("metadata", {}) or {}).get("source", "") or "")
             if allowed_set is not None and source not in allowed_set:
                 continue
@@ -316,7 +332,7 @@ def _expand_to_parent_context(candidates: list[dict]) -> list[dict]:
             if parent_id and current_score > parent_score_map.get(parent_id, 0.0):
                 for idx, existing in enumerate(expanded):
                     if existing.get("metadata", {}).get("parent_id") == parent_id:
-                        # Update with higher-scored item, preserving parent text expansion
+                        # Update with higher-scored item, preserving all scores
                         updated = dict(item)
                         updated["child_text"] = item.get("text", "")
                         if parent_map.get(parent_id):
@@ -325,6 +341,13 @@ def _expand_to_parent_context(candidates: list[dict]) -> list[dict]:
                         else:
                             metadata["context_granularity"] = "child"
                         updated["metadata"] = metadata
+                        # Preserve all score fields from the higher-scored item
+                        updated["hybrid_score"] = current_score
+                        updated["dense_score"] = item.get("dense_score")
+                        updated["bm25_score"] = item.get("bm25_score")
+                        updated["rerank_score"] = item.get("rerank_score")
+                        updated["rank_feature_score"] = item.get("rank_feature_score")
+                        updated["retrieval_sources"] = item.get("retrieval_sources", [])
                         expanded[idx] = updated
                         parent_score_map[parent_id] = current_score
                         break
@@ -414,31 +437,39 @@ def hybrid_search_with_diagnostics(
                 retrieval_strategy=retrieval_strategy,
             )
 
-        precomputed_vector_cache = {}
+        # If no results with strict threshold, retry with relaxed threshold
+        # Optimization: cache raw vector results to avoid duplicate queries
+        raw_vector_cache: dict[str, list] = {}
         if not fused and relaxed_threshold < strict_threshold:
-            settings_obj = get_settings()
-            flags = _strategy_flags(retrieval_strategy)
-            vector_top_k = int(getattr(settings_obj, "vector_top_k", 6) or 6)
-            variants = build_rewrite_queries(
-                query,
-                enable_llm=bool(flags["rewrite"] and getattr(settings_obj, "query_rewrite_enabled", True) and getattr(settings_obj, "query_rewrite_with_llm", False)),
-                use_reasoning=False,
-                enable_decompose=bool(flags["decompose"] and getattr(settings_obj, "query_decompose_enabled", True)),
-                max_variants=int(getattr(settings_obj, "query_rewrite_max_variants", 6) or 6),
-            )
-            if not variants:
-                variants = [query]
-            for variant in variants:
-                vector_results = _safe_similarity_search(variant, k=vector_top_k, allowed_sources=allowed_sources)
-                precomputed_vector_cache[variant] = vector_results
-            fused, diag = _collect_candidates(
-                query,
-                allowed_sources=allowed_sources,
-                vector_threshold=relaxed_threshold,
-                retrieval_strategy=retrieval_strategy,
-                precomputed_vector_results=precomputed_vector_cache,
-            )
-            degraded = True
+            with traced_span("retrieval.degraded_retry", {"relaxed_threshold": relaxed_threshold}):
+                # Build raw vector cache from first attempt
+                settings_obj = get_settings()
+                flags = _strategy_flags(retrieval_strategy)
+                vector_top_k = int(getattr(settings_obj, "vector_top_k", 6) or 6)
+                variants = build_rewrite_queries(
+                    query,
+                    enable_llm=bool(flags["rewrite"] and getattr(settings_obj, "query_rewrite_enabled", True) and getattr(settings_obj, "query_rewrite_with_llm", False)),
+                    use_reasoning=False,
+                    enable_decompose=bool(flags["decompose"] and getattr(settings_obj, "query_decompose_enabled", True)),
+                    max_variants=int(getattr(settings_obj, "query_rewrite_max_variants", 6) or 6),
+                )
+                if not variants:
+                    variants = [query]
+
+                # Fetch raw results once and cache them
+                for variant in variants:
+                    raw_vector_cache[variant] = _safe_similarity_search(variant, k=vector_top_k, allowed_sources=allowed_sources)
+
+                # Re-run collection with relaxed threshold using cached raw results
+                fused, diag = _collect_candidates(
+                    query,
+                    allowed_sources=allowed_sources,
+                    vector_threshold=relaxed_threshold,
+                    retrieval_strategy=retrieval_strategy,
+                    precomputed_raw_vector_results=raw_vector_cache,
+                )
+                degraded = True
+                diag["degraded_reason"] = "strict_threshold_no_results"
 
         # rank_feature_score already applied in _collect_candidates, just re-sort
         fused.sort(key=lambda x: x.get("hybrid_score", 0.0), reverse=True)

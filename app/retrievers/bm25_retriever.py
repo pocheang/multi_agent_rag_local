@@ -30,26 +30,41 @@ def bm25_search(query: str, k: int = 6, allowed_sources: list[str] | None = None
     bm25, records = _load_bm25()
     if not records:
         return []
+
+    # Filter by allowed_sources if specified
     if allowed_sources is not None:
         allowed = set(allowed_sources)
-        records = [r for r in records if str((r.get("metadata", {}) or {}).get("source", "")) in allowed]
-        if not records:
+        filtered_records = [r for r in records if str((r.get("metadata", {}) or {}).get("source", "")) in allowed]
+        if not filtered_records:
             return []
+
+        # Rebuild BM25 index with filtered records
         if BM25Okapi is None:
             bm25 = None
+            records = filtered_records
         else:
-            tokenized = [tokenize(r.get("text", "")) for r in records]
-            bm25 = BM25Okapi(tokenized) if tokenized else None
+            tokenized = [tokenize(r.get("text", "")) for r in filtered_records]
+            if not tokenized:
+                return []
+            bm25 = BM25Okapi(tokenized)
+            records = filtered_records
+
     tokens = tokenize(query)
+    if not tokens:
+        return []
+
     if bm25 is None:
+        # Fallback: simple token overlap scoring
         query_set = set(tokens)
         scored = []
         for idx, row in enumerate(records):
-            score = len(query_set.intersection(set(tokenize(row.get("text", "")))))
+            doc_tokens = set(tokenize(row.get("text", "")))
+            score = len(query_set.intersection(doc_tokens))
             scored.append((idx, float(score)))
         scores = [x[1] for x in sorted(scored, key=lambda x: x[0])]
     else:
         scores = bm25.get_scores(tokens)
+
     ranked = sorted(enumerate(scores), key=lambda x: x[1], reverse=True)[:k]
     return [
         {

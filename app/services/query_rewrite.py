@@ -67,12 +67,28 @@ def _rule_rewrites(query: str) -> list[str]:
 
 
 def _llm_rewrite(query: str, use_reasoning: bool = False) -> str | None:
+    from app.services.request_context import deadline_exceeded, remaining_seconds
+
+    # Check if we have time for LLM rewrite
+    if deadline_exceeded():
+        return None
+
+    timeout = remaining_seconds()
+    if timeout is None or timeout < 0.5:
+        # Not enough time for LLM call
+        return None
+
+    # Reserve at least 0.5s for the rest of the pipeline
+    timeout = max(0.5, min(2.0, timeout - 0.5))
+
     prompt = (
         "Rewrite the query for retrieval. Keep meaning unchanged. "
         "Return one short rewritten query only."
     )
     try:
         model = get_reasoning_model() if use_reasoning else get_chat_model()
+        # Note: LangChain models don't have direct timeout parameter
+        # The timeout is enforced by request_context at the workflow level
         result = model.invoke([("system", prompt), ("human", query)])
         text = (result.content if hasattr(result, "content") else str(result)).strip()
         if not text or len(text) < 3:
@@ -89,22 +105,38 @@ def build_rewrite_queries(
     enable_decompose: bool = True,
     max_variants: int = 6,
 ) -> list[str]:
+    q = str(query or "").strip()
+    if not q:
+        return []
+
     rewrites = _rule_rewrites(query)
     if enable_decompose:
         rewrites.extend(_decompose_query(query))
     if enable_llm:
         llm_q = _llm_rewrite(query, use_reasoning=use_reasoning)
-        if llm_q and llm_q not in rewrites:
+        if llm_q:
             rewrites.append(llm_q)
-    # dedupe while preserving order
+
+    # Dedupe while preserving order
+    # Use normalized form for comparison but keep original form
     seen: set[str] = set()
     out: list[str] = []
+
     for item in rewrites:
-        key = item.strip().lower()
-        if not key or key in seen:
+        original = item.strip()
+        if not original:
             continue
-        seen.add(key)
-        out.append(item.strip())
+
+        # Normalize for comparison: lowercase + collapse whitespace
+        normalized = re.sub(r'\s+', ' ', original.lower())
+
+        if normalized in seen:
+            continue
+
+        seen.add(normalized)
+        out.append(original)
+
         if len(out) >= max_variants:
             break
+
     return out

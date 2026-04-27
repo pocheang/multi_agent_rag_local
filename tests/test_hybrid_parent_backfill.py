@@ -28,7 +28,7 @@ def test_hybrid_search_backfills_parent_and_dedupes_by_parent(monkeypatch):
         (_Doc("child two", {"chunk_id": "c2", "source": "s1", "parent_id": "p1"}), 0.8),
     ]
     monkeypatch.setattr(hybrid_retriever, "similarity_search", lambda _q, k=None: vector_results)
-    monkeypatch.setattr(hybrid_retriever, "bm25_search", lambda _q, k=6: [])
+    monkeypatch.setattr(hybrid_retriever, "bm25_search", lambda _q, k=6, allowed_sources=None: [])
     monkeypatch.setattr(hybrid_retriever, "rerank", lambda _q, items, top_n=None: items)
     monkeypatch.setattr(hybrid_retriever, "get_parent_text_map", lambda _ids: {"p1": "parent block content"})
 
@@ -70,7 +70,7 @@ def test_hybrid_search_relaxes_vector_threshold_when_strict_empty(monkeypatch):
 
     vector_results = [(_Doc("low but valid", {"chunk_id": "c-low", "source": "s1"}), 0.2)]
     monkeypatch.setattr(hybrid_retriever, "similarity_search", lambda _q, k=None: vector_results)
-    monkeypatch.setattr(hybrid_retriever, "bm25_search", lambda _q, k=6: [])
+    monkeypatch.setattr(hybrid_retriever, "bm25_search", lambda _q, k=6, allowed_sources=None: [])
     monkeypatch.setattr(hybrid_retriever, "rerank", lambda _q, items, top_n=None: items)
     monkeypatch.setattr(hybrid_retriever, "get_parent_text_map", lambda _ids: {})
 
@@ -113,7 +113,7 @@ def test_hybrid_search_uses_query_variants(monkeypatch):
         ),
     )
     monkeypatch.setattr(hybrid_retriever, "similarity_search", _fake_similarity_search)
-    monkeypatch.setattr(hybrid_retriever, "bm25_search", lambda _q, k=6: [])
+    monkeypatch.setattr(hybrid_retriever, "bm25_search", lambda _q, k=6, allowed_sources=None: [])
     monkeypatch.setattr(hybrid_retriever, "rerank", lambda _q, items, top_n=None: items)
     monkeypatch.setattr(hybrid_retriever, "get_parent_text_map", lambda _ids: {})
 
@@ -155,7 +155,7 @@ def test_hybrid_search_with_diagnostics_reports_rewrites_and_degrade(monkeypatch
         ),
     )
     monkeypatch.setattr(hybrid_retriever, "similarity_search", lambda _q, k=None: [(_Doc("doc", {"chunk_id": "cid", "source": "s1.md"}), 0.2)])
-    monkeypatch.setattr(hybrid_retriever, "bm25_search", lambda _q, k=6: [])
+    monkeypatch.setattr(hybrid_retriever, "bm25_search", lambda _q, k=6, allowed_sources=None: [])
     monkeypatch.setattr(hybrid_retriever, "rerank", lambda _q, items, top_n=None: items)
     monkeypatch.setattr(hybrid_retriever, "get_parent_text_map", lambda _ids: {})
 
@@ -204,7 +204,7 @@ def test_hybrid_search_adds_rank_feature_score(monkeypatch):
         "similarity_search",
         lambda _q, k=None: [(_Doc("doc", {"chunk_id": "cid", "source": "s1.md"}), 0.9)],
     )
-    monkeypatch.setattr(hybrid_retriever, "bm25_search", lambda _q, k=6: [])
+    monkeypatch.setattr(hybrid_retriever, "bm25_search", lambda _q, k=6, allowed_sources=None: [])
     monkeypatch.setattr(hybrid_retriever, "rerank", lambda _q, items, top_n=None: items)
     monkeypatch.setattr(hybrid_retriever, "get_parent_text_map", lambda _ids: {})
 

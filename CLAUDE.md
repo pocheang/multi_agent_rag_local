@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Multi-Agent Local RAG system (v0.2.4) - A production-grade retrieval-augmented generation platform with FastAPI backend, React frontend, and Neo4j graph database integration.
+Multi-Agent Local RAG system (v0.2.5) - A production-grade retrieval-augmented generation platform with FastAPI backend, React frontend, and Neo4j graph database integration.
 
 **Core Architecture:**
 - **Backend**: FastAPI with LangGraph-based multi-agent workflow orchestration

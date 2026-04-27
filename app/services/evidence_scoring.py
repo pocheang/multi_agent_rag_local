@@ -37,24 +37,39 @@ def evidence_is_sufficient(
     route: str,
     min_hits: int,
 ) -> bool:
+    # Check for execution failures first
+    vector_failed = vector_result.get("error") or vector_result.get("timeout")
+    graph_failed = graph_result.get("error") or graph_result.get("timeout")
+
+    # If both sources failed, evidence is insufficient
+    if route == "hybrid" and vector_failed and graph_failed:
+        return False
+
+    # If single source failed, evidence is insufficient
+    if route == "vector" and vector_failed:
+        return False
+    if route == "graph" and graph_failed:
+        return False
+
     score = local_evidence_score(vector_result, graph_result, route=route)
 
     # Progressive threshold based on min_hits requirement
+    # Align thresholds to actually meet min_hits (score = hits / 3.0)
     if min_hits <= 1:
-        threshold = 0.25  # ~0.75 effective hits
+        threshold = 0.33  # ~1.0 effective hit
     elif min_hits == 2:
-        threshold = 0.55  # ~1.65 effective hits
+        threshold = 0.67  # ~2.0 effective hits
     elif min_hits == 3:
-        threshold = 0.75  # ~2.25 effective hits
+        threshold = 1.0   # ~3.0 effective hits
     else:
-        threshold = 0.85  # ~2.55+ effective hits
+        threshold = 1.0   # ~3.0+ effective hits (capped at 1.0)
 
     # For hybrid route, be more lenient if either vector or graph has strong signal
     if route == "hybrid":
         v_score = vector_evidence_score(vector_result)
         g_score = graph_evidence_score(graph_result)
-        # If either source is strong, lower the combined threshold
-        if v_score >= 0.7 or g_score >= 0.7:
-            threshold = max(0.4, threshold - 0.15)
+        # If either source is strong, lower the combined threshold moderately
+        if v_score >= 0.67 or g_score >= 0.67:
+            threshold = max(0.5, threshold - 0.2)
 
     return score >= threshold

@@ -71,9 +71,11 @@ def graph_lookup(question: str, allowed_sources: list[str] | None = None) -> dic
             path_rows = []
             seen_path: set[tuple[str, str, str, str, str]] = set()
             for name in lookup_entity_names[:3]:
+                # Fix lambda capture bug: capture name in local scope
+                current_name = name
                 rows = call_with_circuit_breaker(
                     "neo4j.entity_neighbors",
-                    lambda: client.entity_neighbors(name, limit=10, allowed_sources=allowed_sources),
+                    lambda n=current_name: client.entity_neighbors(n, limit=10, allowed_sources=allowed_sources),
                 )
                 for row in rows:
                     entity = _normalize_entity_name(str(row.get("entity", "")).strip())
@@ -89,7 +91,7 @@ def graph_lookup(question: str, allowed_sources: list[str] | None = None) -> dic
                     neighbor_rows.append({"entity": entity, "relation": relation, "other": other, "weight": weight})
                 paths = call_with_circuit_breaker(
                     "neo4j.entity_paths_2hop",
-                    lambda: client.entity_paths_2hop(name, limit=8, allowed_sources=allowed_sources),
+                    lambda n=current_name: client.entity_paths_2hop(n, limit=8, allowed_sources=allowed_sources),
                 )
                 for p in paths:
                     source = _normalize_entity_name(str(p.get("source", "")).strip())
@@ -116,12 +118,43 @@ def graph_lookup(question: str, allowed_sources: list[str] | None = None) -> dic
                         }
                     )
 
-            graph_signal_score = min(
-                1.0,
-                (len(normalized_entities) / 4.0)
-                + (sum(float(x.get("weight", 0.0)) for x in neighbor_rows[:12]) / 12.0)
-                + (sum(float(x.get("weight", 0.0)) for x in path_rows[:8]) / 16.0),
-            )
+            # Calculate graph signal score with balanced weighting
+            # Each component is normalized to [0, 1] before weighted averaging
+            entity_score = min(1.0, len(normalized_entities) / 4.0)
+
+            # Neighbor score: average weight of top neighbors
+            neighbor_weights = [float(x.get("weight", 0.0)) for x in neighbor_rows[:12]]
+            if neighbor_weights:
+                neighbor_score = sum(neighbor_weights) / len(neighbor_weights)
+                neighbor_score = min(1.0, neighbor_score)
+            else:
+                neighbor_score = 0.0
+
+            # Path score: average weight of top paths
+            path_weights = [float(x.get("weight", 0.0)) for x in path_rows[:8]]
+            if path_weights:
+                path_score = sum(path_weights) / len(path_weights)
+                path_score = min(1.0, path_score)
+            else:
+                path_score = 0.0
+
+            # Weighted average: entities (30%), neighbors (40%), paths (30%)
+            # Only include components that have data
+            total_weight = 0.0
+            weighted_sum = 0.0
+
+            if normalized_entities:
+                weighted_sum += 0.3 * entity_score
+                total_weight += 0.3
+            if neighbor_rows:
+                weighted_sum += 0.4 * neighbor_score
+                total_weight += 0.4
+            if path_rows:
+                weighted_sum += 0.3 * path_score
+                total_weight += 0.3
+
+            graph_signal_score = (weighted_sum / total_weight) if total_weight > 0 else 0.0
+
             return {
                 "entities": normalized_entities,
                 "neighbors": neighbor_rows,

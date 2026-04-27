@@ -240,22 +240,37 @@ def stream_synthesize_answer(
         with bulkhead("llm"):
             model = _build_generation_model(use_reasoning=use_reasoning, question=question)
             parts: list[str] = []
-            for chunk in model.stream([("system", ANSWER_PROMPT), ("human", prompt)]):
-                content = getattr(chunk, "content", None)
-                if content:
-                    text = str(content)
-                    parts.append(text)
-                    yield {"type": "chunk", "content": text}
-        initial = "".join(parts).strip()
-        if not initial:
-            with bulkhead("llm"):
-                result = model.invoke([("system", ANSWER_PROMPT), ("human", prompt)])
-            initial = str(result.content if hasattr(result, "content") else result).strip()
-            if initial:
-                yield {"type": "reset", "content": initial}
+            stream_failed = False
+            try:
+                for chunk in model.stream([("system", ANSWER_PROMPT), ("human", prompt)]):
+                    content = getattr(chunk, "content", None)
+                    if content:
+                        text = str(content)
+                        parts.append(text)
+                        yield {"type": "chunk", "content": text}
+            except Exception as stream_error:
+                logger.warning(f"Stream failed, falling back to invoke: {type(stream_error).__name__}")
+                stream_failed = True
+
+        initial = "".join(parts).strip() if parts else ""
+
+        # If streaming failed or produced no content, fall back to invoke
+        if stream_failed or not initial:
+            try:
+                with bulkhead("llm"):
+                    result = model.invoke([("system", ANSWER_PROMPT), ("human", prompt)])
+                initial = str(result.content if hasattr(result, "content") else result).strip()
+                if initial:
+                    yield {"type": "reset", "content": initial}
+            except Exception as invoke_error:
+                logger.exception(f"Invoke fallback also failed: {type(invoke_error).__name__}")
+                yield {"type": "reset", "content": SYNTHESIS_FALLBACK_MESSAGE}
+                return
+
         if not initial:
             yield {"type": "reset", "content": SYNTHESIS_FALLBACK_MESSAGE}
             return
+
         final = _refine_answer(
             question=question,
             initial_answer=initial,

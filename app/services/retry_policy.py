@@ -33,6 +33,6 @@ def call_with_retry(op_name: str, fn: Callable[[], Any]) -> Any:
             if i >= attempts or (not _is_retryable(e)):
                 raise
             time.sleep((base_delay * i) / 1000.0)
-    if last_exc:
-        raise last_exc
-    return fn()
+    # This line should never be reached due to the raise in the loop
+    # But if somehow we exit the loop without returning or raising, raise the last exception
+    raise last_exc if last_exc else RuntimeError(f"Retry loop exited unexpectedly for {op_name}")

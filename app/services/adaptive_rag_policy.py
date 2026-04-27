@@ -67,10 +67,9 @@ def build_adaptive_plan(
     else:
         min_hits = 3
 
-    # When user explicitly enables web fallback, treat it as "always use web"
-    # force_web is for time-sensitive queries detected by router
-    # use_web_fallback is the user's explicit toggle
-    prefer_web = bool(use_web_fallback or force_web)
+    # force_web is for time-sensitive queries detected by router (should prefer web)
+    # use_web_fallback is the user's explicit toggle (allows web as fallback, not preference)
+    prefer_web = bool(force_web)
     reason = (
         f"adaptive_level={level}"
         f" | adaptive_route={route}"
