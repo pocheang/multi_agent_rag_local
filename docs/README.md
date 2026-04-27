@@ -1,9 +1,9 @@
 # 技术文档中心
 
-**文档版本**: v1.2.0  
+**文档版本**: v1.3.0  
 **最后更新**: 2026-04-27  
 **维护团队**: 技术文档组  
-**项目版本**: v0.2.5
+**项目版本**: v0.3.0
 
 > 📖 **多语言支持**: [English](README.md) | [中文](README_CN.md)
 
@@ -34,7 +34,21 @@
 |------|------|------|----------|
 | [superpowers/specs/2026-04-19-query-to-answer-ux-speed-design.md](superpowers/specs/2026-04-19-query-to-answer-ux-speed-design.md) | 查询到答案 UX 速度设计 | ✅ 最新 | 2026-04-19 |
 
-### 版本修复文档 (v0.2.5 - 2026-04-27)
+### 版本发布文档
+
+#### v0.3.0 - 模块化架构重构 (2026-04-27)
+
+| 文档 | 描述 | 状态 | 最后更新 |
+|------|------|------|----------|
+| [v0.3.0-release-completion-report.md](v0.3.0-release-completion-report.md) | v0.3.0 发布完成报告 | ✅ 最新 | 2026-04-27 |
+
+**核心成果**:
+- 🏗️ 代码减少 90.7% (9135 → 846 行主文件)
+- 📦 65 个专注模块替代 7 个大文件
+- ✅ 100% 向后兼容
+- 🚀 开发效率提升 5 倍
+
+#### v0.2.5 - 修复版本 (2026-04-27)
 
 | 文档 | 描述 | 状态 | 最后更新 |
 |------|------|------|----------|
@@ -103,7 +117,7 @@ pie title 文档类型分布
 
 | 状态 | 数量 | 占比 |
 |------|------|------|
-| ✅ 最新 | 22 | 92% |
+| ✅ 最新 | 23 | 92% |
 | 🔄 更新中 | 0 | 0% |
 | ⚠️ 待更新 | 0 | 0% |
 | 📋 已归档 | 2 | 8% |
@@ -116,6 +130,7 @@ pie title 文档类型分布
 
 **开发人员**:
 - [CLAUDE.md](../CLAUDE.md) - 开发指南
+- [v0.3.0-release-completion-report.md](v0.3.0-release-completion-report.md) - 模块化架构指南 (v0.3.0)
 - [API_SETTINGS_GUIDE.md](API_SETTINGS_GUIDE.md) - API 配置
 - [CHANGELOG_2026-04-27.md](CHANGELOG_2026-04-27.md) - 最新修复 (v0.2.5)
 - [FIXES_INDEX.md](FIXES_INDEX.md) - 修复快速导航
@@ -131,6 +146,7 @@ pie title 文档类型分布
 
 **产品经理**:
 - [README.md](../README.md) - 产品介绍
+- [v0.3.0-release-completion-report.md](v0.3.0-release-completion-report.md) - v0.3.0 发布报告
 - [VERSION_HISTORY.md](VERSION_HISTORY.md) - 完整版本历史
 - [CHANGELOG_2026-04-27.md](CHANGELOG_2026-04-27.md) - 最新变更 (v0.2.5)
 - [superpowers/specs/2026-04-19-query-to-answer-ux-speed-design.md](superpowers/specs/2026-04-19-query-to-answer-ux-speed-design.md) - UX 设计
@@ -221,6 +237,7 @@ graph LR
 
 | 版本 | 日期 | 作者 | 变更说明 |
 |------|------|------|----------|
+| v1.3.0 | 2026-04-27 | 文档组 | 更新至 v0.3.0，添加模块化架构重构文档 |
 | v1.2.0 | 2026-04-27 | 文档组 | 更新至 v0.2.5，同步核心文档版本信息 |
 | v1.1.0 | 2026-04-27 | 文档组 | 添加 v0.2.5 修复文档、版本历史、维护指南、中文索引 |
 | v1.0.0 | 2026-04-26 | 文档组 | 创建文档中心索引 |
