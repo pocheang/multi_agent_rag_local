@@ -4,16 +4,18 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Multi-Agent Local RAG system (v0.3.0) - A production-grade retrieval-augmented generation platform with FastAPI backend, React frontend, and Neo4j graph database integration.
+Multi-Agent Local RAG system (v0.3.1) - A production-grade retrieval-augmented generation platform with FastAPI backend, React frontend, and Neo4j graph database integration.
 
-**Recent Changes (v0.3.0)**: Major refactoring completed - codebase modularized from 7 large files (9135 lines) into 65 focused modules (846 lines in main files), reducing code by 90.7% while maintaining 100% backward compatibility.
+**Recent Changes (v0.3.1)**: Enterprise-grade documentation organization completed - documentation reorganized into 5 category directories, 15 duplicate documents consolidated into 4 summary files, reducing documentation by 23.9% while maintaining complete audit trail and historical records.
+
+**v0.3.0 Completion**: Major codebase refactoring completed - modularized from 7 large files (9135 lines) into 65 focused modules (846 lines in main files), reducing code by 90.7% while maintaining 100% backward compatibility. 18 critical bugs fixed, 29/29 tests passing.
 
 **Core Architecture:**
 - **Backend**: FastAPI with LangGraph-based multi-agent workflow orchestration
 - **Frontend**: React + Vite + TypeScript
 - **Retrieval**: Hybrid system combining vector search (ChromaDB), BM25, and reranking
 - **Graph**: Neo4j for knowledge graph extraction and traversal
-- **LLM Backends**: Supports OpenAI (default: gpt-5.4-codex), Anthropic Claude, and Ollama
+- **LLM Backends**: Supports OpenAI (default: gpt-4-turbo), Anthropic Claude, and Ollama
 - **Tiered Execution**: Query complexity classification with latency budget enforcement (fast/balanced/deep tiers)
 
 ## Development Commands

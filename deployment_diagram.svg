@@ -1,0 +1,284 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 1800">
+  <defs>
+    <style>
+      .title { font: bold 26px sans-serif; fill: #1a1a1a; }
+      .subtitle { font: bold 16px sans-serif; fill: #333; }
+      .label { font: 14px sans-serif; fill: #444; }
+      .small-label { font: 12px sans-serif; fill: #666; }
+      .tiny-label { font: 11px sans-serif; fill: #777; }
+
+      .client { fill: #e3f2fd; stroke: #1976d2; stroke-width: 2; }
+      .app-server { fill: #fff3e0; stroke: #f57c00; stroke-width: 2; }
+      .container { fill: #e8f5e9; stroke: #388e3c; stroke-width: 2; }
+      .external { fill: #f3e5f5; stroke: #7b1fa2; stroke-width: 2; }
+      .storage { fill: #fce4ec; stroke: #c2185b; stroke-width: 2; }
+      .network { fill: #fff9c4; stroke: #f9a825; stroke-width: 2; }
+
+      .arrow { fill: none; stroke: #333; stroke-width: 2; marker-end: url(#arrowhead); }
+      .bi-arrow { fill: none; stroke: #333; stroke-width: 2; marker-start: url(#arrowhead-start); marker-end: url(#arrowhead); }
+      .data-arrow { fill: none; stroke: #1976d2; stroke-width: 2; marker-end: url(#arrowhead-blue); stroke-dasharray: 5,5; }
+
+      .text-white { fill: white; }
+      .text-black { fill: #1a1a1a; }
+    </style>
+
+    <marker id="arrowhead" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto">
+      <polygon points="0 0, 10 3, 0 6" fill="#333" />
+    </marker>
+    <marker id="arrowhead-start" markerWidth="10" markerHeight="10" refX="1" refY="3" orient="auto">
+      <polygon points="10 0, 0 3, 10 6" fill="#333" />
+    </marker>
+    <marker id="arrowhead-blue" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto">
+      <polygon points="0 0, 10 3, 0 6" fill="#1976d2" />
+    </marker>
+  </defs>
+
+  <!-- Title -->
+  <text x="800" y="35" text-anchor="middle" class="title">Multi-Agent RAG Deployment Architecture</text>
+  <text x="800" y="60" text-anchor="middle" class="small-label">Production-Ready Deployment with Docker Compose</text>
+
+  <!-- Client Layer -->
+  <rect x="50" y="100" width="1500" height="180" fill="#f5f5f5" stroke="#999" stroke-width="2" rx="8"/>
+  <text x="800" y="130" text-anchor="middle" class="subtitle">Client Layer</text>
+
+  <rect x="150" y="150" width="250" height="100" class="client" rx="5"/>
+  <text x="275" y="180" text-anchor="middle" class="subtitle">Web Browser</text>
+  <text x="275" y="205" text-anchor="middle" class="label">React Frontend</text>
+  <text x="275" y="225" text-anchor="middle" class="small-label">Vite + TypeScript</text>
+  <text x="275" y="242" text-anchor="middle" class="tiny-label">http://127.0.0.1:5173/app</text>
+
+  <rect x="500" y="150" width="250" height="100" class="client" rx="5"/>
+  <text x="625" y="180" text-anchor="middle" class="subtitle">Mobile App</text>
+  <text x="625" y="205" text-anchor="middle" class="label">iOS / Android</text>
+  <text x="625" y="225" text-anchor="middle" class="small-label">REST API Client</text>
+  <text x="625" y="242" text-anchor="middle" class="tiny-label">(Future Support)</text>
+
+  <rect x="850" y="150" width="250" height="100" class="client" rx="5"/>
+  <text x="975" y="180" text-anchor="middle" class="subtitle">API Clients</text>
+  <text x="975" y="205" text-anchor="middle" class="label">Python / Node.js</text>
+  <text x="975" y="225" text-anchor="middle" class="small-label">SDK Integration</text>
+  <text x="975" y="242" text-anchor="middle" class="tiny-label">Direct API Access</text>
+
+  <rect x="1200" y="150" width="250" height="100" class="client" rx="5"/>
+  <text x="1325" y="180" text-anchor="middle" class="subtitle">n8n Workflows</text>
+  <text x="1325" y="205" text-anchor="middle" class="label">Automation</text>
+  <text x="1325" y="225" text-anchor="middle" class="small-label">Webhook Integration</text>
+  <text x="1325" y="242" text-anchor="middle" class="tiny-label">http://localhost:5678</text>
+
+  <!-- Load Balancer / Reverse Proxy -->
+  <rect x="550" y="320" width="500" height="80" class="network" rx="5"/>
+  <text x="800" y="350" text-anchor="middle" class="subtitle">Load Balancer / Reverse Proxy</text>
+  <text x="800" y="375" text-anchor="middle" class="label">Nginx / Traefik (Optional)</text>
+  <text x="800" y="392" text-anchor="middle" class="small-label">SSL Termination, Rate Limiting, CORS</text>
+
+  <!-- Application Server Layer -->
+  <rect x="50" y="440" width="1500" height="280" fill="#f5f5f5" stroke="#999" stroke-width="2" rx="8"/>
+  <text x="800" y="470" text-anchor="middle" class="subtitle">Application Server Layer (Host Machine)</text>
+
+  <rect x="150" y="490" width="400" height="200" class="app-server" rx="5"/>
+  <text x="350" y="520" text-anchor="middle" class="subtitle">FastAPI Backend</text>
+  <text x="350" y="545" text-anchor="middle" class="label">uvicorn server</text>
+  <text x="350" y="565" text-anchor="middle" class="small-label">Host: 127.0.0.1</text>
+  <text x="350" y="582" text-anchor="middle" class="small-label">Port: 8000</text>
+  <text x="350" y="602" text-anchor="middle" class="tiny-label">Components:</text>
+  <text x="350" y="619" text-anchor="middle" class="tiny-label">• API Routes (/query, /sessions, /admin)</text>
+  <text x="350" y="636" text-anchor="middle" class="tiny-label">• LangGraph Workflow Orchestration</text>
+  <text x="350" y="653" text-anchor="middle" class="tiny-label">• Multi-Agent System (5 agents)</text>
+  <text x="350" y="670" text-anchor="middle" class="tiny-label">• Auth & RBAC Middleware</text>
+
+  <rect x="650" y="490" width="400" height="200" class="app-server" rx="5"/>
+  <text x="850" y="520" text-anchor="middle" class="subtitle">Python Runtime</text>
+  <text x="850" y="545" text-anchor="middle" class="label">Virtual Environment</text>
+  <text x="850" y="565" text-anchor="middle" class="small-label">.venv/</text>
+  <text x="850" y="585" text-anchor="middle" class="tiny-label">Dependencies:</text>
+  <text x="850" y="602" text-anchor="middle" class="tiny-label">• FastAPI, LangGraph, LangChain</text>
+  <text x="850" y="619" text-anchor="middle" class="tiny-label">• ChromaDB, Neo4j Driver</text>
+  <text x="850" y="636" text-anchor="middle" class="tiny-label">• OpenAI, Anthropic SDKs</text>
+  <text x="850" y="653" text-anchor="middle" class="tiny-label">• Redis, SQLite3</text>
+  <text x="850" y="670" text-anchor="middle" class="tiny-label">• Prometheus, OpenTelemetry</text>
+
+  <rect x="1150" y="490" width="350" height="200" class="app-server" rx="5"/>
+  <text x="1325" y="520" text-anchor="middle" class="subtitle">Background Services</text>
+  <text x="1325" y="545" text-anchor="middle" class="label">Async Workers</text>
+  <text x="1325" y="570" text-anchor="middle" class="tiny-label">• Auto-Ingest Watcher</text>
+  <text x="1325" y="587" text-anchor="middle" class="tiny-label">  (monitors data/docs/)</text>
+  <text x="1325" y="607" text-anchor="middle" class="tiny-label">• Background Queue</text>
+  <text x="1325" y="624" text-anchor="middle" class="tiny-label">  (async task processing)</text>
+  <text x="1325" y="644" text-anchor="middle" class="tiny-label">• Shadow Queue</text>
+  <text x="1325" y="661" text-anchor="middle" class="tiny-label">  (canary testing)</text>
+
+  <!-- Container Layer -->
+  <rect x="50" y="760" width="1500" height="280" fill="#f5f5f5" stroke="#999" stroke-width="2" rx="8"/>
+  <text x="800" y="790" text-anchor="middle" class="subtitle">Container Layer (Docker Compose)</text>
+
+  <rect x="150" y="810" width="350" height="200" class="container" rx="5"/>
+  <text x="325" y="840" text-anchor="middle" class="subtitle">Neo4j Container</text>
+  <text x="325" y="865" text-anchor="middle" class="label">neo4j:5.26</text>
+  <text x="325" y="885" text-anchor="middle" class="small-label">Container: local-rag-neo4j</text>
+  <text x="325" y="905" text-anchor="middle" class="tiny-label">Ports:</text>
+  <text x="325" y="922" text-anchor="middle" class="tiny-label">• 7474 (HTTP Browser)</text>
+  <text x="325" y="939" text-anchor="middle" class="tiny-label">• 7687 (Bolt Protocol)</text>
+  <text x="325" y="959" text-anchor="middle" class="tiny-label">Environment:</text>
+  <text x="325" y="976" text-anchor="middle" class="tiny-label">• NEO4J_AUTH=neo4j/neo4j_password</text>
+  <text x="325" y="993" text-anchor="middle" class="tiny-label">• NEO4J_PLUGINS=["apoc"]</text>
+
+  <rect x="600" y="810" width="350" height="200" class="container" rx="5"/>
+  <text x="775" y="840" text-anchor="middle" class="subtitle">n8n Container</text>
+  <text x="775" y="865" text-anchor="middle" class="label">n8nio/n8n:latest</text>
+  <text x="775" y="885" text-anchor="middle" class="small-label">Container: local-rag-n8n</text>
+  <text x="775" y="905" text-anchor="middle" class="tiny-label">Port: 5678</text>
+  <text x="775" y="925" text-anchor="middle" class="tiny-label">Environment:</text>
+  <text x="775" y="942" text-anchor="middle" class="tiny-label">• N8N_HOST=localhost</text>
+  <text x="775" y="959" text-anchor="middle" class="tiny-label">• WEBHOOK_URL=http://localhost:5678</text>
+  <text x="775" y="976" text-anchor="middle" class="tiny-label">• GENERIC_TIMEZONE=Asia/Shanghai</text>
+  <text x="775" y="993" text-anchor="middle" class="tiny-label">Use: Workflow automation</text>
+
+  <rect x="1050" y="810" width="400" height="200" class="container" rx="5"/>
+  <text x="1250" y="840" text-anchor="middle" class="subtitle">Redis Container (Optional)</text>
+  <text x="1250" y="865" text-anchor="middle" class="label">redis:7-alpine</text>
+  <text x="1250" y="885" text-anchor="middle" class="small-label">Container: local-rag-redis</text>
+  <text x="1250" y="905" text-anchor="middle" class="tiny-label">Port: 6379</text>
+  <text x="1250" y="925" text-anchor="middle" class="tiny-label">Use Cases:</text>
+  <text x="1250" y="942" text-anchor="middle" class="tiny-label">• Query result caching</text>
+  <text x="1250" y="959" text-anchor="middle" class="tiny-label">• Retrieval caching</text>
+  <text x="1250" y="976" text-anchor="middle" class="tiny-label">• Session state (distributed)</text>
+  <text x="1250" y="993" text-anchor="middle" class="tiny-label">Fallback: In-memory cache</text>
+
+  <!-- Storage Layer -->
+  <rect x="50" y="1080" width="1500" height="280" fill="#f5f5f5" stroke="#999" stroke-width="2" rx="8"/>
+  <text x="800" y="1110" text-anchor="middle" class="subtitle">Storage Layer (Persistent Volumes)</text>
+
+  <rect x="100" y="1130" width="280" height="200" class="storage" rx="5"/>
+  <text x="240" y="1160" text-anchor="middle" class="subtitle">Neo4j Volumes</text>
+  <text x="240" y="1185" text-anchor="middle" class="tiny-label">• neo4j_data (graph database)</text>
+  <text x="240" y="1202" text-anchor="middle" class="tiny-label">• neo4j_logs (query logs)</text>
+  <text x="240" y="1219" text-anchor="middle" class="tiny-label">• neo4j_plugins (APOC)</text>
+  <text x="240" y="1236" text-anchor="middle" class="tiny-label">• neo4j_conf (configuration)</text>
+  <text x="240" y="1256" text-anchor="middle" class="small-label">Persistence: Docker volumes</text>
+  <text x="240" y="1273" text-anchor="middle" class="small-label">Backup: neo4j-admin dump</text>
+
+  <rect x="420" y="1130" width="280" height="200" class="storage" rx="5"/>
+  <text x="560" y="1160" text-anchor="middle" class="subtitle">File System Storage</text>
+  <text x="560" y="1185" text-anchor="middle" class="tiny-label">data/</text>
+  <text x="560" y="1202" text-anchor="middle" class="tiny-label">├── docs/ (source documents)</text>
+  <text x="560" y="1219" text-anchor="middle" class="tiny-label">├── uploads/ (user uploads)</text>
+  <text x="560" y="1236" text-anchor="middle" class="tiny-label">├── chroma/ (ChromaDB)</text>
+  <text x="560" y="1253" text-anchor="middle" class="tiny-label">├── chunks/ (JSONL stores)</text>
+  <text x="560" y="1270" text-anchor="middle" class="tiny-label">├── sessions/ (chat history)</text>
+  <text x="560" y="1287" text-anchor="middle" class="tiny-label">└── app.db (SQLite)</text>
+  <text x="560" y="1307" text-anchor="middle" class="small-label">Backup: File system snapshots</text>
+
+  <rect x="740" y="1130" width="280" height="200" class="storage" rx="5"/>
+  <text x="880" y="1160" text-anchor="middle" class="subtitle">n8n Volume</text>
+  <text x="880" y="1185" text-anchor="middle" class="tiny-label">• n8n_data (workflows, credentials)</text>
+  <text x="880" y="1205" text-anchor="middle" class="small-label">Path: /home/node/.n8n</text>
+  <text x="880" y="1225" text-anchor="middle" class="small-label">Contains:</text>
+  <text x="880" y="1242" text-anchor="middle" class="tiny-label">• Workflow definitions (JSON)</text>
+  <text x="880" y="1259" text-anchor="middle" class="tiny-label">• Encrypted credentials</text>
+  <text x="880" y="1276" text-anchor="middle" class="tiny-label">• Execution history</text>
+  <text x="880" y="1293" text-anchor="middle" class="tiny-label">• Settings & configurations</text>
+
+  <rect x="1060" y="1130" width="280" height="200" class="storage" rx="5"/>
+  <text x="1200" y="1160" text-anchor="middle" class="subtitle">Redis Volume (Optional)</text>
+  <text x="1200" y="1185" text-anchor="middle" class="tiny-label">• redis_data (RDB snapshots)</text>
+  <text x="1200" y="1205" text-anchor="middle" class="small-label">Persistence Mode:</text>
+  <text x="1200" y="1222" text-anchor="middle" class="tiny-label">• RDB: Periodic snapshots</text>
+  <text x="1200" y="1239" text-anchor="middle" class="tiny-label">• AOF: Append-only file (optional)</text>
+  <text x="1200" y="1259" text-anchor="middle" class="small-label">Note: Cache can be ephemeral</text>
+  <text x="1200" y="1276" text-anchor="middle" class="small-label">System degrades gracefully</text>
+  <text x="1200" y="1293" text-anchor="middle" class="small-label">without Redis</text>
+
+  <rect x="1380" y="1130" width="180" height="200" class="storage" rx="5"/>
+  <text x="1470" y="1160" text-anchor="middle" class="subtitle">Logs</text>
+  <text x="1470" y="1185" text-anchor="middle" class="tiny-label">logs/</text>
+  <text x="1470" y="1202" text-anchor="middle" class="tiny-label">├── app.log</text>
+  <text x="1470" y="1219" text-anchor="middle" class="tiny-label">├── access.log</text>
+  <text x="1470" y="1236" text-anchor="middle" class="tiny-label">├── error.log</text>
+  <text x="1470" y="1253" text-anchor="middle" class="tiny-label">└── audit.log</text>
+  <text x="1470" y="1273" text-anchor="middle" class="small-label">Rotation:</text>
+  <text x="1470" y="1290" text-anchor="middle" class="tiny-label">Daily, 30d retention</text>
+
+  <!-- External Services -->
+  <rect x="50" y="1400" width="1500" height="180" fill="#f5f5f5" stroke="#999" stroke-width="2" rx="8"/>
+  <text x="800" y="1430" text-anchor="middle" class="subtitle">External Services (Cloud APIs)</text>
+
+  <rect x="150" y="1450" width="280" height="100" class="external" rx="5"/>
+  <text x="290" y="1480" text-anchor="middle" class="subtitle">OpenAI API</text>
+  <text x="290" y="1505" text-anchor="middle" class="label">api.openai.com</text>
+  <text x="290" y="1525" text-anchor="middle" class="small-label">• GPT-4 Turbo (default)</text>
+  <text x="290" y="1542" text-anchor="middle" class="small-label">• text-embedding-ada-002</text>
+
+  <rect x="500" y="1450" width="280" height="100" class="external" rx="5"/>
+  <text x="640" y="1480" text-anchor="middle" class="subtitle">Anthropic API</text>
+  <text x="640" y="1505" text-anchor="middle" class="label">api.anthropic.com</text>
+  <text x="640" y="1525" text-anchor="middle" class="small-label">• Claude 3 Opus</text>
+  <text x="640" y="1542" text-anchor="middle" class="small-label">• Claude 3 Sonnet</text>
+
+  <rect x="850" y="1450" width="280" height="100" class="external" rx="5"/>
+  <text x="990" y="1480" text-anchor="middle" class="subtitle">Ollama (Local)</text>
+  <text x="990" y="1505" text-anchor="middle" class="label">localhost:11434</text>
+  <text x="990" y="1525" text-anchor="middle" class="small-label">• Local LLM inference</text>
+  <text x="990" y="1542" text-anchor="middle" class="small-label">• Privacy-first option</text>
+
+  <rect x="1200" y="1450" width="280" height="100" class="external" rx="5"/>
+  <text x="1340" y="1480" text-anchor="middle" class="subtitle">Monitoring (Optional)</text>
+  <text x="1340" y="1505" text-anchor="middle" class="label">Prometheus + Grafana</text>
+  <text x="1340" y="1525" text-anchor="middle" class="small-label">• Metrics: /metrics endpoint</text>
+  <text x="1340" y="1542" text-anchor="middle" class="small-label">• Traces: OpenTelemetry</text>
+
+  <!-- Arrows: Client to Load Balancer -->
+  <path d="M 275 250 L 800 320" class="arrow"/>
+  <path d="M 625 250 L 800 320" class="arrow"/>
+  <path d="M 975 250 L 800 320" class="arrow"/>
+  <path d="M 1325 250 L 800 320" class="arrow"/>
+
+  <!-- Arrows: Load Balancer to App Server -->
+  <path d="M 800 400 L 350 490" class="bi-arrow"/>
+  <text x="550" y="440" class="small-label">HTTP/REST</text>
+
+  <!-- Arrows: App Server to Containers -->
+  <path d="M 350 690 L 325 810" class="bi-arrow"/>
+  <text x="280" y="750" class="small-label">Bolt</text>
+
+  <path d="M 850 690 L 775 810" class="bi-arrow"/>
+  <text x="820" y="750" class="small-label">HTTP</text>
+
+  <path d="M 1325 690 L 1250 810" class="bi-arrow"/>
+  <text x="1300" y="750" class="small-label">Redis</text>
+
+  <!-- Arrows: Containers to Storage -->
+  <path d="M 325 1010 L 240 1130" class="data-arrow"/>
+  <path d="M 350 1010 L 560 1130" class="data-arrow"/>
+  <path d="M 775 1010 L 880 1130" class="data-arrow"/>
+  <path d="M 1250 1010 L 1200 1130" class="data-arrow"/>
+
+  <!-- Arrows: App Server to External Services -->
+  <path d="M 350 690 L 290 1450" class="arrow"/>
+  <path d="M 350 690 L 640 1450" class="arrow"/>
+  <path d="M 350 690 L 990 1450" class="arrow"/>
+
+  <!-- Deployment Notes -->
+  <rect x="50" y="1620" width="1500" height="140" fill="#fff9e6" stroke="#f9a825" stroke-width="2" rx="8"/>
+  <text x="800" y="1650" text-anchor="middle" class="subtitle">Deployment Commands</text>
+
+  <text x="70" y="1680" class="label" font-weight="bold">1. Start Infrastructure:</text>
+  <text x="80" y="1700" class="small-label" font-family="monospace">docker compose up -d neo4j</text>
+
+  <text x="70" y="1730" class="label" font-weight="bold">2. Start Application:</text>
+  <text x="80" y="1750" class="small-label" font-family="monospace">uvicorn app.api.main:app --host 127.0.0.1 --port 8000 --reload</text>
+
+  <text x="600" y="1680" class="label" font-weight="bold">3. Start Frontend:</text>
+  <text x="610" y="1700" class="small-label" font-family="monospace">cd frontend && npm run dev</text>
+
+  <text x="600" y="1730" class="label" font-weight="bold">4. Optional Services:</text>
+  <text x="610" y="1750" class="small-label" font-family="monospace">docker compose up -d n8n redis</text>
+
+  <text x="1100" y="1680" class="label" font-weight="bold">Environment:</text>
+  <text x="1110" y="1700" class="small-label">• .env file required</text>
+  <text x="1110" y="1717" class="small-label">• API keys configured</text>
+  <text x="1110" y="1734" class="small-label">• Neo4j credentials set</text>
+  <text x="1110" y="1751" class="small-label">• Model backend selected</text>
+
+  <!-- Footer -->
+  <text x="800" y="1790" text-anchor="middle" class="small-label">Multi-Agent RAG v0.3.1 | Docker Compose Deployment | Scalable & Production-Ready</text>
+</svg>

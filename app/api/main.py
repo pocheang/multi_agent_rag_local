@@ -22,6 +22,7 @@ from app.api.dependencies import (
     shadow_queue,
     settings,
     _auto_ingest_stop_event,
+    _require_user,
 )
 
 # Import middleware

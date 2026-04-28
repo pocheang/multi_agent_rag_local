@@ -2,18 +2,27 @@
 
 Provides rate limiting for sensitive admin operations to prevent brute-force attacks and abuse.
 """
-from slowapi import Limiter
-from slowapi.util import get_remote_address
+from typing import Optional
+
+try:
+    from slowapi import Limiter
+    from slowapi.util import get_remote_address
+    SLOWAPI_AVAILABLE = True
+except ImportError:
+    SLOWAPI_AVAILABLE = False
+    Limiter = None
 
 
-def get_limiter() -> Limiter:
+def get_limiter() -> Optional[object]:
     """
     Get rate limiter instance.
 
     Returns:
-        Limiter instance
+        Limiter instance if slowapi is available, None otherwise
     """
-    return Limiter(key_func=get_remote_address)
+    if SLOWAPI_AVAILABLE:
+        return Limiter(key_func=get_remote_address)
+    return None
 
 
 # Rate limit configuration
@@ -52,3 +61,7 @@ def get_rate_limit(operation: str) -> str:
         Rate limit string (e.g., "1/hour")
     """
     return RATE_LIMITS.get(operation, "10/minute")  # Default limit
+
+
+# Export global limiter instance for convenience
+rate_limiter = get_limiter()

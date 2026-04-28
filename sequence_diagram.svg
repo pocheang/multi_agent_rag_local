@@ -1,0 +1,334 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1800 2400">
+  <defs>
+    <style>
+      .title { font: bold 26px sans-serif; fill: #1a1a1a; }
+      .subtitle { font: bold 16px sans-serif; fill: #333; }
+      .label { font: 14px sans-serif; fill: #444; }
+      .small-label { font: 12px sans-serif; fill: #666; }
+      .tiny-label { font: 11px sans-serif; fill: #777; }
+      .time-label { font: 13px monospace; fill: #1976d2; }
+
+      .actor { fill: #e3f2fd; stroke: #1976d2; stroke-width: 2; }
+      .component { fill: #fff3e0; stroke: #f57c00; stroke-width: 2; }
+      .agent { fill: #e8f5e9; stroke: #388e3c; stroke-width: 2; }
+      .storage { fill: #fce4ec; stroke: #c2185b; stroke-width: 2; }
+      .external { fill: #f3e5f5; stroke: #7b1fa2; stroke-width: 2; }
+
+      .lifeline { fill: none; stroke: #999; stroke-width: 2; stroke-dasharray: 5,5; }
+      .activation { fill: #bbdefb; stroke: #1976d2; stroke-width: 2; }
+      .call { fill: none; stroke: #333; stroke-width: 2; marker-end: url(#arrowhead); }
+      .return { fill: none; stroke: #666; stroke-width: 2; stroke-dasharray: 3,3; marker-end: url(#arrowhead-dashed); }
+      .async { fill: none; stroke: #f57c00; stroke-width: 2; marker-end: url(#arrowhead-orange); }
+
+      .text-white { fill: white; }
+      .text-black { fill: #1a1a1a; }
+    </style>
+
+    <marker id="arrowhead" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto">
+      <polygon points="0 0, 10 3, 0 6" fill="#333" />
+    </marker>
+    <marker id="arrowhead-dashed" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto">
+      <polygon points="0 0, 10 3, 0 6" fill="#666" />
+    </marker>
+    <marker id="arrowhead-orange" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto">
+      <polygon points="0 0, 10 3, 0 6" fill="#f57c00" />
+    </marker>
+  </defs>
+
+  <!-- Title -->
+  <text x="900" y="35" text-anchor="middle" class="title">Multi-Agent RAG Query Processing - Sequence Diagram</text>
+  <text x="900" y="60" text-anchor="middle" class="small-label">Detailed interaction flow from user query to final response</text>
+
+  <!-- Actors/Components Headers -->
+  <g id="actors">
+    <!-- User -->
+    <rect x="50" y="100" width="120" height="60" class="actor" rx="5"/>
+    <text x="110" y="135" text-anchor="middle" class="label">User</text>
+
+    <!-- React Frontend -->
+    <rect x="210" y="100" width="120" height="60" class="component" rx="5"/>
+    <text x="270" y="125" text-anchor="middle" class="label">React</text>
+    <text x="270" y="145" text-anchor="middle" class="small-label">Frontend</text>
+
+    <!-- FastAPI -->
+    <rect x="370" y="100" width="120" height="60" class="component" rx="5"/>
+    <text x="430" y="125" text-anchor="middle" class="label">FastAPI</text>
+    <text x="430" y="145" text-anchor="middle" class="small-label">Gateway</text>
+
+    <!-- LangGraph -->
+    <rect x="530" y="100" width="120" height="60" class="component" rx="5"/>
+    <text x="590" y="125" text-anchor="middle" class="label">LangGraph</text>
+    <text x="590" y="145" text-anchor="middle" class="small-label">Workflow</text>
+
+    <!-- Router Agent -->
+    <rect x="690" y="100" width="120" height="60" class="agent" rx="5"/>
+    <text x="750" y="125" text-anchor="middle" class="label">Router</text>
+    <text x="750" y="145" text-anchor="middle" class="small-label">Agent</text>
+
+    <!-- Vector RAG -->
+    <rect x="850" y="100" width="120" height="60" class="agent" rx="5"/>
+    <text x="910" y="125" text-anchor="middle" class="label">Vector RAG</text>
+    <text x="910" y="145" text-anchor="middle" class="small-label">Agent</text>
+
+    <!-- Graph RAG -->
+    <rect x="1010" y="100" width="120" height="60" class="agent" rx="5"/>
+    <text x="1070" y="125" text-anchor="middle" class="label">Graph RAG</text>
+    <text x="1070" y="145" text-anchor="middle" class="small-label">Agent</text>
+
+    <!-- Synthesis -->
+    <rect x="1170" y="100" width="120" height="60" class="agent" rx="5"/>
+    <text x="1230" y="125" text-anchor="middle" class="label">Synthesis</text>
+    <text x="1230" y="145" text-anchor="middle" class="small-label">Agent</text>
+
+    <!-- ChromaDB -->
+    <rect x="1330" y="100" width="120" height="60" class="storage" rx="5"/>
+    <text x="1390" y="125" text-anchor="middle" class="label">ChromaDB</text>
+    <text x="1390" y="145" text-anchor="middle" class="small-label">Vector Store</text>
+
+    <!-- Neo4j -->
+    <rect x="1490" y="100" width="120" height="60" class="storage" rx="5"/>
+    <text x="1550" y="125" text-anchor="middle" class="label">Neo4j</text>
+    <text x="1550" y="145" text-anchor="middle" class="small-label">Graph DB</text>
+
+    <!-- LLM -->
+    <rect x="1650" y="100" width="120" height="60" class="external" rx="5"/>
+    <text x="1710" y="125" text-anchor="middle" class="label">LLM API</text>
+    <text x="1710" y="145" text-anchor="middle" class="small-label">OpenAI/Claude</text>
+  </g>
+
+  <!-- Lifelines -->
+  <line x1="110" y1="160" x2="110" y2="2300" class="lifeline"/>
+  <line x1="270" y1="160" x2="270" y2="2300" class="lifeline"/>
+  <line x1="430" y1="160" x2="430" y2="2300" class="lifeline"/>
+  <line x1="590" y1="160" x2="590" y2="2300" class="lifeline"/>
+  <line x1="750" y1="160" x2="750" y2="2300" class="lifeline"/>
+  <line x1="910" y1="160" x2="910" y2="2300" class="lifeline"/>
+  <line x1="1070" y1="160" x2="1070" y2="2300" class="lifeline"/>
+  <line x1="1230" y1="160" x2="1230" y2="2300" class="lifeline"/>
+  <line x1="1390" y1="160" x2="1390" y2="2300" class="lifeline"/>
+  <line x1="1550" y1="160" x2="1550" y2="2300" class="lifeline"/>
+  <line x1="1710" y1="160" x2="1710" y2="2300" class="lifeline"/>
+
+  <!-- Sequence Flow -->
+  <g id="sequence">
+    <!-- 1. User submits query -->
+    <text x="30" y="200" class="time-label">t0</text>
+    <path d="M 110 200 L 270 200" class="call"/>
+    <text x="180" y="195" class="small-label">1. Submit query</text>
+    <text x="180" y="210" class="tiny-label">"What is RAG?"</text>
+
+    <!-- 2. Frontend to API -->
+    <text x="30" y="250" class="time-label">t1</text>
+    <rect x="265" y="220" width="10" height="80" class="activation"/>
+    <path d="M 270 250 L 430 250" class="call"/>
+    <text x="340" y="245" class="small-label">2. POST /query</text>
+    <text x="340" y="260" class="tiny-label">{question, session_id}</text>
+
+    <!-- 3. API Authentication -->
+    <text x="30" y="320" class="time-label">t2</text>
+    <rect x="425" y="270" width="10" height="600" class="activation"/>
+    <path d="M 430 320 L 420 320 L 420 340 L 430 340" class="call"/>
+    <text x="350" y="315" class="small-label">3. Authenticate</text>
+    <text x="350" y="330" class="tiny-label">Check session token</text>
+
+    <!-- 4. Initialize Workflow -->
+    <text x="30" y="380" class="time-label">t3</text>
+    <path d="M 430 380 L 590 380" class="call"/>
+    <text x="500" y="375" class="small-label">4. run_query()</text>
+    <text x="500" y="390" class="tiny-label">Initialize GraphState</text>
+
+    <!-- 5. Router Node -->
+    <text x="30" y="440" class="time-label">t4</text>
+    <rect x="585" y="400" width="10" height="1200" class="activation"/>
+    <path d="M 590 440 L 750 440" class="call"/>
+    <text x="660" y="435" class="small-label">5. router_node()</text>
+
+    <!-- 6. Router decides route -->
+    <text x="30" y="500" class="time-label">t5</text>
+    <rect x="745" y="460" width="10" height="200" class="activation"/>
+    <path d="M 750 500 L 1710 500" class="call"/>
+    <text x="1200" y="495" class="small-label">6. decide_route(question)</text>
+    <text x="1200" y="510" class="tiny-label">LLM call for classification</text>
+
+    <!-- 7. LLM returns decision -->
+    <text x="30" y="580" class="time-label">t6</text>
+    <path d="M 1710 580 L 750 580" class="return"/>
+    <text x="1200" y="575" class="small-label">7. Return: route="hybrid"</text>
+    <text x="1200" y="590" class="tiny-label">reason, skill, agent_class</text>
+
+    <!-- 8. Router returns to workflow -->
+    <text x="30" y="640" class="time-label">t7</text>
+    <path d="M 750 640 L 590 640" class="return"/>
+    <text x="660" y="635" class="small-label">8. Updated GraphState</text>
+
+    <!-- 9. Adaptive Planner -->
+    <text x="30" y="700" class="time-label">t8</text>
+    <path d="M 590 700 L 580 700 L 580 730 L 590 730" class="call"/>
+    <text x="500" y="695" class="small-label">9. adaptive_planner_node()</text>
+    <text x="500" y="710" class="tiny-label">Set retrieval params</text>
+    <text x="500" y="725" class="tiny-label">Tier: Balanced (top_k=10)</text>
+
+    <!-- 10. Entry Decider -->
+    <text x="30" y="770" class="time-label">t9</text>
+    <path d="M 590 770 L 580 770 L 580 800 L 590 800" class="call"/>
+    <text x="500" y="765" class="small-label">10. entry_decider_node()</text>
+    <text x="500" y="780" class="tiny-label">next_step = "vector"</text>
+
+    <!-- 11. Vector RAG Node -->
+    <text x="30" y="850" class="time-label">t10</text>
+    <path d="M 590 850 L 910 850" class="call"/>
+    <text x="740" y="845" class="small-label">11. vector_node()</text>
+
+    <!-- 12. Vector retrieval -->
+    <text x="30" y="910" class="time-label">t11</text>
+    <rect x="905" y="870" width="10" height="300" class="activation"/>
+    <path d="M 910 910 L 1390 910" class="call"/>
+    <text x="1140" y="905" class="small-label">12. query(embedding)</text>
+    <text x="1140" y="920" class="tiny-label">Vector similarity search</text>
+
+    <!-- 13. ChromaDB returns results -->
+    <text x="30" y="980" class="time-label">t12</text>
+    <rect x="1385" y="930" width="10" height="80" class="activation"/>
+    <path d="M 1390 980 L 910 980" class="return"/>
+    <text x="1140" y="975" class="small-label">13. Top 10 chunks</text>
+
+    <!-- 14. BM25 retrieval -->
+    <text x="30" y="1040" class="time-label">t13</text>
+    <path d="M 910 1040 L 900 1040 L 900 1070 L 910 1070" class="call"/>
+    <text x="820" y="1035" class="small-label">14. BM25 search</text>
+    <text x="820" y="1050" class="tiny-label">Keyword matching</text>
+
+    <!-- 15. RRF Fusion + Reranking -->
+    <text x="30" y="1110" class="time-label">t14</text>
+    <path d="M 910 1110 L 900 1110 L 900 1140 L 910 1140" class="call"/>
+    <text x="800" y="1105" class="small-label">15. RRF + Rerank</text>
+    <text x="800" y="1120" class="tiny-label">Combine & rerank top 5</text>
+
+    <!-- 16. Vector returns to workflow -->
+    <text x="30" y="1190" class="time-label">t15</text>
+    <path d="M 910 1190 L 590 1190" class="return"/>
+    <text x="740" y="1185" class="small-label">16. vector_result</text>
+    <text x="740" y="1200" class="tiny-label">{context, citations, count}</text>
+
+    <!-- 17. Vector Decider -->
+    <text x="30" y="1250" class="time-label">t16</text>
+    <path d="M 590 1250 L 580 1250 L 580 1280 L 590 1280" class="call"/>
+    <text x="480" y="1245" class="small-label">17. vector_decider_node()</text>
+    <text x="480" y="1260" class="tiny-label">Check: hits < threshold?</text>
+    <text x="480" y="1275" class="tiny-label">Decision: need graph</text>
+
+    <!-- 18. Graph RAG Node -->
+    <text x="30" y="1330" class="time-label">t17</text>
+    <path d="M 590 1330 L 1070 1330" class="call"/>
+    <text x="820" y="1325" class="small-label">18. graph_node()</text>
+
+    <!-- 19. Extract entities -->
+    <text x="30" y="1390" class="time-label">t18</text>
+    <rect x="1065" y="1350" width="10" height="300" class="activation"/>
+    <path d="M 1070 1390 L 1710 1390" class="call"/>
+    <text x="1380" y="1385" class="small-label">19. extract_entities()</text>
+    <text x="1380" y="1400" class="tiny-label">LLM call for NER</text>
+
+    <!-- 20. LLM returns entities -->
+    <text x="30" y="1460" class="time-label">t19</text>
+    <path d="M 1710 1460 L 1070 1460" class="return"/>
+    <text x="1380" y="1455" class="small-label">20. Entities: ["RAG", "retrieval"]</text>
+
+    <!-- 21. Neo4j query -->
+    <text x="30" y="1520" class="time-label">t20</text>
+    <path d="M 1070 1520 L 1550 1520" class="call"/>
+    <text x="1300" y="1515" class="small-label">21. Cypher query</text>
+    <text x="1300" y="1530" class="tiny-label">MATCH (e:Entity)-[:RELATED_TO]->()</text>
+
+    <!-- 22. Neo4j returns graph -->
+    <text x="30" y="1590" class="time-label">t21</text>
+    <rect x="1545" y="1540" width="10" height="80" class="activation"/>
+    <path d="M 1550 1590 L 1070 1590" class="return"/>
+    <text x="1300" y="1585" class="small-label">22. Graph context</text>
+    <text x="1300" y="1600" class="tiny-label">{entities, neighbors, context}</text>
+
+    <!-- 23. Graph returns to workflow -->
+    <text x="30" y="1660" class="time-label">t22</text>
+    <path d="M 1070 1660 L 590 1660" class="return"/>
+    <text x="820" y="1655" class="small-label">23. graph_result</text>
+
+    <!-- 24. Graph Decider -->
+    <text x="30" y="1720" class="time-label">t23</text>
+    <path d="M 590 1720 L 580 1720 L 580 1750 L 590 1750" class="call"/>
+    <text x="480" y="1715" class="small-label">24. graph_decider_node()</text>
+    <text x="480" y="1730" class="tiny-label">Decision: sufficient evidence</text>
+    <text x="480" y="1745" class="tiny-label">next_step = "synthesis"</text>
+
+    <!-- 25. Synthesis Node -->
+    <text x="30" y="1800" class="time-label">t24</text>
+    <path d="M 590 1800 L 1230 1800" class="call"/>
+    <text x="900" y="1795" class="small-label">25. synthesis_node()</text>
+
+    <!-- 26. Synthesize answer -->
+    <text x="30" y="1860" class="time-label">t25</text>
+    <rect x="1225" y="1820" width="10" height="300" class="activation"/>
+    <path d="M 1230 1860 L 1710 1860" class="call"/>
+    <text x="1460" y="1855" class="small-label">26. synthesize_answer()</text>
+    <text x="1460" y="1870" class="tiny-label">Combine vector + graph context</text>
+
+    <!-- 27. LLM generates answer -->
+    <text x="30" y="1930" class="time-label">t26</text>
+    <path d="M 1710 1930 L 1230 1930" class="return"/>
+    <text x="1460" y="1925" class="small-label">27. Generated answer</text>
+    <text x="1460" y="1940" class="tiny-label">"RAG is Retrieval-Augmented..."</text>
+
+    <!-- 28. Grounding check -->
+    <text x="30" y="1990" class="time-label">t27</text>
+    <path d="M 1230 1990 L 1220 1990 L 1220 2020 L 1230 2020" class="call"/>
+    <text x="1120" y="1985" class="small-label">28. apply_grounding()</text>
+    <text x="1120" y="2000" class="tiny-label">Verify citations</text>
+
+    <!-- 29. Safety check -->
+    <text x="30" y="2060" class="time-label">t28</text>
+    <path d="M 1230 2060 L 1220 2060 L 1220 2090 L 1230 2090" class="call"/>
+    <text x="1120" y="2055" class="small-label">29. sanitize_answer()</text>
+    <text x="1120" y="2070" class="tiny-label">Safety scan</text>
+
+    <!-- 30. Synthesis returns -->
+    <text x="30" y="2130" class="time-label">t29</text>
+    <path d="M 1230 2130 L 590 2130" class="return"/>
+    <text x="900" y="2125" class="small-label">30. Final GraphState</text>
+    <text x="900" y="2140" class="tiny-label">{answer, grounding, safety}</text>
+
+    <!-- 31. Workflow returns to API -->
+    <text x="30" y="2190" class="time-label">t30</text>
+    <path d="M 590 2190 L 430 2190" class="return"/>
+    <text x="500" y="2185" class="small-label">31. Complete GraphState</text>
+
+    <!-- 32. API streams response -->
+    <text x="30" y="2250" class="time-label">t31</text>
+    <path d="M 430 2250 L 270 2250" class="async"/>
+    <text x="340" y="2245" class="small-label">32. SSE Stream</text>
+    <text x="340" y="2260" class="tiny-label">Real-time events</text>
+
+    <!-- 33. Frontend displays -->
+    <text x="30" y="2310" class="time-label">t32</text>
+    <path d="M 270 2310 L 110 2310" class="async"/>
+    <text x="180" y="2305" class="small-label">33. Display answer</text>
+    <text x="180" y="2320" class="tiny-label">with citations</text>
+  </g>
+
+  <!-- Legend -->
+  <rect x="50" y="2350" width="1720" height="100" fill="#f9f9f9" stroke="#ccc" stroke-width="1" rx="5"/>
+  <text x="900" y="2375" text-anchor="middle" class="subtitle">Legend</text>
+
+  <line x1="100" y1="2395" x2="200" y2="2395" class="call"/>
+  <text x="220" y="2400" class="small-label">Synchronous Call</text>
+
+  <line x1="400" y1="2395" x2="500" y2="2395" class="return"/>
+  <text x="520" y="2400" class="small-label">Return / Response</text>
+
+  <line x1="750" y1="2395" x2="850" y2="2395" class="async"/>
+  <text x="870" y="2400" class="small-label">Async / Stream</text>
+
+  <rect x="1100" y="2385" width="10" height="25" class="activation"/>
+  <text x="1130" y="2400" class="small-label">Active Processing</text>
+
+  <text x="100" y="2430" class="small-label">Total Time: ~2-5 seconds (Balanced tier)</text>
+  <text x="600" y="2430" class="small-label">Key Latencies: Router (500ms) | Vector (800ms) | Graph (600ms) | Synthesis (1000ms)</text>
+</svg>

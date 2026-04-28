@@ -23,9 +23,10 @@ from app.core.schemas import (
     AuditLogEntry,
 )
 from app.services.log_buffer import list_captured_logs
-from app.services.admin_security import admin_security_service
-from app.services.admin_token_tracker import token_tracker
+from app.services.admin_token_tracker import token_tracker, validate_admin_approval_token, get_token_tracker
 from app.services.admin_rate_limit import rate_limiter
+from app.services.admin_security import check_self_modification
+from app.api.utils.admin_helpers import validate_and_check_approval_token, handle_service_exception
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
@@ -62,6 +63,10 @@ def admin_page(request: Request, user: dict[str, Any] = Depends(_require_user)):
 @router.patch("/users/{user_id}/role", response_model=AdminUserSummary)
 def admin_update_user_role(user_id: str, req: AdminRoleUpdateRequest, request: Request, user: dict[str, Any] = Depends(_require_user)):
     _require_permission(user, "admin:user_manage", request, "admin", resource_id=user_id)
+
+    # SECURITY: Prevent self-modification
+    check_self_modification(user_id, user, "admin.user.role_update", _audit, request)
+
     if str(req.role or "").strip().lower() == "admin":
         raise HTTPException(status_code=400, detail="admin role promotion is restricted; use /admin/users/create-admin")
     try:
@@ -273,6 +278,10 @@ def admin_reset_user_password(
 @router.patch("/users/{user_id}/status", response_model=AdminUserSummary)
 def admin_update_user_status(user_id: str, req: AdminStatusUpdateRequest, request: Request, user: dict[str, Any] = Depends(_require_user)):
     _require_permission(user, "admin:user_manage", request, "admin", resource_id=user_id)
+
+    # SECURITY: Prevent self-modification
+    check_self_modification(user_id, user, "admin.user.status_update", _audit, request)
+
     try:
         row = auth_service.update_user_status(user_id=user_id, status=req.status)
     except ValueError as e:
@@ -300,6 +309,10 @@ def admin_update_user_classification(
     user: dict[str, Any] = Depends(_require_user),
 ):
     _require_permission(user, "admin:user_manage", request, "admin", resource_id=user_id)
+
+    # SECURITY: Prevent self-modification
+    check_self_modification(user_id, user, "admin.user.classification_update", _audit, request)
+
     try:
         row = auth_service.update_user_classification(
             user_id=user_id,

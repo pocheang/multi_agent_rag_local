@@ -20,13 +20,13 @@ from app.core.schemas import (
     SessionDetail,
     SessionSummary,
 )
-from app.services.query_normalizer import (
+from app.services.input_normalizer import (
     enhance_user_question_for_completion,
-    is_casual_chat_query,
     normalize_and_validate_user_question,
     normalize_user_question,
 )
-from app.services.query_runtime import run_query
+from app.services.query_intent import is_casual_chat_query
+from app.graph.workflow import run_query
 from app.services.retrieval_profiles import normalize_retrieval_profile
 
 router = APIRouter(prefix="/sessions", tags=["sessions"])

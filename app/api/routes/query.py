@@ -1,24 +1,103 @@
 """Query routes for the Multi-Agent Local RAG API."""
-import asyncio
 import logging
 from typing import Annotated, Any
+
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
-from fastapi.responses import StreamingResponse
-from app.api.dependencies import (    auth_service,    query_guard,    query_result_cache,    quota_guard,    runtime_metrics,    shadow_queue,    settings,    _require_user,    _require_existing_session_for_query,    _require_permission,    _query_cache_key,    _trace_id,    _run_with_query_runtime,    _maybe_sign_response,    _history_store_for_user,    _memory_store_for_user,    _build_memory_context_for_session,    _promote_long_term_memory,    _allowed_sources_for_user,    _allowed_sources_for_visible_filenames,    _enforce_result_source_scope,    _resynthesize_after_source_scope,    _list_visible_pdf_names_for_user,    _visible_doc_chunks_by_filename_for_user,    _is_file_inventory_question,    _build_user_file_inventory_answer,    _audit,    _normalize_agent_class_hint,    _normalize_retrieval_strategy,    _resolve_effective_agent_class,    _latest_answer_for_same_question,    _launch_shadow_run,    _effective_strategy_for_session,    _sse_response,)
-from app.core.schemas import QueryRequest, QueryResponse
+
+from app.api.dependencies import (
+    auth_service,
+    query_guard,
+    query_result_cache,
+    quota_guard,
+    runtime_metrics,
+    shadow_queue,
+    settings,
+    _require_user,
+    _require_permission,
+    _require_existing_session_for_query,
+    _query_cache_key,
+    _query_limiter_key,
+    _trace_id,
+    _run_with_query_runtime,
+    _is_overload_mode,
+    _call_with_supported_kwargs,
+    _user_api_settings_for_runtime,
+    _history_store_for_user,
+    _memory_store_for_user,
+    _build_memory_context_for_session,
+    _promote_long_term_memory,
+    _allowed_sources_for_user,
+    _allowed_sources_for_visible_filenames,
+    _enforce_result_source_scope,
+    _resynthesize_after_source_scope,
+    _list_visible_pdf_names_for_user,
+    _visible_doc_chunks_by_filename_for_user,
+    _is_file_inventory_question,
+    _build_user_file_inventory_answer,
+    _audit,
+    _normalize_agent_class_hint,
+    _normalize_retrieval_strategy,
+    _resolve_effective_agent_class,
+    _latest_answer_for_same_question,
+    _launch_shadow_run,
+    _effective_strategy_for_session,
+    _sse_response,
+)
+from app.core.schemas import Citation, QueryRequest, QueryResponse
 from app.graph.streaming import encode_sse, run_query_stream
 from app.graph.workflow import run_query
-from app.services.alerting import emit_alert
+from app.services.alerting import emit_alert, resolve_signing_secret, sign_payload
 from app.services.consistency_guard import should_stabilize, text_similarity
-from app.services.input_normalizer import (    enhance_user_question_for_completion,    normalize_and_validate_user_question,    normalize_user_question,)
-from app.services.pdf_agent_guard import (    apply_pdf_focus_to_question,    build_choose_pdf_hint,    build_upload_pdf_hint,    choose_pdf_targets,)
+from app.services.evidence_conflict import detect_evidence_conflict
+from app.services.input_normalizer import (
+    enhance_user_question_for_completion,
+    normalize_and_validate_user_question,
+    normalize_user_question,
+)
+from app.services.pdf_agent_guard import (
+    apply_pdf_focus_to_question,
+    build_choose_pdf_hint,
+    build_upload_pdf_hint,
+    choose_pdf_targets,
+)
+from app.services.network_security import OutboundURLValidationError
+from app.services.query_guard import QueryOverloadedError, QueryRateLimitedError
 from app.services.query_intent import is_casual_chat_query
 from app.services.quota_guard import QuotaExceededError
+from app.services.rag_runtime_scope import execution_route_from_result
 from app.services.retrieval_profiles import profile_force_local_only, profile_to_strategy
-from app.services.runtime_ops import resolve_profile_for_request
+from app.services.request_context import request_context
+from app.services.runtime_ops import feature_enabled, resolve_profile_for_request
 
 router = APIRouter(prefix="/query", tags=["query"])
 logger = logging.getLogger(__name__)
+
+
+def overload_mode_enabled() -> bool:
+    """Small helper for routes that need to degrade gracefully under load."""
+    return _is_overload_mode()
+
+
+def _maybe_sign_response(
+    payload: dict[str, Any],
+    *,
+    user: dict[str, Any],
+    session_id: str,
+    question: str,
+) -> tuple[str | None, str | None]:
+    """Attach an optional HMAC signature to response metadata."""
+    if not bool(getattr(settings, "response_signing_enabled", True)):
+        return None, None
+    kid, secret = resolve_signing_secret()
+    if not kid or not secret:
+        return None, None
+    signed_payload = {
+        "payload": payload,
+        "user_id": str(user.get("user_id", "") or ""),
+        "session_id": str(session_id or ""),
+        "question": str(question or ""),
+    }
+    return sign_payload(signed_payload, secret), kid
 
 
 @router.post("", response_model=QueryResponse)
@@ -367,19 +446,6 @@ def query(req: QueryRequest, request: Request, user: dict[str, Any] = Depends(_r
     runtime_metrics.inc("query_success_total")
     return response
 
-
-def _sse_response(generator: Any) -> StreamingResponse:
-    return StreamingResponse(
-        generator,
-        media_type="text/event-stream",
-        headers={
-            "Cache-Control": "no-cache, no-transform",
-            "Connection": "keep-alive",
-            "X-Accel-Buffering": "no",
-        },
-    )
-
-
 @router.post("/query/stream")
 @router.post("/stream")
 async def stream_query(
@@ -698,44 +764,11 @@ async def stream_query(
                     if replay_enabled:
                         query_result_cache.append_stream_event(stream_cache_key, hello_event, done=False)
                     yield encode_sse(hello_event)
-                    loop = asyncio.get_running_loop()
-                    done_marker: dict[str, Any] = {"type": "__producer_done__"}
-                    queue: asyncio.Queue[dict[str, Any]] = asyncio.Queue(maxsize=256)
-                    producer_stop = threading.Event()
-                    producer_error: dict[str, Exception] = {}
-
-                    def _stream_producer() -> None:
-                        try:
-                            for _event in _call_with_supported_kwargs(
-                                run_query_stream,
-                                effective_question,
-                                **runtime_stream_kwargs,
-                            ):
-                                if producer_stop.is_set():
-                                    break
-                                fut = asyncio.run_coroutine_threadsafe(queue.put(_event), loop)
-                                fut.result()
-                        except Exception as ex:
-                            producer_error["error"] = ex
-                        finally:
-                            producer_stop.set()
-                            asyncio.run_coroutine_threadsafe(queue.put(done_marker), loop).result()
-
-                    producer_context = contextvars.copy_context()
-                    threading.Thread(target=lambda: producer_context.run(_stream_producer), daemon=True).start()
-                    heartbeat_s = max(2.0, float(getattr(settings, "stream_heartbeat_seconds", 8.0) or 8.0))
-
-                    while True:
-                        if await request.is_disconnected():
-                            producer_stop.set()
-                            break
-                        try:
-                            event = await asyncio.wait_for(queue.get(), timeout=heartbeat_s)
-                        except asyncio.TimeoutError:
-                            yield encode_sse({"type": "status", "message": "heartbeat", "trace_id": trace_id})
-                            continue
-                        if event is done_marker:
-                            break
+                    for event in _call_with_supported_kwargs(
+                        run_query_stream,
+                        effective_question,
+                        **runtime_stream_kwargs,
+                    ):
                         if event.get("type") == "done":
                             final_result = _enforce_result_source_scope(
                                 event.get("result", {}),
@@ -786,9 +819,6 @@ async def stream_query(
                             if replay_enabled:
                                 query_result_cache.append_stream_event(stream_cache_key, event, done=False)
                         yield encode_sse(event)
-
-                    if producer_error.get("error") is not None:
-                        raise producer_error["error"]
         except QueryRateLimitedError as e:
             runtime_metrics.inc("query_stream_rate_limited_total")
             emit_alert(

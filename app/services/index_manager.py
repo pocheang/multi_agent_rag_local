@@ -70,7 +70,10 @@ def list_indexed_files() -> list[dict[str, Any]]:
             entry["agent_class"] = str(meta.get("agent_class"))
         page = meta.get("page")
         if page is not None:
-            entry["pages"].add(str(page))
+            try:
+                entry["pages"].add(int(page))
+            except (ValueError, TypeError):
+                pass
 
     settings = get_settings()
     for path in settings.uploads_path.rglob("*"):
@@ -119,6 +122,7 @@ def list_indexed_files() -> list[dict[str, Any]]:
     items = []
     for entry in by_file.values():
         entry["pages"] = sorted(entry["pages"])
+        entry["page_count"] = len(entry["pages"])
         items.append(entry)
     items.sort(key=lambda x: (x["filename"].lower(), str(x.get("source", "")).lower()))
     return items

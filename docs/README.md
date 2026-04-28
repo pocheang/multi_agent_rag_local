@@ -1,248 +1,167 @@
-# 技术文档中心
+# Documentation Hub
 
-**文档版本**: v1.3.0  
-**最后更新**: 2026-04-27  
-**维护团队**: 技术文档组  
-**项目版本**: v0.3.0
+**Document Status**: Published  
+**Last Updated**: 2026-04-28  
+**Audience**: Engineering, Operations, Security, Product, Delivery  
+**Scope**: Multi-Agent Local RAG repository documentation  
+**Structure**: Enterprise-grade documentation organization
 
-> 📖 **多语言支持**: [English](README.md) | [中文](README_CN.md)
+This directory is the enterprise documentation entry point for the project. It organizes documents by type and lifecycle stage, ensuring teams can find the current source of truth quickly.
 
----
+## 📁 Documentation Structure
 
-## 📚 文档导航
-
-### 核心文档
-
-| 文档 | 描述 | 状态 | 最后更新 |
-|------|------|------|----------|
-| [CLAUDE.md](../CLAUDE.md) | 项目总体说明和开发指南 | ✅ 最新 | 2026-04-27 |
-| [README.md](../README.md) | 项目介绍和快速开始 | ✅ 最新 | 2026-04-27 |
-| [CHANGELOG.md](../CHANGELOG.md) | 版本变更历史 | ✅ 最新 | 2026-04-27 |
-| [VERSION_HISTORY.md](VERSION_HISTORY.md) | 完整版本历史记录 | ✅ 最新 | 2026-04-27 |
-
-### 规范文档
-
-| 文档 | 描述 | 状态 | 最后更新 |
-|------|------|------|----------|
-| [DOCUMENTATION_STANDARD.md](DOCUMENTATION_STANDARD.md) | 文档标准规范 | ✅ 最新 | 2026-04-26 |
-| [DOCUMENT_VERSION_CONTROL.md](DOCUMENT_VERSION_CONTROL.md) | 文档版本控制规范 | ✅ 最新 | 2026-04-26 |
-| [DOCUMENTATION_MAINTENANCE.md](DOCUMENTATION_MAINTENANCE.md) | 文档维护指南 | ✅ 最新 | 2026-04-27 |
-
-### 技术规范
-
-| 文档 | 描述 | 状态 | 最后更新 |
-|------|------|------|----------|
-| [superpowers/specs/2026-04-19-query-to-answer-ux-speed-design.md](superpowers/specs/2026-04-19-query-to-answer-ux-speed-design.md) | 查询到答案 UX 速度设计 | ✅ 最新 | 2026-04-19 |
-
-### 版本发布文档
-
-#### v0.3.0 - 模块化架构重构 (2026-04-27)
-
-| 文档 | 描述 | 状态 | 最后更新 |
-|------|------|------|----------|
-| [v0.3.0-release-completion-report.md](v0.3.0-release-completion-report.md) | v0.3.0 发布完成报告 | ✅ 最新 | 2026-04-27 |
-
-**核心成果**:
-- 🏗️ 代码减少 90.7% (9135 → 846 行主文件)
-- 📦 65 个专注模块替代 7 个大文件
-- ✅ 100% 向后兼容
-- 🚀 开发效率提升 5 倍
-
-#### v0.2.5 - 修复版本 (2026-04-27)
-
-| 文档 | 描述 | 状态 | 最后更新 |
-|------|------|------|----------|
-| [FIXES_INDEX.md](FIXES_INDEX.md) | 修复文档索引和快速导航 | ✅ 最新 | 2026-04-27 |
-| [CHANGELOG_2026-04-27.md](CHANGELOG_2026-04-27.md) | v0.2.5 完整变更日志 | ✅ 最新 | 2026-04-27 |
-| [FINAL_FIXES_SUMMARY_2026-04-27.md](FINAL_FIXES_SUMMARY_2026-04-27.md) | 修复总结和统计 | ✅ 最新 | 2026-04-27 |
-| [DEEP_CODE_REVIEW_2026-04-27.md](DEEP_CODE_REVIEW_2026-04-27.md) | 深度代码审查报告 | ✅ 最新 | 2026-04-27 |
-| [LOGIC_FIXES_2026-04-27.md](LOGIC_FIXES_2026-04-27.md) | 第一轮修复 (8个问题) | ✅ 最新 | 2026-04-27 |
-| [FIXES_ROUND2_2026-04-27.md](FIXES_ROUND2_2026-04-27.md) | 第二轮修复 (6个问题) | ✅ 最新 | 2026-04-27 |
-| [FIXES_ROUND3_2026-04-27.md](FIXES_ROUND3_2026-04-27.md) | 第三轮修复 (3个问题) | ✅ 最新 | 2026-04-27 |
-| [FIXES_ROUND4_2026-04-27.md](FIXES_ROUND4_2026-04-27.md) | 第四轮修复 (1个问题) | ✅ 最新 | 2026-04-27 |
-
-### 历史修复报告
-
-| 文档 | 描述 | 状态 | 最后更新 |
-|------|------|------|----------|
-| [fixes/2026-04-26-routing-rag-fixes.md](fixes/2026-04-26-routing-rag-fixes.md) | 路由和RAG系统修复报告 | 📋 已归档 | 2026-04-26 |
-| [2026-04-26-documentation-update-summary.md](2026-04-26-documentation-update-summary.md) | 文档更新总结 | 📋 已归档 | 2026-04-26 |
-
-### 测试报告
-
-| 文档 | 描述 | 状态 | 最后更新 |
-|------|------|------|----------|
-| [网络功能检查报告.md](网络功能检查报告.md) | 网络搜索功能完整性检查 | ✅ 最新 | 2026-04-26 |
-
-### 操作指南
-
-| 文档 | 描述 | 状态 | 最后更新 |
-|------|------|------|----------|
-| [API_SETTINGS_GUIDE.md](API_SETTINGS_GUIDE.md) | API 设置配置指南 | ✅ 最新 | 2026-04-20 |
-| [claude-api-setup.md](claude-api-setup.md) | Claude API 设置指南 | ✅ 最新 | 2026-04-20 |
-| [workflow_lowcode_setup.md](workflow_lowcode_setup.md) | 工作流低代码设置 | ✅ 最新 | 2026-04-15 |
-| [如何找到API设置.md](如何找到API设置.md) | API 设置查找指南（中文） | ✅ 最新 | 2026-04-20 |
-
-### 性能文档
-
-| 文档 | 描述 | 状态 | 最后更新 |
-|------|------|------|----------|
-| [PERFORMANCE_OPTIMIZATION.md](PERFORMANCE_OPTIMIZATION.md) | 性能优化指南 | ✅ 最新 | 2026-04-15 |
-| [runtime_speed_profiles.md](runtime_speed_profiles.md) | 运行时速度配置 | ✅ 最新 | 2026-04-15 |
-
-### 运维文档
-
-| 文档 | 描述 | 状态 | 最后更新 |
-|------|------|------|----------|
-| [production_readiness_checklist.md](production_readiness_checklist.md) | 生产就绪检查清单 | ✅ 最新 | 2026-04-10 |
-
----
-
-## 📊 文档统计
-
-### 按类型统计
-
-```mermaid
-pie title 文档类型分布
-    "核心文档" : 3
-    "技术规范" : 1
-    "修复报告" : 1
-    "测试报告" : 1
-    "操作指南" : 4
-    "性能文档" : 2
-    "运维文档" : 1
+```
+docs/
+├── README.md                              # This file - documentation hub
+├── ENTERPRISE_DOCUMENTATION_STANDARD.md   # Enterprise doc standards
+├── DOCUMENTATION_STANDARD.md              # Documentation policy
+├── DOCUMENTATION_MAINTENANCE.md           # Maintenance workflow
+├── VERSION_HISTORY.md                     # Version timeline
+├── API_SETTINGS_GUIDE.md                  # Configuration reference
+├── PERFORMANCE_OPTIMIZATION.md            # Tuning guidance
+├── runtime_speed_profiles.md              # Latency tier reference
+├── ARCHIVE_REFERENCE.md                   # Historical docs index
+│
+├── archive/                               # Historical & audit records
+│   ├── REFACTORING_*.md                   # Refactoring reports
+│   ├── RELEASE_*.md                       # Release notes
+│   ├── FIXES_*.md                         # Fix logs
+│   ├── LOGIC_FIXES_*.md                   # Logic fix reports
+│   ├── V0.3.0_*.md                        # Version-specific reports
+│   └── ...                                # Other historical docs
+│
+├── project/                               # Project-specific guidance
+│   ├── production_readiness_checklist.md  # Pre-deployment validation
+│   └── ...                                # Other project docs
+│
+├── design/                                # Design specifications
+│   ├── superpowers/specs/                 # Feature design specs
+│   └── ...                                # Other design docs
+│
+├── operations/                            # Operational guidance
+│   └── ...                                # Deployment, monitoring, etc.
+│
+└── development/                           # Development guidance
+    └── ...                                # Dev setup, testing, etc.
 ```
 
-### 按状态统计
+## 🚀 Quick Navigation
 
-| 状态 | 数量 | 占比 |
-|------|------|------|
-| ✅ 最新 | 23 | 92% |
-| 🔄 更新中 | 0 | 0% |
-| ⚠️ 待更新 | 0 | 0% |
-| 📋 已归档 | 2 | 8% |
+### If you are new to the project
 
----
+1. Read [../README.md](../README.md) - Product overview
+2. Read [project/production_readiness_checklist.md](project/production_readiness_checklist.md) - Deployment checklist
+3. Read [DOCUMENTATION_STANDARD.md](DOCUMENTATION_STANDARD.md) - Documentation standards
 
-## 🔍 快速查找
+### If you are deploying or operating the system
 
-### 按角色查找
+- [project/production_readiness_checklist.md](project/production_readiness_checklist.md) - Pre-deployment validation
+- [PERFORMANCE_OPTIMIZATION.md](PERFORMANCE_OPTIMIZATION.md) - Performance tuning
+- [runtime_speed_profiles.md](runtime_speed_profiles.md) - Latency profiles
+- [API_SETTINGS_GUIDE.md](API_SETTINGS_GUIDE.md) - Configuration reference
 
-**开发人员**:
-- [CLAUDE.md](../CLAUDE.md) - 开发指南
-- [v0.3.0-release-completion-report.md](v0.3.0-release-completion-report.md) - 模块化架构指南 (v0.3.0)
-- [API_SETTINGS_GUIDE.md](API_SETTINGS_GUIDE.md) - API 配置
-- [CHANGELOG_2026-04-27.md](CHANGELOG_2026-04-27.md) - 最新修复 (v0.2.5)
-- [FIXES_INDEX.md](FIXES_INDEX.md) - 修复快速导航
+### If you are developing features
 
-**运维人员**:
-- [production_readiness_checklist.md](production_readiness_checklist.md) - 生产检查清单
-- [PERFORMANCE_OPTIMIZATION.md](PERFORMANCE_OPTIMIZATION.md) - 性能优化
-- [runtime_speed_profiles.md](runtime_speed_profiles.md) - 速度配置
+- [../CLAUDE.md](../CLAUDE.md) - Development context
+- [DOCUMENTATION_STANDARD.md](DOCUMENTATION_STANDARD.md) - Documentation policy
+- [DOCUMENTATION_MAINTENANCE.md](DOCUMENTATION_MAINTENANCE.md) - Maintenance workflow
+- [VERSION_HISTORY.md](VERSION_HISTORY.md) - Version timeline
 
-**测试人员**:
-- [网络功能检查报告.md](网络功能检查报告.md) - 功能测试报告
-- [CHANGELOG_2026-04-27.md](CHANGELOG_2026-04-27.md) - 修复验证 (29/29 通过)
+### If you are managing releases
 
-**产品经理**:
-- [README.md](../README.md) - 产品介绍
-- [v0.3.0-release-completion-report.md](v0.3.0-release-completion-report.md) - v0.3.0 发布报告
-- [VERSION_HISTORY.md](VERSION_HISTORY.md) - 完整版本历史
-- [CHANGELOG_2026-04-27.md](CHANGELOG_2026-04-27.md) - 最新变更 (v0.2.5)
-- [superpowers/specs/2026-04-19-query-to-answer-ux-speed-design.md](superpowers/specs/2026-04-19-query-to-answer-ux-speed-design.md) - UX 设计
+- [VERSION_DOCUMENTATION_STANDARD.md](VERSION_DOCUMENTATION_STANDARD.md) - Version documentation requirements
+- [VERSION_DOCUMENTATION_GUIDE.md](VERSION_DOCUMENTATION_GUIDE.md) - Release documentation workflow
+- [VERSION_DOCUMENTATION_CHECKLIST.md](VERSION_DOCUMENTATION_CHECKLIST.md) - Pre-release validation checklist
+- [VERSION_HISTORY.md](VERSION_HISTORY.md) - Complete version history
+- [../CHANGELOG.md](../CHANGELOG.md) - Authoritative change log
 
-### 按主题查找
+## Active Core Documents
 
-**架构设计**:
-- [CLAUDE.md](../CLAUDE.md) - 系统架构
-- [superpowers/specs/2026-04-19-query-to-answer-ux-speed-design.md](superpowers/specs/2026-04-19-query-to-answer-ux-speed-design.md) - 分层执行设计
+| Document | Purpose | Primary Audience |
+| --- | --- | --- |
+| [../README.md](../README.md) | Product and technical overview | All teams |
+| [project/production_readiness_checklist.md](project/production_readiness_checklist.md) | Production launch and go-live validation | Operations, SRE, Engineering |
+| [ENTERPRISE_DOCUMENTATION_STANDARD.md](ENTERPRISE_DOCUMENTATION_STANDARD.md) | Enterprise documentation organization standard | Engineering, PM, Tech Writing |
+| [DOCUMENTATION_STANDARD.md](DOCUMENTATION_STANDARD.md) | Documentation policy, format, and lifecycle | Engineering, PM, Tech Writing |
+| [DOCUMENTATION_MAINTENANCE.md](DOCUMENTATION_MAINTENANCE.md) | Maintenance workflow and ownership model | Maintainers |
+| [VERSION_HISTORY.md](VERSION_HISTORY.md) | Historical version timeline | Delivery, PM, Engineering |
+| [VERSION_DOCUMENTATION_STANDARD.md](VERSION_DOCUMENTATION_STANDARD.md) | Version documentation requirements and standards | Release Managers, Engineering |
+| [VERSION_DOCUMENTATION_GUIDE.md](VERSION_DOCUMENTATION_GUIDE.md) | Version release documentation workflow | Release Managers, Engineering |
+| [VERSION_DOCUMENTATION_CHECKLIST.md](VERSION_DOCUMENTATION_CHECKLIST.md) | Pre-release documentation validation checklist | Release Managers, QA |
+| [API_SETTINGS_GUIDE.md](API_SETTINGS_GUIDE.md) | Runtime API/model configuration | Admins, Operators |
+| [PERFORMANCE_OPTIMIZATION.md](PERFORMANCE_OPTIMIZATION.md) | Runtime tuning guidance | Engineering, Operations |
+| [runtime_speed_profiles.md](runtime_speed_profiles.md) | Speed and latency profile reference | Engineering |
+| [ARCHIVE_REFERENCE.md](ARCHIVE_REFERENCE.md) | Historical and archived document inventory | All teams |
 
-**配置管理**:
-- [API_SETTINGS_GUIDE.md](API_SETTINGS_GUIDE.md) - API 设置
-- [claude-api-setup.md](claude-api-setup.md) - Claude API
-- [workflow_lowcode_setup.md](workflow_lowcode_setup.md) - 工作流配置
+## Historical And Audit Records
 
-**性能优化**:
-- [PERFORMANCE_OPTIMIZATION.md](PERFORMANCE_OPTIMIZATION.md) - 优化指南
-- [runtime_speed_profiles.md](runtime_speed_profiles.md) - 速度配置
-- [fixes/2026-04-26-routing-rag-fixes.md](fixes/2026-04-26-routing-rag-fixes.md) - 性能修复
+Historical documents are organized in the `archive/` directory. They remain valuable for traceability, audit, and milestone review, but they are not the primary operational documentation set.
 
-**质量保证**:
-- [网络功能检查报告.md](网络功能检查报告.md) - 功能测试
-- [production_readiness_checklist.md](production_readiness_checklist.md) - 生产检查
-- [DEEP_CODE_REVIEW_2026-04-27.md](DEEP_CODE_REVIEW_2026-04-27.md) - 深度代码审查
-- [CHANGELOG_2026-04-27.md](CHANGELOG_2026-04-27.md) - 修复验证 (18个问题)
+**Archive Contents**:
+- Release notes and release confirmation documents
+- Refactoring completion reports
+- Point-in-time fix reports
+- Deep review snapshots
+- One-off investigation summaries
 
----
+When a historical document conflicts with a core active document, prefer the active document unless the historical artifact is being used for audit reconstruction.
 
-## 📝 文档规范
+**Note**: The root-level `CHANGELOG.md` is the authoritative version history. Historical milestone reports in `archive/` are preserved for reference but should not replace the main changelog.
 
-所有文档遵循 [文档标准规范](DOCUMENTATION_STANDARD.md)，包括：
+See [ARCHIVE_REFERENCE.md](ARCHIVE_REFERENCE.md) for a complete inventory of archived documents.
 
-- ✅ 统一的元数据格式
-- ✅ 标准化的章节结构
-- ✅ 语义化版本控制
-- ✅ 完整的变更历史
-- ✅ 清晰的时间线管理
+## Document Classes
 
----
+| Class | Description | Update Rule |
+| --- | --- | --- |
+| Active | Current source of truth used for delivery and operations | Must be reviewed when code or process changes |
+| Reference | Stable supporting guidance | Review quarterly or on dependency change |
+| Historical | Snapshot of a release, fix, or investigation | Do not rewrite materially after publication |
+| Archived | Deprecated content preserved for record keeping | Keep read-only except metadata |
 
-## 🔄 文档更新流程
+## Ownership Model
 
-```mermaid
-graph LR
-    A[编写/更新文档] --> B[自检]
-    B --> C[提交审核]
-    C --> D{技术审核}
-    D -->|通过| E[发布]
-    D -->|不通过| F[修改]
-    F --> B
-    E --> G[更新索引]
-    G --> H[通知相关人员]
-```
+| Area | Owner |
+| --- | --- |
+| Product and repository overview | Engineering lead |
+| Deployment and readiness | Platform or operations owner |
+| Security-sensitive configuration | Backend lead or security owner |
+| Documentation standards and workflow | Repository maintainers |
+| Historical milestone reports | Original delivery owner |
 
-### 更新频率
+## Review Triggers
 
-| 文档类型 | 更新触发条件 | 审核周期 |
-|---------|-------------|----------|
-| 核心文档 | 重大变更 | 每月 |
-| 技术规范 | 新功能设计 | 按需 |
-| 修复报告 | Bug 修复 | 按需 |
-| 测试报告 | 功能测试 | 按需 |
-| 操作指南 | 配置变更 | 季度 |
-| 性能文档 | 性能优化 | 季度 |
+Update the relevant documents when any of the following change:
 
----
+- API routes or authentication behavior
+- Query orchestration or retrieval strategy
+- Environment variables or secret handling
+- Build, deployment, or release process
+- Frontend entry flow or admin capabilities
+- Observability, resilience, or data retention policies
 
-## 📞 联系方式
+## Recommended Enterprise Baseline
 
-**文档维护团队**: tech-docs@example.com  
-**技术支持**: tech-support@example.com  
-**问题反馈**: [GitHub Issues](https://github.com/your-org/multi-agent-rag/issues)
+For customer delivery, internal platform adoption, or handover to another team, make sure at minimum the following documents are current:
 
----
+1. `README.md` (root)
+2. `docs/README.md` (this file)
+3. `docs/project/production_readiness_checklist.md`
+4. `docs/ENTERPRISE_DOCUMENTATION_STANDARD.md`
+5. `docs/DOCUMENTATION_STANDARD.md`
+6. `docs/DOCUMENTATION_MAINTENANCE.md`
+7. `CHANGELOG.md` (root)
+8. `CLAUDE.md` (root)
 
-## 📅 文档审核计划
+## Notes On Document Organization
 
-| 文档 | 下次审核日期 | 负责人 | 状态 |
-|------|-------------|--------|------|
-| CLAUDE.md | 2026-05-26 | 技术负责人 | 📋 已排期 |
-| 网络功能检查报告 | 2026-07-26 | 测试组 | 📋 已排期 |
-| 路由和RAG修复报告 | 2026-07-26 | 后端组 | 📋 已排期 |
-| 文档标准规范 | 2026-07-26 | 文档组 | 📋 已排期 |
+This repository now follows an enterprise-grade documentation structure:
 
----
+- **Active Core Documents**: Located in `docs/` root - kept current and synchronized with code
+- **Historical Records**: Located in `docs/archive/` - preserved for audit and traceability
+- **Project Documentation**: Located in `docs/project/` - project-specific guidance
+- **Design Specifications**: Located in `docs/design/` - feature and technical designs
+- **Operations Guides**: Located in `docs/operations/` - deployment and operational guidance
+- **Development Guides**: Located in `docs/development/` - development workflow and setup
 
-## 变更历史
-
-| 版本 | 日期 | 作者 | 变更说明 |
-|------|------|------|----------|
-| v1.3.0 | 2026-04-27 | 文档组 | 更新至 v0.3.0，添加模块化架构重构文档 |
-| v1.2.0 | 2026-04-27 | 文档组 | 更新至 v0.2.5，同步核心文档版本信息 |
-| v1.1.0 | 2026-04-27 | 文档组 | 添加 v0.2.5 修复文档、版本历史、维护指南、中文索引 |
-| v1.0.0 | 2026-04-26 | 文档组 | 创建文档中心索引 |
-
----
-
-**最后更新**: 2026-04-27  
-**文档状态**: [已发布]
+For detailed information on the documentation organization standard, see [ENTERPRISE_DOCUMENTATION_STANDARD.md](ENTERPRISE_DOCUMENTATION_STANDARD.md).

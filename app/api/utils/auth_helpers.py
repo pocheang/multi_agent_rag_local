@@ -7,7 +7,11 @@ from urllib.parse import urlparse
 from fastapi import HTTPException, Request, Response
 from fastapi.security import HTTPAuthorizationCredentials
 
-from app.api.dependencies import auth_service, settings
+from app.core.config import get_settings
+from app.services.auth_db import AuthDBService
+
+settings = get_settings()
+auth_service = AuthDBService()
 
 
 def _auth_cookie_name() -> str:

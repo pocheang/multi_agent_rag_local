@@ -12,8 +12,8 @@ from app.api.dependencies import (
     _is_probably_valid_upload_signature,
     _is_source_manageable_for_user,
     _list_visible_documents_for_user,
-    _require_permission,
     _require_user,
+    _require_permission,
     settings,
 )
 from app.core.schemas import (
@@ -28,6 +28,21 @@ from app.services.runtime_ops import append_index_freshness
 
 router = APIRouter(tags=["documents"])
 logger = logging.getLogger(__name__)
+
+
+def _resolve_manageable_source_for_filename(filename: str, user: dict[str, Any]) -> str | None:
+    """Resolve the current user's manageable source path from a frontend filename."""
+    candidates: list[str] = []
+    for row in _list_visible_documents_for_user(user):
+        row_filename = str(row.get("filename", "") or "").strip()
+        row_source = str(row.get("source", "") or "").strip()
+        if row_filename != filename or not row_source:
+            continue
+        if _is_source_manageable_for_user(row_source, user):
+            candidates.append(row_source)
+    if len(candidates) == 1:
+        return candidates[0]
+    return None
 
 
 @router.get("/documents", response_model=list[IndexedFileSummary])
@@ -45,7 +60,7 @@ def delete_document(
     user: dict[str, Any] = Depends(_require_user),
 ):
     _require_permission(user, "document:manage_own", request, "document", resource_id=filename)
-    source = source or None
+    source = (source or "").strip() or _resolve_manageable_source_for_filename(filename, user)
     if source is None:
         raise HTTPException(status_code=400, detail="source is required")
     if not _is_source_manageable_for_user(source, user):
@@ -63,7 +78,7 @@ def delete_document(
 @router.post("/documents/{filename}/reindex", response_model=FileIndexActionResponse)
 def reindex_document(filename: str, request: Request, source: str | None = None, user: dict[str, Any] = Depends(_require_user)):
     _require_permission(user, "document:manage_own", request, "document", resource_id=filename)
-    source = source or None
+    source = (source or "").strip() or _resolve_manageable_source_for_filename(filename, user)
     if source is None:
         raise HTTPException(status_code=400, detail="source is required")
     if not _is_source_manageable_for_user(source, user):

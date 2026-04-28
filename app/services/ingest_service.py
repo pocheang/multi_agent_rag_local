@@ -6,7 +6,7 @@ from langchain_core.documents import Document
 from app.graph.neo4j_client import Neo4jClient
 from app.ingestion.chunker import split_documents
 from app.ingestion.graph_extractor import extract_triplets
-from app.ingestion.loaders import load_documents
+from app.ingestion import loaders
 from app.retrievers.bm25_retriever import reset_bm25_cache
 from app.retrievers.corpus_store import documents_to_records, read_corpus_records, write_corpus_records
 from app.retrievers.hybrid_retriever import clear_retrieval_cache
@@ -32,9 +32,25 @@ def ingest_paths(
     reset_vector_store: bool = False,
     metadata_overrides_by_source: dict[str, dict[str, Any]] | None = None,
 ) -> dict:
-    docs = load_documents(paths=paths)
+    docs = loaders.load_documents(paths=paths)
     if not docs:
         return {"loaded_documents": 0, "chunks_indexed": 0, "triplets_written": 0}
+
+    # Count unique source files (not Document objects)
+    unique_sources = {str((doc.metadata or {}).get("source", "")) for doc in docs}
+    unique_sources.discard("")  # Remove empty strings
+    files_loaded = len(unique_sources)
+
+    # Collect page information for each source
+    pages_by_source: dict[str, set[int]] = {}
+    for doc in docs:
+        source = str((doc.metadata or {}).get("source", ""))
+        page = (doc.metadata or {}).get("page")
+        if source and page is not None:
+            try:
+                pages_by_source.setdefault(source, set()).add(int(page))
+            except (ValueError, TypeError):
+                pass
 
     if metadata_overrides_by_source:
         for doc in docs:
@@ -88,9 +104,10 @@ def ingest_paths(
             client.close()
 
     return {
-        "loaded_documents": len(docs),
+        "loaded_documents": files_loaded,
         "chunks_indexed": len(chunks),
         "triplets_written": count_triplets,
+        "pages_by_source": {k: len(v) for k, v in pages_by_source.items()},
     }
 
 

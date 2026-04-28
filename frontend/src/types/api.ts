@@ -62,12 +62,13 @@ export type IndexedFileSummary = {
   filename: string;
   source: string;
   chunks: number;
+  pages?: number[];
+  page_count?: number;
   agent_class?: string;
   owner_user_id?: string | null;
   visibility?: "private" | "public" | string;
   exists_on_disk?: boolean;
   in_uploads?: boolean;
-  pages?: number[];
 };
 
 export type FileIndexActionResponse = {
@@ -78,6 +79,7 @@ export type FileIndexActionResponse = {
   loaded_documents?: number;
   chunks_indexed?: number;
   triplets_written?: number;
+  pages_by_source?: Record<string, number>;
 };
 
 export type UploadResponse = {
@@ -88,6 +90,7 @@ export type UploadResponse = {
   loaded_documents: number;
   chunks_indexed: number;
   triplets_written: number;
+  pages_by_source?: Record<string, number>;
 };
 
 export type PromptTemplate = {

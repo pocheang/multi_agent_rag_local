@@ -11,7 +11,11 @@ def _load_cross_encoder():
     try:
         from sentence_transformers import CrossEncoder
 
-        return CrossEncoder(settings.reranker_model_name, trust_remote_code=True)
+        return CrossEncoder(
+            settings.reranker_model_name,
+            trust_remote_code=True,
+            local_files_only=True,
+        )
     except Exception:
         return None
 

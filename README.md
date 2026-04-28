@@ -1,109 +1,117 @@
-# Multi-Agent Local RAG System
+# Multi-Agent Local RAG
 
-[![Version](https://img.shields.io/badge/version-0.3.0-blue.svg)](https://github.com/pocheang/multi_agent_rag_local)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](./LICENSE)
-[![Python](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
-[![Tests](https://img.shields.io/badge/tests-29%2F29%20passing-brightgreen.svg)](./tests)
-[![Architecture](https://img.shields.io/badge/architecture-modular-orange.svg)](./CLAUDE.md)
+[![Python](https://img.shields.io/badge/python-3.11%2B-blue.svg)](https://www.python.org/downloads/)
+[![Backend](https://img.shields.io/badge/backend-FastAPI-009688.svg)](https://fastapi.tiangolo.com/)
+[![Frontend](https://img.shields.io/badge/frontend-React%20%2B%20Vite-61DAFB.svg)](https://react.dev/)
 
-A production-grade, local-first retrieval-augmented generation (RAG) system with multi-agent orchestration, hybrid retrieval, and intelligent query routing. **Now with modular architecture** - 90.7% code reduction through strategic refactoring.
+Enterprise-oriented, local-first RAG platform with multi-agent orchestration, hybrid retrieval, graph enhancement, admin governance, and streaming chat.
 
-## 📋 Table of Contents
+This repository packages a FastAPI backend, a React frontend, and a modular retrieval pipeline designed for private knowledge bases, internal copilots, and controlled enterprise AI workflows.
 
-- [Overview](#overview)
-- [Key Features](#key-features)
-- [Architecture](#architecture)
-- [Screenshots](#screenshots)
-- [Quick Start](#quick-start)
-- [What's New in 0.2.5](#whats-new-in-025)
-- [Technology Stack](#technology-stack)
-- [API Documentation](#api-documentation)
-- [Testing](#testing)
-- [Documentation](#documentation)
-- [Contributing](#contributing)
-- [License](#license)
+## Executive Summary
 
-## 🎯 Overview
+- Multi-agent query orchestration built on LangGraph
+- Hybrid retrieval with vector search, BM25, fusion, and reranking
+- Optional Neo4j knowledge graph enrichment
+- Local-first document ingestion with OCR support
+- Role-based access control, session isolation, and admin operations
+- Runtime controls for retrieval profiles, canary, rollback, benchmarking, and replay
+- Streaming chat UX with session history and prompt management
 
-Multi-Agent Local RAG is a sophisticated retrieval-augmented generation platform that combines the power of multiple AI agents, hybrid retrieval strategies, and knowledge graph integration to deliver accurate, grounded, and contextually relevant answers to user queries.
+## Target Use Cases
 
-**Key Highlights:**
-- 🤖 **Multi-Agent Orchestration**: LangGraph-based workflow with specialized agents (Router, Vector RAG, Graph RAG, Web Research, Synthesis)
-- 🔍 **Hybrid Retrieval**: Combines vector search (ChromaDB), BM25, and neural reranking for optimal retrieval
-- 📊 **Knowledge Graph**: Neo4j integration for entity relationships and graph-based reasoning
-- ⚡ **Tiered Execution**: Intelligent query routing with latency budget enforcement (fast/balanced/deep)
-- 🔐 **Enterprise-Ready**: RBAC, audit logging, session management, and resilience patterns
-- 🌐 **Modern Stack**: FastAPI backend + React frontend with real-time streaming
-- 🏗️ **Modular Architecture (v0.3.0)**: 65 focused modules replacing 7 monolithic files - 90.7% code reduction with 100% backward compatibility
+- Internal knowledge assistant for enterprise teams
+- Private document Q&A over PDF, image, and text corpora
+- RAG evaluation and retrieval strategy experimentation
+- Controlled AI operations with auditability and rollback
+- Hybrid local and hosted model deployments
 
-## ✨ Key Features
+## System Overview
 
-### Core Capabilities
-- **Multi-Session Chat**: Persistent chat sessions with streaming responses
-- **Document Management**: PDF/image upload, indexing, and auto-ingestion
-- **Hybrid Retrieval**: Vector + BM25 + Reranking with parent-child chunking
-- **Graph RAG**: Neo4j-powered knowledge graph extraction and traversal
-- **Web Fallback**: Automatic web research when local knowledge is insufficient
-- **Prompt Templates**: Customizable prompt management system
-- **Source Allowlisting**: User-level document access control
+### Core Components
 
-### Advanced Features
-- **Tiered Query Routing**: Automatic classification (fast/balanced/deep) based on query complexity
-- **Latency Budget Management**: Hard runtime limits per tier for predictable performance
-- **Evidence Grounding**: Citations, conflict detection, and answer safety checks
-- **Adaptive RAG Policy**: Dynamic retrieval strategy adjustment
-- **Runtime Resilience**: Circuit breakers, bulkheads, rate limiting, and quota enforcement
-- **Admin Operations**: Retrieval profiles, canary testing, A/B comparison, benchmarking
-- **Observability**: OpenTelemetry tracing, Prometheus metrics, health checks
+- `app/api/`: FastAPI application, route modules, middleware, dependencies
+- `app/graph/`: LangGraph workflow, routing logic, streaming helpers
+- `app/agents/`: router, retrieval, graph, web, and synthesis agents
+- `app/retrievers/`: hybrid retrieval pipeline and ranking logic
+- `app/services/`: auth, runtime governance, caching, resilience, memory, prompts
+- `app/ingestion/`: loaders, chunking, OCR, indexing
+- `frontend/`: React + Vite user interface
+- `tests/`: backend and workflow regression coverage
 
-## 🏗️ Architecture
+### Request Flow
 
-### System Architecture
+1. User authenticates and starts or resumes a session.
+2. Query enters the FastAPI layer and shared dependencies initialize context.
+3. LangGraph routes the request through retrieval, graph, web, and synthesis steps.
+4. Hybrid retrieval gathers evidence from Chroma, BM25, and optional graph context.
+5. Safety and grounding logic shape the final answer.
+6. The frontend receives streamed or non-streamed output with citations and metadata.
 
+## API Surface
+
+The main backend entry point is `app.api.main:app`.
+
+### Major Route Groups
+
+- `/auth`: register, login, logout, current user
+- `/query`: synchronous and streaming query endpoints
+- `/sessions`: session CRUD, strategy lock, memory operations
+- `/documents`: document inventory, deletion, reindex, upload
+- `/prompts`: prompt templates, validation, versions, approval, rollback
+- `/admin/users`: user lifecycle and audit operations
+- `/admin/ops`: retrieval profile, canary, rollback, benchmark, replay, reports
+- `/admin/model-settings` and `/user/api-settings`: runtime model settings
+- `/health`, `/ready`, `/metrics`: health and readiness endpoints
+
+## Architecture Characteristics
+
+### Retrieval
+
+- Dense retrieval through ChromaDB
+- Sparse retrieval through BM25
+- Reciprocal Rank Fusion for candidate blending
+- Optional reranking with `BAAI/bge-reranker-v2-m3`
+- Parent-child chunk strategy for precision and answer context
+
+### Orchestration
+
+- LangGraph-based node orchestration
+- Router, vector, graph, web, and synthesis stages
+- Streaming support for partial answer delivery
+- Runtime-safe wrappers and fallback handling
+
+### Governance and Safety
+
+- RBAC and user-scoped data access
+- Approval-token flow for privileged admin creation
+- Audit logging for sensitive operations
+- Retrieval profiles, canary routing, and rollback support
+- Query guards, quota controls, and resilience utilities
+
+## Repository Layout
+
+```text
+.
+|-- app/
+|   |-- agents/
+|   |-- api/
+|   |-- core/
+|   |-- graph/
+|   |-- ingestion/
+|   |-- retrievers/
+|   |-- services/
+|   `-- tools/
+|-- configs/
+|-- data/
+|-- docs/
+|-- frontend/
+|-- scripts/
+`-- tests/
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│                         Frontend (React)                        │
-│                    http://127.0.0.1:5173/app                    │
-└────────────────────────────┬────────────────────────────────────┘
-                             │ HTTP/SSE
-┌────────────────────────────▼────────────────────────────────────┐
-│                    FastAPI Backend (Port 8000)                  │
-│  ┌──────────────────────────────────────────────────────────┐  │
-│  │              LangGraph Multi-Agent Workflow              │  │
-│  │                                                          │  │
-│  │  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌─────────┐ │  │
-│  │  │  Router  │→ │ Vector   │→ │  Graph   │→ │Synthesis│ │  │
-│  │  │  Agent   │  │ RAG Agent│  │RAG Agent │  │ Agent   │ │  │
-│  │  └──────────┘  └──────────┘  └──────────┘  └─────────┘ │  │
-│  │       │             │              │             ▲       │  │
-│  │       └─────────────┴──────────────┴─────────────┘       │  │
-│  │                   │                                      │  │
-│  │                   ▼                                      │  │
-│  │          ┌─────────────────┐                            │  │
-│  │          │  Web Research   │                            │  │
-│  │          │     Agent       │                            │  │
-│  │          └─────────────────┘                            │  │
-│  └──────────────────────────────────────────────────────────┘  │
-│                             │                                   │
-│  ┌──────────────────────────▼────────────────────────────────┐ │
-│  │              Hybrid Retrieval System                      │ │
-│  │  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌─────────┐  │ │
-│  │  │ Vector   │  │   BM25   │  │   RRF    │  │Reranker │  │ │
-│  │  │ Search   │  │  Search  │  │  Fusion  │  │ (BGE)   │  │ │
-│  │  │(ChromaDB)│  │          │  │          │  │         │  │ │
-│  │  └──────────┘  └──────────┘  └──────────┘  └─────────┘  │ │
-│  └───────────────────────────────────────────────────────────┘ │
-└─────────────────────────────┬───────────────────────────────────┘
-                              │
-        ┌─────────────────────┼─────────────────────┐
-        │                     │                     │
-┌───────▼────────┐   ┌────────▼────────┐   ┌───────▼────────┐
-│   ChromaDB     │   │     Neo4j       │   │  LLM Backend   │
-│ (Vector Store) │   │ (Knowledge Graph)│   │ (OpenAI/Claude)│
-└────────────────┘   └─────────────────┘   └────────────────┘
-```
 
-### Multi-Agent Workflow
+## Multi-Agent Workflow
 
 The system uses **LangGraph** to orchestrate a sophisticated multi-agent workflow:
 
@@ -125,47 +133,63 @@ Queries are automatically classified into three tiers based on complexity:
 
 **Load-Based Degradation**: System automatically downgrades tiers when load >80% for stability.
 
-## 🚀 Quick Start
+## Prerequisites
 
-### Prerequisites
-
-- Python 3.10+
+- Python 3.11+
 - Node.js 18+
-- Docker & Docker Compose (for Neo4j)
-- OpenAI API key or Anthropic API key
+- Docker and Docker Compose for Neo4j
+- One model backend:
+  - Ollama
+  - OpenAI
+  - Anthropic
 
-### Backend Setup
+## Quick Start
+
+### 1. Backend Setup
 
 ```bash
-# Clone the repository
-git clone https://github.com/pocheang/multi_agent_rag_local.git
-cd multi_agent_rag_local
-
-# Create virtual environment
 python -m venv .venv
-
-# Activate virtual environment
-# Windows:
 .venv\Scripts\activate
-# macOS/Linux:
-source .venv/bin/activate
-
-# Install dependencies
 pip install -U pip
 pip install -e .
+copy .env.example .env
+```
 
-# Configure environment
-cp .env.example .env
-# Edit .env and add your API keys
+### 2. Configure Environment
 
-# Start Neo4j
+Edit `.env` and set the backend you want to use.
+
+Example for OpenAI:
+
+```bash
+MODEL_BACKEND=openai
+OPENAI_API_KEY=your_api_key
+OPENAI_CHAT_MODEL=gpt-4-turbo
+OPENAI_EMBED_MODEL=text-embedding-3-small
+```
+
+Example for Ollama:
+
+```bash
+MODEL_BACKEND=ollama
+OLLAMA_BASE_URL=http://localhost:11434
+OLLAMA_CHAT_MODEL=qwen2.5:7b-instruct
+OLLAMA_EMBED_MODEL=nomic-embed-text
+```
+
+### 3. Start Neo4j
+
+```bash
 docker compose up -d neo4j
+```
 
-# Run backend server
+### 4. Run the Backend
+
+```bash
 uvicorn app.api.main:app --host 127.0.0.1 --port 8000 --reload --reload-dir app --reload-include "*.py" --reload-exclude "data/*" --reload-exclude "artifacts/*" --reload-exclude "frontend/*"
 ```
 
-### Frontend Setup
+### 5. Run the Frontend
 
 ```bash
 cd frontend
@@ -173,264 +197,124 @@ npm install
 npm run dev
 ```
 
-Open your browser to: **http://127.0.0.1:5173/app**
+Open `http://127.0.0.1:5173/app`.
 
-### Using OpenAI Codex (Recommended)
+## Document Ingestion
 
-Set these in `.env`:
-
-```bash
-MODEL_BACKEND=openai
-OPENAI_API_KEY=your_api_key
-OPENAI_CHAT_MODEL=gpt-5.4-codex
-OPENAI_REASONING_MODEL=gpt-5.4-codex
-```
-
-### Using Anthropic Claude
-
-Set these in `.env`:
+- Put source files under `data/docs`
+- Or upload through the web UI / API
+- Run manual ingestion when needed:
 
 ```bash
-MODEL_BACKEND=anthropic
-ANTHROPIC_API_KEY=your_api_key
-ANTHROPIC_CHAT_MODEL=claude-3-5-sonnet-20241022
-```
-
-### Using Ollama (Local)
-
-```bash
-MODEL_BACKEND=ollama
-OLLAMA_BASE_URL=http://localhost:11434
-OLLAMA_CHAT_MODEL=llama3.1:8b
-```
-
-### Data Ingestion
-
-```bash
-# Place documents in data/docs directory
-# Then run ingestion script
 python scripts/ingest.py
-
-# Or enable auto-ingestion in .env
-AUTO_INGEST_ENABLED=true
 ```
 
-## 🆕 What's New in 0.3.0
+Useful related settings:
 
-### 🏗️ Major Refactoring: Modular Architecture
-- **Code Reduction**: 90.7% reduction in main files (9135 → 846 lines)
-- **Module Count**: 7 monolithic files → 65 focused modules
-- **Maintainability**: Average module size reduced from 1305 → 13 lines
-- **Backward Compatibility**: 100% - all existing APIs and tests unchanged
+- `AUTO_INGEST_ENABLED`
+- `DATA_DIR`
+- `CHROMA_PERSIST_DIR`
+- `CORPUS_STORE_PATH`
+- `PARENT_STORE_PATH`
 
-### 📦 New Module Structure
+## Key Configuration Domains
 
-**API Layer** (`app/api/`):
-- `main.py` (140 lines) - Core FastAPI app
-- `routes/` - 11 route modules (query, sessions, documents, auth, admin, health)
-- `dependencies.py` (411 lines) - Shared dependencies
+### Model and Runtime
 
-**Multi-Agent Workflow** (`app/graph/`):
-- `workflow.py` (99 lines) - LangGraph workflow builder
-- `nodes/` - 8 node modules (router, planner, vector, graph, web, synthesis, deciders)
-- `routing/` - Route decision logic
-- `streaming/` - 3 streaming modules (processor, wrappers, encoder)
+- `MODEL_BACKEND`
+- `OPENAI_*`
+- `ANTHROPIC_*`
+- `OLLAMA_*`
+- `QUERY_REQUEST_TIMEOUT_MS`
 
-**Hybrid Retrieval** (`app/retrievers/`):
-- `hybrid_retriever.py` (109 lines) - Main retriever
-- `hybrid/` - 7 retrieval modules (strategy, fusion, adaptive params, caching, etc.)
+### Retrieval
 
-**Authentication** (`app/services/auth/`):
-- 7 auth modules (service, user manager, session manager, audit, encryption, validation)
+- `TOP_K`
+- `VECTOR_TOP_K`
+- `BM25_TOP_K`
+- `ENABLE_RERANKER`
+- `RERANKER_MODEL_NAME`
+- `RETRIEVAL_PROFILE`
 
-**Data Ingestion** (`app/ingestion/`):
-- `loaders.py` (70 lines) - Main loader
-- `loaders/` - 3 loader modules (PDF, image, text)
-- `utils/` - 3 utility modules (OCR, vision, people detection)
+### Storage
 
-### 🎯 Benefits
-- ✅ **Easier Navigation**: Find code 5x faster with focused modules
-- ✅ **Better Testing**: Isolated modules = easier unit tests
-- ✅ **Faster Onboarding**: New developers understand structure in minutes
-- ✅ **Reduced Conflicts**: Smaller files = fewer merge conflicts
-- ✅ **Clear Ownership**: Each module has single responsibility
+- `CHROMA_PERSIST_DIR`
+- `DATA_DIR`
+- `APP_DB_PATH`
+- `SESSIONS_DIR`
+- `UPLOADS_DIR`
 
-### 📊 Migration Stats
-- **Files Refactored**: 7 core files
-- **New Modules Created**: 65 modules
-- **Lines Reduced**: 9135 → 846 (main files)
-- **Test Coverage**: 29/29 tests passing
-- **Breaking Changes**: 0
+### Security
 
-For detailed changes, see [CHANGELOG.md](./CHANGELOG.md) and [v0.3.0 Release Report](./docs/v0.3.0-release-completion-report.md).
+- `AUTH_TOKEN_TTL_HOURS`
+- `ADMIN_CREATE_APPROVAL_TOKEN_HASH`
+- `API_SETTINGS_ENCRYPTION_KEY`
+- `API_BASE_URL_ALLOWLIST`
 
----
+### OCR and Media
 
-## 📜 Previous Release: 0.2.5
+- `TESSERACT_CMD`
+- `TESSERACT_LANG`
+- `OCR_PREPROCESS_ENABLED`
+- `IMAGE_CAPTION_ENABLED`
 
-### Fixed (18 Critical Issues)
-- 🔧 **[P0] Retrieval strategy parameter passing**: Fixed `retrieval_strategy` and `allowed_sources` compatibility
-- 🔧 **[P0] Hybrid routing concurrency**: Eliminated duplicate graph queries (100-500ms latency reduction)
-- 🎯 **[P1] Router decision preservation**: Adaptive planner now respects router agent decisions
-- ⚡ **[P1] Query variant deduplication**: Reduced redundant LLM API calls by 10-30%
-- ⏱️ **[P1] LLM timeout control**: Added 2-second timeout to prevent rewrite blocking
+## Operations
 
-For detailed changes, see [v0.2.5 Fix Summary](./docs/FINAL_FIXES_SUMMARY_2026-04-27.md).
-
-## 📜 Previous Release: 0.2.4
-
-### Added
-- ⚡ **Query-to-answer UX speed optimization** with tiered execution policy (fast/balanced/deep)
-- 🎯 **Tier classification system** for intelligent query routing based on complexity and system load
-- ⏱️ **Latency budget manager** with hard runtime limits per tier
-- 📊 **Enhanced streaming** with tier metadata and expected latency indicators
-- 🔄 **Load-based automatic tier degradation** for system stability
-- 📈 **Comprehensive UX telemetry** for latency tracking (P50/P95/P99) and quality monitoring
-
-### Changed
-- 🚀 Improved first token latency targets: **P50 ≤ 2s, P95 ≤ 4s**
-- 🔧 Enhanced retrieval executor with tier-aware budget enforcement
-- 💬 Synthesis agent now supports tier-aligned answer framing
-- 🌐 Web fallback trigger logic now conditional on evidence confidence and tier budget
-
-### Release Notes
-- Changelog: [CHANGELOG.md](./CHANGELOG.md)
-- Design spec: [Query-to-Answer UX Speed Design](./docs/superpowers/specs/2026-04-19-query-to-answer-ux-speed-design.md)
-
-## 🛠️ Technology Stack
-
-### Backend
-- **Framework**: FastAPI
-- **Orchestration**: LangGraph
-- **Vector Store**: ChromaDB
-- **Graph Database**: Neo4j
-- **LLM Backends**: OpenAI, Anthropic Claude, Ollama
-- **Reranker**: BAAI/bge-reranker-v2-m3
-- **Observability**: OpenTelemetry, Prometheus
-
-### Frontend
-- **Framework**: React 18
-- **Build Tool**: Vite
-- **Language**: TypeScript
-- **Routing**: React Router
-- **Styling**: Tailwind CSS
-
-### Infrastructure
-- **Containerization**: Docker & Docker Compose
-- **Session Storage**: File-based (data/sessions)
-- **Document Storage**: Local filesystem (data/docs, data/uploads)
-- **Chunk Storage**: JSONL (data/chunks)
-
-## 📚 API Documentation
-
-### Health & Monitoring
-- `GET /health` - Health check
-- `GET /ready` - Readiness check
-- `GET /metrics` - Prometheus metrics
-
-### Query Endpoints
-- `POST /query` - Streaming query (SSE)
-- `POST /query-sync` - Synchronous query
-- `GET /sessions` - List chat sessions
-- `POST /sessions` - Create new session
-- `GET /sessions/{session_id}` - Get session details
-- `DELETE /sessions/{session_id}` - Delete session
-
-### Document Management
-- `POST /upload` - Upload documents
-- `POST /index/rebuild` - Rebuild index
-- `GET /index/stats` - Index statistics
-
-### Admin Operations
-- `GET/POST /admin/ops/retrieval-profile` - Manage retrieval profiles
-- `POST /admin/ops/canary` - Canary testing
-- `POST /admin/ops/feature-flags` - Feature flag management
-- `POST /admin/ops/rollback` - Rollback to previous profile
-- `POST /admin/ops/ab-compare` - A/B comparison
-- `POST /admin/ops/benchmark/run` - Run benchmarks
-- `GET /admin/ops/benchmark/trends` - Benchmark trends
-- `GET /admin/ops/alerts` - System alerts
-- `GET /admin/ops/index-freshness` - Index freshness check
-- `POST /admin/ops/autotune` - Auto-tune retrieval parameters
-
-### Authentication
-- `POST /auth/login` - User login
-- `POST /auth/logout` - User logout
-- `GET /auth/me` - Current user info
-
-**Full API documentation**: http://127.0.0.1:8000/docs (when server is running)
-
-## 🧪 Testing
+### Backend Tests
 
 ```bash
-# Run all tests
 pytest -q
+```
 
-# Run specific test file
-pytest tests/test_hybrid_retriever.py -v
+### Quality Gate
 
-# Run with coverage
-pytest --cov=app --cov-report=html
-
-# Run CI quality gate checks
+```bash
 python scripts/ci_quality_gate.py
 ```
 
-### Test Categories
-- **Unit Tests**: Individual service/component testing
-- **Integration Tests**: End-to-end workflow testing
-- **Concurrency Tests**: Race condition detection
-- **Resilience Tests**: Chaos and failure injection
-- **Admin Tests**: Admin operations and user provisioning
+### Frontend Build
 
-## 📖 Documentation
+```bash
+cd frontend
+npm run build
+```
 
-### Core Documentation
-- [Production Readiness Checklist](./docs/production_readiness_checklist.md)
-- [Runtime Speed Profiles](./docs/runtime_speed_profiles.md)
-- [Workflow Visual + n8n Setup](./docs/workflow_lowcode_setup.md)
+### Example Operational Scripts
 
-### Design Specs
-- [Query-to-Answer UX Speed Design](./docs/superpowers/specs/2026-04-19-query-to-answer-ux-speed-design.md)
+- `scripts/benchmark_pipeline.py`
+- `scripts/load_test_query.py`
+- `scripts/eval_retrieval.py`
+- `scripts/chaos_probe.py`
 
-### Operational Scripts
-Located in `scripts/`:
-- `ingest.py` - Document ingestion
-- `chaos_probe.py` - Chaos engineering probes
-- `load_test_query.py` - Load testing
-- `benchmark_pipeline.py` - Pipeline benchmarking
-- `eval_retrieval.py` - Retrieval quality evaluation
-- `ci_quality_gate.py` - CI quality checks
-- `apply_rollback_profile.py` - Apply rollback profiles
-- `migrate_*.py` - Data migration scripts
+## Security Notes
 
-## 🤝 Contributing
+- Do not commit `.env`
+- Prefer hashed admin approval token over plaintext token
+- Review upload limits and API allowlists before production use
+- Validate cross-user isolation and admin endpoint restrictions in every release
+- Treat model-provider credentials as environment-scoped secrets
 
-Contributions are welcome! Please feel free to submit a Pull Request.
+## Documentation
 
-1. Fork the repository
-2. Create your feature branch (`git checkout -b feature/AmazingFeature`)
-3. Commit your changes (`git commit -m 'Add some AmazingFeature'`)
-4. Push to the branch (`git push origin feature/AmazingFeature`)
-5. Open a Pull Request
+Start with the documentation hub: [docs/README.md](./docs/README.md)
 
-## 📄 License
+Recommended reading order:
 
-This project is licensed under the MIT License - see the [LICENSE](./LICENSE) file for details.
+1. [docs/README.md](./docs/README.md)
+2. [docs/production_readiness_checklist.md](./docs/production_readiness_checklist.md)
+3. [docs/DOCUMENTATION_STANDARD.md](./docs/DOCUMENTATION_STANDARD.md)
+4. [CHANGELOG.md](./CHANGELOG.md)
+5. [CLAUDE.md](./CLAUDE.md)
 
-## 🙏 Acknowledgments
+Historical release and refactoring reports are retained under `docs/` for audit and traceability, but they should be treated as point-in-time records rather than the primary operational source of truth.
 
-- Built with [LangGraph](https://github.com/langchain-ai/langgraph) for agent orchestration
-- Powered by [FastAPI](https://fastapi.tiangolo.com/) for high-performance API
-- Uses [ChromaDB](https://www.trychroma.com/) for vector storage
-- Leverages [Neo4j](https://neo4j.com/) for knowledge graphs
-- Reranking by [BAAI/bge-reranker-v2-m3](https://huggingface.co/BAAI/bge-reranker-v2-m3)
+## Known Documentation Note
 
-## 📞 Support
+The repository contains historical documents and release artifacts from multiple milestones. Core entry documents have been normalized for enterprise use, while older milestone reports remain preserved as historical records.
 
-For issues, questions, or contributions, please visit:
-- **GitHub Issues**: https://github.com/pocheang/multi_agent_rag_local/issues
-- **Documentation**: See `docs/` directory
+## License
+
+MIT. See [LICENSE](./LICENSE).
 
 ---
 

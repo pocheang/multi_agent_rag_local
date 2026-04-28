@@ -170,3 +170,7 @@ def get_token_tracker() -> AdminTokenTracker:
     if _global_tracker is None:
         _global_tracker = AdminTokenTracker(expiry_hours=24)
     return _global_tracker
+
+
+# Export global instance for convenience
+token_tracker = get_token_tracker()

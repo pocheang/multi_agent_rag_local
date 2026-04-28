@@ -199,13 +199,15 @@ class UploadResponse(BaseModel):
     loaded_documents: int = 0
     chunks_indexed: int = 0
     triplets_written: int = 0
+    pages_by_source: dict[str, int] = Field(default_factory=dict)
 
 
 class IndexedFileSummary(BaseModel):
     filename: str
     source: str = ""
     chunks: int = 0
-    pages: list[str] = Field(default_factory=list)
+    pages: list[int] = Field(default_factory=list)
+    page_count: int = 0
     owner_user_id: str | None = None
     visibility: str = "private"
     agent_class: str = "general"
@@ -223,6 +225,7 @@ class FileIndexActionResponse(BaseModel):
     loaded_documents: int = 0
     chunks_indexed: int = 0
     triplets_written: int = 0
+    pages_by_source: dict[str, int] = Field(default_factory=dict)
 
 
 class UserApiSettings(BaseModel):

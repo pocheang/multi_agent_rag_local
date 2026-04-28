@@ -38,12 +38,12 @@ from app.services.background_queue import BackgroundTaskQueue
 from app.services.bulkhead import reset_bulkheads
 from app.services.index_manager import rebuild_all_vector_index
 from app.services.model_config_store import (
-    embedding_settings_signature,
     get_global_model_settings,
     normalize_global_model_settings,
     public_global_model_settings,
     save_global_model_settings,
 )
+from app.services.rag_runtime_scope import embedding_settings_signature
 from app.services.network_security import OutboundURLValidationError, validate_api_base_url_for_provider
 from app.services.query_guard import QueryLoadGuard
 from app.services.query_result_cache import QueryResultCache

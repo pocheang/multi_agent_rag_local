@@ -1,0 +1,326 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 2200">
+  <defs>
+    <style>
+      .title { font: bold 26px sans-serif; fill: #1a1a1a; }
+      .subtitle { font: bold 16px sans-serif; fill: #333; }
+      .label { font: 14px sans-serif; fill: #444; }
+      .small-label { font: 12px sans-serif; fill: #666; }
+      .tiny-label { font: 11px sans-serif; fill: #777; }
+
+      .start-end { fill: #4caf50; stroke: #2e7d32; stroke-width: 3; }
+      .process { fill: #2196f3; stroke: #1565c0; stroke-width: 2; }
+      .decision { fill: #ff9800; stroke: #e65100; stroke-width: 2; }
+      .agent { fill: #9c27b0; stroke: #6a1b9a; stroke-width: 2; }
+      .storage { fill: #f44336; stroke: #c62828; stroke-width: 2; }
+      .output { fill: #00bcd4; stroke: #00838f; stroke-width: 2; }
+
+      .arrow { fill: none; stroke: #333; stroke-width: 2; marker-end: url(#arrowhead); }
+      .yes-arrow { fill: none; stroke: #4caf50; stroke-width: 2.5; marker-end: url(#arrowhead-green); }
+      .no-arrow { fill: none; stroke: #f44336; stroke-width: 2.5; marker-end: url(#arrowhead-red); }
+      .data-arrow { fill: none; stroke: #2196f3; stroke-width: 2; marker-end: url(#arrowhead-blue); stroke-dasharray: 5,5; }
+
+      .text-white { fill: white; }
+      .text-black { fill: #1a1a1a; }
+    </style>
+
+    <marker id="arrowhead" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto">
+      <polygon points="0 0, 10 3, 0 6" fill="#333" />
+    </marker>
+    <marker id="arrowhead-green" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto">
+      <polygon points="0 0, 10 3, 0 6" fill="#4caf50" />
+    </marker>
+    <marker id="arrowhead-red" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto">
+      <polygon points="0 0, 10 3, 0 6" fill="#f44336" />
+    </marker>
+    <marker id="arrowhead-blue" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto">
+      <polygon points="0 0, 10 3, 0 6" fill="#2196f3" />
+    </marker>
+  </defs>
+
+  <!-- Title -->
+  <text x="800" y="35" text-anchor="middle" class="title">Multi-Agent RAG Query Processing Flow</text>
+  <text x="800" y="60" text-anchor="middle" class="small-label">LangGraph Workflow Orchestration with Tiered Execution</text>
+
+  <!-- START -->
+  <ellipse cx="800" cy="110" rx="80" ry="35" class="start-end"/>
+  <text x="800" y="118" text-anchor="middle" class="text-white subtitle">START</text>
+
+  <!-- User Query Input -->
+  <rect x="700" y="170" width="200" height="70" class="process" rx="8"/>
+  <text x="800" y="195" text-anchor="middle" class="text-white subtitle">User Query</text>
+  <text x="800" y="215" text-anchor="middle" class="text-white small-label">POST /query</text>
+  <text x="800" y="232" text-anchor="middle" class="text-white tiny-label">question + context</text>
+
+  <!-- API Gateway -->
+  <rect x="700" y="270" width="200" height="70" class="process" rx="8"/>
+  <text x="800" y="295" text-anchor="middle" class="text-white subtitle">API Gateway</text>
+  <text x="800" y="315" text-anchor="middle" class="text-white small-label">FastAPI Handler</text>
+  <text x="800" y="332" text-anchor="middle" class="text-white tiny-label">Auth + Validation</text>
+
+  <!-- Workflow Init -->
+  <rect x="700" y="370" width="200" height="70" class="process" rx="8"/>
+  <text x="800" y="395" text-anchor="middle" class="text-white subtitle">Workflow Init</text>
+  <text x="800" y="415" text-anchor="middle" class="text-white small-label">build_workflow()</text>
+  <text x="800" y="432" text-anchor="middle" class="text-white tiny-label">GraphState creation</text>
+
+  <!-- Router Node -->
+  <rect x="700" y="470" width="200" height="80" class="agent" rx="8"/>
+  <text x="800" y="495" text-anchor="middle" class="text-white subtitle">Router Agent</text>
+  <text x="800" y="515" text-anchor="middle" class="text-white small-label">decide_route()</text>
+  <text x="800" y="532" text-anchor="middle" class="text-white tiny-label">Query classification</text>
+  <text x="800" y="546" text-anchor="middle" class="text-white tiny-label">→ route, reason, skill</text>
+
+  <!-- Adaptive Planner -->
+  <rect x="700" y="580" width="200" height="80" class="agent" rx="8"/>
+  <text x="800" y="605" text-anchor="middle" class="text-white subtitle">Adaptive Planner</text>
+  <text x="800" y="625" text-anchor="middle" class="text-white small-label">adaptive_planner_node</text>
+  <text x="800" y="642" text-anchor="middle" class="text-white tiny-label">Set retrieval params</text>
+  <text x="800" y="656" text-anchor="middle" class="text-white tiny-label">Tier: Fast/Balanced/Deep</text>
+
+  <!-- Entry Decider -->
+  <polygon points="800,700 920,750 800,800 680,750" class="decision"/>
+  <text x="800" y="745" text-anchor="middle" class="text-black subtitle">Entry Decider</text>
+  <text x="800" y="762" text-anchor="middle" class="text-black tiny-label">route_after_router()</text>
+
+  <!-- Vector RAG Branch -->
+  <rect x="200" y="870" width="200" height="90" class="agent" rx="8"/>
+  <text x="300" y="895" text-anchor="middle" class="text-white subtitle">Vector RAG</text>
+  <text x="300" y="915" text-anchor="middle" class="text-white small-label">vector_node</text>
+  <text x="300" y="932" text-anchor="middle" class="text-white tiny-label">Hybrid retrieval:</text>
+  <text x="300" y="946" text-anchor="middle" class="text-white tiny-label">Vector + BM25 + Rerank</text>
+  <text x="300" y="956" text-anchor="middle" class="text-white tiny-label">Parent expansion</text>
+
+  <!-- Graph RAG Branch -->
+  <rect x="700" y="870" width="200" height="90" class="agent" rx="8"/>
+  <text x="800" y="895" text-anchor="middle" class="text-white subtitle">Graph RAG</text>
+  <text x="800" y="915" text-anchor="middle" class="text-white small-label">graph_node</text>
+  <text x="800" y="932" text-anchor="middle" class="text-white tiny-label">Neo4j queries</text>
+  <text x="800" y="946" text-anchor="middle" class="text-white tiny-label">Entity extraction</text>
+  <text x="800" y="956" text-anchor="middle" class="text-white tiny-label">Graph traversal</text>
+
+  <!-- Web Research Branch -->
+  <rect x="1200" y="870" width="200" height="90" class="agent" rx="8"/>
+  <text x="1300" y="895" text-anchor="middle" class="text-white subtitle">Web Research</text>
+  <text x="1300" y="915" text-anchor="middle" class="text-white small-label">web_node</text>
+  <text x="1300" y="932" text-anchor="middle" class="text-white tiny-label">Web search fallback</text>
+  <text x="1300" y="946" text-anchor="middle" class="text-white tiny-label">External sources</text>
+
+  <!-- Storage Layer -->
+  <g id="storage-layer">
+    <rect x="50" y="1000" width="150" height="60" class="storage" rx="5"/>
+    <text x="125" y="1025" text-anchor="middle" class="text-white small-label">ChromaDB</text>
+    <text x="125" y="1042" text-anchor="middle" class="text-white tiny-label">Vector Search</text>
+
+    <rect x="225" y="1000" width="150" height="60" class="storage" rx="5"/>
+    <text x="300" y="1025" text-anchor="middle" class="text-white small-label">BM25 Store</text>
+    <text x="300" y="1042" text-anchor="middle" class="text-white tiny-label">Keyword Search</text>
+
+    <rect x="725" y="1000" width="150" height="60" class="storage" rx="5"/>
+    <text x="800" y="1025" text-anchor="middle" class="text-white small-label">Neo4j</text>
+    <text x="800" y="1042" text-anchor="middle" class="text-white tiny-label">Knowledge Graph</text>
+
+    <rect x="1225" y="1000" width="150" height="60" class="storage" rx="5"/>
+    <text x="1300" y="1025" text-anchor="middle" class="text-white small-label">Web API</text>
+    <text x="1300" y="1042" text-anchor="middle" class="text-white tiny-label">Search Engine</text>
+  </g>
+
+  <!-- Vector Decider -->
+  <polygon points="300,1110 400,1150 300,1190 200,1150" class="decision"/>
+  <text x="300" y="1148" text-anchor="middle" class="text-black small-label">Vector</text>
+  <text x="300" y="1162" text-anchor="middle" class="text-black small-label">Decider</text>
+
+  <!-- Graph Decider -->
+  <polygon points="800,1110 900,1150 800,1190 700,1150" class="decision"/>
+  <text x="800" y="1148" text-anchor="middle" class="text-black small-label">Graph</text>
+  <text x="800" y="1162" text-anchor="middle" class="text-black small-label">Decider</text>
+
+  <!-- Synthesis Node -->
+  <rect x="650" y="1250" width="300" height="100" class="agent" rx="8"/>
+  <text x="800" y="1280" text-anchor="middle" class="text-white subtitle">Synthesis Agent</text>
+  <text x="800" y="1300" text-anchor="middle" class="text-white small-label">synthesis_node</text>
+  <text x="800" y="1317" text-anchor="middle" class="text-white tiny-label">synthesize_answer()</text>
+  <text x="800" y="1331" text-anchor="middle" class="text-white tiny-label">Combine: vector + graph + web</text>
+  <text x="800" y="1345" text-anchor="middle" class="text-white tiny-label">Generate final answer</text>
+
+  <!-- Grounding Check -->
+  <rect x="650" y="1380" width="300" height="80" class="process" rx="8"/>
+  <text x="800" y="1405" text-anchor="middle" class="text-white subtitle">Answer Grounding</text>
+  <text x="800" y="1425" text-anchor="middle" class="text-white small-label">apply_sentence_grounding()</text>
+  <text x="800" y="1442" text-anchor="middle" class="text-white tiny-label">Citation verification</text>
+  <text x="800" y="1456" text-anchor="middle" class="text-white tiny-label">Conflict detection</text>
+
+  <!-- Safety Check -->
+  <rect x="650" y="1490" width="300" height="80" class="process" rx="8"/>
+  <text x="800" y="1515" text-anchor="middle" class="text-white subtitle">Safety Check</text>
+  <text x="800" y="1535" text-anchor="middle" class="text-white small-label">sanitize_answer()</text>
+  <text x="800" y="1552" text-anchor="middle" class="text-white tiny-label">Content filtering</text>
+  <text x="800" y="1566" text-anchor="middle" class="text-white tiny-label">PII detection</text>
+
+  <!-- Explainability -->
+  <rect x="650" y="1600" width="300" height="80" class="process" rx="8"/>
+  <text x="800" y="1625" text-anchor="middle" class="text-white subtitle">Explainability</text>
+  <text x="800" y="1645" text-anchor="middle" class="text-white small-label">build_explainability_report()</text>
+  <text x="800" y="1662" text-anchor="middle" class="text-white tiny-label">Reasoning trace</text>
+  <text x="800" y="1676" text-anchor="middle" class="text-white tiny-label">Metadata collection</text>
+
+  <!-- Response Streaming -->
+  <rect x="650" y="1710" width="300" height="80" class="output" rx="8"/>
+  <text x="800" y="1735" text-anchor="middle" class="text-white subtitle">Response Streaming</text>
+  <text x="800" y="1755" text-anchor="middle" class="text-white small-label">SSE Stream</text>
+  <text x="800" y="1772" text-anchor="middle" class="text-white tiny-label">Real-time events:</text>
+  <text x="800" y="1786" text-anchor="middle" class="text-white tiny-label">routing → retrieval → synthesis</text>
+
+  <!-- END -->
+  <ellipse cx="800" cy="1850" rx="80" ry="35" class="start-end"/>
+  <text x="800" y="1858" text-anchor="middle" class="text-white subtitle">END</text>
+
+  <!-- Side Panel: Tier Info -->
+  <rect x="1050" y="470" width="480" height="280" fill="#f5f5f5" stroke="#999" stroke-width="2" rx="8"/>
+  <text x="1290" y="495" text-anchor="middle" class="subtitle">Tiered Execution Budgets</text>
+
+  <text x="1070" y="525" class="label" font-weight="bold">Fast Tier (Simple Queries):</text>
+  <text x="1080" y="545" class="small-label">• retrieval_top_k = 5, rerank_top_k = 3</text>
+  <text x="1080" y="562" class="small-label">• max_retrieval_time = 800ms</text>
+  <text x="1080" y="579" class="small-label">• max_synthesis_tokens = 300</text>
+  <text x="1080" y="596" class="small-label">• web_fallback = disabled</text>
+
+  <text x="1070" y="625" class="label" font-weight="bold">Balanced Tier (Default):</text>
+  <text x="1080" y="645" class="small-label">• retrieval_top_k = 10, rerank_top_k = 5</text>
+  <text x="1080" y="662" class="small-label">• max_retrieval_time = 2000ms</text>
+  <text x="1080" y="679" class="small-label">• max_synthesis_tokens = 800</text>
+  <text x="1080" y="696" class="small-label">• web_fallback = conditional</text>
+
+  <text x="1070" y="725" class="label" font-weight="bold">Deep Tier (Complex Queries):</text>
+  <text x="1080" y="745" class="small-label">• retrieval_top_k = 20, rerank_top_k = 10</text>
+  <text x="1080" y="762" class="small-label">• max_retrieval_time = 5000ms</text>
+  <text x="1080" y="779" class="small-label">• max_synthesis_tokens = 1500</text>
+  <text x="1080" y="796" class="small-label">• web_fallback = enabled</text>
+
+  <!-- Side Panel: Decision Logic -->
+  <rect x="1050" y="870" width="480" height="320" fill="#fff9e6" stroke="#999" stroke-width="2" rx="8"/>
+  <text x="1290" y="895" text-anchor="middle" class="subtitle">Decision Logic Flow</text>
+
+  <text x="1070" y="925" class="label" font-weight="bold">1. Entry Decider (after Router):</text>
+  <text x="1080" y="945" class="small-label">• route = "vector_only" → vector</text>
+  <text x="1080" y="962" class="small-label">• route = "graph_only" → graph</text>
+  <text x="1080" y="979" class="small-label">• route = "web_only" → web</text>
+  <text x="1080" y="996" class="small-label">• route = "hybrid" → vector (then graph)</text>
+
+  <text x="1070" y="1025" class="label" font-weight="bold">2. Vector Decider:</text>
+  <text x="1080" y="1045" class="small-label">• If vector hits &lt; threshold → graph or web</text>
+  <text x="1080" y="1062" class="small-label">• If sufficient evidence → synthesis</text>
+  <text x="1080" y="1079" class="small-label">• adaptive_prefer_graph = true → graph</text>
+
+  <text x="1070" y="1108" class="label" font-weight="bold">3. Graph Decider:</text>
+  <text x="1080" y="1128" class="small-label">• If graph + vector sufficient → synthesis</text>
+  <text x="1080" y="1145" class="small-label">• If use_web_fallback = true → web</text>
+  <text x="1080" y="1162" class="small-label">• Otherwise → synthesis</text>
+
+  <text x="1070" y="1191" class="label" font-weight="bold">4. Web Node:</text>
+  <text x="1080" y="1211" class="small-label">• Always proceeds to → synthesis</text>
+
+  <!-- Side Panel: State Management -->
+  <rect x="50" y="1250" width="480" height="280" fill="#e8f5e9" stroke="#999" stroke-width="2" rx="8"/>
+  <text x="290" y="1275" text-anchor="middle" class="subtitle">GraphState Management</text>
+
+  <text x="70" y="1305" class="label" font-weight="bold">State Fields (TypedDict):</text>
+  <text x="80" y="1325" class="small-label">• question: str - User query</text>
+  <text x="80" y="1342" class="small-label">• memory_context: str - Chat history</text>
+  <text x="80" y="1359" class="small-label">• route: str - Routing decision</text>
+  <text x="80" y="1376" class="small-label">• reason: str - Routing reason</text>
+  <text x="80" y="1393" class="small-label">• skill: str - Agent skill type</text>
+  <text x="80" y="1410" class="small-label">• vector_result: dict - Vector retrieval</text>
+  <text x="80" y="1427" class="small-label">• graph_result: dict - Graph retrieval</text>
+  <text x="80" y="1444" class="small-label">• web_result: dict - Web search</text>
+  <text x="80" y="1461" class="small-label">• answer: str - Final answer</text>
+  <text x="80" y="1478" class="small-label">• grounding: dict - Citation info</text>
+  <text x="80" y="1495" class="small-label">• answer_safety: dict - Safety report</text>
+  <text x="80" y="1512" class="small-label">• explainability: dict - Reasoning trace</text>
+
+  <!-- Arrows: Main Flow -->
+  <path d="M 800 145 L 800 170" class="arrow"/>
+  <path d="M 800 240 L 800 270" class="arrow"/>
+  <path d="M 800 340 L 800 370" class="arrow"/>
+  <path d="M 800 440 L 800 470" class="arrow"/>
+  <path d="M 800 550 L 800 580" class="arrow"/>
+  <path d="M 800 660 L 800 700" class="arrow"/>
+
+  <!-- Arrows: Entry Decider to Agents -->
+  <path d="M 680 750 L 400 870" class="arrow"/>
+  <text x="520" y="800" class="small-label" fill="#4caf50">vector</text>
+
+  <path d="M 800 800 L 800 870" class="arrow"/>
+  <text x="820" y="835" class="small-label" fill="#4caf50">graph</text>
+
+  <path d="M 920 750 L 1200 870" class="arrow"/>
+  <text x="1080" y="800" class="small-label" fill="#4caf50">web</text>
+
+  <!-- Arrows: Agents to Storage -->
+  <path d="M 250 960 L 125 1000" class="data-arrow"/>
+  <path d="M 300 960 L 300 1000" class="data-arrow"/>
+  <path d="M 800 960 L 800 1000" class="data-arrow"/>
+  <path d="M 1300 960 L 1300 1000" class="data-arrow"/>
+
+  <!-- Arrows: Agents to Deciders -->
+  <path d="M 300 960 L 300 1110" class="arrow"/>
+  <path d="M 800 960 L 800 1110" class="arrow"/>
+
+  <!-- Arrows: Deciders to Synthesis -->
+  <path d="M 400 1150 L 650 1300" class="yes-arrow"/>
+  <text x="500" y="1210" class="small-label" fill="#4caf50">sufficient</text>
+
+  <path d="M 300 1190 L 700 1150" class="no-arrow"/>
+  <text x="480" y="1180" class="small-label" fill="#f44336">need graph</text>
+
+  <path d="M 800 1190 L 800 1250" class="yes-arrow"/>
+  <text x="820" y="1220" class="small-label" fill="#4caf50">sufficient</text>
+
+  <path d="M 900 1150 L 1200 915" class="no-arrow"/>
+  <text x="1050" y="1020" class="small-label" fill="#f44336">need web</text>
+
+  <path d="M 1300 960 L 800 1250" class="arrow"/>
+
+  <!-- Arrows: Synthesis Pipeline -->
+  <path d="M 800 1350 L 800 1380" class="arrow"/>
+  <path d="M 800 1460 L 800 1490" class="arrow"/>
+  <path d="M 800 1570 L 800 1600" class="arrow"/>
+  <path d="M 800 1680 L 800 1710" class="arrow"/>
+  <path d="M 800 1790 L 800 1815" class="arrow"/>
+
+  <!-- Legend -->
+  <g id="legend">
+    <rect x="50" y="1900" width="1500" height="120" fill="#f9f9f9" stroke="#ccc" stroke-width="1" rx="5"/>
+    <text x="800" y="1925" text-anchor="middle" class="subtitle">Legend</text>
+
+    <rect x="80" y="1945" width="80" height="40" class="start-end" rx="5"/>
+    <text x="120" y="1970" text-anchor="middle" class="text-white small-label">Start/End</text>
+
+    <rect x="200" y="1945" width="80" height="40" class="process" rx="5"/>
+    <text x="240" y="1970" text-anchor="middle" class="text-white small-label">Process</text>
+
+    <polygon points="340,1965 380,1975 340,1985 300,1975" class="decision"/>
+    <text x="340" y="1979" text-anchor="middle" class="text-black small-label">Decision</text>
+
+    <rect x="420" y="1945" width="80" height="40" class="agent" rx="5"/>
+    <text x="460" y="1970" text-anchor="middle" class="text-white small-label">Agent</text>
+
+    <rect x="540" y="1945" width="80" height="40" class="storage" rx="5"/>
+    <text x="580" y="1970" text-anchor="middle" class="text-white small-label">Storage</text>
+
+    <rect x="660" y="1945" width="80" height="40" class="output" rx="5"/>
+    <text x="700" y="1970" text-anchor="middle" class="text-white small-label">Output</text>
+
+    <line x1="800" y1="1965" x2="880" y2="1965" class="arrow"/>
+    <text x="920" y="1970" class="small-label">Control Flow</text>
+
+    <line x1="1020" y1="1965" x2="1100" y2="1965" class="data-arrow"/>
+    <text x="1140" y="1970" class="small-label">Data Flow</text>
+
+    <line x1="1240" y1="1965" x2="1320" y2="1965" class="yes-arrow"/>
+    <text x="1360" y="1970" class="small-label">Yes/Success</text>
+  </g>
+
+  <!-- Footer -->
+  <text x="800" y="2050" text-anchor="middle" class="small-label">Multi-Agent RAG v0.3.1 | LangGraph Workflow | Adaptive Retrieval with Tiered Execution</text>
+  <text x="800" y="2070" text-anchor="middle" class="tiny-label">Router → Adaptive Planner → Entry Decider → [Vector/Graph/Web Agents] → Synthesis → Grounding → Safety → Response</text>
+</svg>

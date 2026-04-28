@@ -61,9 +61,6 @@ from app.agents.synthesis_agent import synthesize_answer
 
 # Import helper functions from utility modules
 from app.api.utils.auth_helpers import (
-    _require_user,
-    _require_user_and_token,
-    _require_permission,
     _set_auth_cookie,
     _clear_auth_cookie,
     _enforce_cookie_csrf,
@@ -72,8 +69,15 @@ from app.api.utils.auth_helpers import (
     _auth_cookie_samesite,
     _request_origin,
     _origin_is_allowed,
-    _is_valid_admin_approval_token,
-    _is_valid_admin_approval_token_for_actor,
+    _client_ip,
+    _request_meta,
+    _audit,
+)
+
+from app.api.utils.auth_dependencies import (
+    _require_user,
+    _require_user_and_token,
+    _require_permission,
 )
 
 from app.api.utils.response_helpers import (
@@ -94,7 +98,6 @@ from app.api.utils.query_helpers import (
     _resolve_effective_agent_class,
     _effective_strategy_for_session,
     _launch_shadow_run,
-    _maybe_sign_response,
 )
 
 from app.api.utils.session_helpers import (
@@ -226,7 +229,7 @@ def _query_cache_key_wrapper(
         request_id=request_id,
         mode=mode,
         index_fingerprint_fn=_visible_index_fingerprint_for_user,
-        model_fingerprint_fn=lambda u: _query_model_fingerprint_for_user(u, auth_service, get_global_model_settings),
+        model_fingerprint_fn=_query_model_fingerprint_for_user,
     )
 
 # Override the imported function with the wrapper
@@ -242,7 +245,7 @@ def _run_with_query_runtime_wrapper(*, user: dict[str, Any], request: Request, f
         fn=fn,
         query_guard=query_guard,
         runtime_metrics=runtime_metrics,
-        api_settings_fn=lambda u: _user_api_settings_for_runtime(u, auth_service),
+        api_settings_fn=_user_api_settings_for_runtime,
     )
 
 _run_with_query_runtime = _run_with_query_runtime_wrapper
@@ -332,41 +335,6 @@ _query_model_fingerprint_for_user = _query_model_fingerprint_for_user_wrapper
 # ============================================================================
 # Additional helper functions that remain in dependencies.py
 # ============================================================================
-
-def _request_meta(request: Request) -> tuple[str | None, str | None]:
-    """Get request metadata (IP and user agent)."""
-    return request.client.host if request.client else None, request.headers.get("user-agent")
-
-
-def _client_ip(request: Request) -> str:
-    """Get client IP address."""
-    ip, _ua = _request_meta(request)
-    return ip or "unknown"
-
-
-def _audit(
-    request: Request,
-    action: str,
-    resource_type: str,
-    result: str,
-    user: dict[str, Any] | None = None,
-    resource_id: str | None = None,
-    detail: str | None = None,
-) -> None:
-    """Log an audit event."""
-    ip, user_agent = _request_meta(request)
-    auth_service.add_audit_log(
-        action=action,
-        resource_type=resource_type,
-        result=result,
-        actor_user_id=user.get("user_id") if user else None,
-        actor_role=user.get("role") if user else None,
-        resource_id=resource_id,
-        ip=ip,
-        user_agent=user_agent,
-        detail=detail,
-    )
-
 
 def _normalize_prompt_fields(title: str, content: str) -> tuple[str, str]:
     """Normalize and validate prompt fields."""

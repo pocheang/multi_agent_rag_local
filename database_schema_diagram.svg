@@ -1,0 +1,419 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1800 1400">
+  <defs>
+    <style>
+      .title { font: bold 26px sans-serif; fill: #1a1a1a; }
+      .subtitle { font: bold 16px sans-serif; fill: #333; }
+      .table-name { font: bold 15px sans-serif; fill: #fff; }
+      .field-name { font: 13px monospace; fill: #333; }
+      .field-type { font: 12px monospace; fill: #666; }
+      .pk { font: bold 13px monospace; fill: #d32f2f; }
+      .fk { font: 13px monospace; fill: #1976d2; }
+      .index { font: 11px sans-serif; fill: #f57c00; }
+      .small-label { font: 12px sans-serif; fill: #666; }
+
+      .table-header { fill: #1976d2; stroke: #0d47a1; stroke-width: 2; }
+      .table-body { fill: #fff; stroke: #1976d2; stroke-width: 2; }
+      .graph-db { fill: #4caf50; stroke: #2e7d32; stroke-width: 2; }
+      .vector-db { fill: #9c27b0; stroke: #6a1b9a; stroke-width: 2; }
+      .file-store { fill: #ff9800; stroke: #e65100; stroke-width: 2; }
+      .cache-store { fill: #f44336; stroke: #c62828; stroke-width: 2; }
+
+      .relation { fill: none; stroke: #666; stroke-width: 2; marker-end: url(#arrowhead); }
+      .one-to-many { fill: none; stroke: #1976d2; stroke-width: 2; marker-end: url(#arrowhead-blue); }
+    </style>
+
+    <marker id="arrowhead" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto">
+      <polygon points="0 0, 10 3, 0 6" fill="#666" />
+    </marker>
+    <marker id="arrowhead-blue" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto">
+      <polygon points="0 0, 10 3, 0 6" fill="#1976d2" />
+    </marker>
+  </defs>
+
+  <!-- Title -->
+  <text x="900" y="35" text-anchor="middle" class="title">Multi-Agent RAG Database Schema</text>
+  <text x="900" y="60" text-anchor="middle" class="small-label">SQLite + Neo4j + ChromaDB + File System + Redis</text>
+
+  <!-- SQLite Tables Section -->
+  <text x="50" y="95" class="subtitle">SQLite Database (app.db)</text>
+
+  <!-- Users Table -->
+  <g id="users-table">
+    <rect x="50" y="110" width="350" height="40" class="table-header" rx="5"/>
+    <text x="225" y="135" text-anchor="middle" class="table-name">users</text>
+
+    <rect x="50" y="150" width="350" height="380" class="table-body" rx="5"/>
+    <text x="60" y="175" class="pk">🔑 user_id</text>
+    <text x="280" y="175" class="field-type">TEXT PRIMARY KEY</text>
+
+    <text x="60" y="200" class="field-name">username</text>
+    <text x="280" y="200" class="field-type">TEXT UNIQUE NOT NULL</text>
+
+    <text x="60" y="225" class="field-name">salt</text>
+    <text x="280" y="225" class="field-type">TEXT NOT NULL</text>
+
+    <text x="60" y="250" class="field-name">password_hash</text>
+    <text x="280" y="250" class="field-type">TEXT NOT NULL</text>
+
+    <text x="60" y="275" class="field-name">role</text>
+    <text x="280" y="275" class="field-type">TEXT DEFAULT 'viewer'</text>
+
+    <text x="60" y="300" class="field-name">status</text>
+    <text x="280" y="300" class="field-type">TEXT DEFAULT 'active'</text>
+
+    <text x="60" y="325" class="field-name">created_by_user_id</text>
+    <text x="280" y="325" class="field-type">TEXT</text>
+
+    <text x="60" y="350" class="field-name">created_by_username</text>
+    <text x="280" y="350" class="field-type">TEXT</text>
+
+    <text x="60" y="375" class="field-name">admin_ticket_id</text>
+    <text x="280" y="375" class="field-type">TEXT</text>
+
+    <text x="60" y="400" class="field-name">admin_approval_token_hash</text>
+    <text x="280" y="400" class="field-type">TEXT</text>
+
+    <text x="60" y="425" class="field-name">business_unit</text>
+    <text x="280" y="425" class="field-type">TEXT</text>
+
+    <text x="60" y="450" class="field-name">department</text>
+    <text x="280" y="450" class="field-type">TEXT</text>
+
+    <text x="60" y="475" class="field-name">user_type</text>
+    <text x="280" y="475" class="field-type">TEXT</text>
+
+    <text x="60" y="500" class="field-name">data_scope</text>
+    <text x="280" y="500" class="field-type">TEXT</text>
+
+    <text x="60" y="525" class="field-name">created_at</text>
+    <text x="280" y="525" class="field-type">TEXT NOT NULL</text>
+  </g>
+
+  <!-- Auth Sessions Table -->
+  <g id="auth-sessions-table">
+    <rect x="450" y="110" width="350" height="40" class="table-header" rx="5"/>
+    <text x="625" y="135" text-anchor="middle" class="table-name">auth_sessions</text>
+
+    <rect x="450" y="150" width="350" height="180" class="table-body" rx="5"/>
+    <text x="460" y="175" class="pk">🔑 token</text>
+    <text x="680" y="175" class="field-type">TEXT PRIMARY KEY</text>
+
+    <text x="460" y="200" class="fk">🔗 user_id</text>
+    <text x="680" y="200" class="field-type">TEXT NOT NULL</text>
+
+    <text x="460" y="225" class="field-name">username</text>
+    <text x="680" y="225" class="field-type">TEXT NOT NULL</text>
+
+    <text x="460" y="250" class="field-name">issued_at</text>
+    <text x="680" y="250" class="field-type">TEXT NOT NULL</text>
+
+    <text x="460" y="275" class="field-name">last_seen_at</text>
+    <text x="680" y="275" class="field-type">TEXT NOT NULL</text>
+
+    <text x="460" y="300" class="field-name">expires_at</text>
+    <text x="680" y="300" class="field-type">TEXT NOT NULL</text>
+
+    <text x="460" y="320" class="index">📊 INDEX: user_id</text>
+  </g>
+
+  <!-- Audit Logs Table -->
+  <g id="audit-logs-table">
+    <rect x="850" y="110" width="380" height="40" class="table-header" rx="5"/>
+    <text x="1040" y="135" text-anchor="middle" class="table-name">audit_logs</text>
+
+    <rect x="850" y="150" width="380" height="380" class="table-body" rx="5"/>
+    <text x="860" y="175" class="pk">🔑 event_id</text>
+    <text x="1100" y="175" class="field-type">TEXT PRIMARY KEY</text>
+
+    <text x="860" y="200" class="fk">🔗 actor_user_id</text>
+    <text x="1100" y="200" class="field-type">TEXT</text>
+
+    <text x="860" y="225" class="field-name">actor_role</text>
+    <text x="1100" y="225" class="field-type">TEXT</text>
+
+    <text x="860" y="250" class="field-name">action</text>
+    <text x="1100" y="250" class="field-type">TEXT NOT NULL</text>
+
+    <text x="860" y="275" class="field-name">event_category</text>
+    <text x="1100" y="275" class="field-type">TEXT</text>
+
+    <text x="860" y="300" class="field-name">severity</text>
+    <text x="1100" y="300" class="field-type">TEXT</text>
+
+    <text x="860" y="325" class="field-name">resource_type</text>
+    <text x="1100" y="325" class="field-type">TEXT NOT NULL</text>
+
+    <text x="860" y="350" class="field-name">resource_id</text>
+    <text x="1100" y="350" class="field-type">TEXT</text>
+
+    <text x="860" y="375" class="field-name">result</text>
+    <text x="1100" y="375" class="field-type">TEXT NOT NULL</text>
+
+    <text x="860" y="400" class="field-name">ip</text>
+    <text x="1100" y="400" class="field-type">TEXT</text>
+
+    <text x="860" y="425" class="field-name">user_agent</text>
+    <text x="1100" y="425" class="field-type">TEXT</text>
+
+    <text x="860" y="450" class="field-name">detail</text>
+    <text x="1100" y="450" class="field-type">TEXT</text>
+
+    <text x="860" y="475" class="field-name">created_at</text>
+    <text x="1100" y="475" class="field-type">TEXT NOT NULL</text>
+
+    <text x="860" y="500" class="field-name">prev_event_hash</text>
+    <text x="1100" y="500" class="field-type">TEXT (Hash Chain)</text>
+
+    <text x="860" y="525" class="field-name">event_hash</text>
+    <text x="1100" y="525" class="field-type">TEXT (Hash Chain)</text>
+
+    <text x="860" y="545" class="index">📊 INDEX: actor_user_id, created_at</text>
+  </g>
+
+  <!-- Sessions Table -->
+  <g id="sessions-table">
+    <rect x="1280" y="110" width="450" height="40" class="table-header" rx="5"/>
+    <text x="1505" y="135" text-anchor="middle" class="table-name">sessions (Chat History)</text>
+
+    <rect x="1280" y="150" width="450" height="280" class="table-body" rx="5"/>
+    <text x="1290" y="175" class="pk">🔑 session_id</text>
+    <text x="1580" y="175" class="field-type">TEXT PRIMARY KEY</text>
+
+    <text x="1290" y="200" class="fk">🔗 user_id</text>
+    <text x="1580" y="200" class="field-type">TEXT</text>
+
+    <text x="1290" y="225" class="field-name">title</text>
+    <text x="1580" y="225" class="field-type">TEXT</text>
+
+    <text x="1290" y="250" class="field-name">messages</text>
+    <text x="1580" y="250" class="field-type">TEXT (JSON Array)</text>
+
+    <text x="1290" y="275" class="field-name">metadata</text>
+    <text x="1580" y="275" class="field-type">TEXT (JSON)</text>
+
+    <text x="1290" y="300" class="field-name">created_at</text>
+    <text x="1580" y="300" class="field-type">TEXT NOT NULL</text>
+
+    <text x="1290" y="325" class="field-name">updated_at</text>
+    <text x="1580" y="325" class="field-type">TEXT NOT NULL</text>
+
+    <text x="1290" y="350" class="field-name">archived</text>
+    <text x="1580" y="350" class="field-type">INTEGER DEFAULT 0</text>
+
+    <text x="1290" y="375" class="field-name">pinned</text>
+    <text x="1580" y="375" class="field-type">INTEGER DEFAULT 0</text>
+
+    <text x="1290" y="400" class="field-name">tags</text>
+    <text x="1580" y="400" class="field-type">TEXT</text>
+
+    <text x="1290" y="425" class="field-name">folder</text>
+    <text x="1580" y="425" class="field-type">TEXT</text>
+  </g>
+
+  <!-- System Settings Table -->
+  <g id="system-settings-table">
+    <rect x="450" y="360" width="350" height="40" class="table-header" rx="5"/>
+    <text x="625" y="385" text-anchor="middle" class="table-name">system_settings</text>
+
+    <rect x="450" y="400" width="350" height="130" class="table-body" rx="5"/>
+    <text x="460" y="425" class="pk">🔑 key</text>
+    <text x="680" y="425" class="field-type">TEXT PRIMARY KEY</text>
+
+    <text x="460" y="450" class="field-name">value</text>
+    <text x="680" y="450" class="field-type">TEXT NOT NULL</text>
+
+    <text x="460" y="475" class="field-name">updated_at</text>
+    <text x="680" y="475" class="field-type">TEXT NOT NULL</text>
+
+    <text x="460" y="500" class="small-label">Stores: API keys (encrypted),</text>
+    <text x="460" y="518" class="small-label">feature flags, system config</text>
+  </g>
+
+  <!-- Prompt Templates Table -->
+  <g id="prompt-templates-table">
+    <rect x="50" y="560" width="380" height="40" class="table-header" rx="5"/>
+    <text x="240" y="585" text-anchor="middle" class="table-name">prompt_templates</text>
+
+    <rect x="50" y="600" width="380" height="205" class="table-body" rx="5"/>
+    <text x="60" y="625" class="pk">🔑 template_id</text>
+    <text x="300" y="625" class="field-type">TEXT PRIMARY KEY</text>
+
+    <text x="60" y="650" class="field-name">name</text>
+    <text x="300" y="650" class="field-type">TEXT UNIQUE NOT NULL</text>
+
+    <text x="60" y="675" class="field-name">description</text>
+    <text x="300" y="675" class="field-type">TEXT</text>
+
+    <text x="60" y="700" class="field-name">template_text</text>
+    <text x="300" y="700" class="field-type">TEXT NOT NULL</text>
+
+    <text x="60" y="725" class="field-name">variables</text>
+    <text x="300" y="725" class="field-type">TEXT (JSON Array)</text>
+
+    <text x="60" y="750" class="field-name">category</text>
+    <text x="300" y="750" class="field-type">TEXT</text>
+
+    <text x="60" y="775" class="field-name">is_active</text>
+    <text x="300" y="775" class="field-type">INTEGER DEFAULT 1</text>
+
+    <text x="60" y="800" class="field-name">created_at</text>
+    <text x="300" y="800" class="field-type">TEXT NOT NULL</text>
+  </g>
+
+  <!-- Prompt Template Versions Table -->
+  <g id="prompt-versions-table">
+    <rect x="480" y="560" width="380" height="40" class="table-header" rx="5"/>
+    <text x="670" y="585" text-anchor="middle" class="table-name">prompt_template_versions</text>
+
+    <rect x="480" y="600" width="380" height="205" class="table-body" rx="5"/>
+    <text x="490" y="625" class="pk">🔑 version_id</text>
+    <text x="730" y="625" class="field-type">TEXT PRIMARY KEY</text>
+
+    <text x="490" y="650" class="fk">🔗 template_id</text>
+    <text x="730" y="650" class="field-type">TEXT NOT NULL</text>
+
+    <text x="490" y="675" class="field-name">version_number</text>
+    <text x="730" y="675" class="field-type">INTEGER NOT NULL</text>
+
+    <text x="490" y="700" class="field-name">template_text</text>
+    <text x="730" y="700" class="field-type">TEXT NOT NULL</text>
+
+    <text x="490" y="725" class="field-name">variables</text>
+    <text x="730" y="725" class="field-type">TEXT (JSON Array)</text>
+
+    <text x="490" y="750" class="field-name">change_summary</text>
+    <text x="730" y="750" class="field-type">TEXT</text>
+
+    <text x="490" y="775" class="field-name">created_by</text>
+    <text x="730" y="775" class="field-type">TEXT</text>
+
+    <text x="490" y="800" class="field-name">created_at</text>
+    <text x="730" y="800" class="field-type">TEXT NOT NULL</text>
+  </g>
+
+  <!-- Neo4j Graph Database -->
+  <g id="neo4j-db">
+    <rect x="50" y="850" width="400" height="40" class="graph-db" rx="5"/>
+    <text x="250" y="875" text-anchor="middle" class="table-name">Neo4j Knowledge Graph</text>
+
+    <rect x="50" y="890" width="400" height="220" class="table-body" rx="5"/>
+    <text x="60" y="915" class="subtitle">Node Types:</text>
+    <text x="70" y="940" class="field-name">• Entity (name, type, properties)</text>
+    <text x="70" y="960" class="field-name">• Document (doc_id, title, source)</text>
+    <text x="70" y="980" class="field-name">• Chunk (chunk_id, content, embedding_id)</text>
+
+    <text x="60" y="1010" class="subtitle">Relationship Types:</text>
+    <text x="70" y="1035" class="field-name">• MENTIONED_IN (Entity → Chunk)</text>
+    <text x="70" y="1055" class="field-name">• RELATED_TO (Entity → Entity)</text>
+    <text x="70" y="1075" class="field-name">• PART_OF (Chunk → Document)</text>
+    <text x="70" y="1095" class="field-name">• NEXT_CHUNK (Chunk → Chunk)</text>
+  </g>
+
+  <!-- ChromaDB Vector Store -->
+  <g id="chromadb">
+    <rect x="500" y="850" width="400" height="40" class="vector-db" rx="5"/>
+    <text x="700" y="875" text-anchor="middle" class="table-name">ChromaDB Vector Store</text>
+
+    <rect x="500" y="890" width="400" height="220" class="table-body" rx="5"/>
+    <text x="510" y="915" class="subtitle">Collections:</text>
+    <text x="520" y="940" class="field-name">• documents (default collection)</text>
+
+    <text x="510" y="970" class="subtitle">Document Fields:</text>
+    <text x="520" y="995" class="field-name">• id: chunk_id (unique identifier)</text>
+    <text x="520" y="1015" class="field-name">• embedding: vector[1536] (OpenAI)</text>
+    <text x="520" y="1035" class="field-name">• metadata: {source, page, doc_id, ...}</text>
+    <text x="520" y="1055" class="field-name">• document: chunk text content</text>
+
+    <text x="510" y="1085" class="subtitle">Operations:</text>
+    <text x="520" y="1105" class="field-name">• Similarity search (cosine distance)</text>
+  </g>
+
+  <!-- File System Storage -->
+  <g id="file-storage">
+    <rect x="950" y="850" width="400" height="40" class="file-store" rx="5"/>
+    <text x="1150" y="875" text-anchor="middle" class="table-name">File System Storage</text>
+
+    <rect x="950" y="890" width="400" height="220" class="table-body" rx="5"/>
+    <text x="960" y="915" class="subtitle">Chunk Stores (JSONL):</text>
+    <text x="970" y="940" class="field-name">data/chunks/chunks.jsonl</text>
+    <text x="980" y="960" class="small-label">• chunk_id, content, metadata</text>
+    <text x="980" y="978" class="small-label">• Small chunks for retrieval</text>
+
+    <text x="970" y="1008" class="field-name">data/chunks/parents.jsonl</text>
+    <text x="980" y="1028" class="small-label">• parent_id, content, child_ids[]</text>
+    <text x="980" y="1046" class="small-label">• Large parent chunks for context</text>
+
+    <text x="960" y="1076" class="subtitle">Document Storage:</text>
+    <text x="970" y="1096" class="field-name">data/docs/ (source documents)</text>
+  </g>
+
+  <!-- Redis Cache -->
+  <g id="redis-cache">
+    <rect x="1400" y="850" width="350" height="40" class="cache-store" rx="5"/>
+    <text x="1575" y="875" text-anchor="middle" class="table-name">Redis Cache Layer</text>
+
+    <rect x="1400" y="890" width="350" height="220" class="table-body" rx="5"/>
+    <text x="1410" y="915" class="subtitle">Cache Types:</text>
+
+    <text x="1420" y="940" class="field-name">Query Result Cache</text>
+    <text x="1430" y="960" class="small-label">• Key: query_hash</text>
+    <text x="1430" y="978" class="small-label">• TTL: configurable (default 1h)</text>
+
+    <text x="1420" y="1008" class="field-name">Retrieval Cache</text>
+    <text x="1430" y="1028" class="small-label">• Key: retrieval_params_hash</text>
+    <text x="1430" y="1046" class="small-label">• TTL: configurable (default 30m)</text>
+
+    <text x="1420" y="1076" class="field-name">Session Cache</text>
+    <text x="1430" y="1096" class="small-label">• Key: session_id</text>
+    <text x="1430" y="1114" class="small-label">• TTL: session lifetime</text>
+  </g>
+
+  <!-- Relationships -->
+  <path d="M 400 240 L 450 240" class="one-to-many"/>
+  <text x="415" y="235" class="small-label" fill="#1976d2">1:N</text>
+
+  <path d="M 400 300 L 850 300" class="one-to-many"/>
+  <text x="600" y="295" class="small-label" fill="#1976d2">1:N</text>
+
+  <path d="M 400 350 L 1280 350" class="one-to-many"/>
+  <text x="820" y="345" class="small-label" fill="#1976d2">1:N</text>
+
+  <path d="M 240 600 L 240 560" class="one-to-many"/>
+  <text x="250" y="580" class="small-label" fill="#1976d2">1:N</text>
+
+  <path d="M 430 700 L 480 700" class="one-to-many"/>
+  <text x="445" y="695" class="small-label" fill="#1976d2">1:N</text>
+
+  <!-- Legend -->
+  <g id="legend">
+    <rect x="50" y="1150" width="1700" height="180" fill="#f9f9f9" stroke="#ccc" stroke-width="1" rx="5"/>
+    <text x="900" y="1180" text-anchor="middle" class="subtitle">Database Schema Legend</text>
+
+    <text x="70" y="1210" class="pk">🔑 Primary Key</text>
+    <text x="250" y="1210" class="fk">🔗 Foreign Key</text>
+    <text x="430" y="1210" class="index">📊 Index</text>
+
+    <rect x="70" y="1230" width="150" height="30" class="table-header" rx="3"/>
+    <text x="145" y="1250" text-anchor="middle" class="small-label" fill="white">SQLite Table</text>
+
+    <rect x="250" y="1230" width="150" height="30" class="graph-db" rx="3"/>
+    <text x="325" y="1250" text-anchor="middle" class="small-label" fill="white">Neo4j Graph</text>
+
+    <rect x="430" y="1230" width="150" height="30" class="vector-db" rx="3"/>
+    <text x="505" y="1250" text-anchor="middle" class="small-label" fill="white">ChromaDB Vector</text>
+
+    <rect x="610" y="1230" width="150" height="30" class="file-store" rx="3"/>
+    <text x="685" y="1250" text-anchor="middle" class="small-label" fill="white">File System</text>
+
+    <rect x="790" y="1230" width="150" height="30" class="cache-store" rx="3"/>
+    <text x="865" y="1250" text-anchor="middle" class="small-label" fill="white">Redis Cache</text>
+
+    <text x="70" y="1290" class="small-label">Storage Locations:</text>
+    <text x="80" y="1310" class="small-label">• SQLite: data/app.db (WAL mode, busy_timeout=10s)</text>
+    <text x="80" y="1328" class="small-label">• Neo4j: Docker container (port 7687), volume: neo4j_data</text>
+  </g>
+
+  <!-- Footer -->
+  <text x="900" y="1370" text-anchor="middle" class="small-label">Multi-Agent RAG v0.3.1 | Hybrid Storage Architecture</text>
+  <text x="900" y="1390" text-anchor="middle" class="small-label">SQLite (Auth + Sessions) | Neo4j (Knowledge Graph) | ChromaDB (Vectors) | File System (Chunks) | Redis (Cache)</text>
+</svg>

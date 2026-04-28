@@ -117,13 +117,13 @@ class TestUserStatusEnforcement:
     def test_suspended_user_cannot_login(self, client, auth_service):
         """中危: 暂停用户无法登录"""
         # 创建并暂停用户
-        user = auth_service.create_user("suspended_user", "password123")
+        user = auth_service.register("suspended_user", "Password123!")
         auth_service.update_user_status(user["user_id"], "suspended")
 
         # 尝试登录
         response = client.post("/auth/login", json={
             "username": "suspended_user",
-            "password": "password123"
+            "password": "Password123!"
         })
 
         # 应该失败或返回403
@@ -270,19 +270,28 @@ class TestInputValidation:
 @pytest.fixture
 def admin_user_id(auth_service):
     """创建测试管理员用户"""
+    import uuid
+    username = f"test_admin_{uuid.uuid4().hex[:8]}"
     user = auth_service.create_user_with_role(
-        username="test_admin",
+        username=username,
         password="AdminPass123!",
         role="admin"
     )
-    return user["user_id"]
+    yield user["user_id"]
+    # Cleanup
+    try:
+        auth_service.user_manager.delete_user(user["user_id"])
+    except:
+        pass
 
 
 @pytest.fixture
 def admin_token(auth_service, admin_user_id):
     """获取管理员令牌"""
-    token = auth_service.create_session_token(admin_user_id)
-    return token
+    # Get username from user_id
+    user = auth_service.user_manager.get_user_profile(admin_user_id)
+    result = auth_service.login(user["username"], "AdminPass123!")
+    return result["token"]
 
 
 @pytest.fixture
@@ -294,5 +303,12 @@ def admin_headers(admin_token):
 @pytest.fixture
 def test_user_id(auth_service):
     """创建测试普通用户"""
-    user = auth_service.create_user("test_user", "UserPass123!")
-    return user["user_id"]
+    import uuid
+    username = f"test_user_{uuid.uuid4().hex[:8]}"
+    user = auth_service.register(username, "UserPass123!")
+    yield user["user_id"]
+    # Cleanup
+    try:
+        auth_service.user_manager.delete_user(user["user_id"])
+    except:
+        pass

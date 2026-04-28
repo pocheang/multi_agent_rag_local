@@ -19,24 +19,42 @@ class QueryOverloadedError(RuntimeError):
 
 _REDIS_CLIENT = None
 _REDIS_LOCK = threading.Lock()
+_REDIS_UNAVAILABLE_UNTIL = 0.0
+
+
+def _redis_retry_cooldown_seconds() -> float:
+    settings = get_settings()
+    return max(1.0, float(getattr(settings, "redis_retry_cooldown_seconds", 15) or 15))
 
 
 def _get_redis_client():
-    global _REDIS_CLIENT
+    global _REDIS_CLIENT, _REDIS_UNAVAILABLE_UNTIL
     if _REDIS_CLIENT is not None:
         return _REDIS_CLIENT
+    if _REDIS_UNAVAILABLE_UNTIL and time.monotonic() < _REDIS_UNAVAILABLE_UNTIL:
+        return None
     with _REDIS_LOCK:
         if _REDIS_CLIENT is not None:
             return _REDIS_CLIENT
+        if _REDIS_UNAVAILABLE_UNTIL and time.monotonic() < _REDIS_UNAVAILABLE_UNTIL:
+            return None
         settings = get_settings()
         try:
             import redis  # type: ignore
 
-            _REDIS_CLIENT = redis.from_url(str(getattr(settings, "redis_url", "")), decode_responses=True)
+            _REDIS_CLIENT = redis.from_url(
+                str(getattr(settings, "redis_url", "")),
+                decode_responses=True,
+                socket_connect_timeout=0.2,
+                socket_timeout=0.2,
+                retry_on_timeout=False,
+            )
             _REDIS_CLIENT.ping()
+            _REDIS_UNAVAILABLE_UNTIL = 0.0
             return _REDIS_CLIENT
         except Exception:
             _REDIS_CLIENT = None
+            _REDIS_UNAVAILABLE_UNTIL = time.monotonic() + _redis_retry_cooldown_seconds()
             return None
 
 

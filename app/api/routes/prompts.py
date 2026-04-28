@@ -1,7 +1,14 @@
 """Prompt management routes for the Multi-Agent Local RAG API."""
 from typing import Any
 from fastapi import APIRouter, Depends, HTTPException, Request
-from app.api.dependencies import (    prompt_store,    _require_user,    _audit,    _require_permission,    _normalize_prompt_fields,    _resolve_effective_agent_class,)
+from app.api.dependencies import (
+    prompt_store,
+    _audit,
+    _normalize_prompt_fields,
+    _resolve_effective_agent_class,
+    _require_user,
+    _require_permission,
+)
 from app.core.schemas import (    PromptCheckRequest,    PromptCheckResponse,    PromptTemplate,    PromptTemplateCreateRequest,    PromptTemplateUpdateRequest,)
 from app.services.prompt_checker import check_and_enhance_prompt
 
