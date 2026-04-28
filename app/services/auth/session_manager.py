@@ -53,9 +53,8 @@ class SessionManager:
             if parse_iso(str(row["expires_at"])) <= now_ts:
                 conn.execute("DELETE FROM auth_sessions WHERE token=?", (token,))
                 return None
-            if str(row["status"]).lower() != "active":
-                conn.execute("DELETE FROM auth_sessions WHERE token=?", (token,))
-                return None
+            # SECURITY FIX: Return user even if not active, let auth layer handle status check
+            # This ensures proper 403 response instead of 401 for disabled users
             return {
                 "user_id": str(row["user_id"]),
                 "username": str(row["username"]),

@@ -500,7 +500,7 @@ export function AdminPage({ user, onLogout, themeLabel, onThemeToggle }: Props) 
   const createAdmin = async () => {
     const username = adminUsername.trim();
     if (!username) return setError("管理员用户名不能为空");
-    if (!adminPassword || adminPassword.length < 8) return setError("密码长度至少 8 位");
+    if (!adminPassword || adminPassword.length < 12) return setError("密码长度至少 12 位，需含大小写、数字和特殊字符");
     if (adminPassword !== adminPassword2) return setError("两次密码不一致");
     if (!adminApprovalToken.trim()) return setError("审批令牌不能为空");
     if (!newAdminApprovalToken.trim() || newAdminApprovalToken.trim().length < 12) return setError("新管理员令牌至少 12 位");
@@ -605,7 +605,7 @@ export function AdminPage({ user, onLogout, themeLabel, onThemeToggle }: Props) 
   };
 
   const resetUserPassword = async (target: AdminUserSummary) => {
-    const newPassword = (window.prompt(`请输入 ${target.username} 的新密码（至少8位，含大小写和数字）`) || "").trim();
+    const newPassword = (window.prompt(`请输入 ${target.username} 的新密码（至少12位，含大小写、数字和特殊字符）`) || "").trim();
     if (!newPassword) return;
     const approvalToken = (window.prompt("请输入你的审批令牌") || "").trim();
     const ticketId = (window.prompt("请输入工单号") || "").trim();
@@ -694,7 +694,7 @@ export function AdminPage({ user, onLogout, themeLabel, onThemeToggle }: Props) 
               </label>
               <label className="admin-field">
                 <span>管理员密码</span>
-                <input placeholder="至少 8 位" type="password" value={adminPassword} onChange={(e) => setAdminPassword(e.target.value)} />
+                <input placeholder="至少 12 位，含大小写、数字和特殊字符" type="password" value={adminPassword} onChange={(e) => setAdminPassword(e.target.value)} />
               </label>
             </div>
             <div className="ops-two-col admin-create-grid">

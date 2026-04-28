@@ -14,7 +14,13 @@ function validateUsername(value: string) {
 }
 
 function validatePassword(value: string) {
-  return value.length >= 8 && /[a-z]/.test(value) && /[A-Z]/.test(value) && /[0-9]/.test(value);
+  return (
+    value.length >= 12 &&
+    /[a-z]/.test(value) &&
+    /[A-Z]/.test(value) &&
+    /[0-9]/.test(value) &&
+    /[!@#$%^&*()_+\-=[\]{}|;:,.<>?]/.test(value)
+  );
 }
 
 export function LoginPage({ onLogin, themeLabel, onThemeToggle }: Props) {
@@ -77,7 +83,7 @@ export function LoginPage({ onLogin, themeLabel, onThemeToggle }: Props) {
 
   const forgotPassword = () => {
     setError("");
-    setStatus("忘记密码流程待接入，可先联系管理员重置");
+    setStatus("请联系管理员重置密码（需提供用户名、工单号和重置原因）");
   };
 
   return (
@@ -116,7 +122,7 @@ export function LoginPage({ onLogin, themeLabel, onThemeToggle }: Props) {
             }}
           />
           <div className={`hint ${validatePassword(password) ? "ok" : "error"}`}>
-            {validatePassword(password) ? "密码复杂度达标" : "注册至少8位，含大小写和数字"}
+            {validatePassword(password) ? "密码复杂度达标" : "注册至少12位，含大小写、数字和特殊字符"}
           </div>
 
           <div className="action-grid">

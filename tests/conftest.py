@@ -15,7 +15,13 @@ def cleanup_test_users():
     try:
         if os.path.exists(db_path):
             conn = sqlite3.connect(db_path)
-            conn.execute("DELETE FROM users WHERE username LIKE 'test_admin_%' OR username LIKE 'test_user_%'")
+            conn.execute("""
+                DELETE FROM users
+                WHERE username LIKE 'test_admin_%'
+                   OR username LIKE 'test_user_%'
+                   OR username = 'suspended_user'
+                   OR username = 'testadmin'
+            """)
             conn.commit()
             conn.close()
     except Exception:
@@ -27,7 +33,13 @@ def cleanup_test_users():
     try:
         if os.path.exists(db_path):
             conn = sqlite3.connect(db_path)
-            conn.execute("DELETE FROM users WHERE username LIKE 'test_admin_%' OR username LIKE 'test_user_%'")
+            conn.execute("""
+                DELETE FROM users
+                WHERE username LIKE 'test_admin_%'
+                   OR username LIKE 'test_user_%'
+                   OR username = 'suspended_user'
+                   OR username = 'testadmin'
+            """)
             conn.commit()
             conn.close()
     except Exception:

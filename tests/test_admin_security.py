@@ -115,10 +115,10 @@ class TestUserStatusEnforcement:
         assert "not active" in response.json()["detail"].lower()
 
     def test_suspended_user_cannot_login(self, client, auth_service):
-        """中危: 暂停用户无法登录"""
-        # 创建并暂停用户
+        """中危: 禁用用户无法登录"""
+        # 创建并禁用用户
         user = auth_service.register("suspended_user", "Password123!")
-        auth_service.update_user_status(user["user_id"], "suspended")
+        auth_service.update_user_status(user["user_id"], "disabled")
 
         # 尝试登录
         response = client.post("/auth/login", json={

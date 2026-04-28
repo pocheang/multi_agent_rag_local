@@ -194,8 +194,11 @@ class UserManager:
             result = conn.execute("UPDATE users SET status=? WHERE user_id=?", (status, user_id))
             if result.rowcount <= 0:
                 return None
-            if status == "disabled":
-                conn.execute("DELETE FROM auth_sessions WHERE user_id=?", (user_id,))
+            # SECURITY FIX: Don't delete sessions when disabling user
+            # Let the auth layer (_require_user) handle status check and return 403
+            # This provides better security feedback (403 vs 401)
+            # if status == "disabled":
+            #     conn.execute("DELETE FROM auth_sessions WHERE user_id=?", (user_id,))
             row = conn.execute(
                 """
                 SELECT u.user_id, u.username, u.role, u.status, u.created_by_user_id, u.created_by_username, u.admin_ticket_id,

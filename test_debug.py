@@ -1,26 +1,37 @@
-"""Debug test to check actual response"""
+import sys
+sys.path.insert(0, '.')
+
 from fastapi.testclient import TestClient
 from app.api.main import app
 from app.api.dependencies import auth_service
-import uuid
 
-# Create admin user
-username = f'test_admin_{uuid.uuid4().hex[:8]}'
-user = auth_service.create_user_with_role(username, 'AdminPass123!', 'admin')
-print(f'Created user: {user["user_id"]}')
-
-# Login
-result = auth_service.login(username, 'AdminPass123!')
-token = result['token']
-print(f'Got token: {token[:20]}...')
-
-# Try to modify own role
 client = TestClient(app)
-response = client.patch(
-    f'/admin/users/{user["user_id"]}/role',
-    json={'role': 'super_admin'},
-    headers={'Authorization': f'Bearer {token}'}
-)
-print(f'Status: {response.status_code}')
-print(f'Response: {response.json()}')
-print(f'Expected: 403 with "cannot modify your own" message')
+
+# 创建管理员
+admin = auth_service.register("testadmin", "Admin123!@#456")
+auth_service.update_user_role(admin["user_id"], "admin")
+
+# 登录
+login_resp = client.post("/auth/login", json={
+    "username": "testadmin",
+    "password": "Admin123!@#456"
+})
+print(f"Login status: {login_resp.status_code}")
+cookie_token = login_resp.cookies.get("auth_token")
+print(f"Cookie token: {cookie_token}")
+
+# 直接验证 token
+user = auth_service.get_user_by_token(cookie_token)
+print(f"User from token: {user}")
+
+# 禁用管理员
+auth_service.update_user_status(admin["user_id"], "disabled")
+
+# 再次验证 token
+user_after = auth_service.get_user_by_token(cookie_token)
+print(f"User after disable: {user_after}")
+
+# 尝试访问
+response = client.get("/admin/users")
+print(f"Response status: {response.status_code}")
+print(f"Response body: {response.json()}")

@@ -74,6 +74,10 @@ def admin_update_user_role(user_id: str, req: AdminRoleUpdateRequest, request: R
     except ValueError as e:
         _audit(request, action="admin.user.role_update", resource_type="user", result="failed", user=user, resource_id=user_id, detail=str(e))
         raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        # SECURITY: Log all exceptions for audit trail
+        _audit(request, action="admin.user.role_update", resource_type="user", result="failed", user=user, resource_id=user_id, detail=f"Exception: {type(e).__name__}: {str(e)}")
+        raise HTTPException(status_code=500, detail="internal server error")
     if row is None:
         raise HTTPException(status_code=404, detail="user not found")
     _audit(
@@ -251,6 +255,41 @@ def admin_reset_user_password(
     user: dict[str, Any] = Depends(_require_user),
 ):
     _require_permission(user, "admin:user_manage", request, "admin", resource_id=user_id)
+
+    # SECURITY: Rate limiting for password reset (check early, before other validations)
+    rate_key = f"password_reset:{user.get('user_id', '')}:{user_id}"
+    if not hasattr(admin_reset_user_password, '_rate_limit_cache'):
+        admin_reset_user_password._rate_limit_cache = {}
+
+    import time
+    now = time.time()
+    cache = admin_reset_user_password._rate_limit_cache
+
+    # Clean old entries (older than 1 hour)
+    cache_keys_to_delete = [k for k, v in cache.items() if now - v['time'] > 3600]
+    for k in cache_keys_to_delete:
+        del cache[k]
+
+    # Check rate limit (5 per hour) - count ALL attempts including failed ones
+    if rate_key in cache:
+        entry = cache[rate_key]
+        if now - entry['time'] < 3600 and entry['count'] >= 5:
+            _audit(
+                request,
+                action="admin.user.reset_password",
+                resource_type="user",
+                result="rate_limited",
+                user=user,
+                resource_id=user_id,
+                detail="rate limit exceeded",
+            )
+            raise HTTPException(status_code=429, detail="rate limit exceeded")
+        if now - entry['time'] < 3600:
+            entry['count'] += 1
+        else:
+            cache[rate_key] = {'time': now, 'count': 1}
+    else:
+        cache[rate_key] = {'time': now, 'count': 1}
 
     # SECURITY: Prevent self-modification
     check_self_modification(user_id, user, "admin.user.reset_password", _audit, request)
