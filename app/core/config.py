@@ -104,8 +104,8 @@ class Settings(BaseSettings):
     auth_token_ttl_hours: int = Field(default=24, alias="AUTH_TOKEN_TTL_HOURS")
     auth_expose_token_in_response: bool = Field(default=False, alias="AUTH_EXPOSE_TOKEN_IN_RESPONSE")
     auth_cookie_name: str = Field(default="auth_token", alias="AUTH_COOKIE_NAME")
-    auth_cookie_secure: bool = Field(default=False, alias="AUTH_COOKIE_SECURE")
-    auth_cookie_samesite: str = Field(default="lax", alias="AUTH_COOKIE_SAMESITE")  # strict|lax|none
+    auth_cookie_secure: bool = Field(default=True, alias="AUTH_COOKIE_SECURE")
+    auth_cookie_samesite: str = Field(default="strict", alias="AUTH_COOKIE_SAMESITE")  # strict|lax|none
     app_db_path_str: str = Field(default="./data/app.db", alias="APP_DB_PATH")
 
     auth_login_max_failures: int = Field(default=8, alias="AUTH_LOGIN_MAX_FAILURES")

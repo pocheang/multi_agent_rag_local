@@ -10,14 +10,19 @@ def validate_username(username: str) -> str:
 
 def validate_password(password: str) -> str:
     value = password or ""
-    if len(value) < 8:
-        raise ValueError("password must be at least 8 characters")
+    if len(value) < 12:
+        raise ValueError("password must be at least 12 characters")
+    if len(value) > 128:
+        raise ValueError("password must not exceed 128 characters")
     if not any(ch.islower() for ch in value):
         raise ValueError("password must include lowercase letters")
     if not any(ch.isupper() for ch in value):
         raise ValueError("password must include uppercase letters")
     if not any(ch.isdigit() for ch in value):
         raise ValueError("password must include digits")
+    special_chars = "!@#$%^&*()_+-=[]{}|;:,.<>?"
+    if not any(ch in special_chars for ch in value):
+        raise ValueError("password must include special characters")
     return value
 
 

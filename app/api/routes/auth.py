@@ -51,7 +51,7 @@ def login(req: AuthCredentials, request: Request, response: Response):
     except ValueError as e:
         login_limiter.record(login_key)
         _audit(request, action="auth.login", resource_type="auth", result="failed", detail=str(e))
-        raise HTTPException(status_code=401, detail=str(e))
+        raise HTTPException(status_code=401, detail="invalid credentials")
     login_limiter.reset(login_key)
     _audit(
         request,
