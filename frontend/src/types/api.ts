@@ -41,6 +41,18 @@ export type SessionMessageMetadata = {
     detail?: string;
     at?: string;
   }>;
+  graph_result?: {
+    neighbors: Array<{
+      entity: string;
+      relation: string;
+      direction: "in" | "out";
+    }>;
+    paths: Array<{
+      entities: string[];
+      relations: string[];
+    }>;
+    context?: string;
+  };
 };
 
 export type SessionMessage = {

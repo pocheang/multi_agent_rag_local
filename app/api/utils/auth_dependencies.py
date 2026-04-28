@@ -98,7 +98,7 @@ def _require_permission(
     from app.api.utils.auth_helpers import _audit
 
     # Check permission using RBAC system
-    if not can(user, permission, resource_type):
+    if not can(permission, user):
         # Audit permission denial
         _audit(
             request,

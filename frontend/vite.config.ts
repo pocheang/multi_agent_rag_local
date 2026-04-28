@@ -19,7 +19,7 @@ export default defineConfig({
         timeout: 600000,
         proxyTimeout: 600000,
         configure: (proxy, _options) => {
-          proxy.on('proxyRes', (proxyRes, req, res) => {
+          proxy.on('proxyRes', (proxyRes, _req, _res) => {
             // Remove 'secure' flag from cookies in development
             const setCookie = proxyRes.headers['set-cookie'];
             if (setCookie) {
