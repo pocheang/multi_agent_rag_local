@@ -1,12 +1,48 @@
 """Admin user management routes for the Multi-Agent Local RAG API."""
 import hashlib
+import hmac
 from typing import Any
+
 from fastapi import APIRouter, Depends, HTTPException, Request
-from app.api.dependencies import (    auth_service,    _require_user,    _audit,    _require_permission,    _is_valid_admin_approval_token_for_actor,)
-from app.core.schemas import (    AdminCreateAdminRequest,    AdminResetApprovalTokenRequest,    AdminResetPasswordRequest,    AdminRoleUpdateRequest,    AdminStatusUpdateRequest,    AdminUserClassificationUpdateRequest,    AdminUserSummary,    AuditLogEntry,)
+
+from app.api.dependencies import (
+    auth_service,
+    _audit,
+    _require_user,
+    _require_permission,
+    settings,
+)
+from app.core.schemas import (
+    AdminCreateAdminRequest,
+    AdminResetApprovalTokenRequest,
+    AdminResetPasswordRequest,
+    AdminRoleUpdateRequest,
+    AdminStatusUpdateRequest,
+    AdminUserClassificationUpdateRequest,
+    AdminUserSummary,
+    AuditLogEntry,
+)
 from app.services.log_buffer import list_captured_logs
+from app.services.admin_security import admin_security_service
+from app.services.admin_token_tracker import token_tracker
+from app.services.admin_rate_limit import rate_limiter
 
 router = APIRouter(prefix="/admin", tags=["admin"])
+
+
+def _is_valid_admin_approval_token_for_actor(token: str, actor_user_id: str) -> tuple[bool, str]:
+    """Validate the admin approval token against configured plain/hash values."""
+    candidate = str(token or "").strip()
+    configured_hash = str(getattr(settings, "admin_create_approval_token_hash", "") or "").strip().lower()
+    configured_plain = str(getattr(settings, "admin_create_approval_token", "") or "").strip()
+    if not configured_hash and not configured_plain:
+        return False, "missing"
+    if not candidate:
+        return False, "empty"
+    if configured_hash:
+        digest = hashlib.sha256(candidate.encode("utf-8")).hexdigest().lower()
+        return hmac.compare_digest(digest, configured_hash), "hash"
+    return hmac.compare_digest(candidate, configured_plain), "plain"
 
 @router.get("/users", response_model=list[AdminUserSummary])
 

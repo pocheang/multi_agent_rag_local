@@ -174,3 +174,105 @@ def _runtime_diagnostics_summary(get_request_metrics_fn) -> dict[str, Any]:
         "recent_errors": recent_errors,
         "recent_failures": recent_failures,
     }
+
+
+# Security-related helper functions for admin operations
+
+def validate_and_check_approval_token(
+    approval_token: str,
+    actor_user_id: str,
+    audit_callback: callable,
+    request: Any,
+    user: dict[str, Any],
+    action: str
+) -> tuple[bool, str]:
+    """
+    Validate approval token and handle errors (prevent information disclosure).
+
+    Args:
+        approval_token: Approval token to validate
+        actor_user_id: User ID performing the operation
+        audit_callback: Audit log callback function
+        request: FastAPI request object
+        user: User information
+        action: Operation type
+
+    Returns:
+        (token_ok, token_mode) tuple
+
+    Raises:
+        HTTPException: If token is invalid or configuration is missing
+    """
+    from fastapi import HTTPException
+    from app.services.admin_token_tracker import validate_admin_approval_token, get_token_tracker
+
+    configured_hash = str(
+        getattr(settings, "admin_create_approval_token_hash", "") or ""
+    ).strip().lower()
+
+    tracker = get_token_tracker()
+    token_ok, token_mode = validate_admin_approval_token(
+        approval_token,
+        configured_hash,
+        actor_user_id,
+        tracker
+    )
+
+    # Unified error handling, no configuration information leakage
+    if not token_ok:
+        audit_callback(
+            request,
+            action=action,
+            resource_type="user",
+            result="failed",
+            user=user,
+            detail=f"approval_failed; mode={token_mode}"
+        )
+        raise HTTPException(status_code=403, detail="unauthorized")
+
+    return token_ok, token_mode
+
+
+def handle_service_exception(
+    e: Exception,
+    audit_callback: callable,
+    request: Any,
+    action: str,
+    user: dict[str, Any],
+    resource_id: str | None = None
+) -> None:
+    """
+    Unified service layer exception handling with audit logging.
+
+    Args:
+        e: Exception object
+        audit_callback: Audit log callback function
+        request: FastAPI request object
+        action: Operation type
+        user: User information
+        resource_id: Resource ID
+
+    Raises:
+        HTTPException: Converted HTTP exception
+    """
+    import logging
+    from fastapi import HTTPException
+
+    logger = logging.getLogger(__name__)
+
+    audit_callback(
+        request,
+        action=action,
+        resource_type="user",
+        result="failed",
+        user=user,
+        resource_id=resource_id,
+        detail=f"{type(e).__name__}: {str(e)}"
+    )
+
+    if isinstance(e, ValueError):
+        raise HTTPException(status_code=400, detail=str(e))
+
+    logger.error(f"Unexpected error in {action}: {e}", exc_info=True)
+    raise HTTPException(status_code=500, detail="operation failed")
+
