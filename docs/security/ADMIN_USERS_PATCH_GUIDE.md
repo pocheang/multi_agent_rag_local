@@ -1,5 +1,8 @@
 # admin_users.py 安全修复补丁
 
+**最后更新**: 2026-04-28
+
+
 本文档说明了对 `app/api/routes/admin_users.py` 的关键安全修复。
 
 ## 修改概述

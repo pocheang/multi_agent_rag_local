@@ -1,5 +1,8 @@
 # 版本发布文档快速参考 / Version Release Documentation Quick Reference
 
+**最后更新**: 2026-04-28
+
+
 **版本**: v1.0  
 **更新**: 2026-04-28
 

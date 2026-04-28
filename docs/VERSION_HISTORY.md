@@ -1,8 +1,8 @@
 # 版本历史 / Version History
 
 **项目**: Multi-Agent Local RAG System  
-**文档版本**: v1.0  
-**最后更新**: 2026-04-27
+**文档版本**: v1.1  
+**最后更新**: 2026-04-28
 
 ---
 
@@ -10,7 +10,9 @@
 
 | 版本 | 发布日期 | 类型 | 主要特性 | 文档链接 |
 |------|----------|------|----------|----------|
-| **v0.3.1** | 2026-04-27 | 📚 文档版本 | 企业级文档体系、去重合并、结构标准化 | [详情](#v031-2026-04-27) |
+| **v0.3.1.2** | 2026-04-28 | 🔒 安全版本 | 管理员安全加固、输入验证、RBAC修复 | [详情](#v0312-2026-04-28) |
+| v0.3.1.1 | 2026-04-28 | 🔧 修复版本 | PDF上传统计修复、用户反馈改进 | [详情](#v0311-2026-04-28) |
+| v0.3.1 | 2026-04-27 | 📚 文档版本 | 企业级文档体系、去重合并、结构标准化 | [详情](#v031-2026-04-27) |
 | v0.3.0 | 2026-04-27 | 🏗️ 架构版本 | 模块化架构重构，依赖解耦 | [详情](#v030-2026-04-27) |
 | v0.2.5 | 2026-04-27 | 🔧 修复版本 | 18 个问题修复，性能优化 | [详情](#v025-2026-04-27) |
 | v0.2.4 | 2026-04-26 | ⚡ 功能版本 | 分层执行策略，UX 速度优化 | [详情](#v024-2026-04-26) |
@@ -19,6 +21,360 @@
 | v0.2.1 | 2026-04-09 | 🎛️ 功能版本 | RAG/Agent 运维控制 | [详情](#v021-2026-04-09) |
 | v0.2.0 | 2026-04-08 | 👥 功能版本 | 管理员操作与用户管理 | [详情](#v020-2026-04-08) |
 | v0.1.0 | 2026-04-08 | 🎉 首次发布 | 初始公开版本 | [详情](#v010-2026-04-08) |
+
+---
+
+## v0.3.1.2 (2026-04-28)
+
+### 📊 版本信息
+- **发布日期**: 2026-04-28
+- **版本类型**: 安全版本（Security Release）
+- **开发周期**: 1 天
+- **Git 标签**: `v0.3.1.2`
+- **主要工作**: 管理员安全加固与漏洞修复
+
+### 🎯 版本目标
+修复管理员用户管理模块中的关键安全漏洞，加强输入验证，完善 RBAC 权限检查，提升系统整体安全性。
+
+### 🔒 安全修复
+
+#### 🔴 关键漏洞修复（Critical）
+1. **管理员自我修改漏洞** (CVE-pending)
+   - 修复管理员可以修改自己的角色、状态和审批令牌的漏洞
+   - 实现自我修改检测和阻止机制
+   - 添加审计日志记录所有尝试
+
+2. **审批令牌重用漏洞**
+   - 实现令牌单次使用强制执行
+   - 添加令牌使用追踪服务
+   - 防止并发请求中的竞态条件
+
+3. **禁用管理员绕过漏洞**
+   - 在所有认证点添加用户状态验证
+   - 禁用/暂停用户无法执行任何操作
+   - 统一状态检查逻辑
+
+#### 🟠 高危漏洞修复（High）
+4. **信息泄露漏洞**
+   - 统一错误消息防止系统配置泄露
+   - 修复登录错误消息泄露（用户名枚举攻击）
+   - 改进异常处理和审计日志
+
+5. **时序攻击漏洞**
+   - 令牌比较使用恒定时间操作
+   - 防止通过响应时间推断信息
+
+#### 🟡 中危漏洞修复（Medium）
+6. **弱密码策略**
+   - 最小长度从 8 字符提升到 12 字符
+   - 添加特殊字符要求
+   - 最大长度限制 128 字符（防止 DoS）
+
+7. **Cookie 安全加固**
+   - `secure=true` 强制 HTTPS 传输
+   - `samesite=strict` 防止 CSRF 攻击
+   - 改进 cookie 配置默认值
+
+8. **速率限制**
+   - 管理员创建：1次/小时
+   - 令牌重置：3次/小时
+   - 密码重置：5次/小时
+
+9. **输入验证增强**
+   - Ticket ID 格式验证（PROJECT-NUMBER 模式）
+   - 用户名、邮箱格式严格验证
+   - 防止注入攻击
+
+### ✨ 新增模块
+
+#### 安全服务模块
+- **`app/services/admin_security.py`** (128 行)
+  - 模块化安全验证函数
+  - 自我修改检测
+  - 令牌验证逻辑
+  - 统一错误处理
+
+- **`app/services/admin_token_tracker.py`** (176 行)
+  - 令牌使用追踪服务
+  - 过期机制（24小时自动清理）
+  - 并发安全的令牌检查
+
+- **`app/services/admin_rate_limit.py`** (67 行)
+  - 速率限制配置
+  - 管理员操作限流策略
+
+#### API 辅助模块
+- **`app/api/utils/admin_helpers.py`** (102 行)
+  - 令牌验证辅助函数
+  - 异常处理辅助函数
+  - 统一错误响应
+
+- **`app/api/utils/auth_dependencies.py`** (115 行)
+  - 认证依赖函数
+  - 用户状态检查
+  - 权限验证
+
+### 🔧 修改的文件
+
+#### 核心服务
+- **`app/services/auth/validation.py`**
+  - 强化密码验证（12-128字符，特殊字符）
+  
+- **`app/services/auth/session_manager.py`**
+  - 改进会话管理安全性
+
+- **`app/services/auth/user_manager.py`**
+  - 增强用户管理安全检查
+
+#### API 路由
+- **`app/api/routes/admin_users.py`**
+  - 集成安全验证模块
+  - 添加自我修改检查
+  - 统一错误处理
+  - 完善审计日志
+
+- **`app/api/routes/auth.py`**
+  - 统一登录错误消息
+  - 防止用户名枚举
+
+#### 配置
+- **`app/core/config.py`**
+  - Cookie 安全默认值加固
+  - `AUTH_COOKIE_SECURE=true`
+  - `AUTH_COOKIE_SAMESITE=strict`
+
+### 📝 测试覆盖
+
+#### 新增测试
+- **`tests/test_admin_security.py`** (314 行)
+  - 8 个测试类
+  - 15+ 测试用例
+  - 覆盖所有安全修复
+
+测试类别：
+1. `TestAdminSelfModificationPrevention` - 自我修改防护
+2. `TestApprovalTokenSingleUse` - 令牌单次使用
+3. `TestUserStatusValidation` - 用户状态验证
+4. `TestPasswordPolicyEnforcement` - 密码策略
+5. `TestRateLimiting` - 速率限制
+6. `TestInputValidation` - 输入验证
+7. `TestErrorMessageUnification` - 错误消息统一
+8. `TestAuditLogging` - 审计日志
+
+### 📚 文档更新
+
+#### 安全文档
+- **`docs/security/ADMIN_USERS_SECURITY_AUDIT.md`** (653 行)
+  - 完整安全审计报告
+  - 漏洞分析和影响评估
+  - 修复方案详细说明
+
+- **`docs/security/ADMIN_USERS_FIX_PLAN.md`** (564 行)
+  - 详细修复计划
+  - 实施步骤和验证方法
+
+- **`docs/security/ADMIN_USERS_PATCH_GUIDE.md`** (397 行)
+  - 补丁安装指南
+  - 升级步骤和回滚方案
+
+- **`docs/security/SECURITY_FIXES_INSTALLATION.md`** (236 行)
+  - 快速安装指南
+  - 验证和测试步骤
+
+#### 根目录文档
+- **`SECURITY_FIXES_v0.3.1.2.md`** (203 行)
+  - 安全修复总结
+  - 快速参考指南
+
+- **`SECURITY_FIXES_QUICK_REF.md`** (96 行)
+  - 快速参考卡片
+  - 关键修复点概览
+
+### 📊 统计数据
+
+| 指标 | 数值 |
+|------|------|
+| 修复的安全漏洞 | 9 个 |
+| 关键漏洞 | 3 个 |
+| 高危漏洞 | 2 个 |
+| 中危漏洞 | 4 个 |
+| 新增模块 | 5 个 |
+| 修改的文件 | 12 个 |
+| 新增代码行 | 1,000+ 行 |
+| 测试用例 | 15+ 个 |
+| 文档页数 | 2,000+ 行 |
+
+### ⚠️ 破坏性变更
+
+#### 密码策略变更
+- **旧策略**: 最小 8 字符，无特殊字符要求
+- **新策略**: 最小 12 字符，必须包含特殊字符
+- **影响**: 现有弱密码用户需要重置密码
+
+#### Cookie 安全设置
+- **旧设置**: `secure=false`, `samesite=lax`
+- **新设置**: `secure=true`, `samesite=strict`
+- **影响**: 必须使用 HTTPS，跨站请求受限
+
+### 🚀 升级指南
+
+```bash
+# 1. 备份数据库
+cp data/auth.db data/auth.db.backup
+
+# 2. 拉取最新代码
+git pull origin main
+git checkout v0.3.1.2
+
+# 3. 安装依赖（如有更新）
+pip install -e .
+
+# 4. 运行测试验证
+pytest tests/test_admin_security.py -v
+
+# 5. 重启服务
+# 停止现有服务
+pkill -f "uvicorn app.api.main:app"
+
+# 启动新版本
+uvicorn app.api.main:app --host 127.0.0.1 --port 8000 --reload
+
+# 6. 验证安全修复
+python -m pytest tests/test_admin_security.py -v
+```
+
+### 🔍 验证步骤
+
+1. **验证自我修改防护**
+   ```bash
+   # 尝试修改自己的角色（应该失败）
+   curl -X PUT http://localhost:8000/admin/users/me \
+     -H "Authorization: Bearer $TOKEN" \
+     -d '{"role": "super_admin"}'
+   ```
+
+2. **验证令牌单次使用**
+   ```bash
+   # 使用同一令牌两次（第二次应该失败）
+   curl -X POST http://localhost:8000/admin/users/approve \
+     -d '{"token": "same-token"}'
+   ```
+
+3. **验证用户状态检查**
+   ```bash
+   # 禁用用户后尝试登录（应该失败）
+   curl -X POST http://localhost:8000/auth/login \
+     -d '{"username": "disabled_user", "password": "pass"}'
+   ```
+
+### 📝 详细文档
+
+- [SECURITY_FIXES_v0.3.1.2.md](../SECURITY_FIXES_v0.3.1.2.md) - 安全修复总结
+- [docs/security/ADMIN_USERS_SECURITY_AUDIT.md](security/ADMIN_USERS_SECURITY_AUDIT.md) - 安全审计报告
+- [docs/security/ADMIN_USERS_FIX_PLAN.md](security/ADMIN_USERS_FIX_PLAN.md) - 修复计划
+- [docs/security/ADMIN_USERS_PATCH_GUIDE.md](security/ADMIN_USERS_PATCH_GUIDE.md) - 补丁指南
+- [CHANGELOG.md](../CHANGELOG.md) - 完整变更日志
+
+### 🎯 后续工作
+
+1. **安全审计**: 定期进行第三方安全审计
+2. **渗透测试**: 进行全面的渗透测试
+3. **监控告警**: 实施安全事件监控和告警
+4. **文档完善**: 持续更新安全最佳实践文档
+
+---
+
+## v0.3.1.1 (2026-04-28)
+
+### 📊 版本信息
+- **发布日期**: 2026-04-28
+- **版本类型**: 修复版本（Bug Fix Release）
+- **开发周期**: 1 天
+- **Git 标签**: `v0.3.1.1`
+- **主要工作**: PDF上传统计修复和用户体验改进
+
+### 🎯 版本目标
+修复PDF文档上传统计不准确的问题，改进用户反馈信息的清晰度和准确性。
+
+### 🔧 修复的问题
+
+#### PDF上传统计准确性
+- **问题**: `loaded_documents` 计数包含内部 Document 对象（页面 + OCR 图像），而非实际上传的文件数
+- **修复**: 修改为计数实际上传的文件数量
+- **影响**: 用户现在看到准确的上传文件数量
+
+#### 页面信息聚合
+- **问题**: 页码存储为字符串导致排序错误
+- **修复**: 页码存储为整数以实现正确的数值排序
+- **影响**: 页面信息显示更加准确
+
+#### 用户反馈清晰度
+- **问题**: 技术性上传消息对用户不友好
+- **修复**: 替换为用户友好的中文格式
+- **示例**: "✓ 已上传 1 个文件 | 索引了 45 个文本块 | 共 3 页"
+
+#### 重新索引通知
+- **问题**: 重新索引成功消息缺少有意义的统计信息
+- **修复**: 改进消息显示文件特定的统计信息
+- **影响**: 用户更清楚地了解索引结果
+
+### ✨ 新增功能
+
+- **`pages_by_source`** 字段
+  - 在 `UploadResponse` 中添加
+  - 在 `FileIndexActionResponse` 中添加
+  - 追踪每个文件的页数
+
+- **`page_count`** 字段
+  - 在 `IndexedFileSummary` 中添加
+  - 显示 PDF 文档的总页数
+
+### 🔧 修改的文件
+
+- **`app/api/routes/documents.py`**
+  - 改进上传统计逻辑
+  - 增强用户反馈消息
+
+- **`app/core/schemas.py`**
+  - 添加 `pages_by_source` 字段
+  - 添加 `page_count` 字段
+  - 修改 `pages` 字段类型为 `list[int]`
+
+- **`app/services/ingest_service.py`**
+  - 修复文档计数逻辑
+  - 改进页面信息聚合
+
+### 📊 统计数据
+
+| 指标 | 数值 |
+|------|------|
+| 修复的问题 | 4 个 |
+| 新增字段 | 2 个 |
+| 修改的文件 | 3 个 |
+| 改进的用户消息 | 2 个 |
+
+### ⚠️ 向后兼容性
+
+**✅ 完全兼容**: 
+- API 响应结构向后兼容
+- 新增字段不影响现有客户端
+- 字段类型变更不破坏现有功能
+
+### 🚀 升级指南
+
+```bash
+# 1. 拉取最新代码
+git pull origin main
+git checkout v0.3.1.1
+
+# 2. 重启服务
+uvicorn app.api.main:app --host 127.0.0.1 --port 8000 --reload
+```
+
+### 📝 详细文档
+
+- [docs/archive/V0.3.1.1_FIXES_SUMMARY.md](archive/V0.3.1.1_FIXES_SUMMARY.md) - 修复详情
+- [CHANGELOG.md](../CHANGELOG.md) - 完整变更日志
 
 ---
 
@@ -238,14 +594,14 @@ pytest -q
 - **测试时间**: ~65 秒
 
 ### 📝 详细文档
-- [📋 完整变更日志](CHANGELOG_2026-04-27.md) - **推荐首先阅读**
-- [📝 修复总结](FINAL_FIXES_SUMMARY_2026-04-27.md)
-- [🔍 深度代码审查](DEEP_CODE_REVIEW_2026-04-27.md)
-- [📚 修复索引](FIXES_INDEX.md)
-- [🔧 第一轮修复](LOGIC_FIXES_2026-04-27.md)
-- [🔧 第二轮修复](FIXES_ROUND2_2026-04-27.md)
-- [🔧 第三轮修复](FIXES_ROUND3_2026-04-27.md)
-- [🔧 第四轮修复](FIXES_ROUND4_2026-04-27.md)
+- [📋 完整变更日志](../CHANGELOG.md) - **推荐首先阅读**
+- [📝 修复总结](archive/FIXES_SUMMARY.md)
+- [🔍 深度代码审查](archive/DEEP_CODE_REVIEW_2026-04-27.md)
+- [📚 修复索引](archive/FIXES_INDEX.md)
+- [🔧 第一轮修复](archive/FIXES_SUMMARY.md)
+- [🔧 第二轮修复](archive/FIXES_SUMMARY.md)
+- [🔧 第三轮修复](archive/FIXES_SUMMARY.md)
+- [🔧 第四轮修复](archive/FIXES_SUMMARY.md)
 
 ### ⚠️ 向后兼容性
 **5 个行为变化需要注意**:
@@ -338,7 +694,7 @@ pytest -q
 ### 📝 详细文档
 - [设计规范](superpowers/specs/2026-04-19-query-to-answer-ux-speed-design.md)
 - [运行时速度配置](runtime_speed_profiles.md)
-- [CHANGELOG.md](../CHANGELOG.md#024---2026-04-26)
+- [CHANGELOG.md](../CHANGELOG.md)
 
 ### 🚀 升级指南
 ```bash
@@ -378,7 +734,7 @@ pip install -e .
 - 更新开发启动指南
 
 ### 📝 详细文档
-- [CHANGELOG.md](../CHANGELOG.md#0221---2026-04-10)
+- [CHANGELOG.md](../CHANGELOG.md)
 
 ---
 
@@ -415,8 +771,8 @@ pip install -e .
 - 弹性测试套件
 
 ### 📝 详细文档
-- [CHANGELOG.md](../CHANGELOG.md#022---2026-04-09)
-- [生产就绪检查清单](production_readiness_checklist.md)
+- [CHANGELOG.md](../CHANGELOG.md)
+- [生产就绪检查清单](project/production_readiness_checklist.md)
 
 ---
 
@@ -448,8 +804,8 @@ RAG/Agent 运维控制，提供运行时配置能力。
 - **索引新鲜度跟踪**: 管理员新鲜度报告端点
 
 ### 📝 详细文档
-- [CHANGELOG.md](../CHANGELOG.md#021---2026-04-09)
-- [生产就绪检查清单](production_readiness_checklist.md)
+- [CHANGELOG.md](../CHANGELOG.md)
+- [生产就绪检查清单](project/production_readiness_checklist.md)
 
 ---
 
@@ -485,7 +841,7 @@ RAG/Agent 运维控制，提供运行时配置能力。
 - **审计覆盖**: 管理员和认证敏感操作
 
 ### 📝 详细文档
-- [CHANGELOG.md](../CHANGELOG.md#02---2026-04-08)
+- [CHANGELOG.md](../CHANGELOG.md)
 
 ---
 
@@ -527,7 +883,7 @@ RAG/Agent 运维控制，提供运行时配置能力。
 ### 📝 详细文档
 - [README.md](../README.md)
 - [CLAUDE.md](../CLAUDE.md)
-- [CHANGELOG.md](../CHANGELOG.md#010---2026-04-08)
+- [CHANGELOG.md](../CHANGELOG.md)
 
 ---
 
@@ -621,5 +977,5 @@ v0.1.0 → v0.2.5:
 ---
 
 **维护者**: Bronit Team  
-**最后更新**: 2026-04-27  
+**最后更新**: 2026-04-28  
 **文档版本**: v1.0

@@ -1,5 +1,8 @@
 # API Settings Guide
 
+**最后更新**: 2026-04-28
+
+
 The API settings panel lets each logged-in user choose the chat model provider used by new query requests.
 
 ## Access

@@ -1,0 +1,672 @@
+{
+  "timestamp": "2026-04-28T15:39:49.296722",
+  "stats": {
+    "total_files": 58,
+    "checked_files": 58,
+    "broken_links": 98,
+    "outdated_dates": 10,
+    "missing_metadata": 1
+  },
+  "issues": [
+    {
+      "type": "metadata",
+      "severity": "warning",
+      "file": "docs\\superpowers\\specs\\2026-04-19-query-to-answer-ux-speed-design.md",
+      "message": "文档缺少标题"
+    },
+    {
+      "type": "metadata",
+      "severity": "info",
+      "file": "docs\\superpowers\\specs\\2026-04-19-query-to-answer-ux-speed-design.md",
+      "message": "文档缺少更新日期"
+    },
+    {
+      "type": "link",
+      "severity": "error",
+      "file": "docs\\VERSION_RELEASE_QUICK_REFERENCE.md",
+      "message": "断开的链接: docs/VERSION_DOCUMENTATION_STANDARD.md -> C:\\Users\\pocheang\\Desktop\\llm\\multi_agent_rag_local_v4\\docs\\docs\\VERSION_DOCUMENTATION_STANDARD.md"
+    },
+    {
+      "type": "link",
+      "severity": "error",
+      "file": "docs\\VERSION_RELEASE_QUICK_REFERENCE.md",
+      "message": "断开的链接: docs/VERSION_DOCUMENTATION_GUIDE.md -> C:\\Users\\pocheang\\Desktop\\llm\\multi_agent_rag_local_v4\\docs\\docs\\VERSION_DOCUMENTATION_GUIDE.md"
+    },
+    {
+      "type": "link",
+      "severity": "error",
+      "file": "docs\\VERSION_RELEASE_QUICK_REFERENCE.md",
+      "message": "断开的链接: docs/VERSION_DOCUMENTATION_CHECKLIST.md -> C:\\Users\\pocheang\\Desktop\\llm\\multi_agent_rag_local_v4\\docs\\docs\\VERSION_DOCUMENTATION_CHECKLIST.md"
+    },
+    {
+      "type": "link",
+      "severity": "error",
+      "file": "docs\\archive\\DEEP_CODE_REVIEW_2026-04-27.md",
+      "message": "断开的链接: LOGIC_FIXES_2026-04-27.md -> C:\\Users\\pocheang\\Desktop\\llm\\multi_agent_rag_local_v4\\docs\\archive\\LOGIC_FIXES_2026-04-27.md"
+    },
+    {
+      "type": "link",
+      "severity": "error",
+      "file": "docs\\archive\\DOCUMENTATION_COMPLETENESS_REPORT.md",
+      "message": "断开的链接: ../CLAUDE.md -> C:\\Users\\pocheang\\Desktop\\llm\\multi_agent_rag_local_v4\\docs\\CLAUDE.md"
+    },
+    {
+      "type": "link",
+      "severity": "error",
+      "file": "docs\\archive\\DOCUMENTATION_COMPLETENESS_REPORT.md",
+      "message": "断开的链接: ../CHANGELOG.md -> C:\\Users\\pocheang\\Desktop\\llm\\multi_agent_rag_local_v4\\docs\\CHANGELOG.md"
+    },
+    {
+      "type": "link",
+      "severity": "error",
+      "file": "docs\\archive\\DOCUMENTATION_COMPLETENESS_REPORT.md",
+      "message": "断开的链接: VERSION_HISTORY.md -> C:\\Users\\pocheang\\Desktop\\llm\\multi_agent_rag_local_v4\\docs\\archive\\VERSION_HISTORY.md"
+    },
+    {
+      "type": "link",
+      "severity": "error",
+      "file": "docs\\archive\\DOCUMENTATION_COMPLETENESS_REPORT.md",
+      "message": "断开的链接: README.md -> C:\\Users\\pocheang\\Desktop\\llm\\multi_agent_rag_local_v4\\docs\\archive\\README.md"
+    },
+    {
+      "type": "link",
+      "severity": "error",
+      "file": "docs\\archive\\DOCUMENTATION_COMPLETENESS_REPORT.md",
+      "message": "断开的链接: README_CN.md -> C:\\Users\\pocheang\\Desktop\\llm\\multi_agent_rag_local_v4\\docs\\archive\\README_CN.md"
+    },
+    {
+      "type": "link",
+      "severity": "error",
+      "file": "docs\\archive\\DOCUMENTATION_COMPLETENESS_REPORT.md",
+      "message": "断开的链接: CHANGELOG_2026-04-27.md -> C:\\Users\\pocheang\\Desktop\\llm\\multi_agent_rag_local_v4\\docs\\archive\\CHANGELOG_2026-04-27.md"
+    },
+    {
+      "type": "link",
+      "severity": "error",
+      "file": "docs\\archive\\DOCUMENTATION_COMPLETENESS_REPORT.md",
+      "message": "断开的链接: FINAL_FIXES_SUMMARY_2026-04-27.md -> C:\\Users\\pocheang\\Desktop\\llm\\multi_agent_rag_local_v4\\docs\\archive\\FINAL_FIXES_SUMMARY_2026-04-27.md"
+    },
+    {
+      "type": "link",
+      "severity": "error",
+      "file": "docs\\archive\\DOCUMENTATION_COMPLETENESS_REPORT.md",
+      "message": "断开的链接: LOGIC_FIXES_2026-04-27.md -> C:\\Users\\pocheang\\Desktop\\llm\\multi_agent_rag_local_v4\\docs\\archive\\LOGIC_FIXES_2026-04-27.md"
+    },
+    {
+      "type": "link",
+      "severity": "error",
+      "file": "docs\\archive\\DOCUMENTATION_COMPLETENESS_REPORT.md",
+      "message": "断开的链接: FIXES_ROUND2_2026-04-27.md -> C:\\Users\\pocheang\\Desktop\\llm\\multi_agent_rag_local_v4\\docs\\archive\\FIXES_ROUND2_2026-04-27.md"
+    },
+    {
+      "type": "link",
+      "severity": "error",
+      "file": "docs\\archive\\DOCUMENTATION_COMPLETENESS_REPORT.md",
+      "message": "断开的链接: FIXES_ROUND3_2026-04-27.md -> C:\\Users\\pocheang\\Desktop\\llm\\multi_agent_rag_local_v4\\docs\\archive\\FIXES_ROUND3_2026-04-27.md"
+    },
+    {
+      "type": "link",
+      "severity": "error",
+      "file": "docs\\archive\\DOCUMENTATION_COMPLETENESS_REPORT.md",
+      "message": "断开的链接: FIXES_ROUND4_2026-04-27.md -> C:\\Users\\pocheang\\Desktop\\llm\\multi_agent_rag_local_v4\\docs\\archive\\FIXES_ROUND4_2026-04-27.md"
+    },
+    {
+      "type": "link",
+      "severity": "error",
+      "file": "docs\\archive\\DOCUMENTATION_COMPLETENESS_REPORT.md",
+      "message": "断开的链接: 2026-04-26-documentation-update-summary.md -> C:\\Users\\pocheang\\Desktop\\llm\\multi_agent_rag_local_v4\\docs\\archive\\2026-04-26-documentation-update-summary.md"
+    },
+    {
+      "type": "link",
+      "severity": "error",
+      "file": "docs\\archive\\DOCUMENTATION_COMPLETENESS_REPORT.md",
+      "message": "断开的链接: API_SETTINGS_GUIDE.md -> C:\\Users\\pocheang\\Desktop\\llm\\multi_agent_rag_local_v4\\docs\\archive\\API_SETTINGS_GUIDE.md"
+    },
+    {
+      "type": "link",
+      "severity": "error",
+      "file": "docs\\archive\\DOCUMENTATION_COMPLETENESS_REPORT.md",
+      "message": "断开的链接: 如何找到API设置.md -> C:\\Users\\pocheang\\Desktop\\llm\\multi_agent_rag_local_v4\\docs\\archive\\如何找到API设置.md"
+    },
+    {
+      "type": "link",
+      "severity": "error",
+      "file": "docs\\archive\\DOCUMENTATION_COMPLETENESS_REPORT.md",
+      "message": "断开的链接: claude-api-setup.md -> C:\\Users\\pocheang\\Desktop\\llm\\multi_agent_rag_local_v4\\docs\\archive\\claude-api-setup.md"
+    },
+    {
+      "type": "link",
+      "severity": "error",
+      "file": "docs\\archive\\DOCUMENTATION_COMPLETENESS_REPORT.md",
+      "message": "断开的链接: workflow_lowcode_setup.md -> C:\\Users\\pocheang\\Desktop\\llm\\multi_agent_rag_local_v4\\docs\\archive\\workflow_lowcode_setup.md"
+    },
+    {
+      "type": "link",
+      "severity": "error",
+      "file": "docs\\archive\\DOCUMENTATION_COMPLETENESS_REPORT.md",
+      "message": "断开的链接: PERFORMANCE_OPTIMIZATION.md -> C:\\Users\\pocheang\\Desktop\\llm\\multi_agent_rag_local_v4\\docs\\archive\\PERFORMANCE_OPTIMIZATION.md"
+    },
+    {
+      "type": "link",
+      "severity": "error",
+      "file": "docs\\archive\\DOCUMENTATION_COMPLETENESS_REPORT.md",
+      "message": "断开的链接: runtime_speed_profiles.md -> C:\\Users\\pocheang\\Desktop\\llm\\multi_agent_rag_local_v4\\docs\\archive\\runtime_speed_profiles.md"
+    },
+    {
+      "type": "link",
+      "severity": "error",
+      "file": "docs\\archive\\DOCUMENTATION_COMPLETENESS_REPORT.md",
+      "message": "断开的链接: superpowers/specs/2026-04-19-query-to-answer-ux-speed-design.md -> C:\\Users\\pocheang\\Desktop\\llm\\multi_agent_rag_local_v4\\docs\\archive\\superpowers\\specs\\2026-04-19-query-to-answer-ux-speed-design.md"
+    },
+    {
+      "type": "link",
+      "severity": "error",
+      "file": "docs\\archive\\DOCUMENTATION_COMPLETENESS_REPORT.md",
+      "message": "断开的链接: production_readiness_checklist.md -> C:\\Users\\pocheang\\Desktop\\llm\\multi_agent_rag_local_v4\\docs\\archive\\production_readiness_checklist.md"
+    },
+    {
+      "type": "link",
+      "severity": "error",
+      "file": "docs\\archive\\DOCUMENTATION_COMPLETENESS_REPORT.md",
+      "message": "断开的链接: 网络功能检查报告.md -> C:\\Users\\pocheang\\Desktop\\llm\\multi_agent_rag_local_v4\\docs\\archive\\网络功能检查报告.md"
+    },
+    {
+      "type": "link",
+      "severity": "error",
+      "file": "docs\\archive\\DOCUMENTATION_COMPLETENESS_REPORT.md",
+      "message": "断开的链接: DOCUMENTATION_STANDARD.md -> C:\\Users\\pocheang\\Desktop\\llm\\multi_agent_rag_local_v4\\docs\\archive\\DOCUMENTATION_STANDARD.md"
+    },
+    {
+      "type": "link",
+      "severity": "error",
+      "file": "docs\\archive\\DOCUMENTATION_COMPLETENESS_REPORT.md",
+      "message": "断开的链接: DOCUMENT_VERSION_CONTROL.md -> C:\\Users\\pocheang\\Desktop\\llm\\multi_agent_rag_local_v4\\docs\\archive\\DOCUMENT_VERSION_CONTROL.md"
+    },
+    {
+      "type": "link",
+      "severity": "error",
+      "file": "docs\\archive\\DOCUMENTATION_COMPLETENESS_REPORT.md",
+      "message": "断开的链接: DOCUMENTATION_MAINTENANCE.md -> C:\\Users\\pocheang\\Desktop\\llm\\multi_agent_rag_local_v4\\docs\\archive\\DOCUMENTATION_MAINTENANCE.md"
+    },
+    {
+      "type": "link",
+      "severity": "error",
+      "file": "docs\\archive\\DOCUMENTATION_COMPLETENESS_REPORT.md",
+      "message": "断开的链接: fixes/2026-04-26-routing-rag-fixes.md -> C:\\Users\\pocheang\\Desktop\\llm\\multi_agent_rag_local_v4\\docs\\archive\\fixes\\2026-04-26-routing-rag-fixes.md"
+    },
+    {
+      "type": "link",
+      "severity": "error",
+      "file": "docs\\archive\\FIXES_INDEX.md",
+      "message": "断开的链接: CHANGELOG_2026-04-27.md -> C:\\Users\\pocheang\\Desktop\\llm\\multi_agent_rag_local_v4\\docs\\archive\\CHANGELOG_2026-04-27.md"
+    },
+    {
+      "type": "link",
+      "severity": "error",
+      "file": "docs\\archive\\FIXES_INDEX.md",
+      "message": "断开的链接: FINAL_FIXES_SUMMARY_2026-04-27.md -> C:\\Users\\pocheang\\Desktop\\llm\\multi_agent_rag_local_v4\\docs\\archive\\FINAL_FIXES_SUMMARY_2026-04-27.md"
+    },
+    {
+      "type": "link",
+      "severity": "error",
+      "file": "docs\\archive\\FIXES_INDEX.md",
+      "message": "断开的链接: LOGIC_FIXES_2026-04-27.md -> C:\\Users\\pocheang\\Desktop\\llm\\multi_agent_rag_local_v4\\docs\\archive\\LOGIC_FIXES_2026-04-27.md"
+    },
+    {
+      "type": "link",
+      "severity": "error",
+      "file": "docs\\archive\\FIXES_INDEX.md",
+      "message": "断开的链接: FIXES_ROUND2_2026-04-27.md -> C:\\Users\\pocheang\\Desktop\\llm\\multi_agent_rag_local_v4\\docs\\archive\\FIXES_ROUND2_2026-04-27.md"
+    },
+    {
+      "type": "link",
+      "severity": "error",
+      "file": "docs\\archive\\FIXES_INDEX.md",
+      "message": "断开的链接: FIXES_ROUND3_2026-04-27.md -> C:\\Users\\pocheang\\Desktop\\llm\\multi_agent_rag_local_v4\\docs\\archive\\FIXES_ROUND3_2026-04-27.md"
+    },
+    {
+      "type": "link",
+      "severity": "error",
+      "file": "docs\\archive\\FIXES_INDEX.md",
+      "message": "断开的链接: FIXES_ROUND4_2026-04-27.md -> C:\\Users\\pocheang\\Desktop\\llm\\multi_agent_rag_local_v4\\docs\\archive\\FIXES_ROUND4_2026-04-27.md"
+    },
+    {
+      "type": "link",
+      "severity": "error",
+      "file": "docs\\archive\\FIXES_INDEX.md",
+      "message": "断开的链接: CHANGELOG_2026-04-27.md -> C:\\Users\\pocheang\\Desktop\\llm\\multi_agent_rag_local_v4\\docs\\archive\\CHANGELOG_2026-04-27.md"
+    },
+    {
+      "type": "link",
+      "severity": "error",
+      "file": "docs\\archive\\FIXES_INDEX.md",
+      "message": "断开的链接: CHANGELOG_2026-04-27.md -> C:\\Users\\pocheang\\Desktop\\llm\\multi_agent_rag_local_v4\\docs\\archive\\CHANGELOG_2026-04-27.md"
+    },
+    {
+      "type": "link",
+      "severity": "error",
+      "file": "docs\\archive\\FIXES_INDEX.md",
+      "message": "断开的链接: CHANGELOG_2026-04-27.md -> C:\\Users\\pocheang\\Desktop\\llm\\multi_agent_rag_local_v4\\docs\\archive\\CHANGELOG_2026-04-27.md"
+    },
+    {
+      "type": "link",
+      "severity": "error",
+      "file": "docs\\archive\\FIXES_INDEX.md",
+      "message": "断开的链接: CHANGELOG_2026-04-27.md -> C:\\Users\\pocheang\\Desktop\\llm\\multi_agent_rag_local_v4\\docs\\archive\\CHANGELOG_2026-04-27.md"
+    },
+    {
+      "type": "link",
+      "severity": "error",
+      "file": "docs\\archive\\FIXES_INDEX.md",
+      "message": "断开的链接: CHANGELOG_2026-04-27.md -> C:\\Users\\pocheang\\Desktop\\llm\\multi_agent_rag_local_v4\\docs\\archive\\CHANGELOG_2026-04-27.md"
+    },
+    {
+      "type": "link",
+      "severity": "error",
+      "file": "docs\\archive\\FIXES_INDEX.md",
+      "message": "断开的链接: LOGIC_FIXES_2026-04-27.md#1-检索策略参数传递不一致 -> C:\\Users\\pocheang\\Desktop\\llm\\multi_agent_rag_local_v4\\docs\\archive\\LOGIC_FIXES_2026-04-27.md#1-检索策略参数传递不一致"
+    },
+    {
+      "type": "link",
+      "severity": "error",
+      "file": "docs\\archive\\FIXES_INDEX.md",
+      "message": "断开的链接: LOGIC_FIXES_2026-04-27.md#2-hybrid-路由的并发执行逻辑错误 -> C:\\Users\\pocheang\\Desktop\\llm\\multi_agent_rag_local_v4\\docs\\archive\\LOGIC_FIXES_2026-04-27.md#2-hybrid-路由的并发执行逻辑错误"
+    },
+    {
+      "type": "link",
+      "severity": "error",
+      "file": "docs\\archive\\FIXES_INDEX.md",
+      "message": "断开的链接: LOGIC_FIXES_2026-04-27.md#3-路由决策与自适应规划的冲突 -> C:\\Users\\pocheang\\Desktop\\llm\\multi_agent_rag_local_v4\\docs\\archive\\LOGIC_FIXES_2026-04-27.md#3-路由决策与自适应规划的冲突"
+    },
+    {
+      "type": "link",
+      "severity": "error",
+      "file": "docs\\archive\\FIXES_INDEX.md",
+      "message": "断开的链接: LOGIC_FIXES_2026-04-27.md#4-证据充分性判断的循环依赖 -> C:\\Users\\pocheang\\Desktop\\llm\\multi_agent_rag_local_v4\\docs\\archive\\LOGIC_FIXES_2026-04-27.md#4-证据充分性判断的循环依赖"
+    },
+    {
+      "type": "link",
+      "severity": "error",
+      "file": "docs\\archive\\FIXES_INDEX.md",
+      "message": "断开的链接: LOGIC_FIXES_2026-04-27.md#5-query-rewrite-的变体去重缺失 -> C:\\Users\\pocheang\\Desktop\\llm\\multi_agent_rag_local_v4\\docs\\archive\\LOGIC_FIXES_2026-04-27.md#5-query-rewrite-的变体去重缺失"
+    },
+    {
+      "type": "link",
+      "severity": "error",
+      "file": "docs\\archive\\FIXES_INDEX.md",
+      "message": "断开的链接: LOGIC_FIXES_2026-04-27.md#6-parent-child-去重逻辑的分数更新不完整 -> C:\\Users\\pocheang\\Desktop\\llm\\multi_agent_rag_local_v4\\docs\\archive\\LOGIC_FIXES_2026-04-27.md#6-parent-child-去重逻辑的分数更新不完整"
+    },
+    {
+      "type": "link",
+      "severity": "error",
+      "file": "docs\\archive\\FIXES_INDEX.md",
+      "message": "断开的链接: FIXES_ROUND2_2026-04-27.md#4-reranker-的-lexical-fallback-分数计算不一致 -> C:\\Users\\pocheang\\Desktop\\llm\\multi_agent_rag_local_v4\\docs\\archive\\FIXES_ROUND2_2026-04-27.md#4-reranker-的-lexical-fallback-分数计算不一致"
+    },
+    {
+      "type": "link",
+      "severity": "error",
+      "file": "docs\\archive\\FIXES_INDEX.md",
+      "message": "断开的链接: FIXES_ROUND3_2026-04-27.md#1-graph-signal-score-的计算优化 -> C:\\Users\\pocheang\\Desktop\\llm\\multi_agent_rag_local_v4\\docs\\archive\\FIXES_ROUND3_2026-04-27.md#1-graph-signal-score-的计算优化"
+    },
+    {
+      "type": "link",
+      "severity": "error",
+      "file": "docs\\archive\\FIXES_INDEX.md",
+      "message": "断开的链接: FIXES_ROUND2_2026-04-27.md#1-query-rewrite-的-llm-调用没有超时控制 -> C:\\Users\\pocheang\\Desktop\\llm\\multi_agent_rag_local_v4\\docs\\archive\\FIXES_ROUND2_2026-04-27.md#1-query-rewrite-的-llm-调用没有超时控制"
+    },
+    {
+      "type": "link",
+      "severity": "error",
+      "file": "docs\\archive\\FIXES_INDEX.md",
+      "message": "断开的链接: FIXES_ROUND2_2026-04-27.md#3-hybrid-executor-的-future-取消不完整 -> C:\\Users\\pocheang\\Desktop\\llm\\multi_agent_rag_local_v4\\docs\\archive\\FIXES_ROUND2_2026-04-27.md#3-hybrid-executor-的-future-取消不完整"
+    },
+    {
+      "type": "link",
+      "severity": "error",
+      "file": "docs\\archive\\FIXES_INDEX.md",
+      "message": "断开的链接: FIXES_ROUND4_2026-04-27.md -> C:\\Users\\pocheang\\Desktop\\llm\\multi_agent_rag_local_v4\\docs\\archive\\FIXES_ROUND4_2026-04-27.md"
+    },
+    {
+      "type": "link",
+      "severity": "error",
+      "file": "docs\\archive\\FIXES_INDEX.md",
+      "message": "断开的链接: FIXES_ROUND2_2026-04-27.md#2-state-访问的-keyerror-风险 -> C:\\Users\\pocheang\\Desktop\\llm\\multi_agent_rag_local_v4\\docs\\archive\\FIXES_ROUND2_2026-04-27.md#2-state-访问的-keyerror-风险"
+    },
+    {
+      "type": "link",
+      "severity": "error",
+      "file": "docs\\archive\\FIXES_INDEX.md",
+      "message": "断开的链接: LOGIC_FIXES_2026-04-27.md#8-web-fallback-的语义混淆 -> C:\\Users\\pocheang\\Desktop\\llm\\multi_agent_rag_local_v4\\docs\\archive\\LOGIC_FIXES_2026-04-27.md#8-web-fallback-的语义混淆"
+    },
+    {
+      "type": "link",
+      "severity": "error",
+      "file": "docs\\archive\\FIXES_INDEX.md",
+      "message": "断开的链接: FIXES_ROUND2_2026-04-27.md#6-web-research-的-domain-allowlist-逻辑明确化 -> C:\\Users\\pocheang\\Desktop\\llm\\multi_agent_rag_local_v4\\docs\\archive\\FIXES_ROUND2_2026-04-27.md#6-web-research-的-domain-allowlist-逻辑明确化"
+    },
+    {
+      "type": "link",
+      "severity": "error",
+      "file": "docs\\archive\\FIXES_INDEX.md",
+      "message": "断开的链接: LOGIC_FIXES_2026-04-27.md#7-闲聊快速路径的状态不一致 -> C:\\Users\\pocheang\\Desktop\\llm\\multi_agent_rag_local_v4\\docs\\archive\\LOGIC_FIXES_2026-04-27.md#7-闲聊快速路径的状态不一致"
+    },
+    {
+      "type": "link",
+      "severity": "error",
+      "file": "docs\\archive\\FIXES_INDEX.md",
+      "message": "断开的链接: FIXES_ROUND2_2026-04-27.md#5-citation-grounding-的句子分割改进 -> C:\\Users\\pocheang\\Desktop\\llm\\multi_agent_rag_local_v4\\docs\\archive\\FIXES_ROUND2_2026-04-27.md#5-citation-grounding-的句子分割改进"
+    },
+    {
+      "type": "link",
+      "severity": "error",
+      "file": "docs\\archive\\FIXES_INDEX.md",
+      "message": "断开的链接: FIXES_ROUND3_2026-04-27.md#2-neo4j-allowed_sources-过滤验证 -> C:\\Users\\pocheang\\Desktop\\llm\\multi_agent_rag_local_v4\\docs\\archive\\FIXES_ROUND3_2026-04-27.md#2-neo4j-allowed_sources-过滤验证"
+    },
+    {
+      "type": "link",
+      "severity": "error",
+      "file": "docs\\archive\\FIXES_INDEX.md",
+      "message": "断开的链接: FIXES_ROUND3_2026-04-27.md#3-bm25-检索的-allowed_sources-过滤说明 -> C:\\Users\\pocheang\\Desktop\\llm\\multi_agent_rag_local_v4\\docs\\archive\\FIXES_ROUND3_2026-04-27.md#3-bm25-检索的-allowed_sources-过滤说明"
+    },
+    {
+      "type": "link",
+      "severity": "error",
+      "file": "docs\\archive\\FIXES_INDEX.md",
+      "message": "断开的链接: CHANGELOG_2026-04-27.md -> C:\\Users\\pocheang\\Desktop\\llm\\multi_agent_rag_local_v4\\docs\\archive\\CHANGELOG_2026-04-27.md"
+    },
+    {
+      "type": "link",
+      "severity": "error",
+      "file": "docs\\archive\\FIXES_INDEX.md",
+      "message": "断开的链接: FINAL_FIXES_SUMMARY_2026-04-27.md -> C:\\Users\\pocheang\\Desktop\\llm\\multi_agent_rag_local_v4\\docs\\archive\\FINAL_FIXES_SUMMARY_2026-04-27.md"
+    },
+    {
+      "type": "link",
+      "severity": "error",
+      "file": "docs\\archive\\FIXES_INDEX.md",
+      "message": "断开的链接: LOGIC_FIXES_2026-04-27.md -> C:\\Users\\pocheang\\Desktop\\llm\\multi_agent_rag_local_v4\\docs\\archive\\LOGIC_FIXES_2026-04-27.md"
+    },
+    {
+      "type": "link",
+      "severity": "error",
+      "file": "docs\\archive\\FIXES_INDEX.md",
+      "message": "断开的链接: FIXES_ROUND2_2026-04-27.md -> C:\\Users\\pocheang\\Desktop\\llm\\multi_agent_rag_local_v4\\docs\\archive\\FIXES_ROUND2_2026-04-27.md"
+    },
+    {
+      "type": "link",
+      "severity": "error",
+      "file": "docs\\archive\\FIXES_INDEX.md",
+      "message": "断开的链接: FIXES_ROUND3_2026-04-27.md -> C:\\Users\\pocheang\\Desktop\\llm\\multi_agent_rag_local_v4\\docs\\archive\\FIXES_ROUND3_2026-04-27.md"
+    },
+    {
+      "type": "link",
+      "severity": "error",
+      "file": "docs\\archive\\FIXES_INDEX.md",
+      "message": "断开的链接: FIXES_ROUND4_2026-04-27.md -> C:\\Users\\pocheang\\Desktop\\llm\\multi_agent_rag_local_v4\\docs\\archive\\FIXES_ROUND4_2026-04-27.md"
+    },
+    {
+      "type": "link",
+      "severity": "error",
+      "file": "docs\\archive\\FIXES_INDEX.md",
+      "message": "断开的链接: ../tests/test_workflow_fixes.py -> C:\\Users\\pocheang\\Desktop\\llm\\multi_agent_rag_local_v4\\docs\\tests\\test_workflow_fixes.py"
+    },
+    {
+      "type": "link",
+      "severity": "error",
+      "file": "docs\\archive\\FIXES_INDEX.md",
+      "message": "断开的链接: ../tests/test_adaptive_rag_policy.py -> C:\\Users\\pocheang\\Desktop\\llm\\multi_agent_rag_local_v4\\docs\\tests\\test_adaptive_rag_policy.py"
+    },
+    {
+      "type": "link",
+      "severity": "error",
+      "file": "docs\\archive\\FIXES_INDEX.md",
+      "message": "断开的链接: ../tests/test_hybrid_parent_backfill.py -> C:\\Users\\pocheang\\Desktop\\llm\\multi_agent_rag_local_v4\\docs\\tests\\test_hybrid_parent_backfill.py"
+    },
+    {
+      "type": "link",
+      "severity": "error",
+      "file": "docs\\archive\\FIXES_INDEX.md",
+      "message": "断开的链接: ../tests/test_resilience.py -> C:\\Users\\pocheang\\Desktop\\llm\\multi_agent_rag_local_v4\\docs\\tests\\test_resilience.py"
+    },
+    {
+      "type": "link",
+      "severity": "error",
+      "file": "docs\\archive\\FIXES_INDEX.md",
+      "message": "断开的链接: ../CLAUDE.md -> C:\\Users\\pocheang\\Desktop\\llm\\multi_agent_rag_local_v4\\docs\\CLAUDE.md"
+    },
+    {
+      "type": "link",
+      "severity": "error",
+      "file": "docs\\archive\\FIXES_INDEX.md",
+      "message": "断开的链接: ../CLAUDE.md -> C:\\Users\\pocheang\\Desktop\\llm\\multi_agent_rag_local_v4\\docs\\CLAUDE.md"
+    },
+    {
+      "type": "link",
+      "severity": "error",
+      "file": "docs\\archive\\GITHUB_RELEASE_v0.2.5.md",
+      "message": "断开的链接: docs/CHANGELOG_2026-04-27.md -> C:\\Users\\pocheang\\Desktop\\llm\\multi_agent_rag_local_v4\\docs\\archive\\docs\\CHANGELOG_2026-04-27.md"
+    },
+    {
+      "type": "link",
+      "severity": "error",
+      "file": "docs\\archive\\GITHUB_RELEASE_v0.2.5.md",
+      "message": "断开的链接: docs/FINAL_FIXES_SUMMARY_2026-04-27.md -> C:\\Users\\pocheang\\Desktop\\llm\\multi_agent_rag_local_v4\\docs\\archive\\docs\\FINAL_FIXES_SUMMARY_2026-04-27.md"
+    },
+    {
+      "type": "link",
+      "severity": "error",
+      "file": "docs\\archive\\GITHUB_RELEASE_v0.2.5.md",
+      "message": "断开的链接: docs/FIXES_INDEX.md -> C:\\Users\\pocheang\\Desktop\\llm\\multi_agent_rag_local_v4\\docs\\archive\\docs\\FIXES_INDEX.md"
+    },
+    {
+      "type": "link",
+      "severity": "error",
+      "file": "docs\\archive\\GITHUB_RELEASE_v0.2.5.md",
+      "message": "断开的链接: docs/DEEP_CODE_REVIEW_2026-04-27.md -> C:\\Users\\pocheang\\Desktop\\llm\\multi_agent_rag_local_v4\\docs\\archive\\docs\\DEEP_CODE_REVIEW_2026-04-27.md"
+    },
+    {
+      "type": "link",
+      "severity": "error",
+      "file": "docs\\archive\\GITHUB_RELEASE_v0.2.5.md",
+      "message": "断开的链接: docs/VERSION_HISTORY.md -> C:\\Users\\pocheang\\Desktop\\llm\\multi_agent_rag_local_v4\\docs\\archive\\docs\\VERSION_HISTORY.md"
+    },
+    {
+      "type": "link",
+      "severity": "error",
+      "file": "docs\\archive\\GITHUB_RELEASE_v0.2.5.md",
+      "message": "断开的链接: docs/RELEASE_SUMMARY_v0.2.5.md -> C:\\Users\\pocheang\\Desktop\\llm\\multi_agent_rag_local_v4\\docs\\archive\\docs\\RELEASE_SUMMARY_v0.2.5.md"
+    },
+    {
+      "type": "link",
+      "severity": "error",
+      "file": "docs\\archive\\GITHUB_RELEASE_v0.2.5.md",
+      "message": "断开的链接: docs/REFACTORING_PLAN.md -> C:\\Users\\pocheang\\Desktop\\llm\\multi_agent_rag_local_v4\\docs\\archive\\docs\\REFACTORING_PLAN.md"
+    },
+    {
+      "type": "link",
+      "severity": "error",
+      "file": "docs\\archive\\GITHUB_RELEASE_v0.2.5.md",
+      "message": "断开的链接: README.md -> C:\\Users\\pocheang\\Desktop\\llm\\multi_agent_rag_local_v4\\docs\\archive\\README.md"
+    },
+    {
+      "type": "link",
+      "severity": "error",
+      "file": "docs\\archive\\GITHUB_RELEASE_v0.2.5.md",
+      "message": "断开的链接: CLAUDE.md -> C:\\Users\\pocheang\\Desktop\\llm\\multi_agent_rag_local_v4\\docs\\archive\\CLAUDE.md"
+    },
+    {
+      "type": "link",
+      "severity": "error",
+      "file": "docs\\archive\\REFACTORING_COMPLETE_v0.3.0.md",
+      "message": "断开的链接: REFACTORING_PLAN.md -> C:\\Users\\pocheang\\Desktop\\llm\\multi_agent_rag_local_v4\\docs\\archive\\REFACTORING_PLAN.md"
+    },
+    {
+      "type": "link",
+      "severity": "error",
+      "file": "docs\\archive\\REFACTORING_COMPLETE_v0.3.0.md",
+      "message": "断开的链接: ../CLAUDE.md -> C:\\Users\\pocheang\\Desktop\\llm\\multi_agent_rag_local_v4\\docs\\CLAUDE.md"
+    },
+    {
+      "type": "link",
+      "severity": "error",
+      "file": "docs\\archive\\V0.2.4_COMPLETION_REPORT.md",
+      "message": "断开的链接: ../docs/design/specs/2026-04-19-query-to-answer-ux-speed-design.md -> C:\\Users\\pocheang\\Desktop\\llm\\multi_agent_rag_local_v4\\docs\\docs\\design\\specs\\2026-04-19-query-to-answer-ux-speed-design.md"
+    },
+    {
+      "type": "link",
+      "severity": "error",
+      "file": "docs\\archive\\V0.2.4_COMPLETION_REPORT.md",
+      "message": "断开的链接: ../docs/runtime_speed_profiles.md -> C:\\Users\\pocheang\\Desktop\\llm\\multi_agent_rag_local_v4\\docs\\docs\\runtime_speed_profiles.md"
+    },
+    {
+      "type": "link",
+      "severity": "error",
+      "file": "docs\\archive\\V0.3.0_RELEASE_NOTES.md",
+      "message": "断开的链接: docs/archive/REFACTORING_SUMMARY.md -> C:\\Users\\pocheang\\Desktop\\llm\\multi_agent_rag_local_v4\\docs\\archive\\docs\\archive\\REFACTORING_SUMMARY.md"
+    },
+    {
+      "type": "link",
+      "severity": "error",
+      "file": "docs\\archive\\V0.3.0_RELEASE_NOTES.md",
+      "message": "断开的链接: docs/archive/FIXES_SUMMARY.md -> C:\\Users\\pocheang\\Desktop\\llm\\multi_agent_rag_local_v4\\docs\\archive\\docs\\archive\\FIXES_SUMMARY.md"
+    },
+    {
+      "type": "link",
+      "severity": "error",
+      "file": "docs\\archive\\V0.3.0_RELEASE_NOTES.md",
+      "message": "断开的链接: docs/archive/V0.3.0_SUMMARY.md -> C:\\Users\\pocheang\\Desktop\\llm\\multi_agent_rag_local_v4\\docs\\archive\\docs\\archive\\V0.3.0_SUMMARY.md"
+    },
+    {
+      "type": "link",
+      "severity": "error",
+      "file": "docs\\archive\\V0.3.0_RELEASE_NOTES.md",
+      "message": "断开的链接: CHANGELOG.md -> C:\\Users\\pocheang\\Desktop\\llm\\multi_agent_rag_local_v4\\docs\\archive\\CHANGELOG.md"
+    },
+    {
+      "type": "link",
+      "severity": "error",
+      "file": "docs\\plans\\V0.3.1.1_PLAN.md",
+      "message": "断开的链接: ../archive/RELEASE_v0.3.1.md -> C:\\Users\\pocheang\\Desktop\\llm\\multi_agent_rag_local_v4\\docs\\archive\\RELEASE_v0.3.1.md"
+    },
+    {
+      "type": "link",
+      "severity": "error",
+      "file": "docs\\plans\\V0.3.1.1_PLAN.md",
+      "message": "断开的链接: ../../README.md#api-structure -> C:\\Users\\pocheang\\Desktop\\llm\\multi_agent_rag_local_v4\\README.md#api-structure"
+    },
+    {
+      "type": "link",
+      "severity": "error",
+      "file": "docs\\security\\ADMIN_USERS_FIX_PLAN.md",
+      "message": "断开的链接: ../tests/test_admin_security.py -> C:\\Users\\pocheang\\Desktop\\llm\\multi_agent_rag_local_v4\\docs\\tests\\test_admin_security.py"
+    },
+    {
+      "type": "link",
+      "severity": "error",
+      "file": "docs\\security\\ADMIN_USERS_FIX_PLAN.md",
+      "message": "断开的链接: ../operations/DEPLOYMENT_GUIDE.md -> C:\\Users\\pocheang\\Desktop\\llm\\multi_agent_rag_local_v4\\docs\\operations\\DEPLOYMENT_GUIDE.md"
+    },
+    {
+      "type": "link",
+      "severity": "error",
+      "file": "docs\\security\\ADMIN_USERS_FIX_PLAN.md",
+      "message": "断开的链接: ../operations/ROLLBACK_PROCEDURE.md -> C:\\Users\\pocheang\\Desktop\\llm\\multi_agent_rag_local_v4\\docs\\operations\\ROLLBACK_PROCEDURE.md"
+    },
+    {
+      "type": "link",
+      "severity": "error",
+      "file": "docs\\templates\\FIXES_REPORT_TEMPLATE.md",
+      "message": "断开的链接: link -> C:\\Users\\pocheang\\Desktop\\llm\\multi_agent_rag_local_v4\\docs\\templates\\link"
+    },
+    {
+      "type": "link",
+      "severity": "error",
+      "file": "docs\\templates\\FIXES_REPORT_TEMPLATE.md",
+      "message": "断开的链接: link -> C:\\Users\\pocheang\\Desktop\\llm\\multi_agent_rag_local_v4\\docs\\templates\\link"
+    },
+    {
+      "type": "link",
+      "severity": "error",
+      "file": "docs\\templates\\FIXES_REPORT_TEMPLATE.md",
+      "message": "断开的链接: link -> C:\\Users\\pocheang\\Desktop\\llm\\multi_agent_rag_local_v4\\docs\\templates\\link"
+    },
+    {
+      "type": "link",
+      "severity": "error",
+      "file": "docs\\templates\\FIXES_REPORT_TEMPLATE.md",
+      "message": "断开的链接: link -> C:\\Users\\pocheang\\Desktop\\llm\\multi_agent_rag_local_v4\\docs\\templates\\link"
+    },
+    {
+      "type": "link",
+      "severity": "error",
+      "file": "docs\\templates\\FIXES_REPORT_TEMPLATE.md",
+      "message": "断开的链接: link -> C:\\Users\\pocheang\\Desktop\\llm\\multi_agent_rag_local_v4\\docs\\templates\\link"
+    },
+    {
+      "type": "link",
+      "severity": "error",
+      "file": "docs\\templates\\FIXES_REPORT_TEMPLATE.md",
+      "message": "断开的链接: link -> C:\\Users\\pocheang\\Desktop\\llm\\multi_agent_rag_local_v4\\docs\\templates\\link"
+    },
+    {
+      "type": "date",
+      "severity": "warning",
+      "file": "docs\\DOCUMENTATION_ORGANIZATION_SUMMARY.md",
+      "message": "发现未来日期: 2026-07-27"
+    },
+    {
+      "type": "date",
+      "severity": "warning",
+      "file": "docs\\DOCUMENTATION_UPDATE_REPORT.md",
+      "message": "发现未来日期: 2026-07-27"
+    },
+    {
+      "type": "date",
+      "severity": "warning",
+      "file": "docs\\DOCUMENTATION_UPDATE_REPORT.md",
+      "message": "发现未来日期: 2026-07-28"
+    },
+    {
+      "type": "date",
+      "severity": "warning",
+      "file": "docs\\DOCUMENTATION_UPDATE_REPORT.md",
+      "message": "发现未来日期: 2026-07-28"
+    },
+    {
+      "type": "date",
+      "severity": "warning",
+      "file": "docs\\DOCUMENTATION_UPDATE_REPORT.md",
+      "message": "发现未来日期: 2026-05-27"
+    },
+    {
+      "type": "date",
+      "severity": "warning",
+      "file": "docs\\DOCUMENTATION_UPDATE_REPORT.md",
+      "message": "发现未来日期: 2026-04-29"
+    },
+    {
+      "type": "date",
+      "severity": "warning",
+      "file": "docs\\VERSION_DOCUMENTATION_GUIDE.md",
+      "message": "发现未来日期: 2026-07-28"
+    },
+    {
+      "type": "date",
+      "severity": "warning",
+      "file": "docs\\VERSION_DOCUMENTATION_STANDARD.md",
+      "message": "发现未来日期: 2026-07-28"
+    },
+    {
+      "type": "date",
+      "severity": "warning",
+      "file": "docs\\archive\\DOCUMENTATION_COMPLETENESS_REPORT.md",
+      "message": "发现未来日期: 2026-05-27"
+    },
+    {
+      "type": "date",
+      "severity": "warning",
+      "file": "docs\\archive\\V0.3.1.2_COMPLETION_REPORT.md",
+      "message": "发现未来日期: 2026-04-29"
+    }
+  ]
+}

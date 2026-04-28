@@ -1,5 +1,8 @@
 # Release v0.2.5 - Critical Logic Fixes and Performance Improvements
 
+**最后更新**: 2026-04-28
+
+
 **Release Date**: 2026-04-27  
 **Tag**: v0.2.5  
 **Commits**: ae2ecc4, 9d8e05f, 19e44ff

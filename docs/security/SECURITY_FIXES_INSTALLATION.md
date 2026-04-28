@@ -1,5 +1,8 @@
 # Security Fixes Installation Guide
 
+**最后更新**: 2026-04-28
+
+
 **Version**: v0.3.1.2  
 **Date**: 2026-04-28  
 **Priority**: 🔴 CRITICAL

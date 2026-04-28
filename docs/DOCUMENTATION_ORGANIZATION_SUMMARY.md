@@ -160,22 +160,22 @@
 
 ### 👤 新项目成员
 1. 阅读 [README.md](README.md)
-2. 阅读 [docs/README.md](docs/README.md)
-3. 阅读 [docs/project/production_readiness_checklist.md](docs/project/production_readiness_checklist.md)
+2. 阅读 [docs/README.md](README.md)
+3. 阅读 [docs/project/production_readiness_checklist.md](project/production_readiness_checklist.md)
 
 ### 🚀 部署和运维
-- [docs/project/production_readiness_checklist.md](docs/project/production_readiness_checklist.md) - 部署检查清单
-- [docs/PERFORMANCE_OPTIMIZATION.md](docs/PERFORMANCE_OPTIMIZATION.md) - 性能优化
-- [docs/API_SETTINGS_GUIDE.md](docs/API_SETTINGS_GUIDE.md) - 配置参考
+- [docs/project/production_readiness_checklist.md](project/production_readiness_checklist.md) - 部署检查清单
+- [docs/PERFORMANCE_OPTIMIZATION.md](PERFORMANCE_OPTIMIZATION.md) - 性能优化
+- [docs/API_SETTINGS_GUIDE.md](API_SETTINGS_GUIDE.md) - 配置参考
 
 ### 👨‍💻 开发和贡献
-- [CLAUDE.md](CLAUDE.md) - 开发指南
-- [docs/DOCUMENTATION_STANDARD.md](docs/DOCUMENTATION_STANDARD.md) - 文档标准
-- [docs/DOCUMENTATION_MAINTENANCE.md](docs/DOCUMENTATION_MAINTENANCE.md) - 维护流程
+- [CLAUDE.md](../CLAUDE.md) - 开发指南
+- [docs/DOCUMENTATION_STANDARD.md](DOCUMENTATION_STANDARD.md) - 文档标准
+- [docs/DOCUMENTATION_MAINTENANCE.md](DOCUMENTATION_MAINTENANCE.md) - 维护流程
 
 ### 📚 历史和审计
-- [docs/ARCHIVE_REFERENCE.md](docs/ARCHIVE_REFERENCE.md) - 历史文档索引
-- [docs/archive/](docs/archive/) - 所有历史文档
+- [docs/ARCHIVE_REFERENCE.md](ARCHIVE_REFERENCE.md) - 历史文档索引
+- [docs/archive/](archive/) - 所有历史文档
 
 ---
 

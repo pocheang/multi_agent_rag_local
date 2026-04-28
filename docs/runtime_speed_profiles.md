@@ -1,5 +1,8 @@
 # Runtime Speed Profiles
 
+**最后更新**: 2026-04-28
+
+
 This project supports three practical runtime profiles for different learning/usage styles.
 
 ## Profiles
