@@ -125,20 +125,6 @@ Queries are automatically classified into three tiers based on complexity:
 
 **Load-Based Degradation**: System automatically downgrades tiers when load >80% for stability.
 
-## 📸 Screenshots
-
-### Login Page
-![Login Page](docs/images/01-login-page.png)
-
-### Chat Interface
-![Chat Interface](docs/images/02-chat-interface.png)
-
-### Admin Panel
-![Admin Panel](docs/images/03-admin-panel.png)
-
-### API Documentation (FastAPI Swagger)
-![API Docs](docs/images/04-api-docs.png)
-
 ## 🚀 Quick Start
 
 ### Prerequisites
@@ -448,4 +434,4 @@ For issues, questions, or contributions, please visit:
 
 ---
 
-**Made with ❤️ by the Multi-Agent RAG Team**
+**Made with ❤️ by the Bronit Team**
