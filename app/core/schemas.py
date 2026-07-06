@@ -268,7 +268,7 @@ class UserApiSettings(BaseModel):
     base_url: str = Field(default="", description="Base URL for API")
     model: str = Field(default="", description="Model name")
     temperature: float = Field(default=0.7, ge=0.0, le=2.0, description="Temperature")
-    max_tokens: int = Field(default=2048, ge=256, le=8192, description="Max tokens")
+    max_tokens: int = Field(default=2048, ge=256, le=131072, description="Max tokens")
 
 
 class UserApiSettingsView(BaseModel):
@@ -279,7 +279,12 @@ class UserApiSettingsView(BaseModel):
     base_url: str = Field(default="", description="Base URL for API")
     model: str = Field(default="", description="Model name")
     temperature: float = Field(default=0.7, ge=0.0, le=2.0, description="Temperature")
-    max_tokens: int = Field(default=2048, ge=256, le=8192, description="Max tokens")
+    max_tokens: int = Field(default=2048, ge=256, le=131072, description="Max tokens")
+    global_override_enabled: bool = False
+    global_provider: str | None = None
+    global_model: str | None = None
+    effective_provider: str = ""
+    effective_model: str = ""
 
 
 class UserApiSettingsResponse(BaseModel):
@@ -297,6 +302,31 @@ class UserApiSettingsTestResponse(BaseModel):
     preview: str = ""
 
 
+class ModelCatalogItem(BaseModel):
+    id: str
+    label: str
+    roles: list[str] = Field(default_factory=list)
+    recommended: bool = False
+    deprecated_after: str | None = None
+
+
+class ProviderCatalogEntry(BaseModel):
+    label: str
+    base_url: str = ""
+    default_chat_model: str = ""
+    default_reasoning_model: str = ""
+    default_embedding_model: str = ""
+    requires_api_key: bool = False
+    supports_embeddings: bool = False
+    api_style: str
+    note: str = ""
+    models: list[ModelCatalogItem] = Field(default_factory=list)
+
+
+class ModelCatalogResponse(BaseModel):
+    version: str
+    providers: dict[str, ProviderCatalogEntry]
+
 class AdminModelSettings(BaseModel):
     enabled: bool = Field(
         default=False, description="Apply this global model config to users without personal overrides"
@@ -310,7 +340,7 @@ class AdminModelSettings(BaseModel):
     reasoning_model: str = Field(default="", description="Reasoning model name")
     embedding_model: str = Field(default="", description="Embedding model name")
     temperature: float = Field(default=0.7, ge=0.0, le=2.0, description="Temperature")
-    max_tokens: int = Field(default=2048, ge=256, le=8192, description="Max tokens")
+    max_tokens: int = Field(default=2048, ge=256, le=131072, description="Max tokens")
 
 
 class AdminModelSettingsView(BaseModel):
@@ -322,7 +352,7 @@ class AdminModelSettingsView(BaseModel):
     reasoning_model: str = ""
     embedding_model: str = ""
     temperature: float = Field(default=0.7, ge=0.0, le=2.0)
-    max_tokens: int = Field(default=2048, ge=256, le=8192)
+    max_tokens: int = Field(default=2048, ge=256, le=131072)
     embedding_reindexed: bool = False
     records_reindexed: int = 0
 

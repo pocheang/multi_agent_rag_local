@@ -4,7 +4,7 @@ import { useTranslation } from "react-i18next";
 import "@/styles/pages/landing-entry.css";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { LanguageToggle } from "@/components/LanguageToggle";
-import { DataFlowVisualization } from "../components/DataFlowVisualization";
+import { DataFlowVisualization } from "@/components/DataFlowVisualization";
 
 interface LandingPageProps {
   isLoggedIn: boolean;
@@ -448,14 +448,14 @@ export function LandingPage({ isLoggedIn, themeLabel, onThemeToggle }: LandingPa
                 </svg>
               </Link>
             ) : (
-              <div style={{ display: "flex", gap: "var(--space-4)", justifyContent: "center" }}>
+              <div className="landing-cta-actions">
                 <Link to="/app/login?mode=login" className="landing-hero-btn secondary">
                   {t("auth.loginButton")}
                   <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
                     <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3" />
                   </svg>
                 </Link>
-                <Link to="/app/login?mode=register" className="landing-hero-btn" style={{ border: "1px solid white", color: "white" }}>
+                <Link to="/app/login?mode=register" className="landing-hero-btn landing-hero-btn-light-outline">
                   {t("pages.landing.register")}
                 </Link>
               </div>

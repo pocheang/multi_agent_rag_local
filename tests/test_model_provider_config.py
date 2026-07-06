@@ -5,9 +5,11 @@ from app.core.models import (
     OutboundRedactedChatModel,
     OutboundRedactedEmbeddings,
     _build_chat_model_cached,
+    _global_embedding_override,
     get_chat_model,
 )
 from app.core.schemas import AdminModelSettings, UserApiSettings
+from app.services.model_catalog import get_model_catalog, provider_defaults
 from app.services.model_config_store import default_global_model_settings
 from app.services.network_security import validate_api_base_url_for_provider
 from app.services.request_context import request_context
@@ -41,7 +43,7 @@ def test_global_model_settings_default_uses_local_provider(monkeypatch):
             anthropic_chat_model="claude-opus-4-8",
             openai_chat_model="gpt-5.5",
             ollama_reasoning_model="deepseek-r1:32b",
-            openai_reasoning_model="gpt-5.5-thinking",
+            openai_reasoning_model="gpt-5.5",
             anthropic_reasoning_model="claude-opus-4-8",
             ollama_embed_model="nomic-embed-text",
             openai_embed_model="text-embedding-3-small",
@@ -203,3 +205,30 @@ def test_outbound_redacted_embeddings_masks_texts_before_embedding():
     assert "alice@example.com" not in seen["texts"][0]
     assert "/srv/ops.txt" not in seen["texts"][1]
     assert "sk-test-123456" not in seen["query"]
+
+
+def test_current_cloud_provider_catalog_uses_official_model_ids():
+    catalog = get_model_catalog()
+
+    assert provider_defaults("openai")["chat_model"] == "gpt-5.5"
+    assert provider_defaults("openai")["reasoning_model"] == "gpt-5.5"
+    assert provider_defaults("deepseek")["chat_model"] == "deepseek-v4-flash"
+    assert provider_defaults("deepseek")["reasoning_model"] == "deepseek-v4-pro"
+    assert provider_defaults("anthropic")["chat_model"] == "claude-sonnet-5"
+    assert catalog["deepseek"]["supports_embeddings"] is False
+    assert catalog["anthropic"]["supports_embeddings"] is False
+
+
+def test_non_embedding_cloud_provider_keeps_existing_embedding_pipeline(monkeypatch):
+    monkeypatch.setattr(
+        "app.core.models.get_global_model_settings",
+        lambda: {
+            "enabled": True,
+            "provider": "deepseek",
+            "api_key": "sk-test",
+            "base_url": "https://api.deepseek.com/v1",
+            "embedding_model": "",
+        },
+    )
+
+    assert _global_embedding_override() == {}

@@ -2,7 +2,7 @@ import { useTranslation } from "react-i18next";
 import { Link } from "react-router-dom";
 import { LanguageToggle } from "@/components/LanguageToggle";
 import { getThemeIcon } from "@/lib/theme";
-import { usePermissions, RoleBadge, type User } from "@/hooks/usePermissions";
+import { RoleBadge, type User } from "@/hooks/usePermissions";
 
 type Props = {
   themeLabel: string;
@@ -23,7 +23,6 @@ export function ChatTopbar({
 }: Props) {
   const { t } = useTranslation();
   const themeIcon = getThemeIcon(themeLabel);
-  const permissions = usePermissions(user);
 
   return (
     <header className="topbar">
@@ -56,7 +55,7 @@ export function ChatTopbar({
           </div>
         )}
         <LanguageToggle />
-        {permissions.canConfigureSystem && (
+        {user && (
           <button type="button" className="topbar-btn" onClick={onOpenSettings} aria-label={t("components.chat.openSettings")}>
             <span className="btn-icon" aria-hidden="true">⚙</span>
             <span className="btn-label">{t("components.chat.settings")}</span>

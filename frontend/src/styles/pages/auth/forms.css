@@ -168,12 +168,12 @@
 }
 
 .auth-form .hint.ok {
-  color: var(--success-color);
+  color: var(--success);
   font-weight: 600;
 }
 
 .auth-form .hint.error {
-  color: var(--error-color);
+  color: var(--danger);
 }
 
 .auth-form .footer-text {
@@ -211,11 +211,11 @@
   width: 16px;
   height: 16px;
   cursor: pointer;
-  accent-color: var(--primary-color);
+  accent-color: var(--accent);
 }
 
 .auth-form .text-link-btn {
-  color: var(--primary-color);
+  color: var(--accent);
   text-decoration: none;
   font-weight: 600;
   transition: color 0.2s ease;
@@ -224,7 +224,7 @@
 }
 
 .auth-form .text-link-btn:hover {
-  color: var(--primary-hover);
+  color: var(--accent-hover);
   text-decoration: underline;
 }
 
@@ -260,6 +260,28 @@
 
 .auth-form .action-grid > * {
   min-height: 54px;
+}
+
+.auth-form .auth-action-grid-single {
+  grid-template-columns: 1fr;
+  gap: var(--space-3);
+  margin-top: var(--space-4);
+}
+
+.auth-form .auth-button-full {
+  width: 100%;
+}
+
+.auth-form .auth-mode-switch {
+  margin-top: var(--space-6);
+  text-align: center;
+}
+
+.auth-form .auth-mode-switch-btn {
+  background: none;
+  border: none;
+  padding: 0;
+  font: inherit;
 }
 
 .auth-form .alert {

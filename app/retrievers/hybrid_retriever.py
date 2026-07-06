@@ -139,11 +139,11 @@ def _safe_similarity_search(
 ):
     """Backward-compatible vector search wrapper using this module's patch point."""
     if allowed_sources is None:
-        return similarity_search(query, k=k)
+        return similarity_search(query, k=k, require_source_filter=False)
     try:
         return similarity_search(query, k=k, allowed_sources=allowed_sources)
     except TypeError:
-        return similarity_search(query, k=k)
+        return similarity_search(query, k=k, require_source_filter=False)
 
 
 def _expand_to_parent_context(candidates: list[dict]) -> list[dict]:

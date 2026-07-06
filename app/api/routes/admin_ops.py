@@ -5,6 +5,7 @@ from __future__ import annotations
 import csv
 import io
 import statistics
+import threading
 import time
 from collections import Counter
 from datetime import UTC, datetime, timedelta
@@ -28,12 +29,15 @@ from app.api.dependencies import (
     _require_user,
     _runtime_diagnostics_summary,
     auth_service,
+    runtime_metrics,
     settings,
 )
 from app.api.middleware import get_request_metrics
+from app.api.routes.health import _check_neo4j_ready
 from app.api.utils.error_responses import bad_request
 from app.graph.workflow import run_query
 from app.services.consistency_guard import text_similarity
+from app.services.model_config_store import get_global_model_settings, public_global_model_settings
 from app.services.retrieval_profiles import normalize_retrieval_profile, profile_force_local_only
 from app.services.runtime_ops import (
     append_benchmark_trend,
@@ -46,6 +50,103 @@ from app.services.runtime_ops import (
 )
 
 router = APIRouter(prefix="/admin/ops", tags=["admin", "ops"])
+_SERVICE_HEALTH_CACHE: dict[str, Any] = {"expires_at": 0.0, "services": {}}
+_SERVICE_HEALTH_LOCK = threading.Lock()
+
+
+def _service_health_snapshot() -> dict[str, dict[str, Any]]:
+    """Cache slower dependency probes so the live dashboard stays responsive."""
+    now = time.monotonic()
+    with _SERVICE_HEALTH_LOCK:
+        cached = _SERVICE_HEALTH_CACHE["services"]
+        if cached and now < float(_SERVICE_HEALTH_CACHE["expires_at"]):
+            return {name: dict(detail) for name, detail in cached.items()}
+        services = {
+            "api": {"ok": True, "required": True, "latency_ms": 0},
+            "database": _check_database_ready(),
+            "vector_store": _check_chroma_ready(),
+            "graph_store": _check_neo4j_ready(),
+            "ollama": _check_ollama_ready(),
+        }
+        _SERVICE_HEALTH_CACHE["services"] = services
+        _SERVICE_HEALTH_CACHE["expires_at"] = now + 30.0
+        return {name: dict(detail) for name, detail in services.items()}
+
+def _system_resource_snapshot() -> dict[str, float]:
+    """Return process and host utilization without making psutil a hard dependency."""
+    try:
+        import psutil
+
+        process = psutil.Process()
+        disk = psutil.disk_usage(str(settings.app_db_path.parent.resolve()))
+        return {
+            "cpu_percent": round(float(psutil.cpu_percent(interval=None)), 1),
+            "memory_percent": round(float(psutil.virtual_memory().percent), 1),
+            "disk_percent": round(float(disk.percent), 1),
+            "process_memory_mb": round(float(process.memory_info().rss) / (1024 * 1024), 1),
+        }
+    except (ImportError, OSError, RuntimeError):
+        return {
+            "cpu_percent": 0.0,
+            "memory_percent": 0.0,
+            "disk_percent": 0.0,
+            "process_memory_mb": 0.0,
+        }
+
+
+def _check_database_ready() -> dict[str, Any]:
+    started = time.perf_counter()
+    try:
+        with auth_service._connect() as connection:
+            connection.execute("SELECT 1").fetchone()
+        return {"ok": True, "required": True, "latency_ms": int((time.perf_counter() - started) * 1000)}
+    except Exception as exc:
+        return {
+            "ok": False,
+            "required": True,
+            "latency_ms": int((time.perf_counter() - started) * 1000),
+            "error": str(exc),
+        }
+
+
+def _runtime_snapshot_payload() -> dict[str, Any]:
+    now = datetime.now(UTC)
+    cutoff = now - timedelta(minutes=5)
+    rows = [row for row in get_request_metrics() if _parse_request_ts(str(row.get("ts", ""))) >= cutoff]
+    durations = [float(row.get("duration_ms", 0) or 0) for row in rows]
+    errors = sum(1 for row in rows if int(row.get("status_code", 0) or 0) >= 400 or row.get("error"))
+    total = len(rows)
+    global_model = get_global_model_settings()
+    public_model = public_global_model_settings(global_model)
+    provider = str(global_model.get("provider", "local") or "local")
+    model_ready = provider in {"local", "ollama"} or bool(global_model.get("api_key"))
+
+    services = _service_health_snapshot()
+    services["model"] = {
+        "ok": model_ready,
+        "required": bool(global_model.get("enabled", False)),
+        "message": "configured" if model_ready else "API key is missing",
+    }
+    blocking = [name for name, detail in services.items() if detail.get("required") and not detail.get("ok")]
+    return {
+        "generated_at": now.isoformat(),
+        "status": "healthy" if not blocking else "degraded",
+        "blocking_services": blocking,
+        "resources": _system_resource_snapshot(),
+        "traffic": {
+            "window_seconds": 300,
+            "requests_total": total,
+            "requests_per_second": round(total / 300, 3),
+            "avg_response_ms": round(statistics.fmean(durations), 1) if durations else 0.0,
+            "p95_response_ms": round(sorted(durations)[max(0, int(len(durations) * 0.95) - 1)], 1)
+            if durations
+            else 0.0,
+            "error_rate_percent": round((errors / total) * 100, 2) if total else 0.0,
+            "active_requests": int((runtime_metrics.snapshot().get("gauges") or {}).get("query_guard_inflight", 0) or 0),
+        },
+        "services": services,
+        "model": public_model,
+    }
 
 
 def _overview_payload(
@@ -239,6 +340,12 @@ def _alerts_payload(*, hours: int) -> dict[str, Any]:
         "alerts": alerts,
     }
 
+
+
+@router.get("/runtime")
+def admin_ops_runtime(request: Request, user: dict[str, Any] = Depends(_require_user)):
+    _require_permission(user, "admin:audit_read", request, "admin")
+    return _runtime_snapshot_payload()
 
 @router.get("/overview")
 def admin_ops_overview(

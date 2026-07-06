@@ -1,4 +1,5 @@
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useRef } from "react";
+import { useTranslation } from "react-i18next";
 import {
   AGENT_MODES,
   type AgentClassHint,
@@ -21,11 +22,14 @@ import { useChatHelpers } from "@/pages/chat/hooks/useChatHelpers";
 import { KeyboardHelp } from "@/components/KeyboardHelp";
 import { generateSmartPrompts } from "@/pages/chat/utils/smartPrompts";
 import type { User, UserRole } from "@/hooks/usePermissions";
+import { appApi } from "@/lib/api";
 
 // Route-specific CSS (code-split by Vite)
 import "@/styles/pages/chat-entry.css";
 
 export function ChatPage({ user, onLogout, themeLabel, onThemeToggle }: Props) {
+  const { t } = useTranslation();
+  const lastOverrideStateRef = useRef<{ enabled: boolean; provider: string; model: string } | null>(null);
   // Convert AuthUser to User type for permission system
   const permissionUser: User | null = user ? {
     user_id: user.user_id,
@@ -165,6 +169,20 @@ export function ChatPage({ user, onLogout, themeLabel, onThemeToggle }: Props) {
       await actions.refreshDocuments();
       await actions.refreshPrompts();
       if (rows.length > 0) await actions.loadSession(rows[0].session_id);
+
+      // Get initial global settings override status
+      try {
+        const res = await appApi.getUserApiSettings();
+        if (res.ok && res.settings) {
+          lastOverrideStateRef.current = {
+            enabled: !!res.settings.global_override_enabled,
+            provider: res.settings.global_provider || "",
+            model: res.settings.global_model || "",
+          };
+        }
+      } catch (e) {
+        // Silent catch
+      }
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -185,6 +203,41 @@ export function ChatPage({ user, onLogout, themeLabel, onThemeToggle }: Props) {
       void actions.refreshSessions(false, true);
       void actions.refreshDocuments(true);
       void actions.refreshPrompts(true);
+
+      // Check global settings override status periodically
+      void (async () => {
+        try {
+          const res = await appApi.getUserApiSettings();
+          if (res.ok && res.settings) {
+            const enabled = !!res.settings.global_override_enabled;
+            const provider = res.settings.global_provider || "";
+            const model = res.settings.global_model || "";
+
+            if (lastOverrideStateRef.current !== null) {
+              const prev = lastOverrideStateRef.current;
+              if (prev.enabled !== enabled || prev.provider !== provider || prev.model !== model) {
+                if (enabled) {
+                  const desc = t("components.apiSettings.globalOverrideDesc", { provider, model });
+                  actions.notify(
+                    `${t("components.apiSettings.globalOverrideNotice")}: ${desc}`,
+                    "info",
+                    4000
+                  );
+                } else if (prev.enabled) {
+                  actions.notify(
+                    t("components.apiSettings.globalOverrideDisabledNotice"),
+                    "info",
+                    4000
+                  );
+                }
+              }
+            }
+            lastOverrideStateRef.current = { enabled, provider, model };
+          }
+        } catch (e) {
+          // Silent catch
+        }
+      })();
     }, 25000);
     return () => window.clearInterval(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -332,7 +385,7 @@ export function ChatPage({ user, onLogout, themeLabel, onThemeToggle }: Props) {
       </main>
 
       <ToastStack toasts={toasts} />
-      <ApiSettings isOpen={settingsOpen} onClose={() => setSettingsOpen(false)} isAdmin={isAdmin} />
+      <ApiSettings isOpen={settingsOpen} onClose={() => setSettingsOpen(false)} />
       <KeyboardHelp />
     </div>
   );

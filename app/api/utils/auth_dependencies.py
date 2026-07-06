@@ -138,3 +138,12 @@ def _require_permission(
         )
         raise forbidden(f"Permission denied: {permission}")
 
+
+
+def require_admin(
+    request: Request,
+    user: dict[str, Any] = Depends(_require_user),
+) -> dict[str, Any]:
+    """Require an active administrator for standalone admin routers."""
+    _require_permission(user, "admin:audit_read", request, "admin")
+    return user

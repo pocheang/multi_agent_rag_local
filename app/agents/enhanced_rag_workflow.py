@@ -47,6 +47,7 @@ from app.agents.degradation_strategies import (
     record_component_success,
 )
 from app.core.models import get_chat_model, get_reasoning_model
+from app.services.agent_execution_tracker import get_tracker
 
 logger = logging.getLogger(__name__)
 
@@ -192,6 +193,10 @@ class EnhancedRAGWorkflow:
             "degradation_events": [],
         }
 
+        # Initialize execution tracker
+        tracker = get_tracker()
+        execution_id = tracker.start_execution(query=query, user_id=user_id)
+
         try:
             # Step 1: Get context hints from conversation history (Task 6)
             context_hints = None
@@ -205,11 +210,28 @@ class EnhancedRAGWorkflow:
                         logger.info("Resolved follow-up query with conversation context")
 
             # Step 2: Route decision with validation and retry (Task 2)
+            route_step_id = tracker.record_agent_step(
+                execution_id=execution_id,
+                agent_name="router",
+                input_data={"query": resolved_query, "agent_class_hint": agent_class_hint}
+            )
+
             route_decision, route_validation = await self._route_with_validation(
                 query=resolved_query,
                 agent_class_hint=agent_class_hint,
                 context_hints=context_hints,
                 execution_metadata=execution_metadata,
+            )
+
+            tracker.complete_agent_step(
+                execution_id=execution_id,
+                step_id=route_step_id,
+                output_data={
+                    "route": route_decision.route,
+                    "confidence": route_decision.confidence,
+                    "skill": route_decision.skill
+                },
+                metadata={"validation_passed": route_validation.is_valid}
             )
 
             # Step 3: Execute retrieval based on validated route with intelligent retry
@@ -218,6 +240,12 @@ class EnhancedRAGWorkflow:
             retrieval_retry_count = 0
             current_top_k = 5
             current_route = route_decision.route
+
+            retrieval_step_id = tracker.record_agent_step(
+                execution_id=execution_id,
+                agent_name=f"{current_route}_retrieval",
+                input_data={"query": resolved_query, "route": current_route}
+            )
 
             while retrieval_retry_count <= self.max_route_retries:
                 try:
@@ -235,6 +263,15 @@ class EnhancedRAGWorkflow:
                         execution_metadata=execution_metadata,
                         retry_attempt=retrieval_retry_count,
                         top_k=current_top_k,
+                    )
+
+                    tracker.complete_agent_step(
+                        execution_id=execution_id,
+                        step_id=retrieval_step_id,
+                        output_data={
+                            "chunks_count": len(retrieval_result.get("chunks", [])),
+                            "route": current_route
+                        }
                     )
 
                     # Step 4: Assess retrieval quality
@@ -394,6 +431,13 @@ class EnhancedRAGWorkflow:
                 f"retries={execution_metadata['retry_count']}"
             )
 
+            # Mark execution as complete
+            tracker.complete_execution(execution_id, final_result={
+                "route": route_decision.route,
+                "quality_level": quality_report.quality_level,
+                "confidence": quality_report.overall_confidence,
+            })
+
             return {
                 "answer": answer,
                 "citations": citations,
@@ -417,6 +461,8 @@ class EnhancedRAGWorkflow:
             }
 
         except Exception as e:
+            # Mark execution as failed
+            tracker.fail_execution(execution_id, str(e))
             logger.exception(f"Enhanced RAG workflow failed: {e}")
             raise
 

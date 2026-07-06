@@ -7,6 +7,7 @@ from types import SimpleNamespace
 
 from app.api.utils.string_utils import normalize_string
 from app.core.config import get_settings
+from app.services.model_catalog import provider_supports_embeddings
 from app.services.model_config_store import get_global_model_settings
 from app.services.network_security import validate_api_base_url_for_provider
 from app.services.outbound_redaction import (
@@ -430,7 +431,7 @@ def _global_embedding_override() -> dict:
         return {}
     provider = str(raw.get("provider", "") or "").strip().lower()
     model = str(raw.get("embedding_model", "") or "").strip()
-    if not provider or not model or provider == "anthropic":
+    if not provider or not model or not provider_supports_embeddings(provider):
         return {}
     return {
         "provider": provider,

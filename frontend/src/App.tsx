@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useMemo, useState, type ReactNode } from "react";
+import { lazy, Suspense, useEffect, useState, type ReactNode } from "react";
 import { Navigate, Route, Routes, useLocation, useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { authApi } from "@/lib/api";
@@ -35,7 +35,7 @@ function Protected({
 }
 
 export function App() {
-  const { t, i18n } = useTranslation();
+  const { t } = useTranslation();
   const [user, setUser] = useState<AuthUser | null>(null);
   const [authReady, setAuthReady] = useState(false);
   const [theme, setTheme] = useState<ThemeMode>(getSavedTheme());
@@ -58,9 +58,12 @@ export function App() {
       .finally(() => setAuthReady(true));
   }, []);
 
-  const themeLabel = useMemo(() => {
-    return theme === "dark" ? t('theme.dark') : t('theme.light');
-  }, [theme, t, i18n.language]);
+  const themeLabel = theme === "dark" ? t("theme.dark") : t("theme.light");
+  const handleThemeToggle = () => setTheme((prev) => nextTheme(prev));
+  const themeControls = {
+    themeLabel,
+    onThemeToggle: handleThemeToggle,
+  };
 
   const logout = async () => {
     await authApi.logout();
@@ -73,110 +76,57 @@ export function App() {
     setUser(nextUser);
   };
 
+  const renderGuestOnly = (page: ReactNode) => {
+    if (user) {
+      return <Navigate to="/app" replace />;
+    }
+    return page;
+  };
+
+  const renderProtected = (page: ReactNode) => (
+    <Protected user={user} authReady={authReady}>
+      {page}
+    </Protected>
+  );
+
   return (
     <Suspense fallback={<RouteFallback />}>
       <Routes>
         <Route
           path="/app/login"
-          element={
-            user ? (
-              <Navigate to="/app" replace />
-            ) : (
-              <LoginPage
-                onLogin={loginSuccess}
-                themeLabel={themeLabel}
-                onThemeToggle={() => setTheme((prev) => nextTheme(prev))}
-              />
-            )
-          }
+          element={renderGuestOnly(<LoginPage onLogin={loginSuccess} {...themeControls} />)}
         />
         <Route
           path="/app/forgot-password"
-          element={
-            user ? (
-              <Navigate to="/app" replace />
-            ) : (
-              <ForgotPasswordPage
-                themeLabel={themeLabel}
-                onThemeToggle={() => setTheme((prev) => nextTheme(prev))}
-              />
-            )
-          }
+          element={renderGuestOnly(<ForgotPasswordPage {...themeControls} />)}
         />
         <Route
           path="/app"
-          element={
-            <Protected user={user} authReady={authReady}>
-              <ChatPage
-                user={user}
-                onLogout={logout}
-                themeLabel={themeLabel}
-                onThemeToggle={() => setTheme((prev) => nextTheme(prev))}
-              />
-            </Protected>
-          }
+          element={renderProtected(<ChatPage user={user} onLogout={logout} {...themeControls} />)}
         />
         <Route
           path="/app/admin"
-          element={
-            <Protected user={user} authReady={authReady}>
-              <AdminPage
-                user={user}
-                onLogout={logout}
-                themeLabel={themeLabel}
-                onThemeToggle={() => setTheme((prev) => nextTheme(prev))}
-              />
-            </Protected>
-          }
+          element={renderProtected(<AdminPage user={user} onLogout={logout} {...themeControls} />)}
         />
         <Route
           path="/app/analytics"
-          element={
-            <Protected user={user} authReady={authReady}>
-              <AnalyticsPage
-                user={user}
-                onLogout={logout}
-                themeLabel={themeLabel}
-                onThemeToggle={() => setTheme((prev) => nextTheme(prev))}
-              />
-            </Protected>
-          }
+          element={renderProtected(<AnalyticsPage user={user} onLogout={logout} {...themeControls} />)}
         />
         <Route
           path="/app/change-password"
-          element={
-            <Protected user={user} authReady={authReady}>
-              <ChangePasswordPage themeLabel={themeLabel} onThemeToggle={() => setTheme((prev) => nextTheme(prev))} />
-            </Protected>
-          }
+          element={renderProtected(<ChangePasswordPage {...themeControls} />)}
         />
         <Route
           path="/app/profile"
-          element={
-            <Protected user={user} authReady={authReady}>
-              <ProfilePage user={user} />
-            </Protected>
-          }
+          element={renderProtected(<ProfilePage user={user} />)}
         />
         <Route
           path="/app/architecture"
-          element={
-            <ArchitecturePage
-              isLoggedIn={!!user}
-              themeLabel={themeLabel}
-              onThemeToggle={() => setTheme((prev) => nextTheme(prev))}
-            />
-          }
+          element={<ArchitecturePage isLoggedIn={!!user} {...themeControls} />}
         />
         <Route
           path="/"
-          element={
-            <LandingPage
-              isLoggedIn={!!user}
-              themeLabel={themeLabel}
-              onThemeToggle={() => setTheme((prev) => nextTheme(prev))}
-            />
-          }
+          element={<LandingPage isLoggedIn={!!user} {...themeControls} />}
         />
         <Route path="*" element={<NotFoundPage pathname={location.pathname} />} />
       </Routes>

@@ -5,6 +5,8 @@ import json
 from pathlib import Path
 from typing import Any
 
+from app.services.model_catalog import provider_supports_embeddings
+
 
 def is_under_path(path: Path, root: Path) -> bool:
     try:
@@ -28,7 +30,7 @@ def embedding_settings_signature(settings_data: dict[str, Any]) -> str:
     embedding_model = str(settings_data.get("embedding_model", "") or "").strip()
     base_url = str(settings_data.get("base_url", "") or "").strip().rstrip("/")
     enabled = bool(settings_data.get("enabled", False))
-    if provider == "anthropic":
+    if provider and not provider_supports_embeddings(provider):
         embedding_provider = ""
         embedding_model = ""
         base_url = ""

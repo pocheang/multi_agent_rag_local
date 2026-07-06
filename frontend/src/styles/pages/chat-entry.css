@@ -1,27 +1,15 @@
 /* Chat route stylesheet entry.
    Keep chat-only shell, sidebar, message, composer, citation, graph, and route theme CSS out of main.css. */
 
-@import '../components/topbar.css';
-@import '../components/topbar-responsive.css';
-@import '../components/buttons/groups.css';
-@import './chat.css';
-@import '../components/sidebar/layout.css';
-@import '../components/sidebar/modern-layout.css';
-@import '../components/sidebar/rail.css';
-@import '../components/sidebar/navigation.css';
-@import '../components/sidebar/modern-sessions.css';
-@import '../components/sidebar/modules.css';
-@import '../components/sidebar/actions.css';
-@import '../components/sidebar/footer.css';
-@import '../components/sidebar/backdrop.css';
-@import '../components/sidebar/responsive.css';
-@import '../features/messages.css';
-@import '../features/composer/layout.css';
-@import '../features/composer/editor.css';
-@import '../features/composer/actions.css';
-@import '../features/citations.css';
-@import '../features/graph.css';
-@import '../features/process.css';
-@import '../themes/light/chat.css';
-@import '../themes/dark/chat.css';
-@import './chat-responsive.css';
+@import "../components/topbar.css";
+@import "../components/topbar-responsive.css";
+@import "./chat.css";
+@import "../components/sidebar/index.css";
+@import "../features/messages.css";
+@import "../features/composer/index.css";
+@import "../features/citations.css";
+@import "../features/graph.css";
+@import "../features/process.css";
+@import "../themes/light/chat.css";
+@import "../themes/dark/chat.css";
+@import "./chat-responsive.css";

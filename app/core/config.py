@@ -21,11 +21,11 @@ class Settings(BaseSettings):
     openai_base_url: str | None = Field(default=None, alias="OPENAI_BASE_URL")
     openai_chat_model: str = Field(default="gpt-5.5", alias="OPENAI_CHAT_MODEL")
     openai_embed_model: str = Field(default="text-embedding-3-small", alias="OPENAI_EMBED_MODEL")
-    openai_reasoning_model: str = Field(default="gpt-5.5-thinking", alias="OPENAI_REASONING_MODEL")
+    openai_reasoning_model: str = Field(default="gpt-5.5", alias="OPENAI_REASONING_MODEL")
 
     anthropic_api_key: str | None = Field(default=None, alias="ANTHROPIC_API_KEY")
-    anthropic_chat_model: str = Field(default="claude-opus-4-8", alias="ANTHROPIC_CHAT_MODEL")
-    anthropic_reasoning_model: str = Field(default="claude-opus-4-8", alias="ANTHROPIC_REASONING_MODEL")
+    anthropic_chat_model: str = Field(default="claude-sonnet-5", alias="ANTHROPIC_CHAT_MODEL")
+    anthropic_reasoning_model: str = Field(default="claude-fable-5", alias="ANTHROPIC_REASONING_MODEL")
 
     neo4j_uri: str = Field(default="bolt://localhost:7687", alias="NEO4J_URI")
     neo4j_username: str = Field(default="neo4j", alias="NEO4J_USERNAME")
@@ -238,7 +238,7 @@ class Settings(BaseSettings):
     ollama_vision_model: str = Field(default="llama4-scout:8b", alias="OLLAMA_VISION_MODEL")
     cors_enabled: bool = Field(default=True, alias="CORS_ENABLED")
     cors_allow_origins: str = Field(
-        default="http://127.0.0.1:5173,http://localhost:5173,http://127.0.0.1:5174,http://localhost:5174,http://127.0.0.1:8000,http://localhost:8000",
+        default="http://127.0.0.1:5173,http://localhost:5173,http://127.0.0.1:5174,http://localhost:5174,http://127.0.0.1:5175,http://localhost:5175,http://127.0.0.1:8000,http://localhost:8000",
         alias="CORS_ALLOW_ORIGINS",
     )
     cors_allow_methods: str = Field(default="*", alias="CORS_ALLOW_METHODS")

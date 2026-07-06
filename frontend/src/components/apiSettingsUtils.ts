@@ -1,3 +1,4 @@
+import type { ProviderCatalogEntry } from "@/types/api";
 import type { ApiConfig, Provider } from "./apiSettingsConstants";
 import { PROVIDER_DEFAULTS } from "./apiSettingsConstants";
 
@@ -30,12 +31,14 @@ export function buildApiPayload(config: ApiConfig) {
     base_url: config.baseUrl.trim(),
     model: config.model.trim(),
     temperature: clampNumber(Number(config.temperature), 0, 2),
-    max_tokens: clampNumber(Number(config.maxTokens), 256, 8192),
+    max_tokens: clampNumber(Number(config.maxTokens), 256, 131072),
   };
 }
 
-export function applyProviderDefaults(provider: Provider): Partial<ApiConfig> {
-  const defaults = PROVIDER_DEFAULTS[provider];
+export function applyProviderDefaults(provider: Provider, catalog?: ProviderCatalogEntry): Partial<ApiConfig> {
+  const defaults = catalog
+    ? { baseUrl: catalog.base_url, model: catalog.default_chat_model }
+    : PROVIDER_DEFAULTS[provider];
   return {
     provider,
     baseUrl: defaults.baseUrl,
@@ -54,5 +57,10 @@ export function parseApiResponse(response: any): ApiConfig {
     model: response.model || "",
     temperature: Number(response.temperature ?? 0.7),
     maxTokens: Number(response.max_tokens ?? 2048),
+    globalOverrideEnabled: !!response.global_override_enabled,
+    globalProvider: response.global_provider || "",
+    globalModel: response.global_model || "",
+    effectiveProvider: response.effective_provider || "",
+    effectiveModel: response.effective_model || "",
   };
 }

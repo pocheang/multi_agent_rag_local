@@ -138,9 +138,9 @@ class MultiPathRetriever:
                         results = similarity_search(query, k=k, allowed_sources=allowed_sources)
                     except TypeError:
                         # Fallback if allowed_sources not supported
-                        results = similarity_search(query, k=k)
+                        results = similarity_search(query, k=k, require_source_filter=False)
                 else:
-                    results = similarity_search(query, k=k)
+                    results = similarity_search(query, k=k, require_source_filter=False)
 
                 elapsed = (time.time() - start) * 1000
 

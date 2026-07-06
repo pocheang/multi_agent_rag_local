@@ -254,3 +254,54 @@ def test_admin_ops_benchmark_run(monkeypatch):
         assert len(saved) == 1
     finally:
         api_main.app.dependency_overrides.clear()
+
+
+def test_admin_runtime_snapshot_returns_real_contract(monkeypatch):
+    from app.api.routes import admin_ops
+
+    client = TestClient(api_main.app)
+    api_main.app.dependency_overrides[api_main._require_user] = lambda: {
+        "user_id": "u_admin",
+        "username": "admin",
+        "role": "admin",
+        "status": "active",
+    }
+    monkeypatch.setattr(
+        admin_ops,
+        "get_request_metrics",
+        lambda: [
+            {"ts": datetime.now(UTC).isoformat(), "method": "GET", "path": "/health", "status_code": 200, "duration_ms": 25, "error": ""},
+            {"ts": datetime.now(UTC).isoformat(), "method": "POST", "path": "/query", "status_code": 500, "duration_ms": 75, "error": "RuntimeError"},
+        ],
+    )
+    monkeypatch.setattr(admin_ops, "_system_resource_snapshot", lambda: {"cpu_percent": 12.5, "memory_percent": 44.0, "disk_percent": 61.0, "process_memory_mb": 256.0})
+    monkeypatch.setattr(admin_ops, "_check_database_ready", lambda: {"ok": True, "required": True, "latency_ms": 1})
+    monkeypatch.setattr(admin_ops, "_check_chroma_ready", lambda: {"ok": True, "required": True, "latency_ms": 2})
+    monkeypatch.setattr(admin_ops, "_check_neo4j_ready", lambda: {"ok": False, "required": False, "latency_ms": 3})
+    monkeypatch.setattr(admin_ops, "_check_ollama_ready", lambda: {"ok": True, "required": False, "latency_ms": 1})
+    monkeypatch.setattr(
+        admin_ops,
+        "get_global_model_settings",
+        lambda: {
+            "enabled": True,
+            "provider": "openai",
+            "chat_model": "gpt-5.5",
+            "reasoning_model": "gpt-5.5",
+            "embedding_model": "text-embedding-3-small",
+            "base_url": "https://api.openai.com/v1",
+            "api_key": "secret",
+        },
+    )
+    try:
+        res = client.get("/admin/ops/runtime")
+        assert res.status_code == 200
+        body = res.json()
+        assert body["resources"]["cpu_percent"] == 12.5
+        assert body["traffic"]["requests_total"] == 2
+        assert body["traffic"]["error_rate_percent"] == 50.0
+        assert body["traffic"]["avg_response_ms"] == 50.0
+        assert body["model"]["provider"] == "openai"
+        assert body["model"]["chat_model"] == "gpt-5.5"
+        assert "api_key" not in body["model"]
+    finally:
+        api_main.app.dependency_overrides.clear()

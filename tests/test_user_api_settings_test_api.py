@@ -573,3 +573,18 @@ def test_admin_model_settings_rejects_unsafe_custom_base_url(monkeypatch):
         assert "unsafe base_url" in (res.json().get("detail", "") or "")
     finally:
         api_main.app.dependency_overrides.clear()
+
+
+def test_model_catalog_is_available_to_authenticated_users():
+    client = TestClient(api_main.app)
+    api_main.app.dependency_overrides[api_main._require_user] = _mock_user
+    try:
+        res = client.get("/model-catalog")
+        assert res.status_code == 200
+        body = res.json()
+        assert body["version"] == "2026-07-01"
+        assert body["providers"]["openai"]["default_chat_model"] == "gpt-5.5"
+        assert body["providers"]["deepseek"]["default_chat_model"] == "deepseek-v4-flash"
+        assert body["providers"]["anthropic"]["default_chat_model"] == "claude-sonnet-5"
+    finally:
+        api_main.app.dependency_overrides.clear()

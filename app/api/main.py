@@ -29,12 +29,14 @@ from app.api.middleware import request_timing_middleware
 
 # Import route modules
 from app.api.routes import (
+    admin_agent_quality,
     admin_graph_rag,
     admin_language_stats,
     admin_ops,
     admin_settings,
     admin_users,
     advanced_rag,
+    agent_health,
     agent_tracking,
     analytics,
     auth,
@@ -45,6 +47,7 @@ from app.api.routes import (
     prompts,
     query,
     sessions,
+    web_activity_admin,  # Web Activity Monitoring
 )
 from app.api.utils import (
     admin_helpers,
@@ -263,12 +266,15 @@ app.include_router(admin_users.router)
 app.include_router(admin_ops.router)
 app.include_router(admin_settings.router)
 app.include_router(admin_language_stats.router)
+app.include_router(admin_agent_quality.router)
 app.include_router(agent_tracking.router)
+app.include_router(agent_health.router)
 app.include_router(evaluation.router)
 app.include_router(advanced_rag.router)
 app.include_router(analytics.router)
 app.include_router(admin_graph_rag.router)
 app.include_router(enhanced_query.router)
+app.include_router(web_activity_admin.router)  # Web Activity Monitoring
 
 # React frontend serving
 react_dist_dir = Path(__file__).resolve().parents[2] / "frontend" / "dist"
@@ -278,6 +284,11 @@ react_assets_dir = react_dist_dir / "assets"
 # Serve React build assets
 if react_assets_dir.exists():
     app.mount("/app/assets", StaticFiles(directory=str(react_assets_dir)), name="react-assets")
+
+# Serve static files for Web Activity Dashboard
+static_dir = Path(__file__).parent.parent / "static"
+if static_dir.exists():
+    app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
 
 
 def _serve_react_index() -> FileResponse:

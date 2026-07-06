@@ -1,16 +1,5 @@
 import { useTranslation } from "react-i18next";
-
-type Provider = "local" | "openai" | "anthropic" | "deepseek" | "ollama" | "custom";
-
-type ApiConfig = {
-  provider: Provider;
-  apiKey: string;
-  apiKeyMasked: string;
-  baseUrl: string;
-  model: string;
-  temperature: number;
-  maxTokens: number;
-};
+import type { ApiConfig } from "./apiSettingsConstants";
 
 type Props = {
   config: ApiConfig;
@@ -129,15 +118,15 @@ export function ApiSettingsFormFields({
           type="range"
           className="api-slider"
           min="256"
-          max="8192"
-          step="256"
+          max="131072"
+          step="1024"
           value={config.maxTokens}
           onChange={(e) => onConfigChange({ maxTokens: Number(e.target.value) })}
         />
         <div className="slider-labels">
           <span>256</span>
-          <span>4096</span>
-          <span>8192</span>
+          <span>65536</span>
+          <span>131072</span>
         </div>
       </section>
     </>

@@ -105,7 +105,7 @@ export default defineConfig({
       "/app/upload": createBackendProxy(true),
       "/app/prompts": createBackendProxy(true),
       "/app/query": createBackendProxy(true),
-      "/app/admin": createBackendProxy(true),
+      // Note: /app/admin is handled by frontend router, not proxied to backend
       "/app/user": createBackendProxy(true),
       "/app/api": createBackendProxy(true),
     },

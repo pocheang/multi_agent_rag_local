@@ -503,3 +503,49 @@
     grid-template-columns: repeat(2, 1fr);
   }
 }
+
+/* ============================================
+   Global Override Notice
+   ============================================ */
+
+.global-override-notice {
+  display: flex;
+  gap: 12px;
+  padding: 16px;
+  border-radius: 12px;
+  border: 1px solid rgba(245, 158, 11, 0.35);
+  background: rgba(245, 158, 11, 0.08);
+  color: var(--text-primary);
+  animation: resultSlideIn 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  align-items: flex-start;
+}
+
+.global-override-notice .notice-icon {
+  font-size: 18px;
+  color: #f59e0b;
+  flex-shrink: 0;
+  line-height: 1.4;
+}
+
+.global-override-notice .notice-content {
+  display: grid;
+  gap: 4px;
+}
+
+.global-override-notice .notice-content strong {
+  font-size: 14px;
+  font-weight: 700;
+  color: #f59e0b;
+}
+
+.global-override-notice .notice-content p {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text-secondary);
+}
+
+.global-override-notice .notice-content p.muted {
+  font-size: 12px;
+  color: var(--text-tertiary);
+}

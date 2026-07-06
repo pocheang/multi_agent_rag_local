@@ -195,3 +195,23 @@
   font-size: var(--text-xs);
   color: var(--admin-info);
 }
+
+.admin-field .required {
+  margin-left: 4px;
+  color: var(--danger);
+}
+
+.admin-form-hint {
+  margin-top: 6px;
+  font-size: var(--text-xs);
+  color: var(--admin-text-tertiary);
+  font-family: ui-monospace, monospace;
+}
+
+.admin-model-slider {
+  gap: 10px;
+}
+
+.admin-model-slider input[type="range"] {
+  padding: 0;
+}
