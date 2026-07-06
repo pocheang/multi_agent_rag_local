@@ -4,11 +4,22 @@ All notable changes to this project will be documented in this file.
 
 ## [0.6.1] - 2026-07-06
 
-### 🏗️ Architecture Enhancement & Admin Features Release
+### 🏗️ Architecture Enhancement & Docker Support Release
 
-This release focuses on agent architecture improvements, comprehensive admin monitoring capabilities, enhanced security, and improved web research functionality.
+This release focuses on agent architecture improvements, comprehensive admin monitoring capabilities, enhanced security, Docker containerization support, and improved web research functionality.
 
 #### Major Features
+
+**Docker Containerization** 🆕:
+- Production-ready Dockerfile for backend (Python 3.11, multi-stage build)
+- Frontend Dockerfile with Nginx (Node 20 + Alpine)
+- Complete docker-compose.yml orchestration (PostgreSQL, Neo4j, Redis, backend, frontend)
+- Development environment override (docker-compose.dev.yml)
+- Comprehensive deployment documentation (DOCKER_DEPLOYMENT.md)
+- Environment variable templates (.env.docker.example)
+- Optimized build context (.dockerignore)
+- Health checks for all services
+- One-command deployment: `docker-compose up -d`
 
 **Agent Architecture Improvements**:
 - Unified base agent classes for consistent behavior across all agents
