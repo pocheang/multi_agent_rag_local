@@ -4,7 +4,7 @@ global:
   resolve_timeout: 5m
   # SMTP configuration (optional)
   # smtp_smarthost: 'smtp.gmail.com:587'
-  # smtp_from: 'alerts@example.com'
+  # smtp_from: 'po.cheang@gmail.com'
   # smtp_auth_username: 'your-email@gmail.com'
   # smtp_auth_password: 'your-app-password'
 
@@ -85,8 +85,8 @@ receivers:
     #     description: '{{ .GroupLabels.alertname }}: {{ .Annotations.summary }}'
     # Uncomment to enable Email
     # email_configs:
-    #   - to: 'oncall@example.com'
-    #     from: 'alerts@example.com'
+    #   - to: 'po.cheang@gmail.com'
+    #     from: 'po.cheang@gmail.com'
     #     subject: '🚨 CRITICAL: {{ .GroupLabels.alertname }}'
     #     html: |-
     #       <h2>Critical Alert</h2>

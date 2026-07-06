@@ -1,4 +1,4 @@
-# Docker 部署指南
+﻿# Docker 部署指南
 
 本指南介绍如何使用 Docker 和 Docker Compose 部署 QueryMind 系统。
 
@@ -345,7 +345,7 @@ docker-compose exec backend alembic upgrade head
 遇到问题？
 - 查看日志: `docker-compose logs -f`
 - 查看文档: http://localhost:8000/docs
-- 提交Issue: [GitHub Issues](https://github.com/yourorg/querymind/issues)
+- 提交Issue: [GitHub Issues](https://github.com/pocheang/querymind/issues)
 
 ---
 

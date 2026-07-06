@@ -1,4 +1,4 @@
-<div align="center">
+﻿<div align="center">
 
 # QueryMind（智询）
 
@@ -58,7 +58,7 @@
 
 ```bash
 # 1. 克隆仓库
-git clone https://github.com/yourorg/querymind.git
+git clone https://github.com/pocheang/querymind.git
 cd querymind
 
 # 2. 配置环境变量
@@ -95,7 +95,7 @@ docker-compose exec backend python scripts/init_db.py
 1. **克隆仓库**
 
 ```bash
-git clone https://github.com/yourorg/querymind.git
+git clone https://github.com/pocheang/querymind.git
 cd querymind
 ```
 
@@ -1934,8 +1934,8 @@ python -m app.main
 
 ## 📧 联系方式
 
-- **问题反馈**: [GitHub Issues](https://github.com/yourorg/querymind/issues)
-- **功能建议**: [GitHub Discussions](https://github.com/yourorg/querymind/discussions)
+- **问题反馈**: [GitHub Issues](https://github.com/pocheang/querymind/issues)
+- **功能建议**: [GitHub Discussions](https://github.com/pocheang/querymind/discussions)
 - **安全问题**: 请查看 [SECURITY.md](./SECURITY.md)
 
 ---

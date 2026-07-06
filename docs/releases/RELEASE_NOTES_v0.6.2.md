@@ -1,4 +1,4 @@
-# QueryMind v0.6.2 Release Notes
+﻿# QueryMind v0.6.2 Release Notes
 
 **发布日期**: 2026-07-06  
 **版本类型**: Minor Release - 项目重命名与监控系统完善
@@ -379,8 +379,8 @@ llm_client = LLMClientWithCircuitBreaker(your_llm_client)
 ### 获取帮助
 
 - 📖 [完整文档](../README.md)
-- 🐛 [报告问题](https://github.com/yourorg/querymind/issues)
-- 💬 [讨论区](https://github.com/yourorg/querymind/discussions)
+- 🐛 [报告问题](https://github.com/pocheang/querymind/issues)
+- 💬 [讨论区](https://github.com/pocheang/querymind/discussions)
 
 ### 贡献
 
@@ -404,4 +404,4 @@ llm_client = LLMClientWithCircuitBreaker(your_llm_client)
 
 ---
 
-**完整变更日志**: [v0.6.1...v0.6.2](https://github.com/yourorg/querymind/compare/v0.6.1...v0.6.2)
+**完整变更日志**: [v0.6.1...v0.6.2](https://github.com/pocheang/querymind/compare/v0.6.1...v0.6.2)

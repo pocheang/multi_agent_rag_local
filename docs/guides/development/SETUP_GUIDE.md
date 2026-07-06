@@ -267,7 +267,7 @@ source .venv/bin/activate
 
 ```bash
 # 克隆仓库
-git clone https://github.com/your-org/querymind.git
+git clone https://github.com/pocheang/querymind.git
 cd querymind
 
 # 或者如果你已经有项目
@@ -856,7 +856,7 @@ OLLAMA_EMBED_MODEL=nomic-embed-text
 - 查看 [故障排查指南](../troubleshooting-black-screen.md)
 - 查看 [快速参考](../quick-reference.md)
 - 查看 [配置参考](./CONFIGURATION_REFERENCE.md)
-- 提交 [GitHub Issues](https://github.com/your-org/querymind/issues)
+- 提交 [GitHub Issues](https://github.com/pocheang/querymind/issues)
 
 ---
 
