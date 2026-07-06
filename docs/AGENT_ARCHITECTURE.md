@@ -1,4 +1,4 @@
-# Multi-Agent RAG System Architecture
+﻿# QueryMind System Architecture
 
 ## Overview
 

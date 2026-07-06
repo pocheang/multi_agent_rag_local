@@ -1,6 +1,6 @@
-# API 开发 (API Development)
+﻿# API 开发 (API Development)
 
-本文档介绍如何使用 FastAPI 开发 Multi-Agent Local RAG 系统的 REST API。
+本文档介绍如何使用 FastAPI 开发 QueryMind（智询） 系统的 REST API。
 
 ## 目录
 
@@ -260,7 +260,7 @@ settings = get_settings()
 
 # 创建 FastAPI 应用
 app = FastAPI(
-    title="Multi-Agent Local RAG API",
+    title="QueryMind（智询） API",
     version="0.4.4",
     description="Enterprise RAG system with multi-agent orchestration",
     docs_url="/docs",
@@ -1056,7 +1056,7 @@ def custom_openapi():
         return app.openapi_schema
     
     openapi_schema = get_openapi(
-        title="Multi-Agent Local RAG API",
+        title="QueryMind（智询） API",
         version="0.4.4",
         description="Enterprise RAG system with multi-agent orchestration",
         routes=app.routes,

@@ -1,6 +1,6 @@
-# 数据存储 (Data Storage)
+﻿# 数据存储 (Data Storage)
 
-本文档详细介绍 Multi-Agent Local RAG 系统的数据存储架构，包括 ChromaDB、Neo4j 和 SQLite 的使用和管理。
+本文档详细介绍 QueryMind（智询） 系统的数据存储架构，包括 ChromaDB、Neo4j 和 SQLite 的使用和管理。
 
 ## 目录
 

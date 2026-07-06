@@ -1,4 +1,4 @@
-# Release v0.3.1 - Enterprise Documentation System
+﻿# Release v0.3.1 - Enterprise Documentation System
 
 **Release Date**: 2026-04-28  
 **Release Type**: 📚 Documentation Release  
@@ -9,7 +9,7 @@
 
 ## 🎯 Release Highlights
 
-v0.3.1 establishes a complete **enterprise-grade documentation management system** for the Multi-Agent Local RAG project, ensuring every version has comprehensive documentation including detailed change records, completion reports, and version plans.
+v0.3.1 establishes a complete **enterprise-grade documentation management system** for the QueryMind（智询） project, ensuring every version has comprehensive documentation including detailed change records, completion reports, and version plans.
 
 ### Key Achievements
 
@@ -310,7 +310,7 @@ This project maintains the same license as the main codebase.
 
 ---
 
-**✨ Thank you for using Multi-Agent Local RAG!**
+**✨ Thank you for using QueryMind（智询）!**
 
 **Bronit Team**  
 April 28, 2026

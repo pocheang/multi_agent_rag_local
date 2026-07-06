@@ -1,4 +1,4 @@
-# Agent功能修复 - README
+﻿# Agent功能修复 - README
 
 ## 🎯 修复目标
 
@@ -260,7 +260,7 @@ app/api/main.py  # 添加agent_health路由
 
 **日期**: 2026-06-30
 
-**修复内容**: 完整、清晰、可验证的multi-agent RAG系统
+**修复内容**: 完整、清晰、可验证的QueryMind系统
 
 ---
 

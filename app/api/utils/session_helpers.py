@@ -1,5 +1,5 @@
-"""
-Session-related helper functions for the Multi-Agent Local RAG API.
+﻿"""
+Session-related helper functions for the QueryMind API.
 """
 
 from typing import Any

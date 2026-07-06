@@ -756,3 +756,141 @@ def admin_ops_replay_run(
             "num_questions": len(questions),
         },
     }
+
+
+# ============================================================================
+# Log Level Management Endpoints
+# ============================================================================
+
+
+@router.get("/logging/levels")
+def get_log_levels(
+    request: Request,
+    user: dict[str, Any] = Depends(_require_user),
+):
+    """
+    Get current log levels for all active loggers.
+
+    Returns a dictionary of logger names and their current levels.
+    """
+    _require_permission(user, "admin:ops_manage", request, "admin")
+
+    import logging
+
+    loggers = {}
+    # Get all active loggers
+    for name in sorted(logging.Logger.manager.loggerDict.keys()):
+        logger = logging.getLogger(name)
+        if logger.level != logging.NOTSET:
+            loggers[name] = logging.getLevelName(logger.level)
+
+    # Add root logger
+    root = logging.getLogger()
+    loggers["root"] = logging.getLevelName(root.level)
+
+    return {
+        "loggers": loggers,
+        "total_loggers": len(loggers),
+        "available_levels": ["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"],
+    }
+
+
+@router.post("/logging/level")
+def set_log_level(
+    payload: dict[str, Any],
+    request: Request,
+    user: dict[str, Any] = Depends(_require_user),
+):
+    """
+    Set log level for a specific logger or all loggers.
+
+    Request body:
+    {
+        "logger": "app.agents.enhanced_router_agent",  // or "root" for all
+        "level": "DEBUG"  // DEBUG, INFO, WARNING, ERROR, CRITICAL
+    }
+
+    Returns:
+        Updated log level configuration
+    """
+    _require_permission(user, "admin:ops_manage", request, "admin")
+
+    import logging
+
+    logger_name = str(payload.get("logger", "")).strip()
+    level_str = str(payload.get("level", "")).strip().upper()
+
+    if not logger_name:
+        raise bad_request("logger name is required")
+
+    if level_str not in ["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]:
+        raise bad_request(f"Invalid log level: {level_str}")
+
+    # Convert string to logging level
+    level = getattr(logging, level_str)
+
+    # Set log level
+    if logger_name == "root":
+        logging.getLogger().setLevel(level)
+        affected_logger = "root (all loggers)"
+    else:
+        logging.getLogger(logger_name).setLevel(level)
+        affected_logger = logger_name
+
+    # Audit the change
+    _audit(
+        request,
+        action="admin.logging.set_level",
+        resource_type="admin",
+        result="success",
+        user=user,
+        detail=f"logger={logger_name},level={level_str}",
+    )
+
+    return {
+        "ok": True,
+        "logger": affected_logger,
+        "level": level_str,
+        "message": f"Log level for '{affected_logger}' set to {level_str}",
+    }
+
+
+@router.post("/logging/reset")
+def reset_log_levels(
+    request: Request,
+    user: dict[str, Any] = Depends(_require_user),
+):
+    """
+    Reset all log levels to default (INFO).
+
+    This is useful after debugging to restore normal logging behavior.
+    """
+    _require_permission(user, "admin:ops_manage", request, "admin")
+
+    import logging
+
+    # Reset root logger to INFO
+    logging.getLogger().setLevel(logging.INFO)
+
+    # Reset all configured loggers
+    reset_count = 0
+    for name in logging.Logger.manager.loggerDict.keys():
+        logger = logging.getLogger(name)
+        if logger.level != logging.NOTSET:
+            logger.setLevel(logging.NOTSET)  # Inherit from parent
+            reset_count += 1
+
+    _audit(
+        request,
+        action="admin.logging.reset",
+        resource_type="admin",
+        result="success",
+        user=user,
+        detail=f"reset_count={reset_count}",
+    )
+
+    return {
+        "ok": True,
+        "reset_count": reset_count,
+        "message": f"Reset {reset_count} loggers to default levels",
+    }

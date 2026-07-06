@@ -1,8 +1,8 @@
-# Agent Quality Monitoring - API Documentation
+﻿# Agent Quality Monitoring - API Documentation
 
 ## Overview
 
-The Agent Quality Monitoring system provides comprehensive real-time monitoring and analytics for all agents in the multi-agent RAG system. It tracks execution metrics, success rates, performance timings, and error distributions.
+The Agent Quality Monitoring system provides comprehensive real-time monitoring and analytics for all agents in the QueryMind System. It tracks execution metrics, success rates, performance timings, and error distributions.
 
 ## Architecture
 

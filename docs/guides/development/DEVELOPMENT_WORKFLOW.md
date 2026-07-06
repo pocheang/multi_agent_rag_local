@@ -1,6 +1,6 @@
-# 开发流程 (Development Workflow)
+﻿# 开发流程 (Development Workflow)
 
-本文档详细介绍 Multi-Agent Local RAG 项目的完整开发流程，包括 Git 工作流、分支策略、代码审查和发布流程。
+本文档详细介绍 QueryMind（智询） 项目的完整开发流程，包括 Git 工作流、分支策略、代码审查和发布流程。
 
 ## 目录
 

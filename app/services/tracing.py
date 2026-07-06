@@ -16,7 +16,7 @@ def traced_span(name: str, attributes: dict[str, Any] | None = None) -> Iterator
     except ImportError:
         yield
         return
-    tracer = trace.get_tracer("multi-agent-local-rag")
+    tracer = trace.get_tracer("querymind")
     with tracer.start_as_current_span(name) as span:
         for k, v in (attributes or {}).items():
             try:

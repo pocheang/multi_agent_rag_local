@@ -1,6 +1,6 @@
-# 系统架构 (System Architecture)
+﻿# 系统架构 (System Architecture)
 
-本文档详细介绍 Multi-Agent Local RAG 系统的整体架构设计、核心组件和技术选型。
+本文档详细介绍 QueryMind（智询） 系统的整体架构设计、核心组件和技术选型。
 
 ## 目录
 
@@ -387,7 +387,7 @@ L3: 查询结果缓存
 from fastapi import FastAPI
 from app.api.routes import auth, query, sessions, documents
 
-app = FastAPI(title="Multi-Agent Local RAG")
+app = FastAPI(title="QueryMind（智询）")
 app.include_router(auth.router, prefix="/auth", tags=["auth"])
 app.include_router(query.router, prefix="/query", tags=["query"])
 # ... 其他路由

@@ -1,5 +1,5 @@
-"""
-Multi-Agent RAG System Custom Exception Hierarchy
+﻿"""
+QueryMind System Custom Exception Hierarchy
 
 This module defines a comprehensive exception hierarchy for the RAG system,
 providing semantic, business-context-aware error handling.

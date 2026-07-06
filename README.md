@@ -8,7 +8,7 @@
 [![Python](https://img.shields.io/badge/python-3.11%2B-blue.svg)](https://www.python.org/downloads/)
 [![Backend](https://img.shields.io/badge/backend-FastAPI-009688.svg)](https://fastapi.tiangolo.com/)
 [![Frontend](https://img.shields.io/badge/frontend-React%20%2B%20Vite-61DAFB.svg)](https://react.dev/)
-[![Version](https://img.shields.io/badge/version-v0.6.1-blue.svg)](./CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-v0.6.2-blue.svg)](./CHANGELOG.md)
 
 **智能路由 · 混合检索 · 知识图谱 · 质量保证 · 执行追踪**
 
@@ -33,19 +33,20 @@
 - 🔐 **企业级安全** - JWT认证 + RBAC权限
 - 🤖 **多智能体协作** - 11个专业Agent协同工作
 
-### ✨ v0.6.1 新特性
+### ✨ v0.6.2 新特性
 
-**架构增强与Docker支持发布** (2026-07-06)
+**项目重命名与监控系统完善** (2026-07-06)
 
-- 🏗️ **Agent架构重构**: 统一基类、验证器、执行追踪系统
-- 📊 **管理仪表板**: Agent质量监控、Web活动追踪、系统健康监控
-- 🔒 **安全增强**: 更新SECURITY.md、改进JWT处理、增强认证依赖
-- 🌐 **Web研究增强**: 活动日志、数据管理器、告警系统
-- 🐳 **Docker支持**: 生产级容器化部署，一键启动完整服务栈
-- 🛠️ **开发工具**: 完整的Claude Code技能集、开发生命周期支持
-- 📚 **文档完善**: Agent架构文档、操作指南、Docker部署文档
+- 🏷️ **项目重命名**: 从"Multi-Agent RAG Local v4"更名为"QueryMind（智询）"
+- 📊 **监控系统完善**: Prometheus + Grafana + Alertmanager完整监控栈
+- 🔍 **健康检查增强**: 8个服务依赖的综合健康检查
+- 📈 **业务指标**: Agent执行、检索质量、LLM成本、缓存命中率追踪
+- 🔧 **熔断器集成**: LLM API、向量库、图数据库全面熔断保护
+- 📝 **结构化日志**: Structlog配置，JSON输出，动态日志级别
+- 🚨 **告警规则**: 30+预定义告警规则，覆盖Critical/Warning/Info
+- 📚 **监控文档**: 完整的部署指南、使用手册、实施路线图
 
-📖 [v0.6.1 发布说明](./docs/releases/RELEASE_NOTES_v0.6.1.md) | [v0.6.0 发布说明](./docs/releases/RELEASE_NOTES_v0.6.0.md)
+📖 [v0.6.2 发布说明](./docs/releases/RELEASE_NOTES_v0.6.2.md) | [v0.6.1 发布说明](./docs/releases/RELEASE_NOTES_v0.6.1.md)
 
 ---
 

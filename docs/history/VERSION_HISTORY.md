@@ -1,10 +1,10 @@
-# Version History
+﻿# Version History
 
 **Status**: Public  
 **Last Updated**: 2026-06-28  
 **Audience**: Users, operators, contributors, maintainers  
 
-This file is the public version timeline for Multi-Agent Local RAG. It keeps a
+This file is the public version timeline for QueryMind（智询）. It keeps a
 sanitized record of releases and intentionally excludes internal audit reports,
 security exploit details, private remediation plans, and generated validation
 artifacts.
@@ -395,7 +395,7 @@ Public highlights:
 
 Public highlights:
 
-- Initial local multi-agent RAG baseline.
+- Initial local QueryMind baseline.
 - FastAPI backend, React frontend, retrieval and graph orchestration foundations.
 
 ## Publication Notes

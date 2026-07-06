@@ -1,4 +1,4 @@
-# 多智能体系统 (Multi-Agent System)
+﻿# 多智能体系统 (Multi-Agent System)
 
 本文档详细介绍基于 LangGraph 的多智能体协同系统的设计、实现和使用。
 
@@ -231,7 +231,7 @@ CIRCUIT_BREAKER_COOLDOWN_SECONDS=30
 
 ## 概述
 
-Multi-Agent Local RAG 系统采用 **LangGraph** 框架实现多智能体协同工作流。系统包含 9 个核心节点，通过智能路由实现动态的查询处理。
+QueryMind（智询） 系统采用 **LangGraph** 框架实现多智能体协同工作流。系统包含 9 个核心节点，通过智能路由实现动态的查询处理。
 
 ### 核心智能体
 

@@ -1,4 +1,4 @@
-# Release Notes - v0.4.0
+﻿# Release Notes - v0.4.0
 
 **Release Date**: 2026-05-16  
 **Release Type**: Major Feature Release  
@@ -12,7 +12,7 @@ Version 0.4.0 introduces a comprehensive suite of interview demonstration featur
 
 ### 1. Performance Comparison Framework
 
-Compare the multi-agent RAG system against three baseline systems with comprehensive evaluation metrics.
+Compare the QueryMind System against three baseline systems with comprehensive evaluation metrics.
 
 **Key Features:**
 - **3 Baseline Systems**: Vector-only, Hybrid (Vector+BM25), Rerank (Hybrid+Cross-encoder)

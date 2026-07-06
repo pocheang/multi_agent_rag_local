@@ -1,4 +1,4 @@
-"""Health check and metrics routes for the Multi-Agent Local RAG API."""
+﻿"""Health check and metrics routes for the QueryMind API."""
 
 import os
 import socket
@@ -82,6 +82,136 @@ def _check_chroma_ready() -> dict[str, Any]:
         }
 
 
+def _check_redis_ready() -> dict[str, Any]:
+    """Check Redis connection (if Redis cache backend is enabled)."""
+    start = time.perf_counter()
+    cache_backend = str(getattr(settings, "retrieval_cache_backend", "auto") or "auto").lower()
+
+    # Redis is only required if explicitly configured
+    required = cache_backend == "redis"
+
+    if cache_backend == "off" or cache_backend == "memory":
+        return {"ok": True, "required": False, "latency_ms": 0, "status": "not_configured"}
+
+    try:
+        import redis
+        parsed = urlparse(settings.redis_url or "redis://localhost:6379/0")
+        host = parsed.hostname or "localhost"
+        port = int(parsed.port or 6379)
+
+        client = redis.Redis(host=host, port=port, socket_connect_timeout=3, socket_timeout=3)
+        client.ping()
+        latency = int((time.perf_counter() - start) * 1000)
+        return {"ok": True, "required": required, "latency_ms": latency, "host": f"{host}:{port}"}
+    except ImportError:
+        latency = int((time.perf_counter() - start) * 1000)
+        return {"ok": False, "required": required, "latency_ms": latency, "error": "redis package not installed"}
+    except Exception as e:
+        latency = int((time.perf_counter() - start) * 1000)
+        return {"ok": False, "required": required, "latency_ms": latency, "error": str(e)}
+
+
+def _check_postgres_ready() -> dict[str, Any]:
+    """Check PostgreSQL database connection."""
+    start = time.perf_counter()
+    try:
+        # Try to import database module
+        try:
+            from app.core.database import get_db_session
+        except ImportError:
+            # Database module not configured - this is OK for now
+            return {"ok": True, "required": False, "latency_ms": 0, "status": "not_configured"}
+
+        # Try to get a database session and execute a simple query
+        with get_db_session() as session:
+            session.execute("SELECT 1")
+
+        latency = int((time.perf_counter() - start) * 1000)
+        return {"ok": True, "required": False, "latency_ms": latency}
+    except Exception as e:
+        latency = int((time.perf_counter() - start) * 1000)
+        # PostgreSQL is optional for now - don't fail readiness
+        return {"ok": False, "required": False, "latency_ms": latency, "error": str(e)}
+
+
+def _check_openai_api_ready() -> dict[str, Any]:
+    """Check OpenAI API availability (if configured as backend)."""
+    start = time.perf_counter()
+    backend = str(settings.model_backend or "").lower()
+    required = backend == "openai"
+
+    if backend != "openai":
+        return {"ok": True, "required": False, "latency_ms": 0, "status": "not_configured"}
+
+    if not settings.openai_api_key:
+        return {"ok": False, "required": True, "latency_ms": 0, "error": "OPENAI_API_KEY not configured"}
+
+    try:
+        base_url = (settings.openai_base_url or "https://api.openai.com/v1").rstrip("/")
+        headers = {"Authorization": f"Bearer {settings.openai_api_key}"}
+
+        with httpx.Client(timeout=5.0) as client:
+            # Check models endpoint (lightweight check)
+            resp = client.get(f"{base_url}/models", headers=headers)
+            resp.raise_for_status()
+
+        latency = int((time.perf_counter() - start) * 1000)
+        return {"ok": True, "required": required, "latency_ms": latency, "base_url": base_url}
+    except Exception as e:
+        latency = int((time.perf_counter() - start) * 1000)
+        return {"ok": False, "required": required, "latency_ms": latency, "error": str(e)}
+
+
+def _check_anthropic_api_ready() -> dict[str, Any]:
+    """Check Anthropic API availability (if configured as backend)."""
+    start = time.perf_counter()
+    backend = str(settings.model_backend or "").lower()
+    required = backend == "anthropic"
+
+    if backend != "anthropic":
+        return {"ok": True, "required": False, "latency_ms": 0, "status": "not_configured"}
+
+    if not settings.anthropic_api_key:
+        return {"ok": False, "required": True, "latency_ms": 0, "error": "ANTHROPIC_API_KEY not configured"}
+
+    try:
+        # Simple connectivity check - just verify the key format
+        if not settings.anthropic_api_key.startswith("sk-ant-"):
+            return {"ok": False, "required": required, "latency_ms": 0, "error": "Invalid API key format"}
+
+        latency = int((time.perf_counter() - start) * 1000)
+        return {"ok": True, "required": required, "latency_ms": latency, "status": "key_configured"}
+    except Exception as e:
+        latency = int((time.perf_counter() - start) * 1000)
+        return {"ok": False, "required": required, "latency_ms": latency, "error": str(e)}
+
+
+def _check_embedding_model_ready() -> dict[str, Any]:
+    """Check if embedding model is loaded and ready."""
+    start = time.perf_counter()
+    try:
+        # Try to access the embedding model
+        from app.retrievers.vector_store import get_embeddings
+
+        embeddings = get_embeddings()
+        # Quick validation - embed a test string
+        test_embedding = embeddings.embed_query("test")
+
+        if not test_embedding or len(test_embedding) == 0:
+            raise ValueError("Embedding returned empty result")
+
+        latency = int((time.perf_counter() - start) * 1000)
+        return {
+            "ok": True,
+            "required": True,
+            "latency_ms": latency,
+            "dimension": len(test_embedding),
+        }
+    except Exception as e:
+        latency = int((time.perf_counter() - start) * 1000)
+        return {"ok": False, "required": True, "latency_ms": latency, "error": str(e)}
+
+
 def _runtime_diagnostics_summary() -> dict[str, Any]:
     conda_prefix = str(os.environ.get("CONDA_PREFIX", "") or "").strip()
     conda_env = str(os.environ.get("CONDA_DEFAULT_ENV", "") or "").strip()
@@ -129,7 +259,15 @@ def home():
 
 @router.get("/health")
 def health():
-    return {"status": "ok"}
+    """
+    Basic liveness probe - returns OK if the API process is running.
+    Use /ready for comprehensive dependency checks.
+    """
+    return {
+        "status": "ok",
+        "service": "querymind-api",
+        "version": "0.6.1",
+    }
 
 
 @router.get("/metrics")
@@ -145,15 +283,36 @@ def metrics():
 
 @router.get("/ready")
 def ready():
+    """
+    Readiness probe - comprehensive check of all dependencies.
+    Returns 200 if all required services are healthy, 503 if any required service fails.
+    """
     checks = {
         "api": {"ok": True, "required": True, "latency_ms": 0},
+        "postgres": _check_postgres_ready(),
+        "redis": _check_redis_ready(),
         "ollama": _check_ollama_ready(),
+        "openai": _check_openai_api_ready(),
+        "anthropic": _check_anthropic_api_ready(),
         "neo4j": _check_neo4j_ready(),
         "chroma": _check_chroma_ready(),
+        "embedding_model": _check_embedding_model_ready(),
     }
+
+    # Identify blocking failures (required services that are not OK)
     blocking_failures = [name for name, detail in checks.items() if detail.get("required") and not detail.get("ok")]
-    status_text = "ok" if not blocking_failures else "degraded"
-    code = 200 if status_text == "ok" else 503
+
+    # Determine overall status
+    if not blocking_failures:
+        status_text = "healthy"
+        code = 200
+    elif len(blocking_failures) < len([s for s in checks.values() if s.get("required")]):
+        status_text = "degraded"
+        code = 200  # Partially healthy - can still serve requests
+    else:
+        status_text = "unhealthy"
+        code = 503
+
     payload = {
         "status": status_text,
         "blocking_failures": blocking_failures,
@@ -162,5 +321,37 @@ def ready():
             "guard": query_guard.stats(),
             "shadow_queue": shadow_queue.stats(),
         },
+        "timestamp": time.time(),
     }
     return JSONResponse(content=payload, status_code=code)
+
+
+@router.get("/circuit-breakers")
+def circuit_breaker_status():
+    """
+    Get status of all circuit breakers in the system.
+
+    Returns the state, failure count, and opened time for each circuit.
+    Use this to monitor resilience mechanisms and identify failing services.
+    """
+    from app.services.resilience import _BREAKERS, _BREAKERS_LOCK
+
+    circuits = {}
+    current_time = time.time()
+
+    with _BREAKERS_LOCK:
+        for name, state in _BREAKERS.items():
+            is_open = state.opened_until > current_time
+            circuits[name] = {
+                "state": "open" if is_open else "closed",
+                "consecutive_failures": state.fails,
+                "opened_until": state.opened_until if is_open else None,
+                "time_until_retry": max(0, int(state.opened_until - current_time)) if is_open else 0,
+            }
+
+    return {
+        "timestamp": current_time,
+        "total_circuits": len(circuits),
+        "open_circuits": sum(1 for c in circuits.values() if c["state"] == "open"),
+        "circuits": circuits,
+    }

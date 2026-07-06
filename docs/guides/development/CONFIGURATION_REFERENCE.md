@@ -1,6 +1,6 @@
-# 配置参考 (Configuration Reference)
+﻿# 配置参考 (Configuration Reference)
 
-本文档详细说明 Multi-Agent Local RAG 系统的所有环境变量和配置选项。
+本文档详细说明 QueryMind（智询） 系统的所有环境变量和配置选项。
 
 ## 目录
 

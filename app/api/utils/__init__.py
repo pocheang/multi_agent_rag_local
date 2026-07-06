@@ -1,1 +1,1 @@
-# Utility modules for the Multi-Agent Local RAG API
+﻿# Utility modules for the QueryMind API

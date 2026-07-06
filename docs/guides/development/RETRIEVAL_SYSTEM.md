@@ -1,6 +1,6 @@
-# 检索系统 (Retrieval System)
+﻿# 检索系统 (Retrieval System)
 
-本文档详细介绍 Multi-Agent Local RAG 系统的混合检索架构、算法实现和优化策略。
+本文档详细介绍 QueryMind（智询） 系统的混合检索架构、算法实现和优化策略。
 
 ## 目录
 

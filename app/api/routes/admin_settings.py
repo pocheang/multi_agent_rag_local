@@ -1,4 +1,4 @@
-"""Admin settings and configuration routes for the Multi-Agent Local RAG API."""
+﻿"""Admin settings and configuration routes for the QueryMind API."""
 
 import re
 import time

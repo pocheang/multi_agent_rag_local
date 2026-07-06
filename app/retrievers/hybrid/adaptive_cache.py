@@ -1,5 +1,5 @@
-"""
-Adaptive Caching Strategy for Multi-Agent RAG System
+﻿"""
+Adaptive Caching Strategy for QueryMind System
 
 This module implements intelligent cache TTL calculation based on:
     - Query complexity (fast/balanced/deep tier)

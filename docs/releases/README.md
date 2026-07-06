@@ -1,6 +1,6 @@
-# Release Notes
+﻿# Release Notes
 
-Complete release history for the Multi-Agent Local RAG system.
+Complete release history for the QueryMind（智询） System.
 
 ## Latest Releases
 

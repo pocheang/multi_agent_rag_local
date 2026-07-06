@@ -1,5 +1,5 @@
-"""
-Query helper functions for the Multi-Agent Local RAG API.
+﻿"""
+Query helper functions for the QueryMind API.
 """
 
 import json

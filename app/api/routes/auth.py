@@ -1,4 +1,4 @@
-"""Authentication routes for the Multi-Agent Local RAG API."""
+﻿"""Authentication routes for the QueryMind API."""
 
 import logging
 import secrets
