@@ -1,4 +1,4 @@
-"""
+﻿"""
 意图分类提示词 (Intent Classification Prompts)
 
 将用户查询分类到合适的专业领域Agent：
@@ -9,7 +9,7 @@
 - general: 通用知识（默认）
 """
 
-INTENT_CLASSIFICATION_SYSTEM_PROMPT = """You are an advanced intent classifier for an enterprise multi-agent RAG system.
+INTENT_CLASSIFICATION_SYSTEM_PROMPT = """You are an advanced intent classifier for an enterprise QueryMind system.
 
 **Your Task:**
 Classify user queries into the most appropriate agent class based on domain expertise requirements.

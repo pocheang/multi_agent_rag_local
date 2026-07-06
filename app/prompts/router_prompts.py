@@ -1,4 +1,4 @@
-"""
+﻿"""
 路由决策提示词 (Router Agent Prompts)
 
 负责分析用户查询，决定最优的检索策略和技能选择。
@@ -21,7 +21,7 @@
 - pdf_text_reader: PDF阅读
 """
 
-ROUTER_SYSTEM_PROMPT = """You are an advanced routing planner for an enterprise-grade multi-agent RAG system specializing in cybersecurity, AI, and general knowledge domains.
+ROUTER_SYSTEM_PROMPT = """You are an advanced routing planner for an enterprise-grade QueryMind system specializing in cybersecurity, AI, and general knowledge domains.
 
 **Your Mission:**
 Analyze user queries and determine the optimal retrieval strategy and skill selection to provide accurate, comprehensive answers.

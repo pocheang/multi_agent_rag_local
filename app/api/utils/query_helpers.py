@@ -1,5 +1,5 @@
-"""
-Query-related helper functions for the Multi-Agent Local RAG API.
+﻿"""
+Query-related helper functions for the QueryMind API.
 """
 
 import hashlib

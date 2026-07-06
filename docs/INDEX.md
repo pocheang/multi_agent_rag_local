@@ -1,8 +1,8 @@
-# Documentation Index
+﻿# Documentation Index
 
 **Status**: Public
 **Last Updated**: 2026-06-23
-**Purpose**: Complete index of public Multi-Agent Local RAG documentation
+**Purpose**: Complete index of public QueryMind（智询） documentation
 
 This index covers only publicly published documentation. Internal records
 (audits, fix logs, work-in-progress plans, AI assistant instructions) are kept

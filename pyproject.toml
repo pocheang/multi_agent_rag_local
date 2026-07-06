@@ -68,7 +68,7 @@ reranker = [
 ]
 # Convenience meta-extra: equivalent to the historical full install.
 full = [
-  "multi-agent-local-rag[ocr,paddle,docling,reranker]",
+  "querymind[ocr,paddle,docling,reranker]",
 ]
 dev = [
   "pytest>=8.0.0",

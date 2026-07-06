@@ -1,5 +1,5 @@
-"""
-Request middleware for the Multi-Agent Local RAG API.
+﻿"""
+Request middleware for the QueryMind API.
 """
 
 import os

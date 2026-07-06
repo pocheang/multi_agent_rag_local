@@ -1,3 +1,3 @@
-"""Version information for multi-agent-local-rag package."""
+"""Version information for QueryMind package."""
 
-__version__ = "0.5.0"
+__version__ = "0.6.2"

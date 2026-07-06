@@ -1,8 +1,8 @@
-# PDF Performance Tuning Guide
+﻿# PDF Performance Tuning Guide
 
 ## Overview
 
-This guide covers performance optimization strategies for PDF processing in the multi-agent RAG system. The PDF module includes several performance features: caching, streaming processing, batch chart extraction, and configurable processing modes.
+This guide covers performance optimization strategies for PDF processing in the QueryMind System. The PDF module includes several performance features: caching, streaming processing, batch chart extraction, and configurable processing modes.
 
 ### Key Performance Metrics
 

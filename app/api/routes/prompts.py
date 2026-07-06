@@ -1,4 +1,4 @@
-"""Prompt management routes for the Multi-Agent Local RAG API."""
+﻿"""Prompt management routes for the QueryMind API."""
 
 from typing import Any
 

@@ -1,6 +1,6 @@
-# Configuration and Operation Guides
+﻿# Configuration and Operation Guides
 
-This directory contains guides for configuring and operating the Multi-Agent Local RAG system.
+This directory contains guides for configuring and operating the QueryMind（智询） System.
 
 ## Available Guides
 

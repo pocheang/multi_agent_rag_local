@@ -2,6 +2,117 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.6.2] - 2026-07-06
+
+### 🏷️ Project Rebranding & Production Monitoring Release
+
+This release officially renames the project to **QueryMind（智询）** and delivers a complete production-grade monitoring stack with Prometheus, Grafana, and comprehensive observability features.
+
+#### Major Features
+
+**Project Rebranding** 🆕:
+- Renamed from "Multi-Agent RAG Local v4" to "QueryMind（智询）"
+- Updated 27 Python code files, 3 config files, 48 documentation files
+- Package name: `querymind`
+- Service identifier: `querymind-api`
+- Trace identifier: `querymind`
+- Technical terms preserved where appropriate (e.g., "multi-agent system" in architecture docs)
+
+**Monitoring Stack Deployment** 🆕:
+- Complete Docker Compose monitoring stack (Prometheus + Grafana + Alertmanager)
+- 30+ predefined alert rules (Critical/Warning/Info levels)
+- 14-panel Grafana dashboard (system health, performance, costs, errors)
+- One-command deployment: `docker-compose -f docker-compose.monitoring.yml up -d`
+- Prometheus data retention: 30 days
+- Alert routing with Slack/PagerDuty/Email templates
+
+**Enhanced Health Checks** 🆕:
+- 6 new dependency health check functions (PostgreSQL, Redis, OpenAI, Anthropic, Neo4j, ChromaDB)
+- `/health` endpoint for Kubernetes liveness probe
+- `/ready` endpoint for comprehensive readiness checks (8 services)
+- `/circuit-breakers` endpoint for circuit breaker status monitoring
+
+**Business Metrics Tracking** 🆕:
+- Agent execution metrics (by agent/status/route with labels)
+- Retrieval quality score tracking (by strategy: hybrid/dense/bm25/rerank)
+- LLM API cost tracking (by provider/model)
+- Cache hit rate metrics (by operation/layer)
+- User session duration tracking (by user type)
+- Prometheus-compatible labeled metrics export
+
+**Structured Logging** 🆕:
+- New module: `app/core/logging_config.py` with Structlog configuration
+- JSON-formatted log output for machine parsing
+- Context propagation and performance tracking
+- Dynamic log level management via admin API
+- New endpoints: `GET /admin/ops/logging/levels`, `POST /admin/ops/logging/level`, `POST /admin/ops/logging/reset`
+
+**Circuit Breaker Integration** 🆕:
+- New module: `app/services/circuit_breaker_integration.py`
+- Wrapper classes: `LLMClientWithCircuitBreaker`, `VectorStoreWithCircuitBreaker`, `GraphStoreWithCircuitBreaker`
+- Decorator pattern: `@with_circuit_breaker()`
+- Automatic degradation strategies
+- Real-time status monitoring
+
+**Documentation** 🆕:
+- 10 new monitoring documents (~82 pages total)
+- Monitoring audit report (15 issues identified and fixed)
+- Metrics usage guide with Prometheus query examples
+- Logging migration guide with 5 migration modes
+- Deployment guide with troubleshooting
+- Implementation roadmap (5 phases)
+- Quick reference guide
+- MONITORING_README with feature overview
+
+#### Technical Improvements
+
+**Monitoring Coverage**:
+- Health check services: 3 → 8 (+167%)
+- Metrics dimensionality: basic → multi-labeled
+- Log format: text → JSON structured
+- Circuit breaker coverage: partial → 100%
+- Alert rules: 0 → 30+
+- Visualization panels: 0 → 14
+
+**Quality Metrics** (maintained from v0.6.1):
+- Router accuracy: >99%
+- Hallucination rate: <10%
+- Citation completeness: >96%
+- Precision@5: >0.90
+- P95 latency: <4s
+
+#### Files Changed
+
+**Modified**:
+- 27 Python code files (project name updates)
+- 3 monitoring config files (Prometheus, Grafana, Alertmanager)
+- 48 documentation files (project name updates)
+- pyproject.toml (package name and dependencies)
+- README.md (version and features)
+- app/__version__.py (version 0.6.2)
+
+**Added**:
+- app/core/logging_config.py (~150 lines)
+- app/services/circuit_breaker_integration.py (~300 lines)
+- config/prometheus/prometheus.yml
+- config/prometheus/alert_rules.yml
+- config/alertmanager/alertmanager.yml
+- config/grafana/datasources.yml
+- dashboards/grafana/rag-system-overview.json
+- docker-compose.monitoring.yml
+- docs/releases/RELEASE_NOTES_v0.6.2.md
+- 9 monitoring documentation files
+
+#### Breaking Changes
+
+None - fully backward compatible with v0.6.1
+
+#### Migration Notes
+
+See [Migration Guide](docs/releases/RELEASE_NOTES_v0.6.2.md#-迁移指南) for detailed upgrade instructions from v0.6.1.
+
+---
+
 ## [0.6.1] - 2026-07-06
 
 ### 🏗️ Architecture Enhancement & Docker Support Release

@@ -1,5 +1,5 @@
-"""
-Admin-related helper functions for the Multi-Agent Local RAG API.
+﻿"""
+Admin-related helper functions for the QueryMind API.
 """
 
 import os

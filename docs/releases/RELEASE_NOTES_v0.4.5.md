@@ -1,4 +1,4 @@
-# Release Notes - v0.4.5
+﻿# Release Notes - v0.4.5
 
 **发布日期**: 2026-06-19  
 **版本类型**: 重大功能更新 - 系统优化版本  
@@ -350,6 +350,6 @@ GRAPH_PARAMS_HIGH_QUALITY = {
 
 ---
 
-**🎉 感谢使用 Multi-Agent RAG Local v0.4.5！**
+**🎉 感谢使用 QueryMind Local v0.4.5！**
 
 本版本显著提升了系统性能和可维护性，为未来的功能扩展奠定了坚实基础。

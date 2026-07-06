@@ -1,6 +1,6 @@
-# 代码规范 (Code Standards)
+﻿# 代码规范 (Code Standards)
 
-本文档定义 Multi-Agent Local RAG 项目的编码标准、最佳实践和代码风格指南。
+本文档定义 QueryMind（智询） 项目的编码标准、最佳实践和代码风格指南。
 
 ## 目录
 

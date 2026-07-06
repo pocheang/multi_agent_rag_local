@@ -1,5 +1,5 @@
-"""
-Authentication helper functions for the Multi-Agent Local RAG API.
+﻿"""
+Authentication helper functions for the QueryMind API.
 """
 
 from typing import Any

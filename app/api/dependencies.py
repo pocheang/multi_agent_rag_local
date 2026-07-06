@@ -1,5 +1,5 @@
-"""
-Shared dependencies, services, and helper functions for the Multi-Agent Local RAG API.
+﻿"""
+Shared dependencies, services, and helper functions for the QueryMind API.
 
 This module serves as the central hub for all shared dependencies and re-exports
 helper functions from specialized utility modules.

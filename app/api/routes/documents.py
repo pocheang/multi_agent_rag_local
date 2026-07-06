@@ -1,4 +1,4 @@
-"""Document management routes for the Multi-Agent Local RAG API."""
+﻿"""Document management routes for the QueryMind API."""
 
 import asyncio
 try:

@@ -1,4 +1,4 @@
-"""Query routes for the Multi-Agent Local RAG API."""
+﻿"""Query routes for the QueryMind API."""
 
 import logging
 from typing import Annotated, Any

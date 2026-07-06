@@ -1,6 +1,6 @@
-# 前端开发 (Frontend Development)
+﻿# 前端开发 (Frontend Development)
 
-本文档介绍 Multi-Agent Local RAG 系统的前端开发指南，包括 React 组件开发、状态管理和 API 集成。
+本文档介绍 QueryMind（智询） 系统的前端开发指南，包括 React 组件开发、状态管理和 API 集成。
 
 ## 目录
 
@@ -142,7 +142,7 @@ VITE_WS_BASE_URL=wss://api.example.com
 
 ## 技术栈
 
-Multi-Agent Local RAG 的前端采用现代化的 React 技术栈，强调类型安全、开发效率和用户体验。
+QueryMind（智询） 的前端采用现代化的 React 技术栈，强调类型安全、开发效率和用户体验。
 
 ### 核心框架
 

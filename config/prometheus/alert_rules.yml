@@ -1,0 +1,356 @@
+﻿# Prometheus Alerting Rules for QueryMind System
+# Place this file in: config/prometheus/alert_rules.yml
+
+groups:
+  - name: rag_system_critical
+    interval: 30s
+    rules:
+      # ====================================================================
+      # Critical Alerts - Immediate Action Required
+      # ====================================================================
+
+      - alert: SystemUnhealthy
+        expr: |
+          up{job="rag-api"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          component: system
+        annotations:
+          summary: "RAG API is down"
+          description: "RAG API instance {{ $labels.instance }} has been down for more than 1 minute"
+          action: "Check application logs and restart service if needed"
+
+      - alert: HighAgentErrorRate
+        expr: |
+          sum(rate(agent_execution_total{status="failed"}[5m])) by (agent)
+          /
+          sum(rate(agent_execution_total[5m])) by (agent)
+          > 0.10
+        for: 5m
+        labels:
+          severity: critical
+          component: agents
+        annotations:
+          summary: "High error rate for {{ $labels.agent }}"
+          description: "Agent {{ $labels.agent }} has {{ $value | humanizePercentage }} error rate (threshold: 10%)"
+          action: "Check agent logs and circuit breaker status"
+
+      - alert: LLMCostExceeded
+        expr: |
+          sum(rate(llm_api_cost_usd_total[1h])) > 20
+        for: 15m
+        labels:
+          severity: critical
+          component: llm
+        annotations:
+          summary: "LLM cost exceeds $20/hour"
+          description: "Current LLM API cost rate: ${{ $value | humanize }}/hour"
+          action: "Review query patterns and consider rate limiting"
+
+      - alert: AllCircuitBreakersOpen
+        expr: |
+          count(circuit_breaker_state{state="open"}) >= 3
+        for: 2m
+        labels:
+          severity: critical
+          component: resilience
+        annotations:
+          summary: "Multiple circuit breakers are open"
+          description: "{{ $value }} circuit breakers are currently open, indicating widespread service issues"
+          action: "Check external service availability and logs"
+
+  - name: rag_system_warnings
+    interval: 1m
+    rules:
+      # ====================================================================
+      # Warning Alerts - Attention Needed
+      # ====================================================================
+
+      - alert: HighLatency
+        expr: |
+          histogram_quantile(0.95,
+            sum(rate(query_duration_seconds_bucket[5m])) by (le)
+          ) > 4
+        for: 5m
+        labels:
+          severity: warning
+          component: performance
+        annotations:
+          summary: "P95 query latency exceeds 4 seconds"
+          description: "P95 latency is {{ $value | humanizeDuration }}"
+          action: "Check slow query logs and database performance"
+
+      - alert: LowRetrievalQuality
+        expr: |
+          avg(retrieval_quality_score_seconds_sum / retrieval_quality_score_seconds_count) by (strategy)
+          < 0.6
+        for: 10m
+        labels:
+          severity: warning
+          component: retrieval
+        annotations:
+          summary: "Low retrieval quality for {{ $labels.strategy }}"
+          description: "Average quality score: {{ $value | humanize }} (threshold: 0.6)"
+          action: "Review retrieval strategy configuration and reranker settings"
+
+      - alert: LowCacheHitRate
+        expr: |
+          sum(rate(cache_operations_total{result="hit"}[5m]))
+          /
+          sum(rate(cache_operations_total[5m]))
+          < 0.50
+        for: 15m
+        labels:
+          severity: warning
+          component: cache
+        annotations:
+          summary: "Cache hit rate below 50%"
+          description: "Current hit rate: {{ $value | humanizePercentage }}"
+          action: "Review cache configuration and TTL settings"
+
+      - alert: HighMemoryUsage
+        expr: |
+          process_resident_memory_bytes{job="rag-api"} / (1024*1024*1024) > 4
+        for: 5m
+        labels:
+          severity: warning
+          component: resources
+        annotations:
+          summary: "High memory usage detected"
+          description: "Memory usage: {{ $value | humanize }}GB"
+          action: "Monitor for memory leaks and consider scaling"
+
+      - alert: CircuitBreakerOpen
+        expr: |
+          circuit_breaker_state{state="open"} == 1
+        for: 1m
+        labels:
+          severity: warning
+          component: resilience
+        annotations:
+          summary: "Circuit breaker open for {{ $labels.circuit_name }}"
+          description: "Service {{ $labels.circuit_name }} is experiencing failures"
+          action: "Check service health and logs"
+
+      - alert: EmbeddingModelSlow
+        expr: |
+          histogram_quantile(0.95,
+            sum(rate(embedding_duration_seconds_bucket[5m])) by (le)
+          ) > 2
+        for: 5m
+        labels:
+          severity: warning
+          component: embedding
+        annotations:
+          summary: "Embedding model is slow"
+          description: "P95 embedding latency: {{ $value | humanizeDuration }}"
+          action: "Check GPU utilization and model loading"
+
+  - name: rag_system_info
+    interval: 2m
+    rules:
+      # ====================================================================
+      # Info Alerts - Monitoring and Trends
+      # ====================================================================
+
+      - alert: HighQueryRate
+        expr: |
+          sum(rate(agent_execution_total[5m])) > 100
+        for: 5m
+        labels:
+          severity: info
+          component: traffic
+        annotations:
+          summary: "High query rate detected"
+          description: "Current rate: {{ $value | humanize }} queries/second"
+          action: "Monitor system capacity and consider scaling"
+
+      - alert: LLMCostIncreasing
+        expr: |
+          sum(rate(llm_api_cost_usd_total[1h])) > 10
+        for: 30m
+        labels:
+          severity: info
+          component: cost
+        annotations:
+          summary: "LLM costs are increasing"
+          description: "Current rate: ${{ $value | humanize }}/hour"
+          action: "Review usage patterns"
+
+      - alert: LongUserSessions
+        expr: |
+          histogram_quantile(0.95,
+            sum(rate(user_session_duration_seconds_bucket[1h])) by (le)
+          ) > 3600
+        for: 1h
+        labels:
+          severity: info
+          component: engagement
+        annotations:
+          summary: "Users have long session durations"
+          description: "P95 session duration: {{ $value | humanizeDuration }}"
+          action: "Good engagement signal - monitor for patterns"
+
+      - alert: NewAgentDeployed
+        expr: |
+          changes(agent_execution_total[1h]) > 0
+          and
+          absent(agent_execution_total offset 2h)
+        for: 5m
+        labels:
+          severity: info
+          component: deployment
+        annotations:
+          summary: "New agent detected: {{ $labels.agent }}"
+          description: "Agent {{ $labels.agent }} started reporting metrics"
+          action: "Verify deployment and monitor initial performance"
+
+  - name: rag_system_dependencies
+    interval: 1m
+    rules:
+      # ====================================================================
+      # Dependency Health Alerts
+      # ====================================================================
+
+      - alert: ChromaDBUnreachable
+        expr: |
+          chroma_health{status="ok"} == 0
+        for: 2m
+        labels:
+          severity: critical
+          component: database
+        annotations:
+          summary: "ChromaDB is unreachable"
+          description: "Vector database is down or unreachable"
+          action: "Check ChromaDB service and logs"
+
+      - alert: Neo4jUnreachable
+        expr: |
+          neo4j_health{status="ok"} == 0
+        for: 2m
+        labels:
+          severity: warning
+          component: database
+        annotations:
+          summary: "Neo4j is unreachable"
+          description: "Graph database is down, falling back to vector-only retrieval"
+          action: "Check Neo4j service and logs"
+
+      - alert: RedisUnreachable
+        expr: |
+          redis_health{status="ok"} == 0
+        for: 2m
+        labels:
+          severity: warning
+          component: cache
+        annotations:
+          summary: "Redis is unreachable"
+          description: "Cache backend is down, using in-memory cache"
+          action: "Check Redis service and logs"
+
+      - alert: OllamaUnreachable
+        expr: |
+          ollama_health{status="ok"} == 0
+          and
+          model_backend == "ollama"
+        for: 2m
+        labels:
+          severity: critical
+          component: llm
+        annotations:
+          summary: "Ollama service is unreachable"
+          description: "Local LLM backend is down"
+          action: "Check Ollama service and restart if needed"
+
+  - name: rag_system_slo
+    interval: 5m
+    rules:
+      # ====================================================================
+      # SLO (Service Level Objective) Monitoring
+      # ====================================================================
+
+      - alert: SLOErrorRateBreach
+        expr: |
+          (
+            sum(rate(agent_execution_total{status="failed"}[30m]))
+            /
+            sum(rate(agent_execution_total[30m]))
+          ) > 0.05
+        for: 10m
+        labels:
+          severity: warning
+          component: slo
+        annotations:
+          summary: "Error rate SLO breach (target: <5%)"
+          description: "Current error rate: {{ $value | humanizePercentage }}"
+          action: "Investigate error patterns and recent changes"
+
+      - alert: SLOLatencyBreach
+        expr: |
+          histogram_quantile(0.95,
+            sum(rate(query_duration_seconds_bucket[30m])) by (le)
+          ) > 4
+        for: 10m
+        labels:
+          severity: warning
+          component: slo
+        annotations:
+          summary: "Latency SLO breach (target: P95 <4s)"
+          description: "Current P95 latency: {{ $value | humanizeDuration }}"
+          action: "Analyze slow queries and optimize performance"
+
+      - alert: SLOAvailabilityBreach
+        expr: |
+          (
+            sum(rate(up{job="rag-api"}[1h]))
+            /
+            count(up{job="rag-api"})
+          ) < 0.99
+        for: 5m
+        labels:
+          severity: critical
+          component: slo
+        annotations:
+          summary: "Availability SLO breach (target: >99%)"
+          description: "Current availability: {{ $value | humanizePercentage }}"
+          action: "Investigate service stability and infrastructure issues"
+
+# ====================================================================
+# Alert Routing Configuration (for Alertmanager)
+# ====================================================================
+# Place in alertmanager.yml:
+#
+# route:
+#   group_by: ['alertname', 'component']
+#   group_wait: 30s
+#   group_interval: 5m
+#   repeat_interval: 4h
+#   receiver: 'default'
+#   routes:
+#     - match:
+#         severity: critical
+#       receiver: 'pagerduty'
+#       continue: true
+#     - match:
+#         severity: warning
+#       receiver: 'slack'
+#     - match:
+#         severity: info
+#       receiver: 'slack-info'
+#
+# receivers:
+#   - name: 'default'
+#     webhook_configs:
+#       - url: 'http://rag-api:8000/webhooks/alerts'
+#   - name: 'pagerduty'
+#     pagerduty_configs:
+#       - service_key: '<your-pagerduty-key>'
+#   - name: 'slack'
+#     slack_configs:
+#       - api_url: '<your-slack-webhook>'
+#         channel: '#rag-alerts'
+#   - name: 'slack-info'
+#     slack_configs:
+#       - api_url: '<your-slack-webhook>'
+#         channel: '#rag-monitoring'

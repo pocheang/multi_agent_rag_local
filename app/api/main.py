@@ -1,5 +1,5 @@
 """
-Main FastAPI application for Multi-Agent Local RAG.
+Main FastAPI application for QueryMind（智询）.
 """
 
 import logging
@@ -175,7 +175,7 @@ async def lifespan(app: FastAPI):
 
 
 # Initialize FastAPI app
-app = FastAPI(title="Multi-Agent Local RAG", lifespan=lifespan)
+app = FastAPI(title="QueryMind（智询）", lifespan=lifespan)
 
 _APP_BASE_API_SEGMENTS = {
     "admin",
