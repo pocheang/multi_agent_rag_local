@@ -1,0 +1,27 @@
+# Docker Compose Override for Development
+version: '3.8'
+
+services:
+  backend:
+    volumes:
+      - ./app:/app/app:ro
+      - ./scripts:/app/scripts:ro
+      - ./config:/app/config:ro
+    command: uvicorn app.api.main:app --reload --host 0.0.0.0 --port 8000
+    environment:
+      APP_ENV: development
+      DEBUG: "true"
+      LOG_LEVEL: DEBUG
+
+  frontend:
+    build:
+      context: ./frontend
+      target: builder
+    volumes:
+      - ./frontend/src:/app/src:ro
+      - ./frontend/public:/app/public:ro
+    command: npm run dev -- --host 0.0.0.0
+    ports:
+      - "5173:5173"
+    environment:
+      NODE_ENV: development
