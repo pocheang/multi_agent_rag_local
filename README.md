@@ -8,7 +8,7 @@
 [![Python](https://img.shields.io/badge/python-3.11%2B-blue.svg)](https://www.python.org/downloads/)
 [![Backend](https://img.shields.io/badge/backend-FastAPI-009688.svg)](https://fastapi.tiangolo.com/)
 [![Frontend](https://img.shields.io/badge/frontend-React%20%2B%20Vite-61DAFB.svg)](https://react.dev/)
-[![Version](https://img.shields.io/badge/version-v0.6.0-blue.svg)](./CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-v0.6.1-blue.svg)](./CHANGELOG.md)
 
 **智能路由 · 混合检索 · 知识图谱 · 质量保证 · 执行追踪**
 
@@ -33,16 +33,18 @@
 - 🔐 **企业级安全** - JWT认证 + RBAC权限
 - 🤖 **多智能体协作** - 11个专业Agent协同工作
 
-### ✨ v0.6.0 新特性
+### ✨ v0.6.1 新特性
 
-**质量优化发布** (2026-06-28)
+**架构增强与管理功能发布** (2026-07-06)
 
-- ⭐ **Router准确率提升**: 95% → 99% (+4.2%)
-- ⭐ **幻觉率大幅降低**: 27.5% → 8.0% (-71%)
-- ⭐ **引用完整性提升**: 85% → 96% (+13%)
-- ⭐ **零破坏性变更**: 100%向后兼容
+- 🏗️ **Agent架构重构**: 统一基类、验证器、执行追踪系统
+- 📊 **管理仪表板**: Agent质量监控、Web活动追踪、系统健康监控
+- 🔒 **安全增强**: 更新SECURITY.md、改进JWT处理、增强认证依赖
+- 🌐 **Web研究增强**: 活动日志、数据管理器、告警系统
+- 🛠️ **开发工具**: 完整的Claude Code技能集、开发生命周期支持
+- 📚 **文档完善**: Agent架构文档、操作指南、部署文档
 
-📖 [完整发布说明](./docs/releases/RELEASE_NOTES_v0.6.0.md)
+📖 [v0.6.0 发布说明](./docs/releases/RELEASE_NOTES_v0.6.0.md)
 
 ---
 

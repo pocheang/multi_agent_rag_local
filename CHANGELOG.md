@@ -2,6 +2,120 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.6.1] - 2026-07-06
+
+### 🏗️ Architecture Enhancement & Admin Features Release
+
+This release focuses on agent architecture improvements, comprehensive admin monitoring capabilities, enhanced security, and improved web research functionality.
+
+#### Major Features
+
+**Agent Architecture Improvements**:
+- Unified base agent classes for consistent behavior across all agents
+- Agent validation framework for input/output verification
+- Result schemas for standardized agent responses
+- Shared utilities for common agent operations
+- Unified configuration system for agent parameters
+- Enhanced agent execution tracker with detailed performance metrics
+
+**Admin Dashboard Features**:
+- Agent Quality Dashboard: Real-time monitoring of agent performance, quality metrics, and health status
+- Web Activity Dashboard: Comprehensive tracking of web research activities with charts and KPIs
+- System Monitor: Centralized system health monitoring and diagnostics
+- Enhanced audit log table with better filtering and export capabilities
+- Improved data tables with pagination, sorting, and search
+- Advanced diagnostics panel with system metrics
+
+**Security Enhancements**:
+- Comprehensive security policy documentation in SECURITY.md
+- Improved JWT token handling and validation
+- Enhanced authentication dependencies with better error handling
+- Deprecated legacy authentication code moved to .deprecated files
+- Security-focused configuration improvements
+
+**Web Research Agent Improvements**:
+- Web activity logging system with configurable retention
+- Data manager for efficient activity data handling
+- Alert system for monitoring research quality and failures
+- Enhanced web research utilities and helper functions
+- Configurable web activity settings (config/web_activity_config.json)
+
+**Developer Experience**:
+- Complete Claude Code skill set for development lifecycle
+- Skills for: developing-change, governing-ai-data, operating-production, planning-work, releasing-deploying, reporting-handoff, verifying-change
+- Comprehensive skill references and documentation
+- Project standards and reporting guidelines
+
+#### Technical Improvements
+
+**Backend**:
+- Model catalog service for centralized provider management
+- Enhanced model configuration store with better validation
+- Improved RAG runtime scope management
+- New API routes: admin_agent_quality, agent_health, web_activity_admin
+- Enhanced admin operations with more endpoints
+- Better API dependencies and error handling
+
+**Frontend**:
+- New admin pages: AdminAgentQualityDashboard, AdminSystemMonitor, AdminWebActivityDashboard
+- Web activity components: charts, KPI cards, and data tables
+- Enhanced model settings with improved UI/UX
+- Better admin state management
+- Improved API settings components
+- Export utilities for data export functionality
+- New CSS organization with themes/dark support
+- Responsive modals and form styling improvements
+
+**Documentation**:
+- AGENT_ARCHITECTURE.md: Comprehensive agent architecture documentation
+- AGENT_CODE_ORGANIZATION.md: Code organization guidelines
+- AGENT_QUALITY_MONITOR.md: Quality monitoring guide
+- WEB_RESEARCH_AGENT.md: Web research agent documentation
+- Multiple operational guides and troubleshooting docs
+- Enhanced README with implementation plan references
+
+#### Testing
+
+**New Test Coverage**:
+- Unit tests for unified agents
+- Web research agent tests
+- Web activity system integration tests
+- Admin agent quality API tests
+- React agent tools tests
+- Enhanced existing test suites
+
+**Testing Utilities**:
+- generate_test_agent_data.py: Test data generation script
+- test_agent_health_complete.py: Comprehensive health checks
+- verify_agent_quality.py: Quality verification tool
+- Debug utilities for authentication and refresh token issues
+
+#### Configuration & Scripts
+
+**New Configuration**:
+- config/web_activity_config.json: Web activity settings
+- Enhanced skill configurations
+- Improved environment handling
+
+**Utility Scripts**:
+- restart.bat: Quick restart script for development
+- demo_react_agent_tools.py: React agent demonstration
+- test_agent_tracker.py: Agent tracker testing
+- validate_json.py: JSON configuration validation
+
+#### Breaking Changes
+
+None. This release is fully backward compatible with v0.6.0.
+
+#### Migration Notes
+
+- No database migrations required
+- New environment variables are optional
+- Admin features require restart to load new routes
+- Web activity logging is opt-in via configuration
+
+---
+
 ## [0.6.0] - 2026-06-28
 
 ### 🎯 Agent Quality Optimization Release

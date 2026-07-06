@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "querymind"
-version = "0.5.0"
+version = "0.6.1"
 description = "QueryMind - Enterprise intelligent Q&A engine with multi-agent orchestration"
 readme = "README.md"
 requires-python = ">=3.11"
