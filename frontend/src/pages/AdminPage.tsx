@@ -3,13 +3,16 @@ import { useTranslation } from "react-i18next";
 import { Link, useNavigate } from "react-router-dom";
 import { LanguageToggle } from "@/components/LanguageToggle";
 import type { AuthUser } from "@/types/api";
+import { AdminAgentQualityDashboard } from "@/pages/admin/AdminAgentQualityDashboard";
 import { AdminAuditLogManagement } from "@/pages/admin/AdminAuditLogManagement";
 import { AdminCreateForm } from "@/pages/admin/AdminCreateForm";
 import { AdminModelSettings } from "@/pages/admin/AdminModelSettings";
 import { AdminOpsOverview } from "@/pages/admin/AdminOpsOverview";
 import { AdminRagSettings } from "@/pages/admin/AdminRagSettings";
 import { AdminSystemLogTable } from "@/pages/admin/AdminSystemLogTable";
+import { AdminSystemMonitor } from "@/pages/admin/AdminSystemMonitor";
 import { AdminUserManagement } from "@/pages/admin/AdminUserManagement";
+import { AdminWebActivityDashboard } from "@/pages/admin/AdminWebActivityDashboard";
 import { useAdminActions } from "@/pages/admin/useAdminActions";
 import { useAdminState } from "@/pages/admin/useAdminState";
 import { formatAuditTime } from "@/pages/admin/utils";
@@ -135,8 +138,11 @@ export function AdminPage({ user, onLogout, themeLabel, onThemeToggle }: Props) 
           <main className="panel">
             <div className="row-actions wrap admin-section-tabs">
               <button type="button" className={state.section === "ops" ? "" : "secondary"} onClick={() => state.setSection("ops")}>{t("pages.admin.sections.ops")}</button>
+              <button type="button" className={state.section === "monitor" ? "" : "secondary"} onClick={() => state.setSection("monitor")}>{t("pages.admin.sections.monitor", "Runtime Monitor")}</button>
               <button type="button" className={state.section === "rag" ? "" : "secondary"} onClick={() => state.setSection("rag")}>{t("pages.admin.sections.rag")}</button>
               <button type="button" className={state.section === "models" ? "" : "secondary"} onClick={() => state.setSection("models")}>{t("pages.admin.sections.models")}</button>
+              <button type="button" className={state.section === "webactivity" ? "" : "secondary"} onClick={() => state.setSection("webactivity")}>{t("pages.admin.sections.webactivity", "Web Activity")}</button>
+              <button type="button" className={state.section === "agentquality" ? "" : "secondary"} onClick={() => state.setSection("agentquality")}>{t("pages.admin.sections.agentquality", "Agent Quality")}</button>
               <button type="button" className={state.section === "admins" ? "" : "secondary"} onClick={() => state.setSection("admins")}>{t("pages.admin.sections.admins")}</button>
               <button type="button" className={state.section === "users" ? "" : "secondary"} onClick={() => state.setSection("users")}>{t("pages.admin.sections.users")}</button>
               <button type="button" className={state.section === "audit" ? "" : "secondary"} onClick={() => state.setSection("audit")}>{t("pages.admin.sections.audit")}</button>
@@ -165,6 +171,8 @@ export function AdminPage({ user, onLogout, themeLabel, onThemeToggle }: Props) 
             />
           )}
 
+
+          {state.section === "monitor" && <AdminSystemMonitor />}
           {state.section === "ops" && (
             <AdminOpsOverview
               ops={state.ops}
@@ -321,6 +329,10 @@ export function AdminPage({ user, onLogout, themeLabel, onThemeToggle }: Props) 
               onSystemLogPageSizeChange={setSystemLogPageSize}
             />
           )}
+
+          {state.section === "webactivity" && <AdminWebActivityDashboard />}
+
+          {state.section === "agentquality" && <AdminAgentQualityDashboard />}
 
           <datalist id="actor-user-options">
             {state.users.map((u) => (

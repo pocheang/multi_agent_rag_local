@@ -258,6 +258,69 @@ export type OpsOverview = {
   };
 };
 
+export type ModelProvider = "local" | "ollama" | "openai" | "deepseek" | "anthropic" | "custom";
+
+export type ModelCatalogItem = {
+  id: string;
+  label: string;
+  roles: Array<"chat" | "reasoning" | "embedding" | string>;
+  recommended?: boolean;
+  deprecated_after?: string | null;
+};
+
+export type ProviderCatalogEntry = {
+  label: string;
+  base_url: string;
+  default_chat_model: string;
+  default_reasoning_model: string;
+  default_embedding_model: string;
+  requires_api_key: boolean;
+  supports_embeddings: boolean;
+  api_style: "local" | "ollama" | "openai" | "anthropic" | string;
+  note?: string;
+  models: ModelCatalogItem[];
+};
+
+export type ModelCatalogResponse = {
+  version: string;
+  providers: Record<ModelProvider, ProviderCatalogEntry>;
+};
+
+export type AdminRuntimeSnapshot = {
+  generated_at: string;
+  status: "healthy" | "degraded" | string;
+  blocking_services: string[];
+  resources: {
+    cpu_percent: number;
+    memory_percent: number;
+    disk_percent: number;
+    process_memory_mb: number;
+  };
+  traffic: {
+    window_seconds: number;
+    requests_total: number;
+    requests_per_second: number;
+    avg_response_ms: number;
+    p95_response_ms: number;
+    error_rate_percent: number;
+    active_requests: number;
+  };
+  services: Record<string, OpsServiceHealth & { message?: string }>;
+  model: AdminModelSettingsView;
+};
+
+export type AdminModelSettingsPayload = {
+  enabled: boolean;
+  provider: ModelProvider | string;
+  api_key: string;
+  base_url: string;
+  chat_model: string;
+  reasoning_model: string;
+  embedding_model: string;
+  temperature: number;
+  max_tokens: number;
+};
+
 export type AdminModelSettingsView = {
   enabled: boolean;
   provider: string;

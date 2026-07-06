@@ -6,24 +6,20 @@
 */
 
 /* Core foundation */
-@import './core/tokens.css';
-@import './core/reset.css';
-@import './core/utilities.css';
+@import "./core/tokens.css";
+@import "./core/reset.css";
+@import "./core/utilities.css";
 
 /* Shared theme variables and shared component theme rules */
-@import './themes/dark/colors.css';
-@import './themes/dark/effects.css';
+@import "./themes/dark/index.css";
 
 /* Atomic shared components */
-@import './components/buttons/base.css';
-@import './components/buttons/variants.css';
-@import './components/forms/inputs.css';
-@import './components/forms/selects.css';
-@import './components/forms/validation.css';
-@import './components/badges.css';
-@import './components/skeletons.css';
-@import './components/spinners.css';
+@import "./components/buttons/index.css";
+@import "./components/forms/index.css";
+@import "./components/badges.css";
+@import "./components/skeletons.css";
+@import "./components/spinners.css";
 
 /* Composite shared components */
-@import './components/cards.css';
-@import './components/tables.css';
+@import "./components/cards.css";
+@import "./components/tables.css";

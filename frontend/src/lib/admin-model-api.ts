@@ -1,22 +1,16 @@
-import type { AdminModelSettingsView } from "@/types/api";
+import type { AdminModelSettingsPayload, AdminModelSettingsView, ModelCatalogResponse } from "@/types/api";
 import { authFetch, parseOrThrow } from "./api-client";
 
 export const adminModelApi = {
+  async modelCatalog() {
+    const res = await authFetch("/model-catalog", { method: "GET" });
+    return parseOrThrow<ModelCatalogResponse>(res);
+  },
   async adminModelSettings() {
     const res = await authFetch("/admin/model-settings", { method: "GET" });
     return parseOrThrow<{ ok: boolean; settings: AdminModelSettingsView }>(res);
   },
-  async adminSaveModelSettings(settings: {
-    enabled: boolean;
-    provider: string;
-    api_key: string;
-    base_url: string;
-    chat_model: string;
-    reasoning_model: string;
-    embedding_model: string;
-    temperature: number;
-    max_tokens: number;
-  }) {
+  async adminSaveModelSettings(settings: AdminModelSettingsPayload) {
     const res = await authFetch("/admin/model-settings", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -24,17 +18,7 @@ export const adminModelApi = {
     });
     return parseOrThrow<{ ok: boolean; settings: AdminModelSettingsView }>(res);
   },
-  async adminTestModelSettings(settings: {
-    enabled: boolean;
-    provider: string;
-    api_key: string;
-    base_url: string;
-    chat_model: string;
-    reasoning_model: string;
-    embedding_model: string;
-    temperature: number;
-    max_tokens: number;
-  }) {
+  async adminTestModelSettings(settings: AdminModelSettingsPayload) {
     const res = await authFetch("/admin/model-settings/test", {
       method: "POST",
       headers: { "Content-Type": "application/json" },

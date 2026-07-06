@@ -692,6 +692,25 @@
   box-shadow: var(--shadow-lg);
 }
 
+.landing-cta-actions {
+  display: flex;
+  gap: var(--space-4);
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+.landing-hero-btn-light-outline {
+  border: 1px solid rgba(255, 255, 255, 0.9);
+  color: #ffffff;
+  background: transparent;
+}
+
+.landing-hero-btn-light-outline:hover {
+  background: rgba(255, 255, 255, 0.12);
+  border-color: #ffffff;
+  color: #ffffff;
+}
+
 /* --- Footer --- */
 .landing-footer {
   border-top: 1px solid var(--border-light);

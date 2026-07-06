@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { appApi } from "@/lib/api";
+import type { ModelCatalogResponse } from "@/types/api";
 import { ApiSettingsFormFields } from "./ApiSettingsFormFields";
 import { ApiSettingsPresets } from "./ApiSettingsPresets";
 import { ApiSettingsProviderTabs } from "./ApiSettingsProviderTabs";
@@ -33,10 +34,9 @@ async function loadModalStyles() {
 type Props = {
   isOpen: boolean;
   onClose: () => void;
-  isAdmin?: boolean;
 };
 
-export function ApiSettings({ isOpen, onClose, isAdmin = false }: Props) {
+export function ApiSettings({ isOpen, onClose }: Props) {
   const { t } = useTranslation();
   const [config, setConfig] = useState<ApiConfig>(DEFAULT_CONFIG);
   const [showApiKey, setShowApiKey] = useState(false);
@@ -44,8 +44,14 @@ export function ApiSettings({ isOpen, onClose, isAdmin = false }: Props) {
   const [result, setResult] = useState<{ type: "success" | "error"; message: string } | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [catalog, setCatalog] = useState<ModelCatalogResponse | null>(null);
 
-  const selectedModels = useMemo(() => PROVIDER_MODELS[config.provider] || [], [config.provider]);
+  const selectedModels = useMemo(() => {
+    const catalogModels = catalog?.providers[config.provider]?.models
+      .filter((model) => model.roles.includes("chat") || model.roles.includes("reasoning"))
+      .map((model) => model.id);
+    return catalogModels?.length ? catalogModels : PROVIDER_MODELS[config.provider] || [];
+  }, [catalog, config.provider]);
   const needsApiKey = requiresApiKey(config.provider);
   const needsBaseUrl = requiresBaseUrl(config.provider);
 
@@ -53,7 +59,11 @@ export function ApiSettings({ isOpen, onClose, isAdmin = false }: Props) {
     setIsLoading(true);
     setResult(null);
     try {
-      const response = await appApi.getUserApiSettings();
+      const [response, catalogResponse] = await Promise.all([
+        appApi.getUserApiSettings(),
+        appApi.modelCatalog().catch(() => null),
+      ]);
+      if (catalogResponse) setCatalog(catalogResponse);
       if (response.ok && response.settings) {
         setConfig(parseApiResponse(response.settings));
       }
@@ -78,11 +88,11 @@ export function ApiSettings({ isOpen, onClose, isAdmin = false }: Props) {
   };
 
   const changeProvider = (provider: Provider) => {
-    patchConfig(applyProviderDefaults(provider));
+    patchConfig(applyProviderDefaults(provider, catalog?.providers[provider]));
   };
 
   const applyPreset = (preset: typeof QUICK_PRESETS[number]) => {
-    const defaults = applyProviderDefaults(preset.provider);
+    const defaults = applyProviderDefaults(preset.provider, catalog?.providers[preset.provider]);
     patchConfig({ ...defaults, model: preset.model });
   };
 
@@ -140,46 +150,6 @@ export function ApiSettings({ isOpen, onClose, isAdmin = false }: Props) {
 
   if (!isOpen) return null;
 
-  // Non-admin users cannot modify settings
-  if (!isAdmin) {
-    return (
-      <>
-        <button
-          type="button"
-          className="api-settings-overlay"
-          onClick={onClose}
-          aria-label={t("components.apiSettings.close")}
-        />
-        <aside className="api-settings-panel" role="dialog" aria-modal="true" aria-labelledby="api-settings-title">
-          <header className="settings-header">
-            <div className="settings-header-content">
-              <div className="settings-icon" aria-hidden="true">API</div>
-              <div>
-                <h2 id="api-settings-title" className="settings-title">{t("components.apiSettings.title")}</h2>
-                <p className="settings-subtitle">{t("components.apiSettings.adminOnlyMessage")}</p>
-              </div>
-            </div>
-            <button type="button" className="close-btn" onClick={onClose} aria-label={t("components.apiSettings.close")}>
-              <span aria-hidden="true">x</span>
-            </button>
-          </header>
-
-          <div className="settings-content">
-            <div className="test-result error" style={{ marginTop: "1rem" }}>
-              {t("components.apiSettings.adminOnlyDetails")}
-            </div>
-          </div>
-
-          <footer className="settings-footer">
-            <button type="button" className="api-btn secondary" onClick={onClose}>
-              {t("components.apiSettings.close")}
-            </button>
-          </footer>
-        </aside>
-      </>
-    );
-  }
-
   return (
     <>
       <button
@@ -207,6 +177,24 @@ export function ApiSettings({ isOpen, onClose, isAdmin = false }: Props) {
             <div className="settings-loading">{t("components.apiSettings.loading")}</div>
           ) : (
             <>
+              {config.globalOverrideEnabled && (
+                <div className="global-override-notice">
+                  <span className="notice-icon" aria-hidden="true">ℹ️</span>
+                  <div className="notice-content">
+                    <strong>{t("components.apiSettings.globalOverrideNotice")}</strong>
+                    <p>
+                      {t("components.apiSettings.globalOverrideDesc", {
+                        provider: config.globalProvider,
+                        model: config.globalModel,
+                      })}
+                    </p>
+                    <p className="muted">
+                      {t("components.apiSettings.globalOverrideHint")}
+                    </p>
+                  </div>
+                </div>
+              )}
+
               <ApiSettingsPresets
                 presets={QUICK_PRESETS}
                 activeProvider={config.provider}

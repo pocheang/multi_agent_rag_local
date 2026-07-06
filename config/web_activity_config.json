@@ -1,0 +1,107 @@
+{
+  "alert_system": {
+    "enabled": true,
+    "channels": ["log", "email"],
+    "rules": [
+      {
+        "name": "low_success_rate",
+        "description": "搜索成功率过低",
+        "metric": "success_rate",
+        "operator": "<",
+        "threshold": 80.0,
+        "level": "warning",
+        "enabled": true
+      },
+      {
+        "name": "critical_success_rate",
+        "description": "搜索成功率严重过低",
+        "metric": "success_rate",
+        "operator": "<",
+        "threshold": 50.0,
+        "level": "critical",
+        "enabled": true
+      },
+      {
+        "name": "high_response_time",
+        "description": "平均响应时间过长",
+        "metric": "avg_search_time",
+        "operator": ">",
+        "threshold": 5.0,
+        "level": "warning",
+        "enabled": true
+      },
+      {
+        "name": "high_filter_rate",
+        "description": "结果过滤率过高",
+        "metric": "filter_rate",
+        "operator": ">",
+        "threshold": 80.0,
+        "level": "warning",
+        "enabled": true
+      },
+      {
+        "name": "many_sanitized_queries",
+        "description": "大量敏感查询被脱敏",
+        "metric": "sanitized_queries",
+        "operator": ">",
+        "threshold": 10,
+        "level": "warning",
+        "enabled": true
+      }
+    ]
+  },
+  "data_management": {
+    "backup": {
+      "enabled": true,
+      "interval_days": 7,
+      "retention_days": 30
+    },
+    "archive": {
+      "enabled": true,
+      "after_days": 30,
+      "compression": true
+    },
+    "cleanup": {
+      "enabled": true,
+      "after_days": 90,
+      "include_archives": true
+    }
+  },
+  "authentication": {
+    "enabled": true,
+    "methods": ["api_key", "jwt"],
+    "jwt": {
+      "secret_key": "your-secret-key-change-in-production",
+      "algorithm": "HS256",
+      "expire_minutes": 60
+    }
+  },
+  "logging": {
+    "level": "INFO",
+    "file": "logs/web_activity_admin.log",
+    "max_size_mb": 100,
+    "backup_count": 5
+  },
+  "dashboard": {
+    "auto_refresh_seconds": 30,
+    "default_time_range_days": 7,
+    "max_time_range_days": 90
+  },
+  "email": {
+    "enabled": false,
+    "smtp_host": "smtp.example.com",
+    "smtp_port": 587,
+    "smtp_user": "alerts@example.com",
+    "smtp_password": "your-password",
+    "from_address": "alerts@example.com",
+    "to_addresses": ["admin@example.com"]
+  },
+  "webhook": {
+    "enabled": false,
+    "url": "https://hooks.example.com/alerts",
+    "method": "POST",
+    "headers": {
+      "Content-Type": "application/json"
+    }
+  }
+}

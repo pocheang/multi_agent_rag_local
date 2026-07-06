@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "querymind"
-version = "0.5.0"
+version = "0.6.1"
 description = "QueryMind - Enterprise intelligent Q&A engine with multi-agent orchestration"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -12,10 +12,10 @@ requires-python = ">=3.11"
 # graph integration, query orchestration, and basic PDF/text ingestion.
 # Heavy ML/OCR stacks live in extras (see [project.optional-dependencies]).
 dependencies = [
-  "fastapi>=0.115.0",
-  "uvicorn>=0.30.0",
-  "pydantic>=2.8.0",
-  "pydantic-settings>=2.4.0",
+  "fastapi>=0.138.0,<1.0",
+  "uvicorn>=0.49.0,<1.0",
+  "pydantic>=2.13.0,<3.0",
+  "pydantic-settings>=2.14.0,<3.0",
   "langchain>=0.3.0",
   "langgraph>=0.2.0",
   "langgraph-cli[inmem]>=0.3.0",
@@ -24,24 +24,26 @@ dependencies = [
   "langchain-chroma>=0.2.0",
   "chromadb>=0.5.5",
   "neo4j>=5.24.0",
-  "langchain-openai>=0.2.0",
-  "langchain-anthropic>=0.3.0",
+  "langchain-openai>=1.2.0,<2.0",
+  "openai>=2.44.0,<3.0",
+  "langchain-anthropic>=1.4.0,<2.0",
   "langchain-ollama>=0.2.0",
   "pypdf>=5.0.0",
   "Pillow>=10.0.0",
-  "python-dotenv>=1.0.1",
+  "python-dotenv>=1.2.0,<2.0",
   "ddgs>=8.0.0",
-  "httpx>=0.27.0",
+  "httpx>=0.28.0,<1.0",
   "orjson>=3.10.0",
   "tenacity>=9.0.0",
   "rank-bm25>=0.2.2",
   "jieba>=0.42.1",
-  "python-multipart>=0.0.9",
+  "python-multipart>=0.0.32,<1.0",
   "redis>=5.0.0",
   "authlib>=1.3.0",
   "itsdangerous>=2.1.0",
   "scikit-learn>=1.3.0",
-  "aiofiles>=23.2.0"
+  "aiofiles>=23.2.0",
+  "psutil>=7.0.0,<8.0"
 ]
 
 [project.optional-dependencies]
@@ -74,7 +76,6 @@ dev = [
   "pytest-cov>=4.1.0",
   "pytest-xdist>=3.5.0",
   "reportlab>=4.0.0",
-  "psutil>=5.9.0",
   "ruff>=0.6.0"
 ]
 

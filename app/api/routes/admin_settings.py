@@ -26,6 +26,7 @@ from app.core.models import clear_model_caches, get_chat_model
 from app.core.schemas import (
     AdminModelSettings,
     AdminModelSettingsResponse,
+    ModelCatalogResponse,
     UserApiSettings,
     UserApiSettingsResponse,
     UserApiSettingsTestResponse,
@@ -36,6 +37,7 @@ from app.services.alerting import emit_alert
 from app.services.background_queue import BackgroundTaskQueue
 from app.services.bulkhead import reset_bulkheads
 from app.services.index_manager import rebuild_all_vector_index
+from app.services.model_catalog import CATALOG_VERSION, get_model_catalog
 from app.services.model_config_store import (
     get_global_model_settings,
     normalize_global_model_settings,
@@ -51,6 +53,9 @@ from app.services.request_context import request_context
 from app.services.runtime_ops import apply_rollback_profile
 
 router = APIRouter(tags=["admin", "settings"])
+@router.get("/model-catalog", response_model=ModelCatalogResponse)
+def get_available_model_catalog(user: dict[str, Any] = Depends(_require_user)):
+    return ModelCatalogResponse(version=CATALOG_VERSION, providers=get_model_catalog())
 
 
 @router.get("/admin/model-settings", response_model=AdminModelSettingsResponse)

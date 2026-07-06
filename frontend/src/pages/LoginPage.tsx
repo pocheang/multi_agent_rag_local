@@ -240,46 +240,42 @@ export function LoginPage({ onLogin, themeLabel, onThemeToggle }: Props) {
             </div>
           )}
 
-          <div className="action-grid" style={{ display: "flex", flexDirection: "column", gap: "var(--space-3)", marginTop: "var(--space-4)" }}>
+          <div className="action-grid auth-action-grid-single">
             {mode === "login" ? (
               <button
                 type="button"
-                className="primary-action-btn"
+                className="primary-action-btn auth-button-full"
                 disabled={!loginValid || loading}
                 onClick={() => void login()}
-                style={{ width: "100%" }}
               >
                 {loading ? t('query.searching') : t('auth.loginButton')}
               </button>
             ) : (
               <button
                 type="button"
-                className="primary-action-btn"
+                className="primary-action-btn auth-button-full"
                 disabled={!registerValid || loading}
                 onClick={() => void register()}
-                style={{ width: "100%" }}
               >
                 {loading ? t('query.searching') : t('auth.registerButton')}
               </button>
             )}
           </div>
 
-          <div style={{ textAlign: "center", marginTop: "var(--space-6)" }}>
+          <div className="auth-mode-switch">
             {mode === "login" ? (
               <button
                 type="button"
-                className="text-link-btn"
+                className="text-link-btn auth-mode-switch-btn"
                 onClick={() => setMode("register")}
-                style={{ background: "none", border: "none", padding: 0, font: "inherit", cursor: "pointer", color: "var(--accent)", fontWeight: 600 }}
               >
                 {t("auth.switchToRegister")}
               </button>
             ) : (
               <button
                 type="button"
-                className="text-link-btn"
+                className="text-link-btn auth-mode-switch-btn"
                 onClick={() => setMode("login")}
-                style={{ background: "none", border: "none", padding: 0, font: "inherit", cursor: "pointer", color: "var(--accent)", fontWeight: 600 }}
               >
                 {t("auth.switchToLogin")}
               </button>

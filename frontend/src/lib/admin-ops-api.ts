@@ -1,8 +1,11 @@
-import type { OpsOverview, RetrievalProfileState, BenchmarkTrendItem } from "@/types/api";
+import type { OpsOverview, RetrievalProfileState, BenchmarkTrendItem, AdminRuntimeSnapshot } from "@/types/api";
 import { request, ApiError, safeParsePayload, authFetch } from "./api-client";
 import { buildPostRequest, buildQueryString, buildGetRequest } from "./api-helpers";
 
 export const adminOpsApi = {
+  adminRuntimeSnapshot() {
+    return request<AdminRuntimeSnapshot>("/admin/ops/runtime");
+  },
   adminOpsOverview(input: { hours?: number; actorUserId?: string; actionKeyword?: string } = {}) {
     return buildGetRequest<OpsOverview>("/admin/ops/overview", {
       hours: input.hours ?? 24,

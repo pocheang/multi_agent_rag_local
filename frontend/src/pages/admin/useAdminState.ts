@@ -3,19 +3,26 @@ import type {
   AdminUserSummary,
   AdminModelSettingsView,
   AuditLogEntry,
+  BenchmarkTrendItem,
   OpsOverview,
   RetrievalProfileState,
   SystemLogEntry,
-  BenchmarkTrendItem,
 } from "@/types/api";
 
-type Section = "ops" | "rag" | "models" | "admins" | "users" | "audit" | "syslog";
+type Section =
+  | "ops"
+  | "monitor"
+  | "rag"
+  | "models"
+  | "admins"
+  | "users"
+  | "audit"
+  | "syslog"
+  | "webactivity"
+  | "agentquality";
 
 export function useAdminState() {
-  // Section state
   const [section, setSection] = useState<Section>("ops");
-
-  // Data state
   const [users, setUsers] = useState<AdminUserSummary[]>([]);
   const [logs, setLogs] = useState<AuditLogEntry[]>([]);
   const [systemLogs, setSystemLogs] = useState<SystemLogEntry[]>([]);
@@ -24,11 +31,9 @@ export function useAdminState() {
   const [benchmarkTrends, setBenchmarkTrends] = useState<BenchmarkTrendItem[]>([]);
   const [modelSettings, setModelSettings] = useState<AdminModelSettingsView | null>(null);
 
-  // UI state
   const [statusText, setStatusText] = useState("");
   const [error, setError] = useState("");
 
-  // Loading state
   const [loadingUsers, setLoadingUsers] = useState(false);
   const [loadingLogs, setLoadingLogs] = useState(false);
   const [loadingSystemLogs, setLoadingSystemLogs] = useState(false);
@@ -40,13 +45,11 @@ export function useAdminState() {
   const [modelSaving, setModelSaving] = useState(false);
   const [modelTesting, setModelTesting] = useState(false);
 
-  // Filter state - Users
   const [kw, setKw] = useState("");
   const [fRole, setFRole] = useState("");
   const [fStatus, setFStatus] = useState("");
   const [fOnline, setFOnline] = useState("");
 
-  // Filter state - Audit
   const [auditLimit, setAuditLimit] = useState(200);
   const [auditActorUserId, setAuditActorUserId] = useState("");
   const [auditActionKeyword, setAuditActionKeyword] = useState("");
@@ -54,29 +57,24 @@ export function useAdminState() {
   const [auditSeverity, setAuditSeverity] = useState("");
   const [auditResult, setAuditResult] = useState("");
 
-  // Filter state - System Log
   const [systemLogLimit, setSystemLogLimit] = useState(200);
   const [systemLogLevel, setSystemLogLevel] = useState("");
   const [systemLogLogger, setSystemLogLogger] = useState("");
   const [systemLogKeyword, setSystemLogKeyword] = useState("");
 
-  // Filter state - Ops
   const [opsHours, setOpsHours] = useState(24);
   const [opsActorUserId, setOpsActorUserId] = useState("");
   const [opsActionKeyword, setOpsActionKeyword] = useState("");
   const [opsAutoRefresh, setOpsAutoRefresh] = useState(true);
 
-  // RAG state
   const [canaryEnabled, setCanaryEnabled] = useState(false);
   const [canaryBaseline, setCanaryBaseline] = useState(0);
   const [canarySafe, setCanarySafe] = useState(0);
   const [canarySeed, setCanarySeed] = useState("default");
 
-  // Model state
   const [modelApiKey, setModelApiKey] = useState("");
   const [modelTestResult, setModelTestResult] = useState<{ type: "success" | "error"; message: string } | null>(null);
 
-  // Admin creation state
   const [adminUsername, setAdminUsername] = useState("");
   const [adminPassword, setAdminPassword] = useState("");
   const [adminPassword2, setAdminPassword2] = useState("");
@@ -85,7 +83,6 @@ export function useAdminState() {
   const [adminTicketId, setAdminTicketId] = useState("");
   const [adminReason, setAdminReason] = useState("");
 
-  // User editing state
   const [editingUser, setEditingUser] = useState<AdminUserSummary | null>(null);
   const [editBu, setEditBu] = useState("");
   const [editDept, setEditDept] = useState("");
@@ -93,11 +90,8 @@ export function useAdminState() {
   const [editScope, setEditScope] = useState("");
 
   return {
-    // Section
     section,
     setSection,
-
-    // Data
     users,
     setUsers,
     logs,
@@ -112,14 +106,10 @@ export function useAdminState() {
     setBenchmarkTrends,
     modelSettings,
     setModelSettings,
-
-    // UI
     statusText,
     setStatusText,
     error,
     setError,
-
-    // Loading
     loadingUsers,
     setLoadingUsers,
     loadingLogs,
@@ -140,8 +130,6 @@ export function useAdminState() {
     setModelSaving,
     modelTesting,
     setModelTesting,
-
-    // Filters - Users
     kw,
     setKw,
     fRole,
@@ -150,8 +138,6 @@ export function useAdminState() {
     setFStatus,
     fOnline,
     setFOnline,
-
-    // Filters - Audit
     auditLimit,
     setAuditLimit,
     auditActorUserId,
@@ -164,8 +150,6 @@ export function useAdminState() {
     setAuditSeverity,
     auditResult,
     setAuditResult,
-
-    // Filters - System Log
     systemLogLimit,
     setSystemLogLimit,
     systemLogLevel,
@@ -174,8 +158,6 @@ export function useAdminState() {
     setSystemLogLogger,
     systemLogKeyword,
     setSystemLogKeyword,
-
-    // Filters - Ops
     opsHours,
     setOpsHours,
     opsActorUserId,
@@ -184,8 +166,6 @@ export function useAdminState() {
     setOpsActionKeyword,
     opsAutoRefresh,
     setOpsAutoRefresh,
-
-    // RAG
     canaryEnabled,
     setCanaryEnabled,
     canaryBaseline,
@@ -194,14 +174,10 @@ export function useAdminState() {
     setCanarySafe,
     canarySeed,
     setCanarySeed,
-
-    // Model
     modelApiKey,
     setModelApiKey,
     modelTestResult,
     setModelTestResult,
-
-    // Admin creation
     adminUsername,
     setAdminUsername,
     adminPassword,
@@ -216,8 +192,6 @@ export function useAdminState() {
     setAdminTicketId,
     adminReason,
     setAdminReason,
-
-    // User editing
     editingUser,
     setEditingUser,
     editBu,

@@ -118,6 +118,7 @@ class AgentExecutionTracker:
         step_id: str,
         output_data: dict[str, Any] | None = None,
         decision_rationale: str | None = None,
+        metadata: dict[str, Any] | None = None,
     ) -> None:
         with self._traces_lock:
             if execution_id not in self._traces:
@@ -131,6 +132,8 @@ class AgentExecutionTracker:
                     step.duration_ms = (step.end_time - step.start_time).total_seconds() * 1000
                     step.output_data = output_data
                     step.decision_rationale = decision_rationale
+                    if metadata:
+                        step.metadata.update(metadata)
                     step.status = "completed"
                     logger.debug(f"Completed agent step: {step.agent_name} in {execution_id}")
                     return
@@ -221,6 +224,235 @@ class AgentExecutionTracker:
             # Also clear per-trace locks to prevent memory leak
             self._trace_locks.clear()
         logger.info("Cleared all execution traces")
+
+    def get_execution_stats(self) -> dict[str, Any]:
+        """
+        Get aggregated execution statistics for all agents.
+
+        Returns:
+            Dictionary with agent names as keys and their stats as values.
+        """
+        logger.info(f"Getting execution stats. Total traces: {len(self._traces)}")
+        stats = {}
+
+        with self._traces_lock:
+            for trace_id, trace in self._traces.items():
+                logger.debug(f"Processing trace {trace_id} with {len(trace.steps)} steps")
+                for step in trace.steps:
+                    agent_name = step.agent_name
+
+                    if agent_name not in stats:
+                        stats[agent_name] = {
+                            "executions": 0,
+                            "failures": 0,
+                            "total_duration_ms": 0,
+                            "total_tokens": 0,
+                            "token_count": 0,
+                            "last_execution": "",
+                            "error_types": {},
+                        }
+
+                    # Count execution
+                    stats[agent_name]["executions"] += 1
+
+                    # Count failures
+                    if step.status == "failed" or step.status == "error":
+                        stats[agent_name]["failures"] += 1
+
+                        # Track error types
+                        error_type = step.error or "unknown"
+                        # Extract error type from error message
+                        if ":" in error_type:
+                            error_type = error_type.split(":")[0].strip()
+                        stats[agent_name]["error_types"][error_type] = (
+                            stats[agent_name]["error_types"].get(error_type, 0) + 1
+                        )
+
+                    # Sum duration
+                    if step.duration_ms is not None:
+                        stats[agent_name]["total_duration_ms"] += step.duration_ms
+
+                    # Sum tokens if available
+                    if step.metadata and "tokens" in step.metadata:
+                        stats[agent_name]["total_tokens"] += step.metadata["tokens"]
+                        stats[agent_name]["token_count"] += 1
+
+                    # Update last execution
+                    if step.end_time:
+                        step_time = step.end_time.isoformat()
+                        if step_time > stats[agent_name]["last_execution"]:
+                            stats[agent_name]["last_execution"] = step_time
+
+        # Calculate averages
+        for _agent_name, agent_stats in stats.items():
+            executions = agent_stats["executions"]
+            if executions > 0:
+                agent_stats["avg_duration_ms"] = agent_stats["total_duration_ms"] / executions
+            else:
+                agent_stats["avg_duration_ms"] = 0
+
+            token_count = agent_stats["token_count"]
+            if token_count > 0:
+                agent_stats["avg_tokens"] = agent_stats["total_tokens"] / token_count
+            else:
+                agent_stats["avg_tokens"] = 0
+
+            # Remove internal fields
+            del agent_stats["total_duration_ms"]
+            del agent_stats["total_tokens"]
+            del agent_stats["token_count"]
+
+        return stats
+
+    def get_quality_stats(self) -> dict[str, Any]:
+        """
+        Get comprehensive quality statistics for the dashboard.
+
+        Returns:
+            Dictionary with summary, agents, timeline, and error_distribution.
+        """
+        with self._traces_lock:
+            agents_map: dict[str, dict[str, Any]] = {}
+            timeline_map: dict[str, dict[str, int]] = {}
+            error_distribution: dict[str, int] = {}
+
+            total_executions = 0
+            total_failures = 0
+            total_duration_ms = 0
+            execution_count = 0
+
+            for trace in self._traces.values():
+                for step in trace.steps:
+                    agent_name = step.agent_name
+
+                    # Initialize agent stats
+                    if agent_name not in agents_map:
+                        agents_map[agent_name] = {
+                            "agent_name": agent_name,
+                            "total_executions": 0,
+                            "success_count": 0,
+                            "failure_count": 0,
+                            "total_duration_ms": 0.0,
+                            "total_tokens": 0,
+                            "token_count": 0,
+                            "last_execution": "",
+                            "error_types": {},
+                        }
+
+                    agent = agents_map[agent_name]
+                    agent["total_executions"] += 1
+                    total_executions += 1
+
+                    # Track success/failure
+                    if step.status == "completed":
+                        agent["success_count"] += 1
+                    elif step.status in ("failed", "error"):
+                        agent["failure_count"] += 1
+                        total_failures += 1
+
+                        # Track error types
+                        error_type = self._extract_error_type(step.error or "unknown")
+                        agent["error_types"][error_type] = agent["error_types"].get(error_type, 0) + 1
+                        error_distribution[error_type] = error_distribution.get(error_type, 0) + 1
+
+                    # Track duration
+                    if step.duration_ms is not None:
+                        agent["total_duration_ms"] += step.duration_ms
+                        total_duration_ms += step.duration_ms
+                        execution_count += 1
+
+                    # Track tokens
+                    if step.metadata and "tokens" in step.metadata:
+                        agent["total_tokens"] += step.metadata["tokens"]
+                        agent["token_count"] += 1
+
+                    # Update last execution
+                    if step.end_time:
+                        step_time = step.end_time.isoformat()
+                        if step_time > agent["last_execution"]:
+                            agent["last_execution"] = step_time
+
+                    # Build timeline data (group by minute)
+                    if step.end_time:
+                        timestamp_key = step.end_time.strftime("%Y-%m-%dT%H:%M:00")
+                        if timestamp_key not in timeline_map:
+                            timeline_map[timestamp_key] = {"success": 0, "failure": 0}
+
+                        if step.status == "completed":
+                            timeline_map[timestamp_key]["success"] += 1
+                        elif step.status in ("failed", "error"):
+                            timeline_map[timestamp_key]["failure"] += 1
+
+            # Calculate agent metrics
+            agents = []
+            active_agents = 0
+
+            for agent in agents_map.values():
+                total = agent["total_executions"]
+                success = agent["success_count"]
+
+                # Calculate rates and averages
+                agent["success_rate"] = success / total if total > 0 else 0.0
+                agent["avg_execution_time"] = agent["total_duration_ms"] / total / 1000.0 if total > 0 else 0.0
+                agent["avg_token_usage"] = (
+                    agent["total_tokens"] / agent["token_count"] if agent["token_count"] > 0 else 0.0
+                )
+
+                # Count as active if executed recently (within last hour)
+                if agent["last_execution"]:
+                    last_exec_time = datetime.fromisoformat(agent["last_execution"])
+                    if (utcnow() - last_exec_time).total_seconds() < 3600:
+                        active_agents += 1
+
+                # Clean up temporary fields
+                del agent["total_duration_ms"]
+                del agent["total_tokens"]
+                del agent["token_count"]
+
+                agents.append(agent)
+
+            # Sort agents by total executions
+            agents.sort(key=lambda x: x["total_executions"], reverse=True)
+
+            # Build timeline (sorted by timestamp)
+            timeline = [
+                {"timestamp": ts, "success": counts["success"], "failure": counts["failure"]}
+                for ts, counts in sorted(timeline_map.items())
+            ]
+
+            # Calculate summary
+            overall_success_rate = (
+                (total_executions - total_failures) / total_executions if total_executions > 0 else 1.0
+            )
+            avg_response_time = total_duration_ms / execution_count / 1000.0 if execution_count > 0 else 0.0
+
+            return {
+                "summary": {
+                    "total_agents": len(agents),
+                    "total_executions": total_executions,
+                    "overall_success_rate": overall_success_rate,
+                    "avg_response_time": avg_response_time,
+                    "active_agents": active_agents,
+                },
+                "agents": agents,
+                "timeline": timeline,
+                "error_distribution": error_distribution,
+            }
+
+    @staticmethod
+    def _extract_error_type(error_message: str) -> str:
+        """Extract error type from error message."""
+        if not error_message:
+            return "Unknown"
+
+        # Extract the first part before colon
+        if ":" in error_message:
+            error_type = error_message.split(":", 1)[0].strip()
+        else:
+            error_type = error_message.strip()
+
+        # Limit length
+        return error_type[:50] if len(error_type) > 50 else error_type
 
     async def start_periodic_cleanup(self, interval_seconds: int = 300) -> None:
         """

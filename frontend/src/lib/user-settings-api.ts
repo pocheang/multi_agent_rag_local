@@ -12,6 +12,11 @@ export const userSettingsApi = {
         model: string;
         temperature: number;
         max_tokens: number;
+        global_override_enabled: boolean;
+        global_provider: string | null;
+        global_model: string | null;
+        effective_provider: string;
+        effective_model: string;
       };
     }>(res);
   },
@@ -37,6 +42,11 @@ export const userSettingsApi = {
         model: string;
         temperature: number;
         max_tokens: number;
+        global_override_enabled: boolean;
+        global_provider: string | null;
+        global_model: string | null;
+        effective_provider: string;
+        effective_model: string;
       };
     }>(res);
   },

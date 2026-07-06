@@ -5,10 +5,11 @@ from typing import Any
 from app.api.utils.string_utils import normalize_string
 from app.core.config import get_settings
 from app.services.auth_db import AuthDBService
+from app.services.model_catalog import get_model_catalog, provider_defaults, provider_supports_embeddings
 from app.services.network_security import OutboundURLValidationError, validate_api_base_url_for_provider
 
 GLOBAL_MODEL_SETTINGS_KEY = "global_model_settings"
-PROVIDERS = {"local", "ollama", "openai", "anthropic", "deepseek", "custom"}
+PROVIDERS = set(get_model_catalog())
 
 
 def default_global_model_settings() -> dict[str, Any]:
@@ -33,53 +34,50 @@ def _default_base_url(provider: str) -> str:
     settings = get_settings()
     provider = normalize_string(provider, lowercase=True)
     if provider == "ollama":
-        return str(settings.ollama_base_url or "http://localhost:11434").rstrip("/")
+        return str(settings.ollama_base_url or provider_defaults(provider)["base_url"]).rstrip("/")
     if provider == "openai":
-        return str(settings.openai_base_url or "https://api.openai.com/v1").rstrip("/")
-    if provider == "anthropic":
-        return "https://api.anthropic.com"
-    if provider == "deepseek":
-        return "https://api.deepseek.com/v1"
-    return ""
+        return str(settings.openai_base_url or provider_defaults(provider)["base_url"]).rstrip("/")
+    return provider_defaults(provider)["base_url"]
 
 
 def _default_chat_model(provider: str) -> str:
     settings = get_settings()
     provider = normalize_string(provider, lowercase=True)
-    if provider == "local":
-        return "local-evidence"
     if provider == "ollama":
-        return str(settings.ollama_chat_model or "qwen3:14b")
-    if provider in {"openai", "deepseek", "custom"}:
-        return str(settings.openai_chat_model or "gpt-5.5") if provider != "deepseek" else "deepseek-v4"
+        return str(settings.ollama_chat_model or provider_defaults(provider)["chat_model"])
+    if provider == "openai":
+        return str(settings.openai_chat_model or provider_defaults(provider)["chat_model"])
     if provider == "anthropic":
-        return str(settings.anthropic_chat_model or "claude-opus-4-8")
-    return ""
+        return str(settings.anthropic_chat_model or provider_defaults(provider)["chat_model"])
+    return provider_defaults(provider)["chat_model"]
 
 
 def _default_reasoning_model(provider: str) -> str:
     settings = get_settings()
     provider = normalize_string(provider, lowercase=True)
-    if provider == "local":
-        return "local-evidence"
     if provider == "ollama":
-        return str(settings.ollama_reasoning_model or "deepseek-r1:32b")
-    if provider in {"openai", "deepseek", "custom"}:
-        return str(settings.openai_reasoning_model or settings.openai_chat_model or "gpt-5.5-thinking")
+        return str(settings.ollama_reasoning_model or provider_defaults(provider)["reasoning_model"])
+    if provider == "openai":
+        return str(settings.openai_reasoning_model or settings.openai_chat_model or provider_defaults(provider)["reasoning_model"])
     if provider == "anthropic":
-        return str(settings.anthropic_reasoning_model or settings.anthropic_chat_model or "claude-opus-4-8")
-    return ""
+        return str(
+            settings.anthropic_reasoning_model
+            or settings.anthropic_chat_model
+            or provider_defaults(provider)["reasoning_model"]
+        )
+    return provider_defaults(provider)["reasoning_model"]
 
 
 def _default_embedding_model(provider: str) -> str:
     settings = get_settings()
     provider = normalize_string(provider, lowercase=True)
-    if provider == "local":
-        return "local-hash-384"
+    if not provider_supports_embeddings(provider):
+        return ""
     if provider == "ollama":
-        return str(settings.ollama_embed_model or "nomic-embed-text")
-    return str(settings.openai_embed_model or "text-embedding-3-small")
-
+        return str(settings.ollama_embed_model or provider_defaults(provider)["embedding_model"])
+    if provider in {"openai", "custom"}:
+        return str(settings.openai_embed_model or provider_defaults("openai")["embedding_model"])
+    return provider_defaults(provider)["embedding_model"]
 
 def _normalize_global_model_settings(raw: dict[str, Any]) -> dict[str, Any]:
     current = default_global_model_settings()
@@ -101,7 +99,7 @@ def _normalize_global_model_settings(raw: dict[str, Any]) -> dict[str, Any]:
     embedding_model = str(current.get("embedding_model", "") or "").strip()
     if not chat_model:
         raise ValueError("chat_model is required")
-    if provider != "anthropic" and not embedding_model:
+    if provider_supports_embeddings(provider) and not embedding_model:
         raise ValueError("embedding_model is required")
     api_key = str(current.get("api_key", "") or "").strip()
     if provider in {"openai", "anthropic", "deepseek", "custom"} and not api_key:
@@ -117,7 +115,7 @@ def _normalize_global_model_settings(raw: dict[str, Any]) -> dict[str, Any]:
         "reasoning_model": reasoning_model,
         "embedding_model": embedding_model,
         "temperature": min(2.0, max(0.0, float(current.get("temperature", 0.7) or 0.7))),
-        "max_tokens": min(8192, max(256, int(current.get("max_tokens", 2048) or 2048))),
+        "max_tokens": min(131072, max(256, int(current.get("max_tokens", 2048) or 2048))),
     }
 
 
