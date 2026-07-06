@@ -35,29 +35,61 @@
 
 ### ✨ v0.6.1 新特性
 
-**架构增强与管理功能发布** (2026-07-06)
+**架构增强与Docker支持发布** (2026-07-06)
 
 - 🏗️ **Agent架构重构**: 统一基类、验证器、执行追踪系统
 - 📊 **管理仪表板**: Agent质量监控、Web活动追踪、系统健康监控
 - 🔒 **安全增强**: 更新SECURITY.md、改进JWT处理、增强认证依赖
 - 🌐 **Web研究增强**: 活动日志、数据管理器、告警系统
+- 🐳 **Docker支持**: 生产级容器化部署，一键启动完整服务栈
 - 🛠️ **开发工具**: 完整的Claude Code技能集、开发生命周期支持
-- 📚 **文档完善**: Agent架构文档、操作指南、部署文档
+- 📚 **文档完善**: Agent架构文档、操作指南、Docker部署文档
 
-📖 [v0.6.0 发布说明](./docs/releases/RELEASE_NOTES_v0.6.0.md)
+📖 [v0.6.1 发布说明](./docs/releases/RELEASE_NOTES_v0.6.1.md) | [v0.6.0 发布说明](./docs/releases/RELEASE_NOTES_v0.6.0.md)
 
 ---
 
 ## 🚀 快速开始
 
-### 前置要求
+### 方法1: Docker部署（推荐）⭐
 
+**一键启动完整服务栈**
+
+```bash
+# 1. 克隆仓库
+git clone https://github.com/yourorg/querymind.git
+cd querymind
+
+# 2. 配置环境变量
+cp .env.docker.example .env
+nano .env  # 设置密码和API密钥
+
+# 3. 启动所有服务
+docker-compose up -d
+
+# 4. 初始化数据库
+docker-compose exec backend python scripts/init_db.py
+```
+
+**访问应用**
+- 🌐 前端界面: http://localhost
+- 🔧 后端API: http://localhost:8000
+- 📊 API文档: http://localhost:8000/docs
+- 🕸️ Neo4j: http://localhost:7474
+
+📖 [完整Docker部署指南](./DOCKER_DEPLOYMENT.md)
+
+---
+
+### 方法2: 本地开发环境
+
+**前置要求**
 - Python 3.11+
 - Node.js 16+
 - PostgreSQL 14+ (可选)
 - Neo4j 5+ (可选)
 
-### 安装步骤
+**安装步骤**
 
 1. **克隆仓库**
 
@@ -1002,6 +1034,12 @@ if consecutive_failures > 5:
 - **Axios** - HTTP客户端
 - **Server-Sent Events (SSE)** - 实时流式输出
 
+#### 部署与容器化 🆕
+- **Docker** - 容器化部署
+- **Docker Compose** - 服务编排
+- **Nginx** - 反向代理与静态文件服务
+- **Multi-stage builds** - 优化镜像大小
+
 #### 开发工具
 - **Pytest** - 测试框架
 - **Black** - 代码格式化
@@ -1141,6 +1179,11 @@ if consecutive_failures > 5:
 
 ## 📚 文档
 
+### 部署文档
+
+- [Docker部署指南](./DOCKER_DEPLOYMENT.md) - 容器化部署完整指南
+- [部署指南](./docs/guides/deployment.md) - 传统部署方式
+
 ### 用户文档
 
 - [快速开始指南](./docs/guides/getting-started.md)
@@ -1152,11 +1195,11 @@ if consecutive_failures > 5:
 
 - [架构设计](./docs/architecture/README.md)
 - [Agent系统](./docs/features/agents/README.md)
-- [部署指南](./docs/guides/deployment.md)
 - [贡献指南](./CONTRIBUTING.md)
 
 ### 发布说明
 
+- [v0.6.1 - 架构增强与Docker支持](./docs/releases/RELEASE_NOTES_v0.6.1.md)
 - [v0.6.0 - 质量优化](./docs/releases/RELEASE_NOTES_v0.6.0.md)
 - [v0.5.0 - 权限系统](./docs/releases/RELEASE_NOTES_v0.5.0.md)
 - [完整历史](./docs/history/VERSION_HISTORY.md)
