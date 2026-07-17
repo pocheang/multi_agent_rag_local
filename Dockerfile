@@ -36,6 +36,7 @@ COPY --from=builder /usr/local/bin /usr/local/bin
 COPY app ./app
 COPY scripts ./scripts
 COPY config ./config
+COPY deploy ./deploy
 
 # Create necessary directories
 RUN mkdir -p /app/data/chroma /app/data/chunks /app/logs

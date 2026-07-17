@@ -1,4 +1,4 @@
-﻿<div align="center">
+<div align="center">
 
 # QueryMind（智询）
 
@@ -50,9 +50,19 @@
 
 ---
 
+## 🧭 企业化配置与一键部署
+
+新的配置与部署入口已集中到 config/ 和 deploy/，运行时生成文件统一放在 .runtime/（不会提交 Git）。完整说明见 [配置与部署指南](./docs/zh-CN/guides/configuration-governance.md)。
+
+`ash
+export OPENAI_API_KEY="your-api-key"
+./deploy/scripts/deploy.sh production balanced
+`
+
+PowerShell 使用：$env:OPENAI_API_KEY = "your-api-key"; .\deploy\scripts\deploy.ps1 -Environment production -Profile balanced。
 ## 🚀 快速开始
 
-### 方法1: Docker部署（推荐）⭐
+### 方法1: Docker部署（兼容入口）
 
 **一键启动完整服务栈**
 

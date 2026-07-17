@@ -1,0 +1,4 @@
+services:
+  frontend:
+    ports:
+      - "80:80"

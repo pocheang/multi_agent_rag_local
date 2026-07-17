@@ -31,7 +31,9 @@ CONFIDENCE_BUCKETS: Final[list[tuple[float, float]]] = [
 
 MIN_SAMPLES_FOR_CALIBRATION: Final[int] = 5  # Minimum predictions before applying calibration
 DEFAULT_ACCURACY: Final[float] = 0.5  # Default accuracy when no history
-CALIBRATION_CONFIG_DIR: Final[Path] = Path(__file__).parent.parent.parent / "config"
+CALIBRATION_CONFIG_DIR: Final[Path] = (
+    Path(__file__).resolve().parents[2] / "config" / "application"
+)
 DEFAULT_CALIBRATION_FILE: Final[str] = "router_calibration.json"
 
 

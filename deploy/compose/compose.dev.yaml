@@ -1,0 +1,28 @@
+services:
+  backend:
+    env_file:
+      - ${RUNTIME_ENV_FILE:-../../.runtime/development.env}
+    environment:
+      APP_ENV: development
+      DEBUG: "true"
+      LOG_LEVEL: DEBUG
+    volumes:
+      - ../../app:/app/app:ro
+      - ../../scripts:/app/scripts:ro
+      - ../../config:/app/config:ro
+      - ../../deploy:/app/deploy:ro
+    ports:
+      - "127.0.0.1:8000:8000"
+    command: uvicorn app.api.main:app --reload --host 0.0.0.0 --port 8000
+
+  frontend:
+    build:
+      target: builder
+    volumes:
+      - ../../frontend/src:/app/src:ro
+      - ../../frontend/public:/app/public:ro
+    ports:
+      - "127.0.0.1:5173:5173"
+    environment:
+      NODE_ENV: development
+    command: npm run dev -- --host 0.0.0.0

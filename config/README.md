@@ -1,0 +1,24 @@
+# Configuration
+
+`config/` is the only source-controlled configuration directory.
+
+- `env/` contains shared, development, test, production, and frontend environment templates.
+- `profiles/` contains mutually exclusive runtime strategy overlays: `fast`, `balanced`, and `deep`.
+- `application/` contains application JSON configuration and calibration data.
+- `observability/` contains Prometheus, Grafana, and Alertmanager configuration.
+
+Runtime configuration is generated into `.runtime/` and is never committed. The merge order is:
+
+```text
+base.env < {environment}.env.example < profiles/{profile}.env < .runtime/generated-secrets.env < process overrides
+```
+
+Use the generator instead of appending environment files manually:
+
+```bash
+conda run -n rag-local python deploy/scripts/config.py render --environment development --profile balanced --output .runtime/development.env
+```
+
+Production secrets are generated locally by the deployment script. LLM API keys must be provided through the host environment or an approved secret injection mechanism.
+
+Canonical paths use config/env/ for environment overlays and config/profiles/ for runtime profiles.
