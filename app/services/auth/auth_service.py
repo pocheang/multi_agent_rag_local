@@ -42,7 +42,7 @@ class AuthDBService:
                 raise RuntimeError(
                     "API_SETTINGS_ENCRYPTION_KEY environment variable is required. "
                     "Generate a secure key with: python -c 'import secrets; print(secrets.token_urlsafe(48))' "
-                    "and set it in your .env file. Auto-generation is disabled for security."
+                    "and set it in the generated .runtime environment file. Auto-generation is disabled for security."
                 )
             self._api_settings_key = hashlib.sha256(seed.encode("utf-8")).digest()
             return self._api_settings_key

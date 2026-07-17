@@ -73,7 +73,7 @@ def test_vision_models():
     print("   2. claude-3 (Anthropic Claude 3)")
 
     print("\n⚙️  Configuration:")
-    print("   Set in .env:")
+    print("   Set in .runtime/development.env:")
     print("   PDF_ENABLE_CHART_EXTRACTION=true")
     print("   PDF_CHART_VISION_MODEL=gpt-4-vision")
     print("   OPENAI_API_KEY=your_key_here")
@@ -97,7 +97,7 @@ def main():
         print("  python scripts/dev/test_chart_extraction.py <path_to_pdf>")
         print("\n⚠️  Note: Chart extraction requires:")
         print("  1. OpenAI API key (for GPT-4V) or Anthropic API key (for Claude 3)")
-        print("  2. PDF_ENABLE_CHART_EXTRACTION=true in .env")
+        print("  2. PDF_ENABLE_CHART_EXTRACTION=true in .runtime/development.env")
 
     print("\n" + "=" * 80)
     print("✅ Tests complete!")

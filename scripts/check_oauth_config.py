@@ -17,7 +17,7 @@ try:
     from dotenv import load_dotenv
 
     # 加载环境变量
-    env_file = project_root / ".env"
+    env_file = Path(os.getenv("RUNTIME_ENV_FILE", project_root / ".runtime" / "development.env"))
     load_dotenv(env_file)
 
     # 创建 settings 实例
@@ -62,7 +62,7 @@ try:
         print("📝 配置步骤:")
         print("  1. 阅读配置指南: GOOGLE_OAUTH_SETUP.md")
         print("  2. 访问 Google Cloud Console 创建 OAuth 客户端")
-        print("  3. 在 .env 文件中添加:")
+        print("  3. 在 .runtime/development.env 中添加:")
         print()
         print("     GOOGLE_CLIENT_ID=你的客户端ID")
         print("     GOOGLE_CLIENT_SECRET=你的客户端密钥")
@@ -73,8 +73,8 @@ try:
 
     # 检查环境变量文件
     if not env_file.exists():
-        print("⚠️  未找到 .env 文件")
-        print(f"  请复制 .env.example 为 .env")
+        print("⚠️  未找到运行时配置文件")
+        print("  请先运行 deploy/scripts/config.py render 生成 .runtime/development.env")
         print()
 
     print("=" * 60)

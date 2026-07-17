@@ -1,3 +1,4 @@
+import os
 from functools import lru_cache
 from pathlib import Path
 
@@ -5,8 +6,23 @@ from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
+def resolve_runtime_env_file() -> str | None:
+    """Resolve the generated runtime environment without relying on root .env."""
+    explicit = os.getenv("RUNTIME_ENV_FILE", "").strip()
+    if explicit:
+        return explicit
+    environment = os.getenv("APP_ENV", "development").strip().lower()
+    environment = {"dev": "development"}.get(environment, environment)
+    candidate = Path(__file__).resolve().parents[2] / ".runtime" / f"{environment}.env"
+    return str(candidate) if candidate.is_file() else None
+
+
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
+    model_config = SettingsConfigDict(
+        env_file=resolve_runtime_env_file(),
+        env_file_encoding="utf-8",
+        extra="ignore",
+    )
 
     app_env: str = Field(default="dev", alias="APP_ENV")
     model_backend: str = Field(default="local", alias="MODEL_BACKEND")

@@ -1,5 +1,0 @@
-# Deprecated compatibility wrapper. Use ./deploy/scripts/deploy.sh production balanced --monitoring.
-include:
-  - deploy/compose/compose.yaml
-  - deploy/compose/compose.production.yaml
-  - deploy/compose/compose.monitoring.yaml

@@ -272,7 +272,7 @@ def main():
         print(f"   - 模型: {settings.openai_model or 'default'}")
     except Exception as e:
         print(f"❌ 环境配置加载失败: {e}")
-        print("   请确保已配置 .env 文件")
+        print("   请确保已生成 .runtime/development.env")
         return
 
     # 如果命令行提供了问题，只运行自定义问题

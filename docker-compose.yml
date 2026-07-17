@@ -1,5 +1,0 @@
-# Deprecated compatibility wrapper. Use deploy/scripts/deploy.sh for deployment.
-# Docker Compose v2 supports include; the canonical files live under deploy/compose/.
-include:
-  - deploy/compose/compose.yaml
-  - deploy/compose/compose.production.yaml

@@ -72,14 +72,14 @@ git clone https://github.com/pocheang/querymind.git
 cd querymind
 
 # 2. 配置环境变量
-cp .env.docker.example .env
-nano .env  # 设置密码和API密钥
+export OPENAI_API_KEY="your-api-key"
+# 其他密钥由部署脚本写入 .runtime/
 
 # 3. 启动所有服务
-docker-compose up -d
+./deploy/scripts/deploy.sh production balanced
 
 # 4. 初始化数据库
-docker-compose exec backend python scripts/init_db.py
+# 配置校验、构建、初始化和健康检查由部署脚本完成
 ```
 
 **访问应用**
@@ -119,14 +119,14 @@ conda activate rag-local
 3. **配置环境变量**
 
 ```bash
-cp .env.example .env
-# 编辑 .env 文件，配置API密钥等
+conda run -n rag-local python deploy/scripts/config.py render --environment development --profile balanced --output .runtime/development.env
+# API Key 通过当前进程环境注入
 ```
 
 4. **初始化数据库**
 
 ```bash
-python scripts/init_db.py
+conda run -n rag-local python deploy/scripts/init_app.py
 ```
 
 5. **启动后端服务**
@@ -1625,10 +1625,10 @@ querymind/
 │   └── error.log               # 错误日志
 │
 ├── .env                         # 环境变量 (不提交)
-├── .env.example                 # 环境变量示例
+├── config/env/                 # 环境配置模板
 ├── environment.yml              # Conda环境配置
 ├── requirements.txt             # Python依赖 (可选)
-├── docker-compose.yml           # Docker配置
+├── deploy/compose/             # Compose编排
 ├── Dockerfile                   # Docker镜像
 ├── .gitignore                   # Git忽略文件
 ├── CLAUDE.md                    # Claude项目配置
@@ -1685,14 +1685,14 @@ npm run type-check
 
 ```bash
 # 1. 构建镜像
-docker-compose build
+./deploy/scripts/deploy.sh production balanced
 
 # 2. 启动服务
-docker-compose up -d
+./deploy/scripts/deploy.sh production balanced
 
 # 3. 检查状态
-docker-compose ps
-docker-compose logs -f
+docker compose --env-file .runtime/production.env -f deploy/compose/compose.yaml ps
+docker compose --env-file .runtime/production.env -f deploy/compose/compose.yaml logs -f
 ```
 
 #### 方式2: 传统部署
