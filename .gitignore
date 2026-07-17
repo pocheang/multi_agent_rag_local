@@ -454,3 +454,6 @@ docs/ab_comparison_report.md
 docs/performance_regression_report.md
 docs/*-optimization-plan.md
 docs/*-optimization-design.md
+
+# Generated deployment runtime configuration and secrets
+.runtime/

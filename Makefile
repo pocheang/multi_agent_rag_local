@@ -1,4 +1,4 @@
-.PHONY: install up ingest api cli test fe-install fe-dev fe-build quality-gate benchmark apply-rollback
+.PHONY: install up ingest api cli test fe-install fe-dev fe-build quality-gate benchmark apply-rollback config-check config-render deploy deploy-dev deploy-monitoring
 
 install:
 	python -m venv .venv && . .venv/bin/activate && pip install -U pip && pip install -e .
@@ -13,7 +13,7 @@ api:
 	uvicorn app.api.main:app --host 0.0.0.0 --port 8000 --reload --reload-dir app --reload-include "*.py" --reload-exclude "data/*" --reload-exclude "artifacts/*" --reload-exclude "frontend/*"
 
 cli:
-	python scripts/query_cli.py "请总结系统架构"
+	python scripts/query_cli.py "???????"
 
 test:
 	pytest -q
@@ -35,3 +35,21 @@ benchmark:
 
 apply-rollback:
 	python scripts/apply_rollback_profile.py --profile artifacts/rollback.env --env-file .env
+
+ENV ?= production
+PROFILE ?= balanced
+
+config-check:
+	conda run -n rag-local python deploy/scripts/config.py validate --environment $(ENV) --profile $(PROFILE)
+
+config-render:
+	conda run -n rag-local python deploy/scripts/config.py render --environment $(ENV) --profile $(PROFILE) --output .runtime/$(ENV).env
+
+deploy:
+	./deploy/scripts/deploy.sh $(ENV) $(PROFILE)
+
+deploy-dev:
+	./deploy/scripts/deploy.sh development $(PROFILE)
+
+deploy-monitoring:
+	./deploy/scripts/deploy.sh $(ENV) $(PROFILE) --monitoring

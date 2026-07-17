@@ -1,3 +1,5 @@
+> 新版企业化配置与一键部署入口： [配置与部署指南](./guides/configuration-governance.md)
+
 # 📚 QueryMind 中文文档导航
 
 <div align="center">

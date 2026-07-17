@@ -319,7 +319,7 @@ print("⚙️  测试7: 配置文件")
 print("-" * 80)
 
 try:
-    config_path = Path("config/web_activity_config.json")
+    config_path = Path("config/application/web_activity_config.json")
 
     if config_path.exists():
         with open(config_path, 'r', encoding='utf-8') as f:

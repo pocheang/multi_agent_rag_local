@@ -7,10 +7,14 @@ WORKDIR /app
 COPY frontend/package*.json ./
 
 # Install dependencies
-RUN npm ci --only=production
+RUN npm ci
 
 # Copy source code
 COPY frontend/ ./
+
+# Allow deployment to configure the browser-side API prefix.
+ARG VITE_API_BASE_URL=/api
+ENV VITE_API_BASE_URL=$VITE_API_BASE_URL
 
 # Build the application
 RUN npm run build
