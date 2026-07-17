@@ -1,7 +1,7 @@
 """
 Configuration settings for v0.4.4 optimized RAG pipeline.
 
-Add these settings to your .env file or application config.
+Add these settings to the generated .runtime environment file or application config.
 """
 
 # ============================================================================
@@ -63,7 +63,7 @@ FALLBACK_TO_SCORE_RANKING = True
 # Example Complete Configuration
 # ============================================================================
 
-# Example .env entries:
+# Example .runtime entries:
 """
 # V0.4.4 Optimized RAG
 ENABLE_MULTI_PATH_RETRIEVAL=true

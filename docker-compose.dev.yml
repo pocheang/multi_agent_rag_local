@@ -1,4 +1,0 @@
-# Deprecated compatibility wrapper. Use ./deploy/scripts/deploy.sh development balanced.
-include:
-  - deploy/compose/compose.yaml
-  - deploy/compose/compose.dev.yaml

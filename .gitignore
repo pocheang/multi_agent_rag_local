@@ -4,7 +4,7 @@
 # Environment files with secrets
 .env
 .env.*
-!.env.example
+
 
 # API keys and encryption keys
 *.key
@@ -457,6 +457,3 @@ docs/*-optimization-design.md
 
 # Generated deployment runtime configuration and secrets
 .runtime/
-# Deprecated duplicate runtime profile location
-configs/runtime-profiles/
-!configs/README.md

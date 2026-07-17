@@ -36,9 +36,9 @@ def _apply_env(env_path: Path, values: dict[str, str]) -> None:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Apply rollback profile .env overrides.")
+    parser = argparse.ArgumentParser(description="Apply rollback profile overrides to generated runtime config.")
     parser.add_argument("--profile", default="artifacts/rollback.env")
-    parser.add_argument("--env-file", default=".env")
+    parser.add_argument("--env-file", default=".runtime/development.env")
     args = parser.parse_args()
 
     profile = Path(args.profile)
