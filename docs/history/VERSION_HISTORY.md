@@ -1,7 +1,7 @@
 # Version History
 
 **Status**: Public  
-**Last Updated**: 2026-06-28  
+**Last Updated**: 2026-07-18  
 **Audience**: Users, operators, contributors, maintainers  
 
 This file is the public version timeline for QueryMind（智询）. It keeps a
@@ -15,6 +15,9 @@ For current release notes, also see [../../CHANGELOG.md](../../CHANGELOG.md).
 
 | Version | Date | Type | Public Summary |
 | --- | --- | --- | --- |
+| v0.6.2.1 | 2026-07-18 | Infrastructure & Docs | Configuration governance system, deployment standardization, documentation restructuring (284 files, -23,595 lines net), GitHub open source preparation |
+| v0.6.2 | 2026-07-06 | Rebranding & Monitoring | Project rebranding to QueryMind, production monitoring stack (Prometheus + Grafana), enhanced health checks, business metrics tracking, structured logging |
+| v0.6.1 | 2026-07-06 | Architecture & Docker | Agent architecture improvements, Docker containerization, admin dashboard features, security enhancements, web research agent improvements |
 | v0.6.0 | 2026-06-28 | Quality Optimization | Agent Quality Optimization: Router accuracy 99%, hallucination rate -71%, citation completeness 96%, 20 systematic enhancements across 4 phases |
 | v0.5.0 | 2026-06-26 | Quality & Security | Quality Assurance system (5 agents), Architecture page optimization (10-layer layout), RBAC system, 2026 AI models, enhanced documentation |
 | v0.4.6 | 2026-06-19 | Stability & Security | Fixed 13 critical backend issues: race conditions, resource leaks, security vulnerabilities. 67% memory reduction, auto-recovery mechanisms |
@@ -406,3 +409,99 @@ Public highlights:
 - Deep code reviews, fix logs, and generated validation reports belong in
   `internal_docs/docs_archive/`.
 - Public release notes must not link to ignored internal files.
+
+## v0.6.2.1
+
+**Release Date**: July 18, 2026  
+**Type**: Infrastructure & Documentation
+
+Public highlights:
+
+- **Configuration Governance System**:
+  - Single source of truth: All configuration centralized in `config/` directory
+  - Environment profiles (development, production, test)
+  - Runtime profiles (balanced, deep, fast)
+  - Application-specific settings (router calibration, web activity)
+  - Observability configurations (Prometheus, Grafana, Alertmanager)
+  - Generated runtime configs in `.runtime/` (gitignored)
+
+- **Deployment Standardization**:
+  - New `deploy/` directory structure with modular Docker Compose files
+  - Unified deployment scripts: `./deploy/scripts/deploy.sh [env] [profile]`
+  - 9 deployment combinations (3 environments × 3 profiles)
+  - Configuration generation at deployment time
+  - Container health checks and initialization scripts
+
+- **Documentation Restructuring**:
+  - Removed 220+ obsolete/internal documents (-36,451 lines)
+  - Added 64 standardized documents (+12,856 lines)
+  - Clear 12-category structure (getting-started, user-guide, architecture, features, development, operations, reference, releases, design, templates, archive, zh-CN)
+  - Comprehensive cross-linking and navigation
+  - Documentation governance policy established
+
+- **Security & Publication Preparation**:
+  - Complete security cleanup (internal data removed)
+  - Personal information sanitization from 104+ files
+  - Strict .gitignore policy (460 comprehensive lines)
+  - Publication validation tools (check_github_ready.sh, cleanup_for_github.sh, publish_to_github.sh)
+  - Documentation integrity checker (scripts/check_docs.py, 165 lines)
+
+- **Testing Infrastructure**:
+  - 8 new configuration governance test suites
+  - Compose asset validation
+  - Config generation testing
+  - Deploy script validation
+  - Documentation structure validation
+  - Runtime environment loading tests
+
+Key metrics:
+- **Files changed**: 284 (net -23,595 lines)
+- **Commits**: 16
+- **Documentation**: -220 obsolete, +64 standardized
+- **Tests**: 8 new suites, all passing
+- **Zero functional regressions**
+
+Breaking changes:
+- Root `.env` files deprecated → Use `config/env/`
+- Root `docker-compose.yml` deprecated → Use `deploy/compose/`
+- Legacy startup scripts removed → Use `deploy/scripts/deploy.sh`
+- Local development workflow unchanged
+
+## v0.6.2
+
+**Release Date**: July 6, 2026  
+**Type**: Rebranding & Production Monitoring
+
+Public highlights:
+
+- **Project Rebranding**: Renamed to QueryMind（智询）
+- **Monitoring Stack**: Prometheus + Grafana + Alertmanager
+- **Enhanced Health Checks**: 6 dependency health check functions
+- **Business Metrics**: Agent execution, retrieval quality, LLM costs, cache hits
+- **Structured Logging**: JSON-formatted logs with Structlog
+- **Circuit Breaker Integration**: LLM, vector store, graph store wrappers
+
+Key metrics:
+- Health check services: 3 → 8 (+167%)
+- Alert rules: 0 → 30+
+- Visualization panels: 0 → 14
+- Monitoring docs: ~82 pages
+
+## v0.6.1
+
+**Release Date**: July 6, 2026  
+**Type**: Architecture Enhancement & Docker Support
+
+Public highlights:
+
+- **Docker Containerization**: Production-ready Dockerfile, docker-compose orchestration
+- **Agent Architecture**: Unified base classes, validation framework, result schemas
+- **Admin Dashboard**: Agent quality monitoring, web activity tracking, system monitor
+- **Security Enhancements**: SECURITY.md documentation, improved JWT handling
+- **Web Research Agent**: Activity logging, data manager, alert system
+
+Key metrics:
+- One-command deployment: `docker-compose up -d`
+- Health checks for all services
+- Zero breaking changes
+

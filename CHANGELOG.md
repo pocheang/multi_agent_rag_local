@@ -4,25 +4,213 @@ All notable changes to this project will be documented in this file.
 
 ## [0.6.2.1] - 2026-07-18
 
-### 🌟 GitHub Open Source Release
+### 🏗️ Configuration Governance & GitHub Open Source Release
 
-This release prepares QueryMind for public GitHub publication with complete security cleanup and documentation review.
+This release introduces **enterprise-grade configuration governance**, **deployment standardization**, and **comprehensive documentation restructuring** to prepare QueryMind for public GitHub publication. **Net change: 284 files, +12,856 / −36,451 lines.**
 
-#### Security & Cleanup
-- Remove all internal data files, logs, and runtime configurations
-- Clean up personal information and local paths from documentation
-- Update .gitignore with strict publication policy (460 lines)
-- Create .env.example template for secure configuration
+#### 🎯 Configuration Governance System (NEW)
 
-#### Developer Information
+**Canonical Configuration Architecture**:
+- **Single Source of Truth**: All configuration now lives in `config/` directory
+- **Environment Profiles**: `config/env/` with development/production/test templates
+- **Runtime Profiles**: `config/profiles/` (balanced/deep/fast execution modes)
+- **Application Config**: `config/application/` for agent calibration and web activity
+- **Observability Config**: `config/observability/` for Prometheus, Grafana, Alertmanager
+- **Generated Runtime**: `.runtime/` directory for deployment-time generated configs (gitignored)
+
+**Deployment Standardization**:
+- **New `deploy/` Directory Structure**:
+  - `deploy/compose/`: Modular Docker Compose files (base, dev, monitoring, production)
+  - `deploy/scripts/`: Unified deployment scripts (deploy.sh, deploy.ps1, config.py)
+  - `deploy/scripts/healthcheck.py`: Container health checks
+  - `deploy/scripts/init_app.py`: Application initialization
+- **Deployment Command**: `./deploy/scripts/deploy.sh [env] [profile]`
+- **Configuration Generation**: Runtime configs generated from canonical sources
+
+**Legacy Cleanup**:
+- ❌ Removed root-level `.env.example`, `.env.docker.example`
+- ❌ Removed root-level `docker-compose.yml`, `docker-compose.*.yml`
+- ❌ Removed `start.sh`, `start.bat`, `restart.bat` (replaced by standardized deploy scripts)
+- ❌ Removed `config/legacy/`, `configs/` directories
+- ✅ All functionality preserved through new canonical structure
+
+**Testing & Validation**:
+- 8 new test suites for configuration governance
+- Tests for compose assets, config generation, deploy wrappers, docs paths
+- Runtime environment loading validation
+- Single source config layout verification
+
+#### 📚 Documentation Restructuring (MAJOR)
+
+**New Documentation Architecture**:
+```
+docs/
+├── getting-started/      # Quick start, setup, configuration
+├── user-guide/          # Business guides, system overview
+│   └── business/        # Features, glossary, how-it-works
+├── architecture/        # System design, agents, quality
+│   ├── agents/          # Agent-specific documentation
+│   └── quality-assurance/ # QA system documentation
+├── features/            # Feature-specific guides
+│   ├── agents/          # Agent features
+│   ├── pdf/             # PDF processing
+│   ├── ocr/             # OCR capabilities
+│   └── rag/             # RAG techniques
+├── development/         # Developer guides
+│   ├── frontend/        # React development
+│   └── github-release.md # Release process
+├── operations/          # Deployment, monitoring, troubleshooting
+│   ├── monitoring/      # Prometheus, Grafana setup
+│   ├── runbooks/        # Operational procedures
+│   ├── troubleshooting/ # Problem resolution
+│   └── web-activity/    # Web research logging
+├── reference/           # API docs, configuration, FAQ
+│   └── agents/          # Agent API reference
+├── releases/            # Version history
+├── design/              # Design documents (ADRs)
+└── archive/             # Historical documents
+```
+
+**Documentation Statistics**:
+- **Removed**: ~220 obsolete/internal documents (36,451 lines)
+  - Internal development reports, weekly summaries
+  - Duplicate guides, stale indexes
+  - Legacy monitoring docs
+- **Added/Reorganized**: 64+ standardized documents (12,856 lines)
+  - Structured navigation with README.md in each directory
+  - Cross-linked documentation with consistent format
+  - GitHub-ready markdown formatting
+
+**Key New Documents**:
+- [docs/getting-started/quick-start.md](docs/getting-started/quick-start.md) - Installation guide
+- [docs/architecture/langgraph-stategraph.md](docs/architecture/langgraph-stategraph.md) - Workflow architecture
+- [docs/development/agent-integration.md](docs/development/agent-integration.md) - Agent development guide
+- [docs/development/github-release.md](docs/development/github-release.md) - Release process
+- [docs/operations/deployment.md](docs/operations/deployment.md) - Deployment guide
+- [docs/operations/logging-migration.md](docs/operations/logging-migration.md) - Logging best practices
+- [docs/reference/configuration.md](docs/reference/configuration.md) - Configuration reference
+
+#### 🔐 Security & Publication Preparation
+
+**Security Cleanup**:
+- Remove all internal data files (logs, eval data, demo datasets)
+- Clean up personal information from 104+ markdown files
+- Update .gitignore with strict publication policy (460 lines → comprehensive patterns)
+- Remove local paths and machine-specific references
+
+**Developer Information**:
 - **Developer**: Po Cheang (po.cheang@gmail.com)
 - Update attribution in all release notes and documentation
-- Preserve contact information in CODE_OF_CONDUCT.md
+- Generic placeholders for contact information where appropriate
 
-#### Documentation
-- Complete review of 104 markdown documents
-- Add comprehensive documentation check scripts
-- Remove internal publication helpers from tracking
+**Publication Tools**:
+- `check_github_ready.sh`: Pre-publication validation script
+- `cleanup_for_github.sh`: Automated cleanup script
+- `publish_to_github.sh`: GitHub publication helper
+- `scripts/check_docs.py`: Documentation integrity checker (165 lines)
+
+#### 🛠️ Code Changes
+
+**Configuration Module Updates**:
+- `app/core/config.py`: Support for new config/ structure (18 lines modified)
+- `app/core/optimized_config.py`: Runtime profile loading (4 lines modified)
+- `app/agents/router_calibration.py`: Load from config/application/ (4 lines modified)
+
+**Build & Deployment**:
+- `Dockerfile`: Updated for new config structure (1 line added)
+- `Dockerfile.frontend`: Environment variable handling (6 lines modified)
+- `Makefile`: Updated deployment targets (22 lines modified)
+
+**Script Updates**:
+- `scripts/apply_rollback_profile.py`: Use new profile location
+- `scripts/check_oauth_config.py`: New config paths
+- `scripts/demo_react_agent_tools.py`: Configuration updates
+- `scripts/fix_chunker.py`: New utility script (154 lines)
+
+#### 📊 Version Consistency
+
+- `pyproject.toml`: 0.6.1 → 0.6.2.1
+- `app/__version__.py`: 0.6.2 → 0.6.2.1
+- `frontend/package.json`: 0.6.1 → 0.6.2.1
+- All documentation references updated to v0.6.2.1
+
+#### 🔄 Breaking Changes
+
+**Configuration Migration Required**:
+
+| Old Location | New Location | Action |
+|--------------|--------------|--------|
+| `.env.example` | `config/env/development.env.example` | Copy and customize |
+| `.env.docker.example` | `config/env/production.env.example` | Copy and customize |
+| `docker-compose.yml` | `deploy/compose/compose.yaml` | Use deploy scripts |
+| `start.sh` / `start.bat` | `deploy/scripts/deploy.sh` | Use new deployment |
+| Root `.env` | `.runtime/.env` | Generated automatically |
+
+**Migration Steps**:
+1. Copy your existing `.env` settings to `config/env/development.env`
+2. For Docker deployment: Use `./deploy/scripts/deploy.sh production balanced`
+3. For local development: Keep using `conda activate rag-local` and `uvicorn` as before
+4. Root-level compose files and startup scripts no longer work
+
+**What Still Works**:
+- ✅ Local development workflow unchanged (`conda activate rag-local`, `uvicorn app.api.main:app`)
+- ✅ Frontend development unchanged (`cd frontend && npm run dev`)
+- ✅ All API endpoints remain the same
+- ✅ Database schemas unchanged
+- ✅ Environment variables (just new locations)
+
+#### 📈 Impact Summary
+
+**Files Changed**: 284 files
+- Added: ~64 new documentation files, 8 test suites, deploy/ directory
+- Modified: ~50 files (config paths, documentation references)
+- Removed: ~220 obsolete files (internal docs, legacy configs, deprecated scripts)
+
+**Lines Changed**: Net -23,595 lines
+- Insertions: +12,856 lines (new docs, tests, configs)
+- Deletions: −36,451 lines (cleanup, consolidation)
+
+**Documentation**: 
+- Removed 220 obsolete/internal documents
+- Added/reorganized 64 standardized documents
+- Established clear information architecture
+
+**Configuration**:
+- Centralized from 5+ scattered locations → 1 canonical source
+- Added 3 environment profiles + 3 runtime profiles
+- Deployment scripts support 9 combinations (3 env × 3 profiles)
+
+#### 🎯 Production Readiness
+
+- ✅ Configuration governance established
+- ✅ Deployment standardization complete
+- ✅ Documentation restructured for open source
+- ✅ Security cleanup verified
+- ✅ All tests passing (8 new governance tests)
+- ✅ Zero functional regressions
+
+#### 📖 Documentation
+
+**New Guides**:
+- [Configuration Governance](docs/zh-CN/guides/configuration-governance.md) - 中文配置治理指南
+- [Deployment Guide](docs/operations/deployment.md) - Standardized deployment
+- [GitHub Release Process](docs/development/github-release.md) - Release workflow
+- [Documentation Policy](docs/DOCUMENTATION_POLICY.md) - Doc governance
+
+**Updated**:
+- [README.md](README.md) - New quick start with deployment commands
+- [CLAUDE.md](CLAUDE.md) - AI assistant project context
+- All 48+ architecture and guide documents
+- Chinese documentation (docs/zh-CN/)
+
+#### 🔗 Related Commits
+
+- `23be5d06` - feat: establish enterprise config and deployment governance
+- `170e9263` - refactor: consolidate legacy config and startup entrypoints
+- `b532065a` - refactor: make config sources single and canonical
+- `e7430caf` - docs: complete personal information cleanup and add publication tools
+- `1101db92` - chore: prepare for github publication
+- `6c3b85d5` - chore: bump version to 0.6.2.1 across all files
 
 ## [0.6.2] - 2026-07-06
 
