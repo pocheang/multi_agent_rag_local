@@ -25,7 +25,7 @@ python -m uvicorn app.api.main:app --host 0.0.0.0 --port 8000 --reload
 ### 3️⃣ 启动前端服务
 ```powershell
 # 新开一个终端
-cd c:\Users\pocheang\Desktop\llm\multi_agent_rag_local_v4\frontend
+cd /path/to/querymind/frontend
 
 # 启动前端开发服务器
 npm run dev

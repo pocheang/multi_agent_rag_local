@@ -47,7 +47,7 @@
 
 ```bash
 # 1. 克隆仓库
-git clone https://github.com/pocheang/querymind.git
+git clone https://github.com/YOUR_USERNAME/querymind.git
 cd querymind
 
 # 2. 配置环境变量
@@ -497,8 +497,8 @@ npm run type-check
 ### Q: 如何获取技术支持？
 
 **A:** 
-- 📋 [GitHub Issues](https://github.com/pocheang/querymind/issues)
-- 💬 [GitHub Discussions](https://github.com/pocheang/querymind/discussions)
+- 📋 [GitHub Issues](https://github.com/YOUR_USERNAME/querymind/issues)
+- 💬 [GitHub Discussions](https://github.com/YOUR_USERNAME/querymind/discussions)
 - 📖 [完整文档](../zh-CN/README.md)
 
 ---
@@ -515,7 +515,7 @@ npm run type-check
 
 <div align="center">
 
-**找不到答案？** [提交Issue](https://github.com/pocheang/querymind/issues/new) 💬
+**找不到答案？** [提交Issue](https://github.com/YOUR_USERNAME/querymind/issues/new) 💬
 
 [返回主页](./README.md)
 

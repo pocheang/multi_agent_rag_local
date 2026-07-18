@@ -271,7 +271,7 @@ grep "Exception" logs/*.log
 
 ```bash
 # 1. 后端测试
-cd c:/Users/pocheang/Desktop/llm/multi_agent_rag_local_v4
+cd /path/to/querymind
 conda activate rag-local
 pytest tests/test_admin_agent_quality_api.py -v
 
