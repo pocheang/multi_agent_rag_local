@@ -377,3 +377,13 @@ docs/runtime_speed_profiles.md
 # - 敏感配置 (*.env, config/env/*.env)
 # - 临时和调试文件 (*.tmp, *_REPORT.md)
 # - AI 助手配置 (.claude/, .cursor/)
+# 添加到 .gitignore
+PUBLICATION_*.md
+READY_TO_*.md
+PUSH*.sh
+README_PUSH.md
+FINAL_REPORT.md
+GITHUB_*.md
+check_docs_for_github.sh
+check_github_ready.sh
+cleanup_for_github.sh
