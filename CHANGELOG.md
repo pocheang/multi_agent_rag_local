@@ -2,6 +2,28 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.6.2.1] - 2026-07-18
+
+### 🌟 GitHub Open Source Release
+
+This release prepares QueryMind for public GitHub publication with complete security cleanup and documentation review.
+
+#### Security & Cleanup
+- Remove all internal data files, logs, and runtime configurations
+- Clean up personal information and local paths from documentation
+- Update .gitignore with strict publication policy (460 lines)
+- Create .env.example template for secure configuration
+
+#### Developer Information
+- **Developer**: Po Cheang (po.cheang@gmail.com)
+- Update attribution in all release notes and documentation
+- Preserve contact information in CODE_OF_CONDUCT.md
+
+#### Documentation
+- Complete review of 104 markdown documents
+- Add comprehensive documentation check scripts
+- Remove internal publication helpers from tracking
+
 ## [0.6.2] - 2026-07-06
 
 ### 🏷️ Project Rebranding & Production Monitoring Release
