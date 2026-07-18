@@ -133,14 +133,14 @@ receivers:
 ```yaml
 global:
   smtp_smarthost: 'smtp.gmail.com:587'
-  smtp_from: 'po.cheang@gmail.com'
+  smtp_from: 'alerts@example.com'  # 替换为你的邮箱
   smtp_auth_username: 'your-email@gmail.com'
   smtp_auth_password: 'your-app-password'
 
 receivers:
   - name: 'critical-alerts'
     email_configs:
-      - to: 'po.cheang@gmail.com'
+      - to: 'your-email@example.com'  # 替换为你的邮箱
         subject: '🚨 CRITICAL: {{ .GroupLabels.alertname }}'
 ```
 
