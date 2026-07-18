@@ -100,7 +100,7 @@ This release officially renames the project to **QueryMind（智询）** and del
 - config/grafana/datasources.yml
 - dashboards/grafana/rag-system-overview.json
 - docker-compose.monitoring.yml
-- docs/releases/RELEASE_NOTES_v0.6.2.md
+- docs/releases/v0.6.2-release-notes.md
 - 9 monitoring documentation files
 
 #### Breaking Changes
@@ -109,7 +109,7 @@ None - fully backward compatible with v0.6.1
 
 #### Migration Notes
 
-See [Migration Guide](docs/releases/RELEASE_NOTES_v0.6.2.md#-迁移指南) for detailed upgrade instructions from v0.6.1.
+See [Migration Guide](docs/releases/v0.6.2-release-notes.md#-迁移指南) for detailed upgrade instructions from v0.6.1.
 
 ---
 
@@ -649,7 +649,7 @@ For existing installations:
 
 This release addresses **13 critical backend issues** covering security vulnerabilities, race conditions, resource leaks, and performance optimizations. **All fixes are backward compatible and production-ready**. **Net change: 100% test pass rate (42/42), 67% memory reduction.**
 
-See [docs/releases/RELEASE_NOTES_v0.4.6.md](./docs/releases/RELEASE_NOTES_v0.4.6.md) for the full breakdown.
+See [docs/releases/v0.4.6-release-notes.md](./docs/releases/v0.4.6-release-notes.md) for the full breakdown.
 
 #### Fixed
 
@@ -697,7 +697,7 @@ See [docs/releases/RELEASE_NOTES_v0.4.6.md](./docs/releases/RELEASE_NOTES_v0.4.6
 
 This release represents a **major system optimization** focused on performance improvements, code quality enhancement, and maintainability. Includes two phases of comprehensive optimization with significant latency reduction and code duplication elimination.
 
-See [docs/releases/RELEASE_NOTES_v0.4.5.md](./docs/releases/RELEASE_NOTES_v0.4.5.md) for the full breakdown.
+See [docs/releases/v0.4.5-release-notes.md](./docs/releases/v0.4.5-release-notes.md) for the full breakdown.
 
 #### Added
 
@@ -769,7 +769,7 @@ See [docs/releases/RELEASE_NOTES_v0.4.5.md](./docs/releases/RELEASE_NOTES_v0.4.5
 
 This release addresses **13 critical backend issues** covering security vulnerabilities, race conditions, resource leaks, and performance optimizations. **All fixes are backward compatible and production-ready**. **Net change: 100% test pass rate (42/42), 67% memory reduction.**
 
-See [docs/releases/RELEASE_NOTES_v0.4.6.md](./docs/releases/RELEASE_NOTES_v0.4.6.md) for the full breakdown.
+See [docs/releases/v0.4.6-release-notes.md](./docs/releases/v0.4.6-release-notes.md) for the full breakdown.
 
 #### Fixed
 
@@ -817,7 +817,7 @@ See [docs/releases/RELEASE_NOTES_v0.4.6.md](./docs/releases/RELEASE_NOTES_v0.4.6
 
 This release represents a **complete overhaul of exception handling** across the entire codebase, achieving **100% coverage** with specific exception types. **Net change: 27 files, 55 exception handlers improved, 12 commits.**
 
-See [docs/releases/RELEASE_NOTES_v0.4.3.md](./docs/releases/RELEASE_NOTES_v0.4.3.md)
+See [docs/releases/v0.4.3-release-notes.md](./docs/releases/v0.4.3-release-notes.md)
 for the full breakdown.
 
 #### Fixed
@@ -881,7 +881,7 @@ This release is a focused hardening pass on v0.4.1. No user-facing
 features. **Net change: 18 files, +471 / −742 lines (net −271).**
 Five focused, independently reviewable commits.
 
-See [docs/releases/RELEASE_NOTES_v0.4.2.md](./docs/releases/RELEASE_NOTES_v0.4.2.md)
+See [docs/releases/v0.4.2-release-notes.md](./docs/releases/v0.4.2-release-notes.md)
 for the full breakdown.
 
 #### Removed

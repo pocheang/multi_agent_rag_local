@@ -1,10 +1,19 @@
 # ============================================
+# GITHUB PUBLICATION POLICY
+# ============================================
+# 发布策略：只发布代码、核心配置、更新历史
+# - 代码文件：.py, .js, .jsx, .ts, .tsx
+# - 配置文件：.json, .yaml, .yml, .toml (仅核心配置)
+# - 文档：README.md, CHANGELOG.md, LICENSE
+# - 其他：全部排除
+
+# ============================================
 # SECURITY - Secrets & Credentials
 # ============================================
 # Environment files with secrets
 .env
 .env.*
-
+!.env.example
 
 # API keys and encryption keys
 *.key
@@ -33,29 +42,36 @@ id_ed25519
 *.ppk
 
 # ============================================
+# DATA & RUNTIME (完全排除)
+# ============================================
+# 所有数据目录
+data/
+!data/.gitkeep
+
+# 所有日志
+logs/
+*.log
+*.jsonl
+
+# 所有报告
+reports/
+artifacts/
+
+# 运行时生成
+.runtime/
+
+# ============================================
 # DATABASES & USER DATA
 # ============================================
-# SQLite databases (contain user data, sessions, auth)
 *.db
 *.sqlite
 *.sqlite3
-!data/.gitkeep
-
-# Database backups and dumps
 *.sql
 *.dump
 *.bak
 
-# User uploaded files and documents
-data/uploads/
-data/docs/
-!data/docs/security/
-!data/docs/security/**
-data/sessions/
-data/sessions_cold/
-
 # ============================================
-# PYTHON
+# PYTHON BUILD & CACHE
 # ============================================
 __pycache__/
 *.pyc
@@ -88,7 +104,7 @@ htmlcov/
 .hypothesis/
 
 # ============================================
-# NODE / FRONTEND
+# NODE / FRONTEND BUILD
 # ============================================
 node_modules/
 frontend/node_modules/
@@ -102,33 +118,61 @@ yarn-error.log*
 .yarn-integrity
 
 # ============================================
-# LOCAL RUNTIME DATA
+# INTERNAL DOCUMENTATION (完全排除)
 # ============================================
-# Vector stores and embeddings
-data/chroma/
-data/chunks/
-data/eval/
-!data/eval/*.jsonl
-!data/eval/*.txt
+# 内部文档目录
+internal_docs/
+docs/internal/
+docs/private/
 
-# Application databases
-data/app.db
-data/auth.db
+# 审计和报告
+*_AUDIT*.md
+*_REPORT*.md
+*_INTERNAL*.md
+*_PRIVATE*.md
+GITHUB_SECURITY_AUDIT_REPORT.md
 
-# Test data
-data/test_tmp/
-data/.test_tmp/
+# 临时和计划文档
+*_PLAN.md
+*_CHECKLIST.md
+*_COMPLETION*.md
+*_SUMMARY.md
+*_GUIDE.md
+*_FIXES*.md
+*_EXECUTION*.md
+ARCHITECTURE_*.md
+CODE_QUALITY_*.md
+COMPREHENSIVE_*.md
+FINAL_*.md
+HIGH_PRIORITY_*.md
+PERFORMANCE_*.md
+QUICK_*.md
+REMAINING_*.md
+ULTIMATE_*.md
 
-# Keep directory structure
-data/
-!data/.gitkeep
-# Exception: Allow demo dataset for interview demonstration
-!data/demo/
-!data/demo/**
-# Exception: Allow security documentation for RAG knowledge base
-!data/docs/
-!data/docs/security/
-!data/docs/security/**
+# 项目管理文档
+PROJECT_*.md
+PROJECT_*.txt
+ADMIN_*.md
+SECURITY_FIXES_*.md
+V0.*.md
+VERSION_*.md
+DOCUMENTATION_*.md
+DELIVERY_*.md
+GITHUB_*.md
+GIT_*.md
+ROOT_*.md
+
+# 归档和设计文档
+docs/archive/
+!docs/archive/INDEX.md
+docs/design/
+docs/plans/
+docs/project/
+docs/superpowers/
+docs/templates/
+docs/visualizations/
+docs/security/
 
 # ============================================
 # BUILD & METADATA
@@ -171,46 +215,21 @@ Desktop.ini
 # ============================================
 # TEMP & DEBUG FILES
 # ============================================
-# Temporary numbered files
-.tmp_*.txt
 *.tmp
 *.temp
-
-# Debug artifacts
-tests/.tmp/
-artifacts/
-!artifacts/.gitkeep
 .tmp/
-.tmp_testdata/
-.deprecated_prompts/
-
-# Screenshots and captures
-capture_*.py
+.tmp_*/
 *_screenshot*.png
 *_capture*.png
-
-# Test scripts
+capture_*.py
 test_web_functionality.py
 test_*.temp.py
 fix_*.py
 test_*.sh
-
-# Code quality reports
 code_quality_report.txt
 *_report.txt
 
-# ============================================
-# LOGS
-# ============================================
-*.log
-backend.log
-frontend-dev.log
-frontend/frontend.log
-npm-debug.log
-yarn-error.log
-pip-log.txt
-
-# Frontend generated audit artifacts and backups
+# Frontend generated artifacts
 frontend/css-audit-report.json
 frontend/css-audit-report.md
 frontend/css-audit-summary.md
@@ -232,228 +251,129 @@ frontend/src/styles/pages.css.backup.phase*
 # ============================================
 # AI ASSISTANT SETTINGS
 # ============================================
-# Claude local settings (may contain API keys)
 .claude/settings.json
 .claude/settings.local.json
 .claude/worktrees/
-
-# Other AI assistant configs
 .cursor/
 .continue/
-
-# Skills lock file (Kiro/Claude superpowers - local hashes only)
 skills-lock.json
-
-# AI assistant local directories (per DOCUMENTATION_POLICY)
 .agents/
 .junie/
 .trae/
-
-# LangGraph dev server runtime state (checkpoints, ops, vector store)
 .langgraph_api/
+.superpowers/
 
 # ============================================
-# Internal Documentation (Not for GitHub)
+# DEPLOYMENT & SCRIPTS (仅保留核心)
 # ============================================
-
-# Local startup scripts (user-specific paths)
+# 本地启动脚本
 start-backend.ps1
 start-frontend.ps1
 start-all.ps1
 README-STARTUP.md
 
-# Internal project management and audit reports
-/project_audit/
-/internal_docs/
-internal_docs/
-docs/VALIDATION_REPORT.json
-docs/security/
-docs/plans/
-
-# Internal development guides and plans
-ADMIN_USERS_FIX_PLAN.md
-ADMIN_USERS_PATCH_GUIDE.md
-ADMIN_USERS_SECURITY_AUDIT.md
-CLAUDE.md
-GITHUB_RELEASE_GUIDE.md
-GIT_COMMIT_GUIDE.md
-PROJECT_DOCUMENTATION_SUMMARY.md
-ROOT_ARCHIVE_REFERENCE.md
-SECURITY_FIXES_QUICK_REF.md
-SECURITY_FIXES_v0.3.1.2.md
-V0.3.1_COMPLETION_REPORT.md
-VERSION_DOCS_README.md
-VERSION_DOCUMENTATION_QUICK_OVERVIEW.md
-VERSION_DOCUMENTATION_SYSTEM_COMPLETION_REPORT.md
-VERSION_DOCUMENTATION_SYSTEM_SUMMARY.md
-
-# Internal development reports and temporary docs
-*_REPORT.md
-*_EXECUTION*.md
-*_FIXES*.md
-*_PLAN.md
-*_CHECKLIST.md
-*_COMPLETION*.md
-*_SUMMARY.md
-*_GUIDE.md
-ARCHITECTURE_*.md
-CODE_QUALITY_*.md
-COMPREHENSIVE_*.md
-FINAL_*.md
-HIGH_PRIORITY_*.md
-PERFORMANCE_*.md
-QUICK_*.md
-REMAINING_*.md
-ULTIMATE_*.md
-
-# Internal documentation maintenance files
-docs/ARCHIVE_REFERENCE.md
-docs/DOCUMENTATION_MAINTENANCE.md
-docs/DOCUMENTATION_ORGANIZATION_SUMMARY.md
-docs/DOCUMENTATION_STANDARD.md
-docs/DOCUMENTATION_UPDATE_REPORT.md
-docs/DOCUMENTATION_UPDATE_SUMMARY.md
-docs/ENTERPRISE_DOCUMENTATION_STANDARD.md
-docs/PUBLICATION_MATRIX_PRIVATE.md
-docs/VERSION_DOCUMENTATION_CHECKLIST.md
-docs/VERSION_DOCUMENTATION_GUIDE.md
-docs/VERSION_DOCUMENTATION_STANDARD.md
-docs/VERSION_RELEASE_QUICK_REFERENCE.md
-docs/runtime_speed_profiles.md
-docs/archive/DEEP_CODE_REVIEW_*.md
-docs/archive/DOCUMENTATION_COMPLETENESS_REPORT.md
-docs/archive/FIXES_*.md
-docs/archive/*.md
-!docs/archive/INDEX.md
-
-# Internal project audit and reports
-docs/project/
-
-# ============================================
-# Public Documentation (Visible on GitHub)
-# ============================================
-# Keep these files:
-# - README.md (main project documentation)
-# - CHANGELOG.md (version history)
-# - RELEASE_*.md (release notes)
-# - docs/README.md (documentation index)
-# - docs/PUBLICATION_MATRIX.md (public/private documentation rules)
-# - docs/SECURITY.md (responsible disclosure, no vulnerability details)
-# - docs/API_SETTINGS_GUIDE.md (API usage guide)
-# - docs/PERFORMANCE_OPTIMIZATION.md (performance guide)
-# - docs/VERSION_HISTORY.md (version tracking)
-
-# Visualization outputs
-docs/dashboard.html
-docs/structure_*.txt
-docs/structure_*.html
-docs/visualizations/
-
-# ============================================
-# INTERNAL DOCUMENTATION (NOT FOR PUBLIC)
-# ============================================
-# Internal development documentation
-internal_docs/
-
-# Internal reports and plans
-OPTIMIZATION_COMPLETE_REPORT.md
-REQUIRED_OPTIMIZATIONS.md
-MODEL_CONFIG_UPGRADE_2026.md
-GLOBAL_MODEL_OVERRIDE.md
-*_INTERNAL_*.md
-
-# Artifacts and temporary files
-artifacts/
-
-# Internal completion reports (keep only INDEX.md)
-docs/archive/completion-reports/*.md
-!docs/archive/completion-reports/INDEX.md
-
-# Internal plans and roadmaps
-docs/archive/plans/*.md
-!docs/archive/plans/INDEX.md
-
-# All internal archive documents (fixes, investigations, summaries, etc.)
-docs/archive/fixes/
-docs/archive/frontend/
-docs/archive/investigations/
-docs/archive/refactoring/
-docs/archive/summaries/
-docs/archive/ui/
-
-# Internal design documents
-docs/design/
-
-# Internal feature documentation
-docs/features/
-
-# Internal tools and superpowers
-docs/superpowers/
-
-# Internal templates
-docs/templates/
-
-# Temporary visualizations
-docs/visualizations/
-
-# Internal documentation indexes
-docs/DOCUMENTATION_INDEX.md
-docs/README.md
-
-docs/COMPLETION_REPORT.md
-docs/DOCUMENTATION_COMPLETION_REPORT.md
-docs/DOCUMENTATION_ENHANCEMENTS.md
-docs/PROJECT_RUNNING_STATUS.md
-
-# Development guides (internal use)
-docs/DEVELOPER_GUIDE.md
-docs/BACKEND_BEST_PRACTICES.md
-docs/BACKEND_FIXES_*.md
-docs/REACT_AGENT_GUIDE.md
-docs/AGENT_INTEGRATION_GUIDE.md
-docs/it_ops_langgraph_stategraph_design.md
-docs/SYSTEM_CHECK_CHECKLIST.md
-
-# ============================================
-# GitHub Release Creation Tools (Temporary)
-# ============================================
-# Release creation guides and scripts (one-time use)
+# 发布创建工具
 CREATE_RELEASES_INSTRUCTIONS.md
 HOW_TO_CREATE_RELEASES.md
-GITHUB_RELEASE_*.md
 create_github_releases*.ps1
 create_releases_*.ps1
 fix_*_tag.ps1
 
-# Internal documentation (v0.6.0 cleanup)
-*_INTERNAL.md
-*_PRIVATE.md
-.superpowers/
-PROJECT_*.txt
-PROJECT_*.md
-DOCUMENTATION_INDEX.md
-DOCUMENTATION_CHECKLIST.md
-DELIVERY_CHECKLIST.md
-GITHUB_PUBLICATION_STRATEGY.md
-GITHUB_RELEASE_CHECKLIST.md
-
-# Internal test data
-tests/golden_dataset.json
-scripts/create_golden_dataset.py
-scripts/ab_comparison.py
-scripts/load_test.py
-
-# Internal configuration
+# 内部配置（保留示例配置）
 config/router_calibration.json
 config/circuit_breaker.json
 config/retry_policy.json
 config/fact_verification.json
 
-# Internal reports
+# ============================================
+# RUNTIME CONFIGURATION (完全排除)
+# ============================================
+# 运行时环境配置
+config/env/*.env
+config/profiles/*.env
+!config/env/*.env.example
+!config/profiles/*.env.example
+
+# ============================================
+# TEST DATA & EVALUATION (完全排除)
+# ============================================
+# 测试数据集
+tests/golden_dataset.json
+scripts/create_golden_dataset.py
+scripts/ab_comparison.py
+scripts/load_test.py
+
+# 评估报告
 docs/ab_comparison_report.md
 docs/performance_regression_report.md
 docs/*-optimization-plan.md
 docs/*-optimization-design.md
+docs/runtime_speed_profiles.md
 
-# Generated deployment runtime configuration and secrets
-.runtime/
+# ============================================
+# ALLOWED FILES (可以发布的)
+# ============================================
+# 核心文档
+!README.md
+!CHANGELOG.md
+!LICENSE
+!Makefile
+!Dockerfile
+!Dockerfile.*
+!.dockerignore
+!.gitignore
+
+# 应用代码
+!app/**/*.py
+!tests/**/*.py
+!scripts/**/*.py
+!deploy/**/*.py
+!deploy/**/*.sh
+
+# 前端代码
+!frontend/src/**
+!frontend/public/**
+!frontend/index.html
+!frontend/package.json
+!frontend/package-lock.json
+!frontend/tsconfig.json
+!frontend/vite.config.ts
+!frontend/.env.example
+
+# 核心配置（仅示例）
+!config/**/*.json
+!config/**/*.yaml
+!config/**/*.yml
+!config/**/*.env.example
+
+# Python 项目配置
+!pyproject.toml
+!setup.py
+!setup.cfg
+!requirements.txt
+!requirements-*.txt
+
+# CI/CD 配置
+!.github/**/*.yml
+!.github/**/*.yaml
+
+# Docker 配置
+!docker-compose.yml
+!docker-compose.*.yml
+
+# ============================================
+# PUBLICATION MATRIX (发布决策参考)
+# ============================================
+# 已发布内容说明：
+# - 应用源代码 (app/, frontend/src/)
+# - 测试代码 (tests/)
+# - 部署脚本示例 (deploy/, docker-compose.yml)
+# - 配置模板 (config/**/*.example, .env.example)
+# - 核心文档 (README, CHANGELOG, LICENSE)
+#
+# 不发布内容：
+# - 所有运行时数据 (data/, logs/, reports/)
+# - 内部文档 (internal_docs/, docs/archive/, docs/design/)
+# - 敏感配置 (*.env, config/env/*.env)
+# - 临时和调试文件 (*.tmp, *_REPORT.md)
+# - AI 助手配置 (.claude/, .cursor/)

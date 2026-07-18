@@ -1,1 +1,0 @@
-{"created_at": "2026-04-27T12:20:29.329358+00:00", "num_queries": 3, "strategy": "advanced", "latency_ms": {"p50": 8754.23, "p95": 8754.23, "avg": 9418.85}, "grounding_support_ratio": {"avg": 0.9333, "min": 0.9}, "citations": {"avg": 2.67, "max": 4}}

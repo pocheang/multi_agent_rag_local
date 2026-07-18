@@ -393,8 +393,8 @@ def test_synthesis_prompt():
 
 ## 📚 相关文档
 
-- **完整报告**: [PROMPT_OPTIMIZATION_REPORT.md](../../PROMPT_OPTIMIZATION_REPORT.md)
-- **使用指南**: [PROMPT_USAGE_GUIDE.md](../../PROMPT_USAGE_GUIDE.md)
+- **完整报告**：历史版本报告未纳入当前公开文档。
+- **使用指南**：请以本目录中的提示词实现和测试为准。
 - **原始提示词**: 各个agent模块中的旧提示词定义
 
 ---

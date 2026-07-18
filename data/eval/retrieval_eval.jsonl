@@ -1,3 +1,0 @@
-{"query":"什么是RAG流程", "must_contain":["rag"], "allowed_sources": null}
-{"query":"如何比较向量检索和bm25", "must_contain":["向量"], "allowed_sources": null}
-{"query":"图谱检索中的实体关系有什么用", "must_contain":["关系"], "allowed_sources": null}

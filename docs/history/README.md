@@ -5,8 +5,8 @@ This directory contains historical records of version changes and optimization e
 ## Documents
 
 - [VERSION_HISTORY.md](./VERSION_HISTORY.md) - Sanitized public version timeline
-- [OPTIMIZATION_HISTORY.md](./OPTIMIZATION_HISTORY.md) - Performance optimization history
-- [demo_dataset_setup.md](./demo_dataset_setup.md) - Demo dataset configuration
+- [VERSION_HISTORY.md](./VERSION_HISTORY.md) - Performance optimization history
+- [../..//data/demo/README.md](./../..//data/demo/README.md) - Demo dataset configuration
 
 ## Quick Links
 

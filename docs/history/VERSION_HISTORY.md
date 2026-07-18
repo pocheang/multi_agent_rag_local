@@ -1,4 +1,4 @@
-﻿# Version History
+# Version History
 
 **Status**: Public  
 **Last Updated**: 2026-06-28  
@@ -9,7 +9,7 @@ sanitized record of releases and intentionally excludes internal audit reports,
 security exploit details, private remediation plans, and generated validation
 artifacts.
 
-For current release notes, also see [../CHANGELOG.md](../CHANGELOG.md).
+For current release notes, also see [../../CHANGELOG.md](../../CHANGELOG.md).
 
 ## Release Timeline
 
@@ -276,10 +276,10 @@ Key metrics:
 - Real-time agent execution tracking with SSE support
 
 Related public documents:
-- [Performance Comparison Framework](performance_comparison_framework.md)
-- [Agent Execution Tracking](agent_execution_tracking.md)
-- [Chinese NLP Optimization](chinese_nlp_optimization.md)
-- [Advanced RAG Techniques](advanced_rag_techniques.md)
+- [Performance Comparison Framework](../features/rag/performance_comparison_framework.md)
+- [Agent Execution Tracking](../features/agents/agent_execution_tracking.md)
+- [Chinese NLP Optimization](../features/rag/advanced_rag_techniques.md)
+- [Advanced RAG Techniques](../features/rag/advanced_rag_techniques.md)
 
 ## v0.3.3
 
@@ -327,7 +327,7 @@ Public highlights:
 Relevant public documents:
 
 - [Documentation Policy](../DOCUMENTATION_POLICY.md)
-- [Publication Matrix](PUBLICATION_MATRIX.md)
+- [Publication Matrix](../README.md)
 - [Documentation Hub](README.md)
 
 ## v0.3.0
@@ -360,7 +360,7 @@ Public highlights:
 
 Related public design reference:
 
-- [Query-to-Answer UX Speed Design](design/2026-04-19-query-to-answer-ux-speed-design.md)
+- [Query-to-Answer UX Speed Design](../design/2026-04-19-query-to-answer-ux-speed-design.md)
 
 ## v0.2.2.1
 
