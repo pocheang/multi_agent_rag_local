@@ -163,7 +163,7 @@ This release focuses on agent architecture improvements, comprehensive admin mon
 - Configurable web activity settings (config/web_activity_config.json)
 
 **Developer Experience**:
-- Complete Claude Code skill set for development lifecycle
+- Complete development tool skill set for development lifecycle
 - Skills for: developing-change, governing-ai-data, operating-production, planning-work, releasing-deploying, reporting-handoff, verifying-change
 - Comprehensive skill references and documentation
 - Project standards and reporting guidelines

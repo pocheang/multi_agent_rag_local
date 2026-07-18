@@ -43,6 +43,10 @@ npm run dev
 - API 文档：<http://localhost:8000/docs>
 - 前端开发服务：<http://localhost:5173>
 
+## 开发者
+
+**Po Cheang** - [po.cheang@gmail.com](mailto:po.cheang@gmail.com)
+
 ## 文档入口
 
 从[文档中心](docs/README.md)开始。按使用场景查看：
