@@ -11,7 +11,7 @@ Get-Process | Where-Object { $_.ProcessName -match "python|node" } | Stop-Proces
 ### 2️⃣ 启动后端服务
 ```powershell
 # 在项目根目录
-cd c:\Users\pocheang\Desktop\llm\multi_agent_rag_local_v4
+cd /path/to/querymind
 
 # 激活虚拟环境（如果有）
 .\venv\Scripts\Activate.ps1
