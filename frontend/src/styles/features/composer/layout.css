@@ -4,6 +4,7 @@
 
 .page-shell .composer-panel {
   margin-top: 0;
+  flex-shrink: 0;
   padding: 18px;
   border-radius: 20px;
   border: 1px solid rgba(91, 140, 255, 0.38);
@@ -21,9 +22,6 @@
 }
 
 .page-shell .composer-panel::before {
-  content: "";
-  position: absolute;
-  inset: 0;
   border-radius: inherit;
   pointer-events: none;
   background:
