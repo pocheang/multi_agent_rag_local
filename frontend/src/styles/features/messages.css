@@ -7,8 +7,8 @@
   margin-top: 18px;
   max-width: 100%;
   border-radius: 18px;
-  padding: 18px 20px;
-  line-height: 1.72;
+  padding: 22px 26px;
+  line-height: 1.78;
   overflow-wrap: anywhere;
   position: relative;
   animation: bubbleSlideIn 0.32s cubic-bezier(0.4, 0, 0.2, 1);
@@ -36,9 +36,8 @@
 }
 
 .page-shell .bubble.user {
-  width: 100%;
-  max-width: 100%;
-  margin-left: 0;
+  width: min(780px, 92%);
+  margin-left: auto;
   border: 1px solid rgba(91, 140, 255, 0.35);
   background:
     linear-gradient(135deg, rgba(35, 53, 96, 0.78), rgba(32, 24, 72, 0.62)),
@@ -62,8 +61,7 @@
 }
 
 .page-shell .bubble.assistant {
-  width: 100%;
-  max-width: 100%;
+  width: min(980px, 98%);
   border: 1px solid rgba(111, 132, 189, 0.2);
   background:
     linear-gradient(180deg, rgba(18, 26, 45, 0.9), rgba(12, 19, 35, 0.86)),

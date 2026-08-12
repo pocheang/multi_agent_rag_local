@@ -130,18 +130,20 @@
    ============================================ */
 
 .page-shell .chat-window {
-  flex: 1 1 auto;
-  min-height: 200px;
+  flex: 1 1 0%;
+  min-height: 0;
   max-height: none;
   overflow-y: auto;
   scrollbar-gutter: stable;
   scrollbar-width: thin;
   scrollbar-color: rgba(148, 163, 216, 0.5) rgba(7, 13, 26, 0.56);
-  padding: var(--space-5);
+  padding: 20px 24px;
   background: var(--surface);
   border: 1px solid var(--border-light);
   border-radius: var(--radius-xl);
-  margin: 10px 0;
+  margin: 12px 0;
+  display: flex;
+  flex-direction: column;
 }
 
 .page-shell .chat-window::-webkit-scrollbar {
