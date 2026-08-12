@@ -114,6 +114,8 @@
 }
 
 .page-shell .main {
+  position: sticky;
+  top: 0;
   height: 100vh;
   max-height: 100vh;
   padding: 16px 24px;
@@ -128,8 +130,8 @@
    ============================================ */
 
 .page-shell .chat-window {
-  flex: 1 1 0%;
-  min-height: 160px;
+  flex: 1 1 auto;
+  min-height: 200px;
   max-height: none;
   overflow-y: auto;
   scrollbar-gutter: stable;
