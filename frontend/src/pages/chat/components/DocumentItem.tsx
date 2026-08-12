@@ -19,7 +19,7 @@ export function DocumentItem({
   onDeleteDocument,
 }: Props) {
   const { t } = useTranslation();
-  const canManage = canUploadAndManageDocs && (isAdmin || doc.owner_user_id === currentUserId);
+  const canManage = canUploadAndManageDocs || isAdmin || !doc.owner_user_id || (!!currentUserId && doc.owner_user_id === currentUserId);
   const indexingStatus = doc.indexing_status || "ready";
   const statusLabel =
     indexingStatus === "pending"
@@ -53,13 +53,13 @@ export function DocumentItem({
       </div>
       {canManage && (
         <div className="row-actions">
-          <button type="button" className="secondary tiny-btn" onClick={() => void onReindexDocument(doc)}>
+          <button type="button" className="secondary tiny-btn" onClick={() => void onReindexDocument(doc)} title="重新索引此文档">
             {t("components.workbench.reindex")}
           </button>
-          <button type="button" className="danger tiny-btn" onClick={() => void onDeleteDocument(doc, false)}>
+          <button type="button" className="danger tiny-btn" onClick={() => void onDeleteDocument(doc, false)} title="仅清除向量库索引">
             {t("components.workbench.deleteIndex")}
           </button>
-          <button type="button" className="danger tiny-btn" onClick={() => void onDeleteDocument(doc, true)}>
+          <button type="button" className="danger tiny-btn" onClick={() => void onDeleteDocument(doc, true)} title="删除源文件及索引">
             {t("components.workbench.deleteFile")}
           </button>
         </div>
