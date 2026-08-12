@@ -107,6 +107,43 @@
   background: var(--accent-soft);
   border-color: var(--accent);
   box-shadow: var(--shadow-sm), 0 0 12px rgba(91, 140, 255, 0.15);
+  font-weight: 600;
+  font-size: var(--text-base);
+  color: var(--text-primary);
+}
+
+.page-shell .list {
+  display: grid;
+  gap: var(--space-2);
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.page-shell .list li {
+  border: 1px solid var(--border-light);
+  border-radius: 12px;
+  padding: var(--space-4);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--space-3);
+  transition: all 0.2s ease;
+  background: var(--surface);
+  cursor: pointer;
+}
+
+.page-shell .list li:hover {
+  background: var(--surface-hover);
+  border-color: var(--border-medium);
+  box-shadow: var(--shadow-sm);
+  transform: translateX(3px);
+}
+
+.page-shell .list li.active {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  box-shadow: var(--shadow-sm), 0 0 12px rgba(91, 140, 255, 0.15);
 }
 
 .page-shell .skeleton-list {
@@ -127,13 +164,13 @@
 
 .page-shell .chat-window {
   flex: 1;
-  min-height: 360px;
-  max-height: clamp(420px, 58vh, 680px);
-  overflow-y: scroll;
+  min-height: 440px;
+  max-height: calc(100vh - 280px);
+  overflow-y: auto;
   scrollbar-gutter: stable;
   scrollbar-width: thin;
   scrollbar-color: rgba(148, 163, 216, 0.5) rgba(7, 13, 26, 0.56);
-  padding: var(--space-4);
+  padding: var(--space-5);
   background: var(--surface);
   border: 1px solid var(--border-light);
   border-radius: var(--radius-xl);
@@ -162,7 +199,6 @@
 /* ============================================
    Chat Options & Controls
    ============================================ */
-
 .page-shell .option-group {
   display: flex;
   align-items: center;

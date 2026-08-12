@@ -35,7 +35,7 @@
 }
 
 .page-shell .bubble.user {
-  width: min(780px, 92%);
+  width: min(960px, 95%);
   margin-left: auto;
   border: 1px solid rgba(91, 140, 255, 0.35);
   background:
@@ -60,7 +60,7 @@
 }
 
 .page-shell .bubble.assistant {
-  width: min(980px, 98%);
+  width: 100%;
   border: 1px solid rgba(111, 132, 189, 0.2);
   background:
     linear-gradient(180deg, rgba(18, 26, 45, 0.9), rgba(12, 19, 35, 0.86)),
@@ -70,8 +70,6 @@
 }
 
 .page-shell .bubble.assistant::after {
-  content: "";
-  position: absolute;
   left: -1px;
   top: 16px;
   bottom: 16px;

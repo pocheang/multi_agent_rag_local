@@ -633,29 +633,11 @@
   box-shadow: 0 2px 8px rgba(15, 23, 42, 0.04);
 }
 
-:root[data-theme="light"] .page-shell .bubble:hover {
-  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.08);
-  border-color: var(--chat-border-medium);
-}
-
 :root[data-theme="light"] .page-shell .bubble.user {
   background: var(--chat-bg-surface-soft);
   border: 1px solid var(--chat-border-soft);
   box-shadow: 0 2px 8px rgba(15, 23, 42, 0.04);
-}
-
-:root[data-theme="light"] .page-shell .bubble.user::before {
-  background: linear-gradient(135deg, rgba(99, 102, 241, 0.03), rgba(139, 92, 246, 0.02));
-  opacity: 1;
-}
-
-:root[data-theme="light"] .page-shell .bubble.user:hover {
-  border-color: var(--chat-border-medium);
-  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.08);
-}
-
-:root[data-theme="light"] .page-shell .bubble.user:hover::before {
-  opacity: 1;
+  width: min(960px, 95%);
 }
 
 :root[data-theme="light"] .page-shell .bubble.assistant {
@@ -663,17 +645,13 @@
   border: 1px solid var(--chat-border-soft);
   box-shadow: 0 2px 8px rgba(15, 23, 42, 0.04);
   backdrop-filter: none;
+  width: 100%;
 }
 
 :root[data-theme="light"] .page-shell .bubble.assistant::after {
   background: linear-gradient(180deg, var(--chat-brand) 0%, #8b5cf6 100%);
   box-shadow: 0 0 8px rgba(99, 102, 241, 0.2);
   opacity: 0.4;
-}
-
-:root[data-theme="light"] .page-shell .bubble.assistant:hover {
-  border-color: var(--chat-border-medium);
-  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.08);
 }
 
 :root[data-theme="light"] .page-shell .bubble .markdown {
