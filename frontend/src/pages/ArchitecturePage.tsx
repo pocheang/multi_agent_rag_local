@@ -1,7 +1,7 @@
 import { Link } from "react-router-dom";
 import { useTranslation } from "react-i18next";
-import "../styles/pages/architecture.css";
-import { DataFlowVisualization } from "../components/DataFlowVisualization";
+import "@/styles/pages/architecture.css";
+import { DataFlowVisualization } from "@/components/DataFlowVisualization";
 import { getThemeIcon } from "@/lib/theme";
 import { LanguageToggle } from "@/components/LanguageToggle";
 

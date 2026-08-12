@@ -1,4 +1,4 @@
-import type { ConfirmDialogOptions } from "@/lib/hooks/useConfirmDialog";
+import type { ConfirmDialogOptions } from "@/hooks/useConfirmDialog";
 import { useTranslation } from "react-i18next";
 
 interface ConfirmDialogProps {

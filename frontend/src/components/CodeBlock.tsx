@@ -1,6 +1,6 @@
 import { useTranslation } from "react-i18next";
-import "../styles/components/code-block.css";
-import { useCopyToClipboard } from "@/lib/hooks/useCopyToClipboard";
+import "@/styles/components/code-block.css";
+import { useCopyToClipboard } from "@/hooks/useCopyToClipboard";
 
 export interface CodeBlockProps {
   code: string;

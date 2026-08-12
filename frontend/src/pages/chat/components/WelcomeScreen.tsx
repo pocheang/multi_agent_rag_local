@@ -1,5 +1,5 @@
 import { useTranslation } from "react-i18next";
-import "../../../styles/components/welcome-screen.css";
+import "@/styles/components/welcome-screen.css";
 
 type Props = {
   documentsCount?: number;

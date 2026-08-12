@@ -1,4 +1,4 @@
-import "../styles/components/theme-toggle.css";
+import "@/styles/components/theme-toggle.css";
 import { getThemeIcon } from "@/lib/theme";
 
 interface ThemeToggleProps {

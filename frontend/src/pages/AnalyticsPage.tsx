@@ -18,7 +18,7 @@ import type { AuthUser } from "@/types/api";
 import { LanguageToggle } from "@/components/LanguageToggle";
 import { analyticsApi, type AgentStats, type AnalyticsOverview, type DocumentStats } from "@/lib/analytics-api";
 import { getThemeIcon } from "@/lib/theme";
-import "../styles/pages/analytics.css";
+import "@/styles/pages/analytics.css";
 
 type Props = {
   user: AuthUser | null;

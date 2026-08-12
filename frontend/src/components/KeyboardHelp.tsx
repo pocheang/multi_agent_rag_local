@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
-import "../styles/components/keyboard-help.css";
+import "@/styles/components/keyboard-help.css";
 
 interface Shortcut {
   keys: string[];

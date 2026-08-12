@@ -6,14 +6,11 @@
   "scripts": {
     "dev": "vite",
     "test": "vitest --config vitest.config.ts",
-    "build": "tsc -b && vite build --config vite.config.mjs",
+    "build": "tsc -b && vite build",
     "extract-critical": "node scripts/extract-critical-css.js",
     "preview": "vite preview --host 0.0.0.0 --port 4173"
   },
   "dependencies": {
-    "@ant-design/icons": "^6.2.5",
-    "@uiw/react-md-editor": "^4.1.1",
-    "antd": "^6.4.5",
     "clsx": "^2.1.1",
     "i18next": "^26.3.1",
     "react": "^18.3.1",
@@ -23,7 +20,8 @@
     "react-router-dom": "^6.30.3",
     "reactflow": "^11.11.4",
     "recharts": "^3.8.1",
-    "remark-gfm": "^4.0.0"
+    "remark-gfm": "^4.0.0",
+    "zustand": "^5.0.0"
   },
   "devDependencies": {
     "@fullhuman/postcss-purgecss": "^8.0.0",

@@ -147,7 +147,6 @@ async function fetchWithTimeout(path: string, init: RequestInit, options: Reques
 }
 
 export async function request<T = Json>(path: string, init: RequestInit = {}, options: RequestOptions = {}): Promise<T> {
-  getToken();
   const headers = new Headers(init.headers || {});
   const res = await fetchWithTimeout(path, { ...init, headers }, options);
 
@@ -169,7 +168,6 @@ export async function authFetch(
   let attempt = 0;
   while (true) {
     try {
-      getToken();
       const headers = new Headers(init.headers || {});
       const res = await fetchWithTimeout(path, { ...init, headers }, opts);
       if (res.status === 401) {

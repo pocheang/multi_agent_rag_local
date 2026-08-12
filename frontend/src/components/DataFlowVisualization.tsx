@@ -12,7 +12,7 @@ import ReactFlow, {
   type ReactFlowInstance,
 } from 'reactflow';
 import 'reactflow/dist/style.css';
-import '../styles/components/data-flow.css';
+import '@/styles/components/data-flow.css';
 
 // Node translations
 const nodeTranslations: Record<string, { zh: string; en: string }> = {
