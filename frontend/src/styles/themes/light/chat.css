@@ -428,6 +428,114 @@
   opacity: 1;
 }
 
+
+/* ============================================
+   Light Theme - Workbench 扩展卡片
+   ============================================ */
+
+/* 扩展卡片容器 */
+:root[data-theme="light"] .page-shell .sidebar-module {
+  background: #FFFFFF;
+  border: 1px solid #E2E8F0;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+}
+
+:root[data-theme="light"] .page-shell .sidebar-module:hover {
+  border-color: var(--chat-brand);
+  box-shadow: 0 2px 4px rgba(99, 102, 241, 0.08);
+}
+
+/* 扩展卡片标题区域 */
+:root[data-theme="light"] .page-shell .sidebar-module-toggle {
+  background: transparent;
+  color: var(--chat-text-primary);
+}
+
+:root[data-theme="light"] .page-shell .sidebar-module-toggle:hover {
+  background: #F8FAFC;
+}
+
+:root[data-theme="light"] .page-shell .sidebar-module-toggle strong {
+  color: var(--chat-text-primary);
+}
+
+:root[data-theme="light"] .page-shell .sidebar-module-toggle span {
+  color: var(--chat-text-secondary);
+}
+
+/* 扩展卡片描述文字 */
+:root[data-theme="light"] .page-shell .sidebar-module-copy small {
+  color: var(--chat-text-secondary);
+}
+
+/* 扩展卡片元信息 */
+:root[data-theme="light"] .page-shell .sidebar-module-meta {
+  color: var(--chat-text-tertiary);
+}
+
+:root[data-theme="light"] .page-shell .sidebar-module-meta em {
+  color: var(--chat-text-secondary);
+}
+
+:root[data-theme="light"] .page-shell .sidebar-module-meta span {
+  color: var(--chat-text-tertiary);
+}
+
+/* Knowledge Base 卡片 */
+:root[data-theme="light"] .page-shell .sidebar-kb-card {
+  background: #F8FAFC;
+  border: 1px solid #E2E8F0;
+  color: var(--chat-text-primary);
+}
+
+:root[data-theme="light"] .page-shell .sidebar-kb-card:hover {
+  background: #F1F5F9;
+  border-color: var(--chat-brand);
+}
+
+:root[data-theme="light"] .page-shell .sidebar-kb-card span {
+  color: var(--chat-text-secondary);
+}
+
+:root[data-theme="light"] .page-shell .sidebar-kb-card strong {
+  color: var(--chat-text-primary);
+}
+
+/* 扩展卡片内容区域 */
+:root[data-theme="light"] .page-shell .sidebar-module-body {
+  background: transparent;
+}
+
+:root[data-theme="light"] .page-shell .sidebar-module-body > .panel {
+  background: #F8FAFC;
+  border: 1px solid #E2E8F0;
+}
+
+:root[data-theme="light"] .page-shell .sidebar-module-body > .panel:hover {
+  background: #F1F5F9;
+  border-color: var(--chat-brand);
+}
+
+:root[data-theme="light"] .page-shell .sidebar-module-body > .panel > .section-head {
+  color: var(--chat-text-primary);
+  border-bottom: 1px solid #E2E8F0;
+}
+
+/* ============================================
+   Light Theme - Composer Panel
+   ============================================ */
+
+:root[data-theme="light"] .page-shell .composer-panel {
+  background: var(--chat-bg-surface);
+  border: 1px solid var(--chat-border-soft);
+  box-shadow: var(--chat-shadow-soft);
+}
+
+:root[data-theme="light"] .page-shell .composer-panel::before {
+  background: linear-gradient(180deg, rgba(99, 102, 241, 0.02), transparent 28%);
+  opacity: 1;
+}
+
 :root[data-theme="light"] .page-shell .composer-panel:focus-within {
   border-color: var(--chat-brand);
   box-shadow: 0 4px 12px rgba(99, 102, 241, 0.12), 0 0 0 3px rgba(99, 102, 241, 0.08);
@@ -444,8 +552,15 @@
    ============================================ */
 
 :root[data-theme="light"] .page-shell .composer-input-wrapper {
-  background: var(--chat-bg-surface-soft);
-  border-color: var(--chat-border-soft);
+  background: #FFFFFF;
+  border: 1px solid var(--chat-border-soft);
+  box-shadow: inset 0 1px 2px rgba(15, 23, 42, 0.03);
+  transition: all 0.2s ease;
+}
+
+:root[data-theme="light"] .page-shell .composer-panel:focus-within .composer-input-wrapper {
+  border-color: #6366F1;
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
 }
 
 :root[data-theme="light"] .page-shell .composer-panel textarea {
@@ -486,16 +601,17 @@
 }
 
 :root[data-theme="light"] .page-shell .composer-upload-btn {
-  background: var(--chat-bg-surface);
-  border-color: var(--chat-border-soft);
-  color: var(--chat-text-secondary);
+  background: rgba(99, 102, 241, 0.08);
+  border: 1px solid rgba(99, 102, 241, 0.18);
+  color: #6366F1;
+  border-radius: 10px;
 }
 
 :root[data-theme="light"] .page-shell .composer-upload-btn:hover {
-  background: var(--chat-bg-muted);
-  border-color: var(--chat-border-medium);
-  color: var(--chat-text-primary);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  background: rgba(99, 102, 241, 0.16);
+  border-color: #6366F1;
+  color: #4F46E5;
+  box-shadow: 0 2px 8px rgba(99, 102, 241, 0.2);
 }
 
 /* ============================================
@@ -590,29 +706,6 @@
   color: var(--chat-text-secondary);
 }
 
-:root[data-theme="light"] .page-shell .message-head {
-  color: var(--chat-text-secondary);
-  border-bottom-color: var(--chat-border-soft);
-}
-
-:root[data-theme="light"] .page-shell .message-avatar {
-  background: var(--chat-bg-muted);
-  border: 1px solid var(--chat-border-soft);
-  color: var(--chat-text-primary);
-}
-
-:root[data-theme="light"] .page-shell .bubble.user .message-avatar {
-  background: var(--chat-bg-muted);
-  border: 1px solid var(--chat-border-soft);
-}
-
-:root[data-theme="light"] .page-shell .message-avatar:hover {
-  background: var(--chat-border-soft);
-}
-
-/* ============================================
-   Light Theme - Empty Chat State
-   ============================================ */
 
 :root[data-theme="light"] .page-shell .empty-chat-state {
   color: var(--chat-text-secondary);
@@ -775,18 +868,22 @@
 }
 
 :root[data-theme="light"] .page-shell .chip {
-  background: #F1F5F9;
-  border-color: #E2E8F0;
-  color: #475569;
+  background: #EEF2FF;
+  border: 1px solid #C7D2FE;
+  color: #4338CA;
+  font-family: var(--font-sans);
+  font-size: 11px;
   font-weight: 600;
+  border-radius: 12px;
+  padding: 3px 10px;
   box-shadow: none;
 }
 
 :root[data-theme="light"] .page-shell .chip:hover {
-  background: #E2E8F0;
-  border-color: #CBD5E1;
-  color: #334155;
-  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.08);
+  background: #E0E7FF;
+  border-color: #818CF8;
+  color: #3730A3;
+  box-shadow: 0 2px 8px rgba(99, 102, 241, 0.15);
 }
 
 /* ============================================

@@ -177,40 +177,47 @@
   box-shadow:
     0 0 0 3px rgba(91, 140, 255, 0.16),
     0 4px 12px rgba(91, 140, 255, 0.18);
+  outline: none;
+  border-color: rgba(91, 140, 255, 0.68);
+  box-shadow:
+    0 0 0 3px rgba(91, 140, 255, 0.16),
+    0 4px 12px rgba(91, 140, 255, 0.18);
   background:
     linear-gradient(135deg, rgba(24, 36, 58, 0.96), rgba(18, 28, 48, 1)),
     radial-gradient(circle at 100% 0%, rgba(139, 122, 255, 0.18), transparent 50%);
 }
 
 .page-shell .composer-hint {
-  margin-top: 12px;
-  padding: 10px 12px;
-  border-radius: 12px;
-  border: 1px solid rgba(111, 132, 189, 0.14);
-  background: rgba(7, 13, 27, 0.32);
+  margin-top: 8px;
+  padding: 4px 2px;
+  border: none;
+  background: transparent;
   color: var(--text-tertiary);
-  font-size: 12px;
-  line-height: 1.55;
+  font-size: 12.5px;
+  line-height: 1.5;
+  display: flex;
+  align-items: center;
+  gap: 6px;
 }
 
 .page-shell .quick-actions {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
-  gap: 10px;
-  margin-top: 16px;
+  gap: 8px;
+  margin-top: 12px;
 }
 
 .page-shell .quick-action-btn {
-  padding: 9px 14px;
-  border-radius: 999px;
+  padding: 7px 14px;
+  border-radius: 20px;
   border: 1px solid rgba(111, 132, 189, 0.16);
-  background: rgba(18, 26, 45, 0.64);
+  background: rgba(18, 26, 45, 0.5);
   color: var(--text-secondary);
-  font-size: 13px;
-  font-weight: 680;
+  font-size: 12.5px;
+  font-weight: 500;
   cursor: pointer;
-  transition: all 0.18s ease;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .page-shell .quick-action-btn:hover {
