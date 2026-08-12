@@ -70,7 +70,6 @@ class Settings(BaseSettings):
     query_rewrite_enabled: bool = Field(default=True, alias="QUERY_REWRITE_ENABLED")
     query_rewrite_with_llm: bool = Field(default=False, alias="QUERY_REWRITE_WITH_LLM")
     query_decompose_enabled: bool = Field(default=True, alias="QUERY_DECOMPOSE_ENABLED")
-    query_rewrite_max_variants: int = Field(default=6, alias="QUERY_REWRITE_MAX_VARIANTS")
     query_expansion_enabled: bool = Field(default=True, alias="QUERY_EXPANSION_ENABLED")
     query_expansion_max_ratio: float = Field(default=3.0, alias="QUERY_EXPANSION_MAX_RATIO")
     rank_feature_enabled: bool = Field(default=True, alias="RANK_FEATURE_ENABLED")
@@ -92,8 +91,8 @@ class Settings(BaseSettings):
     cache_ttl_deep_tier: int = Field(default=60, alias="CACHE_TTL_DEEP_TIER")
     cache_ttl_user_query: int = Field(default=180, alias="CACHE_TTL_USER_QUERY")
     circuit_breaker_enabled: bool = Field(default=True, alias="CIRCUIT_BREAKER_ENABLED")
-    circuit_breaker_fail_threshold: int = Field(default=3, alias="CIRCUIT_BREAKER_FAIL_THRESHOLD")
-    circuit_breaker_cooldown_seconds: int = Field(default=30, alias="CIRCUIT_BREAKER_COOLDOWN_SECONDS")
+    circuit_breaker_fail_threshold: int = Field(default=5, alias="CIRCUIT_BREAKER_FAIL_THRESHOLD")
+    circuit_breaker_cooldown_seconds: int = Field(default=60, alias="CIRCUIT_BREAKER_COOLDOWN_SECONDS")
     retrieval_cache_backend: str = Field(default="auto", alias="RETRIEVAL_CACHE_BACKEND")  # auto|memory|redis|off
     redis_url: str = Field(default="redis://localhost:6379/0", alias="REDIS_URL")
     otel_tracing_enabled: bool = Field(default=True, alias="OTEL_TRACING_ENABLED")

@@ -1,4 +1,4 @@
-import type { SessionDetail, SessionSummary } from "@/types/api";
+import type { SessionDetail, SessionSummary } from "../types/api";
 import { authRequest } from "./api-client";
 import { buildQueryString, buildPatchRequest, encodePathParam } from "./api-helpers";
 
@@ -6,17 +6,14 @@ export const sessionApi = {
   sessions() {
     return authRequest<SessionSummary[]>("/sessions");
   },
-  sessionCreate() {
-    return authRequest<SessionDetail>("/sessions", { method: "POST" });
+  sessionCreate(signal?: AbortSignal) {
+    return authRequest<SessionDetail>("/sessions", { method: "POST", signal });
   },
-  sessionDetail(sessionId: string) {
-    return authRequest<SessionDetail>(`/sessions/${encodePathParam(sessionId)}`);
+  sessionDetail(sessionId: string, signal?: AbortSignal) {
+    return authRequest<SessionDetail>(`/sessions/${encodePathParam(sessionId)}`, { signal });
   },
   sessionDelete(sessionId: string) {
     return authRequest<{ ok: boolean; session_id: string }>(`/sessions/${encodePathParam(sessionId)}`, { method: "DELETE" });
-  },
-  sessionRename(sessionId: string, newTitle: string) {
-    return buildPatchRequest<{ ok: boolean; session_id: string }>(`/sessions/${encodePathParam(sessionId)}`, { title: newTitle });
   },
   messageUpdate(
     sessionId: string,

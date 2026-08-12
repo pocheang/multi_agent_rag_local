@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "test": "vitest --config vitest.config.ts",
     "build": "tsc -b && vite build --config vite.config.mjs",
     "extract-critical": "node scripts/extract-critical-css.js",
     "preview": "vite preview --host 0.0.0.0 --port 4173"
@@ -32,9 +33,11 @@
     "@vitejs/plugin-react-swc": "^3.11.0",
     "critical": "^7.2.1",
     "esbuild": "^0.28.0",
+    "jsdom": "^26.1.0",
     "puppeteer": "^23.11.1",
     "purgecss": "^8.0.0",
     "typescript": "^5.9.3",
-    "vite": "^6.4.2"
+    "vite": "^6.4.2",
+    "vitest": "^3.2.7"
   }
 }

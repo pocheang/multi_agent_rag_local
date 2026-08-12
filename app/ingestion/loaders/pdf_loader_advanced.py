@@ -6,9 +6,9 @@ from pathlib import Path
 from langchain_core.documents import Document
 
 from app.ingestion.loaders.pdf_loader_enhanced import load_pdf_enhanced
-from app.ingestion.utils.coreference import simple_coreference_resolution
-from app.ingestion.utils.document_structure import add_section_metadata, extract_document_structure
-from app.ingestion.utils.formula_extractor import enrich_text_with_formulas
+from app.ingestion.processing.coreference import simple_coreference_resolution
+from app.ingestion.processing.structure import add_section_metadata, extract_document_structure
+from app.ingestion.extraction.formulas import enrich_text_with_formulas
 
 logger = logging.getLogger(__name__)
 

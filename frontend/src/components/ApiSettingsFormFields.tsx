@@ -1,4 +1,5 @@
 import { useTranslation } from "react-i18next";
+import { normalizeModelTemperature } from "@/lib/model-temperature";
 import type { ApiConfig } from "./apiSettingsConstants";
 
 type Props = {
@@ -96,10 +97,12 @@ export function ApiSettingsFormFields({
           type="range"
           className="api-slider"
           min="0"
-          max="2"
+          max="1"
           step="0.1"
           value={config.temperature}
-          onChange={(e) => onConfigChange({ temperature: Number(e.target.value) })}
+          onChange={(e) => onConfigChange({
+            temperature: normalizeModelTemperature(Number(e.target.value), config.temperature),
+          })}
         />
         <div className="slider-labels">
           <span>{t("components.apiSettings.stable")}</span>

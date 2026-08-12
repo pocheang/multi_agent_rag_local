@@ -13,6 +13,7 @@ from app.services.auth.validation import (
     validate_username,
 )
 
+
 def _validate_user_id(user_id: str) -> bool:
     """Validate UUID-like user IDs while remaining compatible with legacy 32-char hex IDs."""
     try:

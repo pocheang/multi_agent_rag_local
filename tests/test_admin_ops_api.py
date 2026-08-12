@@ -236,7 +236,7 @@ def test_admin_ops_benchmark_run(monkeypatch):
     monkeypatch.setattr(api_main, "_load_benchmark_queries", lambda path, limit=100: ["q1", "q2"])
     monkeypatch.setattr(
         api_main,
-        "run_query",
+        "execute_standard_compatibility",
         lambda *args, **kwargs: {
             "grounding": {"support_ratio": 0.8},
             "vector_result": {"citations": [{"source": "a", "content": "b"}]},

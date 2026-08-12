@@ -1,9 +1,6 @@
-from app.graph.workflow import build_workflow
+"""Compatibility module for canonical graph Studio entry."""
 
+from importlib import import_module as _import_module
+import sys as _sys
 
-def get_graph():
-    """
-    LangGraph Studio entrypoint.
-    Returns a compiled graph app for visual debugging.
-    """
-    return build_workflow()
+_sys.modules[__name__] = _import_module("app.graph.execution.studio_entry")

@@ -10,6 +10,7 @@
 @import "../features/citations.css";
 @import "../features/graph.css";
 @import "../features/process.css";
+@import "../features/runtime-panels.css";
 @import "../themes/light/chat.css";
 @import "../themes/dark/chat.css";
 @import "./chat-responsive.css";

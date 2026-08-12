@@ -2,12 +2,13 @@ import { useTranslation } from "react-i18next";
 import { Link } from "react-router-dom";
 import { LanguageToggle } from "@/components/LanguageToggle";
 import { getThemeIcon } from "@/lib/theme";
-import { RoleBadge, type User } from "@/hooks/usePermissions";
+import { RoleBadge } from "@/hooks/usePermissions";
+import type { UserIdentity } from "@/types/auth";
 
 type Props = {
   themeLabel: string;
   sidebarCollapsed: boolean;
-  user: User | null;
+  user: UserIdentity | null;
   onToggleSidebar: () => void;
   onOpenSettings: () => void;
   onThemeToggle: () => void;

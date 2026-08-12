@@ -1,32 +1,6 @@
-from typing import Any, TypedDict
+"""Compatibility module for canonical graph execution state."""
 
+from importlib import import_module as _import_module
+import sys as _sys
 
-class GraphState(TypedDict, total=False):
-    question: str
-    session_id: str
-    memory_context: str
-    use_web_fallback: bool
-    use_reasoning: bool
-    route: str
-    adaptive_level: str
-    adaptive_min_vector_hits: int
-    adaptive_prefer_graph: bool
-    adaptive_prefer_web: bool
-    reason: str
-    skill: str
-    agent_class: str
-    vector_result: dict[str, Any]
-    graph_result: dict[str, Any]
-    web_result: dict[str, Any]
-    react_result: dict[str, Any]
-    answer: str
-    grounding: dict[str, Any]
-    answer_safety: dict[str, Any]
-    explainability: dict[str, Any]
-    allowed_sources: list[str]
-    agent_class_hint: str | None
-    next_step: str
-    retrieval_strategy: str | None
-    force_language: str
-    detected_language: str
-    language_preference: str
+_sys.modules[__name__] = _import_module("app.graph.execution.state")

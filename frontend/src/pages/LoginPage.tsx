@@ -89,7 +89,7 @@ export function LoginPage({ onLogin, themeLabel, onThemeToggle }: Props) {
   };
 
   const handleGoogleLogin = () => {
-    window.location.href = "/api/auth/google/login";
+    window.location.href = "/auth/google/login";
   };
 
   const handleGitHubLogin = () => {

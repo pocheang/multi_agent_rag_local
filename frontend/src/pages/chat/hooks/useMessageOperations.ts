@@ -21,7 +21,7 @@ export function useMessageOperations(params: UseMessageOperationsParams) {
   } = params;
 
   const editMessage = async (msg: SessionMessage, useWeb: boolean, useReasoning: boolean) => {
-    if (!currentSessionId) return;
+    if (!currentSessionId || !msg.message_id) return;
     const next = window.prompt("Edit message content", msg.content || "");
     if (next === null) return;
     try {
@@ -43,7 +43,7 @@ export function useMessageOperations(params: UseMessageOperationsParams) {
   };
 
   const removeMessage = async (msg: SessionMessage) => {
-    if (!currentSessionId) return;
+    if (!currentSessionId || !msg.message_id) return;
     if (!window.confirm("Delete this message?")) return;
     try {
       const detail = await appApi.messageDelete(currentSessionId, msg.message_id);

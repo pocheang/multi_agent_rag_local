@@ -1,17 +1,38 @@
 import hashlib
 import json
+import secrets
 import sqlite3
 import threading
+import uuid
 from pathlib import Path
 from typing import Any
 
 from app.core.config import get_settings
 from app.services.auth.audit_logger import AuditLogger
 from app.services.auth.encryption import decrypt_api_settings_payload, encrypt_api_settings_payload
+from app.services.auth.password_utils import generate_salt, hash_password
 from app.services.auth.session_manager import SessionManager
 from app.services.auth.user_manager import UserManager
 from app.services.auth.utils import iso, now
-from app.services.auth.validation import validate_username
+from app.services.auth.validation import (
+    normalize_classification_value,
+    validate_password,
+    validate_role,
+    validate_username,
+)
+
+
+class PasswordChangeError(ValueError):
+    """A password-change failure that is safe to present through the auth API."""
+
+    def __init__(self, audit_detail: str, public_message: str, *, internal: bool = False):
+        super().__init__(public_message)
+        self.audit_detail = audit_detail
+        self.internal = internal
+
+
+class GoogleUserCreationError(RuntimeError):
+    """A Google identity could not be provisioned after it was confirmed absent."""
 
 
 class AuthDBService:
@@ -97,6 +118,18 @@ class AuthDBService:
                 """
             )
             self._ensure_users_columns(conn)
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS oauth_identities (
+                  provider TEXT NOT NULL,
+                  email TEXT NOT NULL COLLATE NOCASE,
+                  user_id TEXT NOT NULL,
+                  created_at TEXT NOT NULL,
+                  PRIMARY KEY (provider, email)
+                )
+                """
+            )
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_oauth_identities_user ON oauth_identities(user_id)")
             conn.execute(
                 """
                 CREATE TABLE IF NOT EXISTS auth_sessions (
@@ -198,6 +231,7 @@ class AuthDBService:
             )
 
     def register(self, username: str, password: str) -> dict[str, Any]:
+        validate_password(password)
         return self.create_user_with_role(username=username, password=password, role="viewer")
 
     def create_user_with_role(
@@ -214,19 +248,120 @@ class AuthDBService:
         user_type: str | None = None,
         data_scope: str | None = None,
     ) -> dict[str, Any]:
-        return self.user_manager.create_user(
-            username=username,
-            password=password,
-            role=role,
-            created_by_user_id=created_by_user_id,
-            created_by_username=created_by_username,
-            admin_ticket_id=admin_ticket_id,
-            admin_approval_token_hash=admin_approval_token_hash,
-            business_unit=business_unit,
-            department=department,
-            user_type=user_type,
-            data_scope=data_scope,
-        )
+        with self._connect() as conn:
+            return self._create_user_record(
+                conn,
+                username=username,
+                password=password,
+                role=role,
+                created_by_user_id=created_by_user_id,
+                created_by_username=created_by_username,
+                admin_ticket_id=admin_ticket_id,
+                admin_approval_token_hash=admin_approval_token_hash,
+                business_unit=business_unit,
+                department=department,
+                user_type=user_type,
+                data_scope=data_scope,
+            )
+
+    @staticmethod
+    def _validate_creation_password(password: str) -> str:
+        """Keep the UserManager creation-password compatibility contract."""
+        try:
+            return validate_password(password)
+        except ValueError:
+            value = password or ""
+            if (
+                8 <= len(value) <= 128
+                and any(ch.islower() for ch in value)
+                and any(ch.isupper() for ch in value)
+                and any(ch.isdigit() for ch in value)
+            ):
+                return value
+            raise
+
+    def _create_user_record(
+        self,
+        conn: sqlite3.Connection,
+        *,
+        username: str,
+        password: str,
+        role: str = "viewer",
+        created_by_user_id: str | None = None,
+        created_by_username: str | None = None,
+        admin_ticket_id: str | None = None,
+        admin_approval_token_hash: str | None = None,
+        business_unit: str | None = None,
+        department: str | None = None,
+        user_type: str | None = None,
+        data_scope: str | None = None,
+        display_name: str | None = None,
+        is_oauth_identity: bool = False,
+    ) -> dict[str, Any]:
+        """Create the user row used by both local registration and OAuth provisioning."""
+        if is_oauth_identity:
+            username = (username or "").strip()
+            if not username:
+                raise ValueError("missing OAuth email")
+        else:
+            # Public local registration keeps the established username policy.
+            username = validate_username(username)
+        password = self._validate_creation_password(password)
+        role = validate_role(role)
+        business_unit = normalize_classification_value(business_unit)
+        department = normalize_classification_value(department)
+        user_type = normalize_classification_value(user_type)
+        data_scope = normalize_classification_value(data_scope)
+        display_name = (display_name or "").strip() or None
+        user_id = uuid.uuid4().hex
+        salt_hex = generate_salt()
+        password_hash = hash_password(password, salt_hex)
+        created_at = iso(now())
+        try:
+            conn.execute(
+                """
+                INSERT INTO users(
+                  user_id, username, salt, password_hash, role, status,
+                  created_by_user_id, created_by_username, admin_ticket_id, admin_approval_token_hash,
+                  business_unit, department, user_type, data_scope, display_name, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    user_id,
+                    username,
+                    salt_hex,
+                    password_hash,
+                    role,
+                    "active",
+                    (created_by_user_id or "").strip() or None,
+                    (created_by_username or "").strip() or None,
+                    (admin_ticket_id or "").strip() or None,
+                    (admin_approval_token_hash or "").strip() or None,
+                    business_unit,
+                    department,
+                    user_type,
+                    data_scope,
+                    display_name,
+                    created_at,
+                ),
+            )
+        except sqlite3.IntegrityError as exc:
+            raise ValueError("username already exists") from exc
+        return {
+            "user_id": user_id,
+            "username": username,
+            "role": role,
+            "status": "active",
+            "created_by_user_id": (created_by_user_id or "").strip() or None,
+            "created_by_username": (created_by_username or "").strip() or None,
+            "admin_ticket_id": (admin_ticket_id or "").strip() or None,
+            "has_admin_approval_token": bool((admin_approval_token_hash or "").strip()),
+            "business_unit": business_unit,
+            "department": department,
+            "user_type": user_type,
+            "data_scope": data_scope,
+            "display_name": display_name,
+        }
 
     def login(self, username: str, password: str) -> dict[str, Any]:
         username = validate_username(username)
@@ -242,6 +377,156 @@ class AuthDBService:
 
     def logout(self, token: str) -> None:
         self.session_manager.delete_session(token)
+
+    def update_user_display_name(self, user_id: str, display_name: str) -> dict[str, Any] | None:
+        return self.user_manager.update_user_display_name(user_id, display_name)
+
+    def change_password(
+        self,
+        *,
+        user_id: str,
+        username: str,
+        old_password: str,
+        new_password: str,
+        current_token: str,
+        role: str,
+        status: str,
+    ) -> dict[str, Any] | None:
+        try:
+            # Preserve the existing verification and session invalidation sequence.
+            self.login(username, old_password)
+        except ValueError as exc:
+            raise PasswordChangeError("old_password_incorrect", "旧密码不正确") from exc
+
+        try:
+            validate_password(new_password)
+        except ValueError as exc:
+            raise PasswordChangeError(f"validation_failed: {exc}", str(exc)) from exc
+
+        if old_password == new_password:
+            raise PasswordChangeError("new_password_same_as_old", "新密码不能与旧密码相同")
+
+        try:
+            self.user_manager.update_user_password(user_id, new_password)
+        except Exception as exc:
+            raise PasswordChangeError(f"update_failed: {exc}", "密码更新失败", internal=True) from exc
+
+        try:
+            return self.session_manager.rotate_session_token(
+                current_token,
+                user_id,
+                username,
+                role,
+                status,
+            )
+        except Exception:
+            # A changed password remains valid even when session rotation cannot complete.
+            return None
+
+    def get_google_user_by_email(self, email: str) -> dict[str, Any] | None:
+        normalized_email = self._normalize_oauth_email(email)
+        with self._connect() as conn:
+            row = conn.execute(
+                """
+                SELECT u.user_id, u.username, u.role, u.status, u.display_name
+                FROM oauth_identities i
+                JOIN users u ON u.user_id = i.user_id
+                WHERE i.provider = 'google' AND i.email = ?
+                """,
+                (normalized_email,),
+            ).fetchone()
+            if row:
+                return self._public_google_user(dict(row), normalized_email)
+
+            # Preserve access to accounts created before OAuth identities were stored.
+            row = conn.execute(
+                "SELECT user_id, username, role, status, display_name FROM users WHERE lower(username)=lower(?)",
+                (normalized_email,),
+            ).fetchone()
+            if row:
+                conn.execute(
+                    "INSERT OR IGNORE INTO oauth_identities(provider, email, user_id, created_at) VALUES (?, ?, ?, ?)",
+                    ("google", normalized_email, row["user_id"], iso(now())),
+                )
+                return self._public_google_user(dict(row), normalized_email)
+
+        return None
+
+    def create_google_user(self, email: str, display_name: str) -> dict[str, Any]:
+        user, _ = self._get_or_create_google_user(email, display_name)
+        return user
+
+    def complete_google_login(self, email: str, display_name: str) -> dict[str, Any]:
+        """Resolve the Google identity and establish the callback session."""
+        user, created = self._get_or_create_google_user(email, display_name)
+        session = self.create_session_for_user(user)
+        return {"user": user, "session": session, "created": created}
+
+    @staticmethod
+    def _normalize_oauth_email(email: str) -> str:
+        normalized_email = (email or "").strip().casefold()
+        if not normalized_email:
+            raise ValueError("missing OAuth email")
+        return normalized_email
+
+    @staticmethod
+    def _public_google_user(user: dict[str, Any], email: str) -> dict[str, Any]:
+        """Expose the Google email identity, never an internal legacy surrogate."""
+        return {**user, "username": email}
+
+    def _get_or_create_google_user(self, email: str, display_name: str) -> tuple[dict[str, Any], bool]:
+        normalized_email = self._normalize_oauth_email(email)
+        normalized_display_name = (display_name or "").strip() or None
+        with self._connect() as conn:
+            conn.execute("BEGIN IMMEDIATE")
+            row = conn.execute(
+                """
+                SELECT u.user_id, u.username, u.role, u.status, u.display_name
+                FROM oauth_identities i
+                JOIN users u ON u.user_id = i.user_id
+                WHERE i.provider = 'google' AND i.email = ?
+                """,
+                (normalized_email,),
+            ).fetchone()
+            if row:
+                return self._public_google_user(dict(row), normalized_email), False
+
+            # Link legacy Google accounts without reinterpreting email as a local username.
+            row = conn.execute(
+                "SELECT user_id, username, role, status, display_name FROM users WHERE lower(username)=lower(?)",
+                (normalized_email,),
+            ).fetchone()
+            if row:
+                conn.execute(
+                    "INSERT INTO oauth_identities(provider, email, user_id, created_at) VALUES (?, ?, ?, ?)",
+                    ("google", normalized_email, row["user_id"], iso(now())),
+                )
+                return self._public_google_user(dict(row), normalized_email), False
+
+            try:
+                user = self._create_user_record(
+                    conn,
+                    username=normalized_email,
+                    password=f"GoogleOAuth1!{secrets.token_urlsafe(32)}",
+                    role="viewer",
+                    display_name=normalized_display_name,
+                    is_oauth_identity=True,
+                )
+                conn.execute(
+                    "INSERT INTO oauth_identities(provider, email, user_id, created_at) VALUES (?, ?, ?, ?)",
+                    ("google", normalized_email, user["user_id"], iso(now())),
+                )
+            except Exception as exc:
+                raise GoogleUserCreationError(str(exc)) from exc
+            return self._public_google_user(user, normalized_email), True
+
+    def create_session_for_user(self, user: dict[str, Any]) -> dict[str, Any]:
+        return self.session_manager.create_session(
+            user_id=str(user["user_id"]),
+            username=str(user["username"]),
+            role=str(user["role"]),
+            status=str(user["status"]),
+        )
 
     def get_user_by_token(self, token: str, include_disabled: bool = False) -> dict[str, Any] | None:
         return self.session_manager.get_user_by_token(token, include_disabled=include_disabled)

@@ -2,7 +2,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type React from "react";
 import { useTranslation } from "react-i18next";
 import type { SessionSummary } from "@/types/api";
-import { usePermissions, type User } from "@/hooks/usePermissions";
+import { usePermissions } from "@/hooks/usePermissions";
+import type { UserIdentity } from "@/types/auth";
 
 type Props = {
   sessions: SessionSummary[];
@@ -10,11 +11,10 @@ type Props = {
   currentSessionId: string | null;
   busySessionId: string | null;
   searchRequestKey?: number;
-  user: User | null;
+  user: UserIdentity | null;
   onCreateSession: () => Promise<void>;
   onLoadSession: (sessionId: string) => Promise<void>;
   onDeleteSession: (sessionId: string) => Promise<void>;
-  onRenameSession?: (sessionId: string, newTitle: string) => Promise<void>;
 };
 
 function formatSessionTime(value: string | undefined, fallback: string, locale: string) {
@@ -38,7 +38,6 @@ export function SessionList({
   onCreateSession,
   onLoadSession,
   onDeleteSession,
-  onRenameSession,
 }: Props) {
   const { t, i18n } = useTranslation();
   const permissions = usePermissions(user);
@@ -84,16 +83,6 @@ export function SessionList({
     event.stopPropagation();
     setOpenMenuId(null);
     void onDeleteSession(sessionId);
-  };
-
-  const handleRename = (sessionId: string, currentTitle: string, event: React.MouseEvent) => {
-    event.stopPropagation();
-    setOpenMenuId(null);
-
-    const newTitle = window.prompt(t("components.chat.renameSession"), currentTitle || t("components.chat.untitled"));
-    if (newTitle !== null && newTitle.trim() !== "" && newTitle !== currentTitle) {
-      void onRenameSession?.(sessionId, newTitle.trim());
-    }
   };
 
   return (
@@ -156,14 +145,6 @@ export function SessionList({
                   </button>
                   {openMenuId === session.session_id && (
                     <div ref={menuRef} className="session-dropdown-menu">
-                      <button
-                        type="button"
-                        className="session-menu-item"
-                        onClick={(event) => handleRename(session.session_id, session.title || "", event)}
-                      >
-                        <span className="menu-icon" aria-hidden="true">✎</span>
-                        {t("components.chat.rename")}
-                      </button>
                       {permissions.canDeleteSession && (
                         <button
                           type="button"

@@ -7,22 +7,22 @@ from collections.abc import Generator
 from concurrent.futures import TimeoutError as FutureTimeoutError
 from typing import Any
 
-from app.agents.react_agent import run_react_agent
-from app.agents.router_agent import decide_route
-from app.agents.synthesis_agent import stream_synthesize_answer, synthesize_answer
+from app.agents.router.routing import decide_route
+from app.agents.synthesizer.generation import stream_synthesize_answer, synthesize_answer
+from app.agents.tool.react import run_react_agent
 from app.core.config import get_settings
 from app.graph.streaming.safe_wrappers import safe_graph_result, safe_vector_result, safe_web_result
-from app.services.adaptive_rag_policy import build_adaptive_plan
-from app.services.agent_execution_tracker import AgentExecutionTracker
+from app.services.retrieval.adaptive_policy import build_adaptive_plan
+from app.services.observability.agent_execution_tracker import AgentExecutionTracker
 from app.services.answer_safety import sanitize_answer
 from app.services.citation_grounding import apply_sentence_grounding
 from app.services.evidence_scoring import evidence_is_sufficient
 from app.services.explainability import build_explainability_report
 from app.services.hybrid_executor import HybridExecutorRejectedError, submit_hybrid
 from app.services.query_intent import is_casual_chat_query, quick_smalltalk_reply, should_force_web_research
-from app.services.request_context import deadline_exceeded, remaining_seconds
-from app.services.session_language import update_language_history
-from app.services.tracing import traced_span
+from app.services.runtime.request_context import deadline_exceeded, remaining_seconds
+from app.services.sessions.language import update_language_history
+from app.services.observability.tracing import traced_span
 
 logger = logging.getLogger(__name__)
 
@@ -42,13 +42,13 @@ def _retrieved_docs_from_vector_result(vector_result: dict | None) -> list[dict]
 def _sync_agent_patchpoints() -> None:
     """Honor tests and legacy callers that replace agent modules in sys.modules."""
     global decide_route, run_react_agent, stream_synthesize_answer, synthesize_answer
-    router_module = sys.modules.get("app.agents.router_agent")
+    router_module = sys.modules.get("app.agents.router.routing")
     if router_module is not None and hasattr(router_module, "decide_route"):
         decide_route = router_module.decide_route
-    react_module = sys.modules.get("app.agents.react_agent")
+    react_module = sys.modules.get("app.agents.tool.react")
     if react_module is not None and hasattr(react_module, "run_react_agent"):
         run_react_agent = react_module.run_react_agent
-    synthesis_module = sys.modules.get("app.agents.synthesis_agent")
+    synthesis_module = sys.modules.get("app.agents.synthesizer.generation")
     if synthesis_module is not None:
         if hasattr(synthesis_module, "stream_synthesize_answer"):
             stream_synthesize_answer = synthesis_module.stream_synthesize_answer
@@ -76,7 +76,7 @@ def run_query_stream(
     # Initialize execution tracking
     tracker = AgentExecutionTracker.get_instance() if enable_tracking else None
     if tracker and enable_tracking:
-        execution_id = tracker.start_execution(question, execution_id, user_id=user_id)
+        execution_id = tracker.start_execution(question, execution_id, user_id=user_id, profile="standard")
 
     state: dict[str, Any] = {
         "question": question,
@@ -656,6 +656,3 @@ def run_query_stream(
         tracker.complete_execution(execution_id, final_payload)
     yield {"type": "done", "result": final_payload}
     return final_payload
-
-
-

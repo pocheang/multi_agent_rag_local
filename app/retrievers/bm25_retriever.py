@@ -6,7 +6,7 @@ try:
 except ImportError:  # pragma: no cover - optional dependency fallback
     BM25Okapi = None  # type: ignore[assignment]
 
-from app.retrievers.corpus_store import read_corpus_records
+from app.retrievers.stores.corpus import read_corpus_records
 
 # English tokenization pattern (original)
 TOKEN_PATTERN = re.compile(r"[A-Za-z0-9_\-]+|[\u4e00-\u9fff]")

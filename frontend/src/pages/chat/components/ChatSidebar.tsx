@@ -3,6 +3,7 @@ import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import type React from "react";
 import type { IndexedFileSummary, PromptTemplate, SessionSummary } from "@/types/api";
+import type { UserIdentity } from "@/types/auth";
 import { SessionList } from "@/pages/chat/components/SessionList";
 import { WorkbenchPanel } from "@/pages/chat/components/WorkbenchPanel";
 
@@ -37,7 +38,7 @@ type Props = {
   docDropActive: boolean;
   canUploadAndManageDocs: boolean;
   isAdmin: boolean;
-  user: any;
+  user: UserIdentity | null;
   prompts: PromptTemplate[];
   promptsLoading: boolean;
   promptTitle: string;
@@ -49,7 +50,6 @@ type Props = {
   onCreateSession: () => Promise<void>;
   onLoadSession: (sessionId: string) => Promise<void>;
   onDeleteSession: (sessionId: string) => Promise<void>;
-  onRenameSession: (sessionId: string, newTitle: string) => Promise<void>;
   onSwitchAgentMode: (mode: AgentClassHint) => void;
   onPdfTargetFileChange: (filename: string) => void;
   onDraftQuestion: () => void;
@@ -106,7 +106,6 @@ export function ChatSidebar({
   onCreateSession,
   onLoadSession,
   onDeleteSession,
-  onRenameSession,
   onSwitchAgentMode,
   onPdfTargetFileChange,
   onDraftQuestion,
@@ -196,7 +195,6 @@ export function ChatSidebar({
             onCreateSession={onCreateSession}
             onLoadSession={onLoadSession}
             onDeleteSession={onDeleteSession}
-            onRenameSession={onRenameSession}
           />
         </div>
 

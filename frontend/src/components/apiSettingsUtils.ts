@@ -1,4 +1,5 @@
 import type { ProviderCatalogEntry } from "@/types/api";
+import { normalizeModelTemperature } from "@/lib/model-temperature";
 import type { ApiConfig, Provider } from "./apiSettingsConstants";
 import { PROVIDER_DEFAULTS } from "./apiSettingsConstants";
 
@@ -30,7 +31,7 @@ export function buildApiPayload(config: ApiConfig) {
     api_key: config.apiKey.trim(),
     base_url: config.baseUrl.trim(),
     model: config.model.trim(),
-    temperature: clampNumber(Number(config.temperature), 0, 2),
+    temperature: normalizeModelTemperature(Number(config.temperature), 0.7),
     max_tokens: clampNumber(Number(config.maxTokens), 256, 131072),
   };
 }
@@ -55,7 +56,7 @@ export function parseApiResponse(response: any): ApiConfig {
     apiKeyMasked: response.api_key_masked || "",
     baseUrl: response.base_url || "",
     model: response.model || "",
-    temperature: Number(response.temperature ?? 0.7),
+    temperature: normalizeModelTemperature(Number(response.temperature), 0.7),
     maxTokens: Number(response.max_tokens ?? 2048),
     globalOverrideEnabled: !!response.global_override_enabled,
     globalProvider: response.global_provider || "",

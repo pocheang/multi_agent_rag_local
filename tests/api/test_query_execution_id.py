@@ -6,6 +6,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.main import app
+from app.pipeline.contracts import PipelineResult, PipelineRoute
 from app.services.agent_execution_tracker import AgentExecutionTracker
 
 
@@ -26,12 +27,12 @@ def user_headers():
 
 @pytest.fixture
 def mock_run_query():
-    """Mock run_query to return a simple result with execution_id."""
-    with patch("app.api.routes.query.run_query") as mock:
+    """Mock the unified pipeline to return a simple tracked answer."""
+    with patch("app.api.routes.query_request_execution.RAGPipeline.execute_sync") as mock:
 
         def side_effect(question, **kwargs):
             execution_id = kwargs.get("execution_id") or "test-exec-id"
-            return {
+            payload = {
                 "answer": "Test answer",
                 "route": "vector",
                 "reason": "test",
@@ -43,6 +44,12 @@ def mock_run_query():
                 "web_result": {"used": False, "citations": []},
                 "detected_language": "zh",
             }
+            return PipelineResult(
+                answer=payload["answer"],
+                citations=(),
+                route=PipelineRoute(route=payload["route"]),
+                execution_metadata={"compatibility_payload": payload},
+            )
 
         mock.side_effect = side_effect
         yield mock
@@ -59,33 +66,44 @@ def test_query_endpoint_returns_execution_id(user_headers, mock_run_query):
     assert response.status_code == 200
     data = response.json()
 
+    assert data["answer"] == "Test answer"
+    assert data["citations"] == []
+    assert data["route"] == "vector"
+
     # Verify execution_id is present
     assert "execution_id" in data
     assert data["execution_id"] is not None
 
 
-def test_stream_query_returns_execution_id(user_headers):
-    """Test that /query/stream endpoint returns execution_id in final result."""
-    with patch("app.api.routes.query.run_query_stream") as mock_stream:
-        # Mock streaming events including execution_id
-        def stream_generator(*args, **kwargs):
-            yield {"type": "status", "message": "routing"}
-            yield {"type": "route", "route": "vector"}
-            yield {
-                "type": "done",
-                "result": {
-                    "answer": "Test answer",
-                    "route": "vector",
-                    "execution_id": "stream-exec-id",
-                    "vector_result": {},
-                    "graph_result": {},
-                    "web_result": {"used": False},
-                    "detected_language": "zh",
-                },
-            }
+def test_stream_query_exposes_execution_id_before_workflow_completion(user_headers):
+    """The browser must be able to attach an execution trace before the final answer arrives."""
+    pipeline_calls = []
 
-        mock_stream.return_value = stream_generator()
+    async def stream_generator(_pipeline, pipeline_request, *, execution_id):
+        pipeline_calls.append((pipeline_request, execution_id))
+        yield {"type": "status", "message": "routing"}
+        yield {"type": "route", "route": "vector"}
+        yield {
+            "type": "done",
+            "result": {
+                "answer": "Test answer",
+                "route": "vector",
+                "execution_id": execution_id,
+                "vector_result": {},
+                "graph_result": {},
+                "web_result": {"used": False},
+                "detected_language": "zh",
+            },
+        }
 
+    with (
+        patch("app.api.routes.query_stream.RAGPipeline.execute_stream", new=stream_generator),
+        patch(
+            "app.api.routes.query_stream.run_query_stream",
+            side_effect=AssertionError("query route must not invoke the compatibility stream directly"),
+            create=True,
+        ) as direct_stream,
+    ):
         client = TestClient(app)
         response = client.post(
             "/api/query/stream", data={"question": "test question", "session_id": "test-session"}, headers=user_headers
@@ -108,14 +126,21 @@ def test_stream_query_returns_execution_id(user_headers):
                     events.append(current_event)
                     current_event = {}
 
-        # Find the 'done' event
-        done_events = [e for e in events if e.get("data", {}).get("type") == "done"]
-        assert len(done_events) > 0
+        versioned_events = [e["data"] for e in events if e.get("event") == "execution_event"]
+        assert versioned_events
+        assert all(event["version"] == "1" for event in versioned_events)
+        started_event = next(event for event in versioned_events if event["message"] == "execution started")
+        started_execution_id = next(
+            metadata["value"] for metadata in started_event["metadata"] if metadata["key"] == "execution_id"
+        )
+        assert isinstance(started_execution_id, str) and started_execution_id
+        assert len(pipeline_calls) == 1
+        assert pipeline_calls[0][1] == started_execution_id
+        assert pipeline_calls[0][0].question.startswith("test question")
+        direct_stream.assert_not_called()
 
-        # Verify execution_id is in the final result
-        result = done_events[0]["data"]["result"]
-        assert "execution_id" in result
-        assert result["execution_id"] == "stream-exec-id"
+        assert any(event["stage"] == "complete" for event in versioned_events)
+        assert all("result" not in event for event in versioned_events)
 
 
 def test_execution_id_can_be_used_with_tracking_endpoints(user_headers, mock_run_query):
@@ -128,7 +153,7 @@ def test_execution_id_can_be_used_with_tracking_endpoints(user_headers, mock_run
 
     # Mock run_query to return this execution_id
     def side_effect(question, **kwargs):
-        return {
+        payload = {
             "answer": "Test answer",
             "route": "vector",
             "reason": "test",
@@ -140,6 +165,12 @@ def test_execution_id_can_be_used_with_tracking_endpoints(user_headers, mock_run
             "web_result": {"used": False, "citations": []},
             "detected_language": "zh",
         }
+        return PipelineResult(
+            answer=payload["answer"],
+            citations=(),
+            route=PipelineRoute(route=payload["route"]),
+            execution_metadata={"compatibility_payload": payload},
+        )
 
     mock_run_query.side_effect = side_effect
 

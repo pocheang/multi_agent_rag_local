@@ -1,5 +1,5 @@
 from app.core.config import get_settings
-from app.services.ingest_service import ingest_docs_dir
+from app.services.documents.ingest import ingest_docs_dir
 
 
 def main():

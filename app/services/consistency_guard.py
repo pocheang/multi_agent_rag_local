@@ -1,17 +1,6 @@
-import re
+"""Compatibility alias for :mod:`app.services.retrieval.consistency_guard`."""
 
-_TOKEN_RE = re.compile(r"[A-Za-z0-9_]+|[\u4e00-\u9fff]")
+from importlib import import_module as _import_module
+import sys as _sys
 
-
-def text_similarity(a: str, b: str) -> float:
-    ta = set(_TOKEN_RE.findall((a or "").lower()))
-    tb = set(_TOKEN_RE.findall((b or "").lower()))
-    if not ta and not tb:
-        return 1.0
-    if not ta or not tb:
-        return 0.0
-    return len(ta & tb) / max(1, len(ta | tb))
-
-
-def should_stabilize(previous_answer: str, new_answer: str, threshold: float) -> bool:
-    return text_similarity(previous_answer, new_answer) < float(threshold)
+_sys.modules[__name__] = _import_module("app.services.retrieval.consistency_guard")

@@ -1,4 +1,4 @@
-from app.retrievers.parent_store import get_parent_text_map
+from app.retrievers.stores.parent import get_parent_text_map
 
 
 def expand_to_parent_context(candidates: list[dict]) -> list[dict]:

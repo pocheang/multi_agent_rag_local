@@ -5,7 +5,7 @@ from typing import Any
 
 from app.evaluation.models import RetrievalResult
 from app.retrievers.bm25_retriever import bm25_search
-from app.retrievers.vector_store import similarity_search
+from app.retrievers.stores.vector import similarity_search
 
 
 class HybridRetriever:

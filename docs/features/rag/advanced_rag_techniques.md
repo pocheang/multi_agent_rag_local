@@ -116,9 +116,7 @@ app/
 ├── models/
 │   └── advanced_rag_models.py       # Data models
 ├── prompts/
-│   ├── query_decomposition.txt      # Decomposition prompt
-│   ├── relevance_evaluation.txt     # Relevance evaluation prompt
-│   └── quality_evaluation.txt       # Quality evaluation prompt
+│   └── core/canonical_agent_prompts.py   # Single canonical owner for agent prompts
 └── api/routes/
     └── advanced_rag.py              # API endpoints
 ```

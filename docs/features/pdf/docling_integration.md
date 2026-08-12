@@ -178,7 +178,7 @@ A: 目前是全局配置。未来可以添加per-file配置。
 ### 代码位置
 
 - **Docling加载器**: `app/ingestion/loaders/pdf_loader.py`
-- **主加载逻辑**: `app/ingestion/loaders.py`
+- **主加载逻辑**: `app/ingestion/loaders/dispatch.py`
 - **配置**: `app/core/config.py`
 - **测试脚本**: `scripts/dev/test_docling_loader.py`
 

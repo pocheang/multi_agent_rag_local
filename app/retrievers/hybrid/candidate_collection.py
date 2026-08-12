@@ -6,7 +6,7 @@ from app.retrievers.hybrid.adaptive_params import adaptive_retrieval_params
 from app.retrievers.hybrid.fusion import hybrid_weights, rrf_score
 from app.retrievers.hybrid.rank_features import rank_feature_score
 from app.retrievers.hybrid.strategy import strategy_flags
-from app.retrievers.vector_store import similarity_search
+from app.retrievers.stores.vector import similarity_search
 from app.services.query_rewrite import build_rewrite_queries
 
 logger = logging.getLogger(__name__)

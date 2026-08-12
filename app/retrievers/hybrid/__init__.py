@@ -5,6 +5,7 @@ from app.retrievers.hybrid.fusion import hybrid_weights, rrf_score
 from app.retrievers.hybrid.parent_expansion import expand_to_parent_context
 from app.retrievers.hybrid.rank_features import rank_feature_score
 from app.retrievers.hybrid.strategy import strategy_flags
+from app.retrievers.hybrid.retriever import hybrid_search, hybrid_search_with_diagnostics
 
 __all__ = [
     "adaptive_retrieval_params",

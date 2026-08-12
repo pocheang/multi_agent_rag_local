@@ -1,99 +1,49 @@
-"""
-Enhanced router agent with query decomposition support.
-"""
+"""Deprecated compatibility wrapper for decomposition-aware routing."""
 
-import logging
-import os
+from __future__ import annotations
+
 from typing import Any
 
-from app.agents.router_agent import RouteDecision, decide_route
-from app.services.query_decomposer import QueryDecomposer
-
-logger = logging.getLogger(__name__)
+from app.agents.router.routing import RouteDecision
+from app.agents.router.compatibility import DecompositionRoutingAdapter, RoutingService
 
 
 class EnhancedRouterAgent:
-    """Router agent with query decomposition capability."""
+    """Compatibility wrapper; it owns no routing rules or second route path."""
 
-    def __init__(self, llm_client, enable_query_decomposition: bool = None):
-        """
-        Initialize enhanced router agent.
-
-        Args:
-            llm_client: LLM client for query decomposition
-            enable_query_decomposition: Whether to enable query decomposition
-                                       (defaults to ENABLE_QUERY_DECOMPOSITION env var)
-        """
-        if enable_query_decomposition is None:
-            enable_query_decomposition = os.getenv("ENABLE_QUERY_DECOMPOSITION", "false").lower() == "true"
-
-        self.enable_query_decomposition = enable_query_decomposition
-        self.query_decomposer = None
-
-        if self.enable_query_decomposition:
-            self.query_decomposer = QueryDecomposer(llm_client)
-            logger.info("Query decomposition enabled")
+    def __init__(
+        self,
+        llm_client: Any,
+        enable_query_decomposition: bool | None = None,
+        *,
+        routing_service: RoutingService | None = None,
+    ) -> None:
+        """Initialize the legacy wrapper around the router compatibility adapter."""
+        self._adapter = DecompositionRoutingAdapter(
+            llm_client,
+            enable_query_decomposition=enable_query_decomposition,
+            routing_service=routing_service,
+        )
+        self.enable_query_decomposition = self._adapter.enable_query_decomposition
+        self.query_decomposer = self._adapter.query_decomposer
 
     async def route_with_decomposition(
         self, question: str, use_reasoning: bool = False, agent_class_hint: str | None = None
     ) -> dict[str, Any]:
-        """
-        Route query with optional decomposition.
-
-        Args:
-            question: User query
-            use_reasoning: Whether to use reasoning model for routing
-            agent_class_hint: Optional hint for agent class
-
-        Returns:
-            Dictionary with routing decision and optional decomposed query
-        """
-        result = {
-            "original_question": question,
-            "decomposed_query": None,
-            "route_decisions": [],
-        }
-
-        # Decompose query if enabled
-        if self.enable_query_decomposition and self.query_decomposer:
-            try:
-                decomposed = await self.query_decomposer.decompose(question)
-                result["decomposed_query"] = decomposed
-
-                # If decomposed into multiple sub-queries, route each one
-                if len(decomposed.sub_queries) > 1:
-                    logger.info(f"Query decomposed into {len(decomposed.sub_queries)} sub-queries")
-                    for sub_query in decomposed.sub_queries:
-                        route_decision = decide_route(sub_query, use_reasoning, agent_class_hint)
-                        result["route_decisions"].append({"query": sub_query, "decision": route_decision})
-                    return result
-
-            except Exception as e:
-                logger.error(f"Error during query decomposition: {e}")
-                # Fall through to normal routing on error
-
-        # Normal routing (no decomposition or single query)
-        route_decision = decide_route(question, use_reasoning, agent_class_hint)
-        result["route_decisions"].append({"query": question, "decision": route_decision})
-
-        return result
+        """Route through the shared adapter, preserving the legacy result shape."""
+        return await self._adapter.route_with_decomposition(
+            question,
+            use_reasoning=use_reasoning,
+            agent_class_hint=agent_class_hint,
+        )
 
 
 def route_with_decomposition_sync(
     question: str, use_reasoning: bool = False, agent_class_hint: str | None = None
 ) -> RouteDecision:
-    """
-    Synchronous wrapper for backward compatibility.
-
-    This function maintains the original decide_route signature but can be
-    extended in the future to support decomposition.
-
-    Args:
-        question: User query
-        use_reasoning: Whether to use reasoning model
-        agent_class_hint: Optional agent class hint
-
-    Returns:
-        RouteDecision
-    """
-    return decide_route(question, use_reasoning, agent_class_hint)
+    """Deprecated synchronous compatibility wrapper for route selection."""
+    return RoutingService().route(
+        question,
+        use_reasoning=use_reasoning,
+        agent_class_hint=agent_class_hint,
+    )

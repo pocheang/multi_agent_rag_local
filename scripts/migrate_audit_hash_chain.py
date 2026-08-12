@@ -4,7 +4,7 @@ import json
 import sqlite3
 
 from app.core.config import get_settings
-from app.services.alerting import resolve_signing_secret, sign_payload
+from app.services.observability.alerting import resolve_signing_secret, sign_payload
 
 
 def main():

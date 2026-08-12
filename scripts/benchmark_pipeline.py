@@ -3,6 +3,7 @@ import json
 import statistics
 import sys
 import time
+from collections.abc import Mapping
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -31,7 +32,11 @@ def main() -> int:
     args = parser.parse_args()
 
     try:
-        from app.graph.workflow import run_query
+        from app.pipeline.contracts import PipelineRequest
+        from app.pipeline.profiles import PipelineProfile
+        from app.pipeline.rag_pipeline import RAGPipeline
+
+        pipeline = RAGPipeline()
     except Exception as e:
         print(json.dumps({"ok": False, "error": f"runtime_unavailable:{type(e).__name__}"}, ensure_ascii=False, indent=2))
         return 1
@@ -46,13 +51,22 @@ def main() -> int:
     support_ratios = []
     for q in queries:
         t0 = time.perf_counter()
-        kwargs = {
+        request_kwargs = {
             "use_web_fallback": args.use_web,
             "use_reasoning": not args.no_reasoning,
         }
         if str(args.strategy or "").strip():
-            kwargs["retrieval_strategy"] = str(args.strategy).strip().lower()
-        result = run_query(q, **kwargs)
+            request_kwargs["retrieval_strategy"] = str(args.strategy).strip().lower()
+        pipeline_result = pipeline.execute_sync(
+            PipelineRequest(
+                question=q,
+                profile=PipelineProfile.STANDARD,
+                **request_kwargs,
+            )
+        )
+        result = pipeline_result.execution_metadata.get("compatibility_payload")
+        if not isinstance(result, Mapping):
+            raise RuntimeError("standard pipeline did not provide its compatibility payload")
         latencies.append((time.perf_counter() - t0) * 1000.0)
         vc = result.get("vector_result", {}).get("citations", []) or []
         wc = result.get("web_result", {}).get("citations", []) or []

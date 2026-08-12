@@ -1,4 +1,5 @@
 import { appApi } from "@/lib/api";
+import { normalizeModelTemperature } from "@/lib/model-temperature";
 import type { AdminModelSettingsPayload, AdminModelSettingsView } from "@/types/api";
 import type { AdminActionsParams, ErrorHandler } from "./types";
 
@@ -42,7 +43,7 @@ export function createModelActions(params: AdminActionsParams, errorHandler: Err
       chat_model: settings.chat_model.trim(),
       reasoning_model: (settings.reasoning_model || settings.chat_model).trim(),
       embedding_model: settings.embedding_model.trim(),
-      temperature: Math.min(2, Math.max(0, Number(settings.temperature || DEFAULT_MODEL_SETTINGS.temperature))),
+      temperature: normalizeModelTemperature(Number(settings.temperature), DEFAULT_MODEL_SETTINGS.temperature),
       max_tokens: Math.min(131072, Math.max(256, Number(settings.max_tokens || DEFAULT_MODEL_SETTINGS.max_tokens))),
     };
   };

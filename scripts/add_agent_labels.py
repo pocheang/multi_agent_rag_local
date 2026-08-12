@@ -16,7 +16,7 @@ project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
 from app.core.config import get_settings
-from app.services.ingest_service import ingest_paths
+from app.services.documents.ingest import ingest_paths
 
 
 def get_agent_for_document(file_path: Path) -> str:

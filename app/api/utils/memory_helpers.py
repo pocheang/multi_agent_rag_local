@@ -5,7 +5,7 @@ Memory-related helper functions for the QueryMind API.
 from typing import Any
 
 from app.core.config import get_settings
-from app.services.memory_store import MemoryStore, build_memory_context
+from app.services.sessions.memory_store import MemoryStore, build_memory_context
 
 settings = get_settings()
 

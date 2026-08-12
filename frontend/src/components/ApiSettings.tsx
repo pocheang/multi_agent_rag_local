@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { IntegrationsPanel } from "@/features/integrations/IntegrationsPanel";
 import { appApi } from "@/lib/api";
 import type { ModelCatalogResponse } from "@/types/api";
 import { ApiSettingsFormFields } from "./ApiSettingsFormFields";
@@ -43,7 +44,7 @@ export function ApiSettings({ isOpen, onClose }: Props) {
   const [isChecking, setIsChecking] = useState(false);
   const [result, setResult] = useState<{ type: "success" | "error"; message: string } | null>(null);
   const [isSaving, setIsSaving] = useState(false);
-  const [isLoading, setIsLoading] = useState(false);
+  const [isLoading, setIsLoading] = useState(isOpen);
   const [catalog, setCatalog] = useState<ModelCatalogResponse | null>(null);
 
   const selectedModels = useMemo(() => {
@@ -78,6 +79,8 @@ export function ApiSettings({ isOpen, onClose }: Props) {
     if (isOpen) {
       void loadModalStyles();
       void loadSettings();
+    } else {
+      setIsLoading(true);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen]);
@@ -217,6 +220,10 @@ export function ApiSettings({ isOpen, onClose }: Props) {
                 onShowApiKeyToggle={() => setShowApiKey((v) => !v)}
                 onConfigChange={patchConfig}
               />
+
+              <div className="settings-section">
+                <IntegrationsPanel />
+              </div>
 
               {result && <div className={`test-result ${result.type}`}>{result.message}</div>}
             </>

@@ -1,5 +1,6 @@
 import { useState, useRef } from "react";
 import type { IndexedFileSummary, PromptTemplate, SessionMessage, SessionSummary } from "@/types/api";
+import type { PipelineProfile } from "@/types/api";
 import type { Toast } from "@/pages/chat/types";
 import type { AgentClassHint, RetrievalStrategy } from "@/pages/chat/constants";
 
@@ -21,6 +22,7 @@ export function useChatPageState() {
   const [useReasoning, setUseReasoning] = useState(false);
   const [agentClassHint, setAgentClassHint] = useState<AgentClassHint>("");
   const [retrievalStrategy, setRetrievalStrategy] = useState<RetrievalStrategy>("advanced");
+  const [pipelineProfile, setPipelineProfile] = useState<PipelineProfile>("standard");
   const [pdfTargetFile, setPdfTargetFile] = useState("");
 
   // Document state
@@ -85,6 +87,8 @@ export function useChatPageState() {
     setAgentClassHint,
     retrievalStrategy,
     setRetrievalStrategy,
+    pipelineProfile,
+    setPipelineProfile,
     pdfTargetFile,
     setPdfTargetFile,
 

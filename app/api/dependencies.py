@@ -13,8 +13,8 @@ from typing import Any
 from fastapi import Request
 from fastapi.security import HTTPBearer
 
-from app.api.utils.admin_helpers import _runtime_diagnostics_summary as _runtime_diagnostics_summary_impl
-from app.api.utils.auth_dependencies import (
+from app.api.deps.admin import _runtime_diagnostics_summary as _runtime_diagnostics_summary_impl
+from app.api.deps.auth import (
     _require_permission,
     _require_user,
     _require_user_and_token,
@@ -24,7 +24,7 @@ from app.api.utils.auth_dependencies import (
 from app.api.utils.auth_helpers import (
     _audit,
 )
-from app.api.utils.admin_helpers import (
+from app.api.deps.admin import (
     _check_chroma_ready,
     _check_ollama_ready,
     _extract_grounding_support_from_detail,
@@ -34,51 +34,51 @@ from app.api.utils.admin_helpers import (
     _parse_request_ts,
 )
 from app.api.utils.auth_helpers import _clear_auth_cookie, _client_ip, _set_auth_cookie
-from app.api.utils.document_helpers import (
+from app.api.deps.documents import (
     _allowed_sources_for_user,
     _build_user_file_inventory_answer,
     _is_file_inventory_question,
 )
 from app.api.utils.memory_helpers import _memory_store_for_user, _promote_long_term_memory
-from app.api.utils.query_helpers import (
+from app.api.deps.query import (
     _call_with_supported_kwargs,
     _normalize_agent_class_hint,
     _query_limiter_key,
     _resolve_effective_agent_class,
     _trace_id,
 )
-from app.api.utils.response_helpers import _sse_response
-from app.api.utils.session_helpers import _require_existing_session_for_query, _require_valid_session_id
-from app.api.utils.document_helpers import _enforce_result_source_scope as _enforce_result_source_scope_impl
-from app.api.utils.document_helpers import (
+from app.api.transport.responses import _sse_response
+from app.api.deps.sessions import _require_existing_session_for_query, _require_valid_session_id
+from app.api.deps.documents import _enforce_result_source_scope as _enforce_result_source_scope_impl
+from app.api.deps.documents import (
     _visible_index_fingerprint_for_user,
 )
-from app.api.utils.error_responses import bad_request
+from app.api.transport.errors import bad_request
 from app.api.utils.memory_helpers import _build_memory_context_for_session as _build_memory_context_for_session_impl
-from app.api.utils.query_helpers import _effective_strategy_for_session as _effective_strategy_for_session_impl
-from app.api.utils.query_helpers import _is_overload_mode as _is_overload_mode_impl
-from app.api.utils.query_helpers import _launch_shadow_run as _launch_shadow_run_impl
-from app.api.utils.query_helpers import _query_cache_key as _query_cache_key_impl
-from app.api.utils.query_helpers import _query_model_fingerprint_for_user as _query_model_fingerprint_for_user_impl
-from app.api.utils.query_helpers import _run_with_query_runtime as _run_with_query_runtime_impl
-from app.api.utils.query_helpers import _user_api_settings_for_runtime as _user_api_settings_for_runtime_impl
-from app.api.utils.session_helpers import (
+from app.api.deps.query import _effective_strategy_for_session as _effective_strategy_for_session_impl
+from app.api.deps.query import _is_overload_mode as _is_overload_mode_impl
+from app.api.deps.query import _launch_shadow_run as _launch_shadow_run_impl
+from app.api.deps.query import _query_cache_key as _query_cache_key_impl
+from app.api.deps.query import _query_model_fingerprint_for_user as _query_model_fingerprint_for_user_impl
+from app.api.deps.query import _run_with_query_runtime as _run_with_query_runtime_impl
+from app.api.deps.query import _user_api_settings_for_runtime as _user_api_settings_for_runtime_impl
+from app.api.deps.sessions import (
     _history_store_for_user,
 )
 
 # Import helper functions from utility modules
 from app.api.utils.string_utils import normalize_string
 from app.core.config import get_settings
-from app.core.schemas import AdminModelSettingsResponse, UserApiSettings, UserApiSettingsView
+from app.api.schemas import AdminModelSettingsResponse, UserApiSettings, UserApiSettingsView
 from app.services.auto_ingest_watcher import AutoIngestWatcher
-from app.services.background_queue import BackgroundTaskQueue
-from app.services.model_config_store import get_global_model_settings, public_global_model_settings
-from app.services.prompt_store import PromptStore
+from app.services.runtime.background_queue import BackgroundTaskQueue
+from app.services.models.config_store import get_global_model_settings, public_global_model_settings
+from app.services.prompts.store import PromptStore
 from app.services.query_guard import QueryLoadGuard
-from app.services.query_result_cache import QueryResultCache
-from app.services.quota_guard import QuotaGuard
-from app.services.rate_limiter import SlidingWindowLimiter
-from app.services.runtime_metrics import RuntimeMetrics
+from app.services.runtime.query_result_cache import QueryResultCache
+from app.services.security.quota import QuotaGuard
+from app.services.security.rate_limiter import SlidingWindowLimiter
+from app.services.runtime.runtime_metrics import RuntimeMetrics
 
 # Global settings and logger
 settings = get_settings()
@@ -255,7 +255,7 @@ def _enforce_result_source_scope(
 
 def _runtime_diagnostics_summary() -> dict[str, Any]:
     """Compose the runtime diagnostics block surfaced on /admin/* endpoints."""
-    from app.api.middleware import get_request_metrics
+    from app.api.transport.middleware import get_request_metrics
 
     return _runtime_diagnostics_summary_impl(get_request_metrics)
 
@@ -325,7 +325,7 @@ def _mask_api_key(api_key: str) -> str:
 
 def _api_settings_view(settings_data: UserApiSettings) -> UserApiSettingsView:
     """Convert API settings to view model."""
-    from app.core.schemas import UserApiSettingsView
+    from app.api.schemas import UserApiSettingsView
 
     global_settings = get_global_model_settings()
     global_enabled = bool(global_settings.get("enabled", False))

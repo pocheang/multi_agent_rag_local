@@ -9,11 +9,11 @@
 
 import logging
 
-from .ai_knowledge_prompts import (
+from .skills.ai_knowledge_prompts import (
     AI_KNOWLEDGE_ASSISTANT_SYSTEM_PROMPT,
     AI_KNOWLEDGE_ASSISTANT_USER_PROMPT_TEMPLATE,
 )
-from .comparison_timeline_prompts import (
+from .skills.comparison_timeline_prompts import (
     COMPARE_ENTITIES_SYSTEM_PROMPT,
     COMPARE_ENTITIES_USER_PROMPT_TEMPLATE,
     TIMELINE_BUILDER_SYSTEM_PROMPT,
@@ -21,7 +21,7 @@ from .comparison_timeline_prompts import (
 )
 
 # 专业技能提示词
-from .cybersecurity_skills_prompts import (
+from .skills.cybersecurity_skills_prompts import (
     CYBER_ATTACK_ANALYSIS_SYSTEM_PROMPT,
     CYBER_ATTACK_ANALYSIS_USER_PROMPT_TEMPLATE,
     CYBER_DEFENSE_HARDENING_SYSTEM_PROMPT,
@@ -29,17 +29,17 @@ from .cybersecurity_skills_prompts import (
     INCIDENT_RESPONSE_PLAYBOOK_SYSTEM_PROMPT,
     INCIDENT_RESPONSE_PLAYBOOK_USER_PROMPT_TEMPLATE,
 )
-from .intent_prompts import (
+from .core.intent_prompts import (
     INTENT_CLASSIFICATION_SYSTEM_PROMPT,
     INTENT_CLASSIFICATION_USER_PROMPT_TEMPLATE,
 )
-from .pdf_web_prompts import (
+from .skills.pdf_web_prompts import (
     PDF_TEXT_READER_SYSTEM_PROMPT,
     PDF_TEXT_READER_USER_PROMPT_TEMPLATE,
     WEB_FACT_CHECK_SYSTEM_PROMPT,
     WEB_FACT_CHECK_USER_PROMPT_TEMPLATE,
 )
-from .rag_quick_retrieval_prompts import (
+from .retrieval.rag_quick_retrieval_prompts import (
     CONTEXT_SUMMARY_SYSTEM_PROMPT,
     CONTEXT_SUMMARY_USER_PROMPT_TEMPLATE,
     DOCUMENT_SEARCH_SYSTEM_PROMPT,
@@ -51,14 +51,14 @@ from .rag_quick_retrieval_prompts import (
     QUICK_ANSWER_SYSTEM_PROMPT,
     QUICK_ANSWER_USER_PROMPT_TEMPLATE,
 )
-from .react_prompts import REACT_SYSTEM_PROMPT, REACT_USER_PROMPT_TEMPLATE
-from .review_prompts import REVIEW_SYSTEM_PROMPT, REVIEW_USER_PROMPT_TEMPLATE
-from .router_prompts import ROUTER_SYSTEM_PROMPT, ROUTER_USER_PROMPT_TEMPLATE
-from .self_rag_prompts import (
+from .core.react_prompts import REACT_SYSTEM_PROMPT, REACT_USER_PROMPT_TEMPLATE
+from .core.review_prompts import REVIEW_SYSTEM_PROMPT, REVIEW_USER_PROMPT_TEMPLATE
+from .core.router_prompts import ROUTER_SYSTEM_PROMPT, ROUTER_USER_PROMPT_TEMPLATE
+from .retrieval.self_rag_prompts import (
     SELF_RAG_ANSWER_QUALITY_PROMPT,
     SELF_RAG_RETRIEVAL_PROMPT,
 )
-from .synthesis_prompts import SYNTHESIS_SYSTEM_PROMPT, SYNTHESIS_USER_PROMPT_TEMPLATE
+from .core.synthesis_prompts import SYNTHESIS_SYSTEM_PROMPT, SYNTHESIS_USER_PROMPT_TEMPLATE
 
 logger = logging.getLogger(__name__)
 

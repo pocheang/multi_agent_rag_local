@@ -244,6 +244,29 @@ def test_get_user_api_settings_masks_api_key(monkeypatch):
         api_main.app.dependency_overrides.clear()
 
 
+def test_get_user_api_settings_normalizes_legacy_temperature(monkeypatch):
+    client = TestClient(api_main.app)
+    api_main.app.dependency_overrides[api_main._require_user] = _mock_user
+    monkeypatch.setattr(
+        "app.services.models.config_store.AuthDBService.get_user_metadata",
+        lambda _service, _user_id, _key: {
+            "provider": "local",
+            "api_key": "",
+            "base_url": "",
+            "model": "local-evidence",
+            "temperature": 1.4,
+            "max_tokens": 2048,
+        },
+    )
+    try:
+        res = client.get("/user/api-settings")
+
+        assert res.status_code == 200
+        assert res.json()["settings"]["temperature"] == 1.0
+    finally:
+        api_main.app.dependency_overrides.clear()
+
+
 def test_get_user_api_settings_defaults_to_local_when_empty(monkeypatch):
     client = TestClient(api_main.app)
     api_main.app.dependency_overrides[api_main._require_user] = _mock_user

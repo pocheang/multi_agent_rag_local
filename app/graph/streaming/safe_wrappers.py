@@ -7,10 +7,10 @@ from datetime import UTC, datetime
 from typing import Any
 from uuid import uuid4
 
-from app.services.bulkhead import bulkhead
-from app.services.resilience import CircuitBreakerOpenError, call_with_circuit_breaker
-from app.services.retrieval_logger import RetrievalLog, RetrievalLogger
-from app.services.retry_policy import call_with_retry
+from app.services.runtime.bulkhead import bulkhead
+from app.services.runtime.resilience import CircuitBreakerOpenError, call_with_circuit_breaker
+from app.services.retrieval.logger import RetrievalLog, RetrievalLogger
+from app.services.runtime.retry_policy import call_with_retry
 
 logger = logging.getLogger(__name__)
 
@@ -81,7 +81,7 @@ def safe_vector_result(
     """Execute vector RAG with resilience patterns."""
     start_time = time.time()
     try:
-        run_vector_rag = _agent_func("app.agents.vector_rag_agent", "run_vector_rag")
+        run_vector_rag = _agent_func("app.agents.rag.vector", "run_vector_rag")
         with bulkhead("retrieval"):
             result = call_with_retry(
                 "stream.vector_rag",
@@ -124,7 +124,7 @@ def safe_vector_result(
         )
         return result
     except CircuitBreakerOpenError:
-        run_vector_rag = _agent_func("app.agents.vector_rag_agent", "run_vector_rag")
+        run_vector_rag = _agent_func("app.agents.rag.vector", "run_vector_rag")
         result = _call_with_supported_kwargs(
             run_vector_rag,
             question,
@@ -187,7 +187,7 @@ def safe_graph_result(
     """Execute graph RAG with resilience patterns."""
     start_time = time.time()
     try:
-        run_graph_rag = _agent_func("app.agents.graph_rag_agent", "run_graph_rag")
+        run_graph_rag = _agent_func("app.agents.rag.graph", "run_graph_rag")
         with bulkhead("neo4j"):
             result = call_with_retry(
                 "stream.graph_rag",
@@ -225,7 +225,7 @@ def safe_graph_result(
         )
         return result
     except CircuitBreakerOpenError:
-        run_graph_rag = _agent_func("app.agents.graph_rag_agent", "run_graph_rag")
+        run_graph_rag = _agent_func("app.agents.rag.graph", "run_graph_rag")
         result = _call_with_supported_kwargs(
             run_graph_rag,
             question,
@@ -278,7 +278,7 @@ def safe_web_result(question: str) -> dict[str, Any]:
     """Execute web research with resilience patterns."""
     start_time = time.time()
     try:
-        run_web_research = _agent_func("app.agents.web_research_agent", "run_web_research")
+        run_web_research = _agent_func("app.agents.rag.web", "run_web_research")
 
         def _web_research_call():
             return run_web_research(question)
@@ -312,7 +312,7 @@ def safe_web_result(question: str) -> dict[str, Any]:
         )
         return result
     except CircuitBreakerOpenError:
-        run_web_research = _agent_func("app.agents.web_research_agent", "run_web_research")
+        run_web_research = _agent_func("app.agents.rag.web", "run_web_research")
         result = run_web_research(question)
         retrieval_time_ms = (time.time() - start_time) * 1000
         citations = result.get("citations", [])

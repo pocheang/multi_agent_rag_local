@@ -62,7 +62,9 @@ npm run preview                     # Preview production build
 
 ### Multi-Agent System
 
-This is a **production-grade RAG system** with 11 specialized agents orchestrated by LangGraph. Key architectural pattern: **specialized agents collaborate** rather than one monolithic agent.
+This is a production-grade RAG system whose three public query APIs enter through `app.pipeline.rag_pipeline.RAGPipeline`. The `standard`, `strict_quality`, and `advanced` Profiles preserve the established endpoint differences while delegating to the existing routing, retrieval, ReAct, synthesis, validation, safety, and context capabilities.
+
+During the migration, the LangGraph, enhanced, and Advanced workflows remain compatibility executors behind the pipeline. Do not add new API or production orchestration code that bypasses `RAGPipeline`; do not delete a compatibility wrapper until code audit confirms it has no production imports and the local rollback-observation criteria are met.
 
 #### Agent Layers (4-tier architecture)
 
@@ -107,7 +109,7 @@ The workflow is defined as a directed acyclic graph (DAG) in [app/graph/nodes/](
 **5-Layer Defense** (implemented in `enhanced_rag_workflow.py`):
 1. **Route validation**: Confidence threshold (>0.6), consistency checks
 2. **Retrieval quality**: Batch relevance scoring via Codex Haiku
-3. **Answer validation**: 4-layer cascade (L1: rules, L2: NLI model, L3: citation check, L4: deep LLM)
+3. **Answer validation**: ordered cascade (rules/safety → citations/evidence → NLI → low-confidence deep LLM)
 4. **Score fusion**: Weighted combination (route 10% + retrieval 30% + factual 45% + quality 10% + citation 5%)
 5. **Context tracking**: Multi-turn coherence validation
 
@@ -201,7 +203,7 @@ Mock external LLM calls in unit tests. Use `pytest-asyncio` for async tests.
 - **Conda environment is mandatory**: Dependencies assume conda-managed packages
 - **Do not commit** files in `.gitignore`: `internal_docs/`, `.env`, `data/chroma/`, logs
 - **SSE streaming**: Real-time status updates use Server-Sent Events (see `app/api/routes/enhanced_query.py`)
-- **Retry logic**: Max 2 retries per stage (routing/retrieval/synthesis) with exponential backoff
+- **Retry logic**: Retrieval retries retain their existing fallback policy; answer regeneration is capped at one retry per request.
 - **Circuit breaker**: Opens after 5 consecutive failures, closes after 60s cooldown
 - **Language detection**: Auto-detected via `language_analytics.py`, affects answer language (100% Chinese or 100% English, no mixing)
 

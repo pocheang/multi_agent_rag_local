@@ -1,11 +1,11 @@
-from app.agents.synthesis_agent import synthesize_answer
-from app.graph.state import GraphState
+from app.agents.synthesizer.generation import synthesize_answer
+from app.graph.execution.state import GraphState
 from app.services.answer_safety import sanitize_answer
 from app.services.citation_grounding import apply_sentence_grounding
 from app.services.explainability import build_explainability_report
 from app.services.query_intent import is_casual_chat_query, quick_smalltalk_reply
-from app.services.request_context import deadline_exceeded
-from app.services.session_language import get_language_preference, update_language_history
+from app.services.runtime.request_context import deadline_exceeded
+from app.services.sessions.language import get_language_preference, update_language_history
 
 
 def synthesis_node(state: GraphState) -> GraphState:

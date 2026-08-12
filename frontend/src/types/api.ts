@@ -1,10 +1,6 @@
-export type AuthUser = {
-  user_id: string;
-  username: string;
-  display_name?: string | null;
-  role: "admin" | "analyst" | "viewer" | string;
-  status: "active" | "disabled" | string;
-};
+import type { UserIdentity } from "./auth";
+
+export type AuthUser = UserIdentity;
 
 export type LoginResponse = {
   token: string;
@@ -21,8 +17,53 @@ export type SessionSummary = {
 };
 
 export type Citation = {
-  source?: string;
-  content?: string;
+  source: string;
+  content: string;
+  document_id?: string;
+  page?: number;
+  metadata?: Record<string, unknown>;
+};
+
+export type PipelineProfile = "standard" | "strict_quality" | "advanced";
+
+export type StandardQueryResponse = {
+  answer: string;
+  route: string;
+  citations: Citation[];
+  graph_entities: string[];
+  web_used: boolean;
+  detected_language: string;
+  debug: Record<string, unknown>;
+  execution_id: string | null;
+};
+
+export type StrictQualityQueryResponse = {
+  answer: string;
+  citations: Citation[];
+  quality_report: Record<string, unknown>;
+  route_used: string;
+  route_reason: string;
+  skill_used: string;
+  agent_class: string;
+  execution_metadata: Record<string, unknown>;
+};
+
+export type AdvancedQueryResponse = {
+  query: string;
+  decomposed_query: Record<string, unknown> | null;
+  sub_query_results: Array<Record<string, unknown>>;
+  final_answer: string;
+  answer_quality: Record<string, unknown> | null;
+  metadata: Record<string, unknown>;
+};
+
+export type NormalizedQueryResult = {
+  profile: PipelineProfile;
+  answer: string;
+  citations: Citation[];
+  route?: string;
+  qualityReport?: Record<string, unknown>;
+  executionMetadata?: Record<string, unknown>;
 };
 
 export type SessionMessageMetadata = {
@@ -35,6 +76,7 @@ export type SessionMessageMetadata = {
   thoughts?: string[];
   graph_entities?: string[];
   citations?: Citation[];
+  quality_report?: Record<string, unknown>;
   current_status?: string;
   execution_steps?: Array<{
     kind: string;
@@ -63,7 +105,7 @@ export type SessionMessageMetadata = {
 };
 
 export type SessionMessage = {
-  message_id: string;
+  message_id: string | null;
   role: "user" | "assistant" | string;
   content: string;
   created_at?: string;
@@ -97,8 +139,10 @@ export type IndexedFileSummary = {
 };
 
 export type FileIndexActionResponse = {
+  ok: boolean;
   filename: string;
   chunks_removed: number;
+  vector_ids_removed: number;
   triplets_removed: number;
   file_removed: boolean;
   loaded_documents?: number;
@@ -110,6 +154,7 @@ export type FileIndexActionResponse = {
 };
 
 export type UploadResponse = {
+  ok: boolean;
   filenames: string[];
   skipped_files?: string[];
   visibility_applied?: "private" | "public" | string;

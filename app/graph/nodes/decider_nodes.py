@@ -1,5 +1,5 @@
 from app.graph.routing.route_logic import route_after_graph, route_after_router, route_after_vector
-from app.graph.state import GraphState
+from app.graph.execution.state import GraphState
 
 
 def entry_decider_node(state: GraphState) -> GraphState:

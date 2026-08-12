@@ -270,7 +270,7 @@ PDF文件
 ### 新增文件
 
 ```
-app/ingestion/utils/
+app/ingestion/extraction/ and app/ingestion/processing/
   ├── pdf_cleaner.py              # 页眉页脚过滤
   ├── table_merger.py             # 跨页表格合并
   ├── nested_table_handler.py     # 嵌套表格处理
@@ -290,7 +290,7 @@ docs/
 
 ```
 app/ingestion/loaders/pdf_loader.py  # 添加load_pdf_enhanced()
-app/ingestion/loaders.py             # 集成增强模式
+app/ingestion/loaders/dispatch.py    # 集成增强模式
 app/core/config.py                   # 添加配置项
 ```
 

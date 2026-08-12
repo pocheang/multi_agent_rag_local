@@ -52,7 +52,10 @@ export const documentApi = {
           return;
         }
         if (xhr.status < 200 || xhr.status >= 300) {
-          reject(new ApiError(xhr.status, String(payload?.detail || "request failed")));
+          const detail = payload && typeof payload === "object" && !Array.isArray(payload)
+            ? (payload as Record<string, unknown>).detail
+            : undefined;
+          reject(new ApiError(xhr.status, typeof detail === "string" ? detail : "request failed"));
           return;
         }
         resolve(payload as UploadResponse);

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
   AGENT_MODES,
@@ -21,23 +21,18 @@ import { useChatComputed } from "@/pages/chat/hooks/useChatComputed";
 import { useChatHelpers } from "@/pages/chat/hooks/useChatHelpers";
 import { KeyboardHelp } from "@/components/KeyboardHelp";
 import { generateSmartPrompts } from "@/pages/chat/utils/smartPrompts";
-import type { User, UserRole } from "@/hooks/usePermissions";
+import type { UserIdentity } from "@/types/auth";
 import { appApi } from "@/lib/api";
+import { ChatRuntimePanels } from "@/pages/chat/components/ChatRuntimePanels";
 
 // Route-specific CSS (code-split by Vite)
 import "@/styles/pages/chat-entry.css";
 
 export function ChatPage({ user, onLogout, themeLabel, onThemeToggle }: Props) {
   const { t } = useTranslation();
+  const [executionId, setExecutionId] = useState<string | null>(null);
   const lastOverrideStateRef = useRef<{ enabled: boolean; provider: string; model: string } | null>(null);
-  // Convert AuthUser to User type for permission system
-  const permissionUser: User | null = user ? {
-    user_id: user.user_id,
-    username: user.username,
-    role: user.role as UserRole,
-    status: user.status,
-    display_name: user.display_name ?? undefined,
-  } : null;
+  const permissionUser: UserIdentity | null = user;
   const {
     sidebarOpen, setSidebarOpen,
     sidebarCollapsed, setSidebarCollapsed,
@@ -52,7 +47,8 @@ export function ChatPage({ user, onLogout, themeLabel, onThemeToggle }: Props) {
     useWeb, setUseWeb,
     useReasoning, setUseReasoning,
     agentClassHint, setAgentClassHint,
-    retrievalStrategy, setRetrievalStrategy,
+  retrievalStrategy, setRetrievalStrategy,
+    pipelineProfile, setPipelineProfile,
     pdfTargetFile, setPdfTargetFile,
     documents, setDocuments,
     docsLoading, setDocsLoading,
@@ -151,6 +147,7 @@ export function ChatPage({ user, onLogout, themeLabel, onThemeToggle }: Props) {
     setMessages,
     setIsSending,
     setQuestion,
+    onExecutionId: setExecutionId,
   });
 
   useEffect(() => {
@@ -303,7 +300,6 @@ export function ChatPage({ user, onLogout, themeLabel, onThemeToggle }: Props) {
         onCreateSession={async () => { await actions.createSession(); }}
         onLoadSession={actions.loadSession}
         onDeleteSession={actions.deleteSession}
-        onRenameSession={actions.renameSession}
         onSwitchAgentMode={helpers.switchAgentMode}
         onPdfTargetFileChange={setPdfTargetFile}
         onDraftQuestion={helpers.draftPdfQuestion}
@@ -354,6 +350,8 @@ export function ChatPage({ user, onLogout, themeLabel, onThemeToggle }: Props) {
           onNavigateToArchitecture={() => window.location.href = '/architecture'}
         />
 
+        <ChatRuntimePanels executionId={executionId} />
+
         <ChatComposer
           composerDropActive={composerDropActive}
           question={question}
@@ -367,8 +365,9 @@ export function ChatPage({ user, onLogout, themeLabel, onThemeToggle }: Props) {
           useReasoning={useReasoning}
           agentClassHint={agentClassHint}
           retrievalStrategy={retrievalStrategy}
+          pipelineProfile={pipelineProfile}
           onQuestionChange={setQuestion}
-          onAsk={() => messageActions.ask({ question, isSending, useWeb, useReasoning, agentClassHint, retrievalStrategy })}
+          onAsk={() => messageActions.ask({ question, isSending, useWeb, useReasoning, agentClassHint, retrievalStrategy, pipelineProfile })}
           onStop={() => messageActions.stopCurrentRun(isSending)}
           onClearQuestion={() => setQuestion("")}
           onPromptPick={setQuestion}
@@ -376,6 +375,7 @@ export function ChatPage({ user, onLogout, themeLabel, onThemeToggle }: Props) {
           onUseReasoningChange={setUseReasoning}
           onAgentClassHintChange={(v) => setAgentClassHint((v as AgentClassHint) || "")}
           onRetrievalStrategyChange={(v) => setRetrievalStrategy((v as RetrievalStrategy) || "advanced")}
+          onPipelineProfileChange={(v) => setPipelineProfile(v === "strict_quality" || v === "advanced" ? v : "standard")}
           onComposerDragEnter={dragHandlers.onComposerDragEnter}
           onComposerDragOver={dragHandlers.onComposerDragOver}
           onComposerDragLeave={dragHandlers.onComposerDragLeave}

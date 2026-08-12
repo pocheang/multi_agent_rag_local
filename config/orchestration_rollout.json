@@ -1,0 +1,12 @@
+{
+  "mode": "disabled",
+  "sample_percent": 0,
+  "candidate_profile": "baseline",
+  "seed": "orchestration-shadow",
+  "observation": {
+    "minimum_samples": 500,
+    "minimum_days": 14,
+    "min_answer_similarity": 0.95,
+    "max_failure_rate": 0.05
+  }
+}

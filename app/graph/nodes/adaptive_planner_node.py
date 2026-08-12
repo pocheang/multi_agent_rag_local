@@ -1,5 +1,5 @@
-from app.graph.state import GraphState
-from app.services.adaptive_rag_policy import build_adaptive_plan
+from app.graph.execution.state import GraphState
+from app.services.retrieval.adaptive_policy import build_adaptive_plan
 from app.services.query_intent import should_force_web_research
 
 
@@ -14,21 +14,14 @@ def adaptive_planner_node(state: GraphState) -> GraphState:
         force_web=force_web,
     )
 
-    # Preserve router's decision unless adaptive planner has strong reason to override
+    # Adaptive planning may tune retrieval thresholds and fallback preferences,
+    # but it must not replace the router's semantic route. Explicit retrieval
+    # failures are handled by downstream fallback nodes.
     final_route = initial_route
 
-    if initial_route == "vector":
-        if plan.route == "hybrid":
-            final_route = "hybrid"
-        elif plan.route == "graph" and plan.prefer_graph:
-            final_route = "graph"
-    elif initial_route == "graph":
-        if plan.route == "hybrid":
-            final_route = "hybrid"
 
     reason_parts = [state.get("reason", "")]
-    if final_route != initial_route:
-        reason_parts.append(f"adaptive_override: {initial_route}->{final_route}")
+
     reason_parts.append(plan.reason)
     reason = " | ".join([p for p in reason_parts if p]).strip()
 

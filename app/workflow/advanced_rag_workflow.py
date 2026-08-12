@@ -6,14 +6,14 @@ import asyncio
 import logging
 from typing import Any
 
-from app.agents.enhanced_router_agent import EnhancedRouterAgent
-from app.agents.enhanced_vector_rag_agent import EnhancedVectorRAGAgent
-from app.agents.graph_rag_agent import run_graph_rag
-from app.agents.react_agent import run_react_agent
-from app.agents.synthesis_agent import synthesize_answer
-from app.agents.web_research_agent import run_web_research
-from app.core.models import get_chat_model
-from app.models.advanced_rag_models import AdvancedRAGResult, SubQueryResult
+from app.agents.rag.enhanced_vector import EnhancedVectorRAGAgent
+from app.agents.rag.graph import run_graph_rag
+from app.agents.rag.web import run_web_research
+from app.agents.synthesizer.generation import synthesize_answer
+from app.agents.tool.react import run_react_agent
+from app.services.models.runtime import get_chat_model
+from app.domain.advanced_rag import AdvancedRAGResult, SubQueryResult
+from app.agents.router.compatibility import DecompositionRoutingAdapter, RoutingService
 
 logger = logging.getLogger(__name__)
 _NO_ANSWER = "I don't have enough information to answer this question."
@@ -38,9 +38,12 @@ class AdvancedRAGWorkflow:
         self.enable_self_rag = enable_self_rag
 
         self.llm_client = get_chat_model()
-        self.router_agent = EnhancedRouterAgent(
+        # Preserve the legacy attribute name while using the canonical routing
+        # compatibility owner.
+        self.router_agent = DecompositionRoutingAdapter(
             self.llm_client,
             enable_query_decomposition=enable_decomposition,
+            routing_service=RoutingService(),
         )
         self.vector_rag_agent = EnhancedVectorRAGAgent(
             self.llm_client,
@@ -126,7 +129,7 @@ class AdvancedRAGWorkflow:
                 all_citations,
             )
             if quality_dict:
-                from app.models.advanced_rag_models import AnswerQuality
+                from app.domain.advanced_rag import AnswerQuality
 
                 answer_quality = AnswerQuality(**quality_dict)
 

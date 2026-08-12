@@ -6,16 +6,7 @@
  */
 
 import { useMemo } from 'react';
-
-export type UserRole = 'admin' | 'analyst' | 'viewer';
-
-export interface User {
-  user_id: string;
-  username: string;
-  role: UserRole;
-  status: string;
-  display_name?: string;
-}
+import { toKnownUserRole, type KnownUserRole, type UserIdentity } from '@/types/auth';
 
 export interface PermissionCheck {
   // Session permissions
@@ -49,7 +40,7 @@ export interface PermissionCheck {
   canViewAgentTracking: boolean;
 
   // Role info
-  role: UserRole;
+  role: KnownUserRole;
   isAdmin: boolean;
   isAnalyst: boolean;
   isViewer: boolean;
@@ -59,7 +50,7 @@ export interface PermissionCheck {
  * Role-based permissions mapping
  * Must match backend RBAC in app/services/rbac.py
  */
-const ROLE_PERMISSIONS: Record<UserRole, PermissionCheck> = {
+const ROLE_PERMISSIONS: Record<KnownUserRole, PermissionCheck> = {
   admin: {
     canCreateSession: true,
     canDeleteSession: true,
@@ -153,16 +144,17 @@ const ROLE_PERMISSIONS: Record<UserRole, PermissionCheck> = {
  * }
  * ```
  */
-export function usePermissions(user: User | null): PermissionCheck {
-  return useMemo(() => {
-    if (!user || !user.role) {
-      // Default to viewer permissions for unauthenticated users
-      return ROLE_PERMISSIONS.viewer;
-    }
+export function getPermissionCheck(user: UserIdentity | null): PermissionCheck {
+  if (!user || !user.role) {
+    // Default to viewer permissions for unauthenticated users
+    return ROLE_PERMISSIONS.viewer;
+  }
 
-    const role = user.role.toLowerCase() as UserRole;
-    return ROLE_PERMISSIONS[role] || ROLE_PERMISSIONS.viewer;
-  }, [user]);
+  return ROLE_PERMISSIONS[toKnownUserRole(user.role)];
+}
+
+export function usePermissions(user: UserIdentity | null): PermissionCheck {
+  return useMemo(() => getPermissionCheck(user), [user]);
 }
 
 /**
@@ -180,10 +172,10 @@ export function usePermissions(user: User | null): PermissionCheck {
  * ```
  */
 export function hasPermission(
-  user: User | null,
+  user: UserIdentity | null,
   permission: keyof PermissionCheck
 ): boolean {
-  const permissions = usePermissions(user);
+  const permissions = getPermissionCheck(user);
   return Boolean(permissions[permission]);
 }
 
@@ -208,7 +200,7 @@ export function withPermission<P extends object>(
   requiredPermissions: Array<keyof PermissionCheck>,
   fallback: React.ReactNode = null
 ) {
-  return function PermissionWrappedComponent(props: P & { user: User | null }) {
+  return function PermissionWrappedComponent(props: P & { user: UserIdentity | null }) {
     const { user, ...rest } = props;
     const permissions = usePermissions(user);
 
@@ -244,7 +236,7 @@ export function PermissionGate({
   fallback = null,
   children,
 }: {
-  user: User | null;
+  user: UserIdentity | null;
   requires: Array<keyof PermissionCheck>;
   fallback?: React.ReactNode;
   children: React.ReactNode;
@@ -265,18 +257,17 @@ export function PermissionGate({
 /**
  * Role badge component to display user role
  */
-export function RoleBadge({ role }: { role: UserRole }) {
-  const styles: Record<UserRole, { bg: string; text: string; label: string }> = {
-    admin: { bg: 'bg-red-100', text: 'text-red-800', label: 'Admin' },
-    analyst: { bg: 'bg-blue-100', text: 'text-blue-800', label: 'Analyst' },
-    viewer: { bg: 'bg-gray-100', text: 'text-gray-800', label: 'Viewer' },
+export function RoleBadge({ role }: { role: string }) {
+  const knownRole = toKnownUserRole(role);
+  const labels: Record<KnownUserRole, string> = {
+    admin: 'Admin',
+    analyst: 'Analyst',
+    viewer: 'Viewer',
   };
 
-  const style = styles[role] || styles.viewer;
-
   return (
-    <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${style.bg} ${style.text}`}>
-      {style.label}
+    <span className={`role-badge role-badge--${knownRole}`}>
+      {labels[knownRole]}
     </span>
   );
 }

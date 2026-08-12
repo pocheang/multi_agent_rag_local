@@ -1,4 +1,4 @@
-.PHONY: install up ingest api cli test fe-install fe-dev fe-build quality-gate benchmark apply-rollback config-check config-render deploy deploy-dev deploy-monitoring
+.PHONY: install up ingest api cli test fe-install fe-dev fe-build quality-gate benchmark refactor-inventory apply-rollback config-check config-render deploy deploy-dev deploy-monitoring
 
 install:
 	python -m venv .venv && . .venv/bin/activate && pip install -U pip && pip install -e .
@@ -32,6 +32,9 @@ quality-gate:
 
 benchmark:
 	python scripts/benchmark_pipeline.py --queries data/eval/benchmark_queries.txt
+
+refactor-inventory:
+	conda run -n rag-local python scripts/inventory_refactor_targets.py --json audit_output/refactor-inventory.json
 
 apply-rollback:
 	python scripts/apply_rollback_profile.py --profile artifacts/rollback.env --env-file .env

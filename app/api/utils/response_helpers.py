@@ -1,32 +1,7 @@
-﻿"""
-Query helper functions for the QueryMind API.
-"""
+"""Compatibility alias for the canonical API transport implementation."""
 
-import json
-from typing import Any
+from importlib import import_module as _import_module
+import sys as _sys
 
-from fastapi.responses import StreamingResponse
+_sys.modules[__name__] = _import_module("app.api.transport.responses")
 
-
-async def _wrap_sse_generator(generator: Any, append_terminal_event: bool):
-    if hasattr(generator, "__aiter__"):
-        async for chunk in generator:
-            yield chunk
-    else:
-        for chunk in generator:
-            yield chunk
-    if append_terminal_event:
-        yield f"data: {json.dumps({'type': 'stream_end'})}\n\n"
-
-
-def _sse_response(generator: Any, *, append_terminal_event: bool = False) -> StreamingResponse:
-    """Create a Server-Sent Events streaming response."""
-    return StreamingResponse(
-        _wrap_sse_generator(generator, append_terminal_event),
-        media_type="text/event-stream",
-        headers={
-            "Cache-Control": "no-cache",
-            "Connection": "keep-alive",
-            "X-Accel-Buffering": "no",
-        },
-    )

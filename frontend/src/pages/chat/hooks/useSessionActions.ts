@@ -63,16 +63,20 @@ export function useSessionActions(params: UseSessionActionsParams) {
     }
   };
 
-  const createSession = async () => {
+  const createSession = async (signal?: AbortSignal) => {
     try {
-      const detail = await appApi.sessionCreate();
+      const detail = await appApi.sessionCreate(signal);
+      if (signal?.aborted) return null;
       setCurrentSessionId(detail.session_id);
       setMessages(detail.messages || []);
-      await refreshSessions();
-      notify("Session created", "success");
+      if (!signal) {
+        await refreshSessions();
+        notify("Session created", "success");
+      }
       closeSidebar();
       return detail.session_id;
     } catch (e) {
+      if (signal?.aborted || (e instanceof DOMException && e.name === "AbortError")) return null;
       await handleApiError(e, "Failed to create session");
       return null;
     }
@@ -93,23 +97,10 @@ export function useSessionActions(params: UseSessionActionsParams) {
     }
   };
 
-  const renameSession = async (sessionId: string, newTitle: string) => {
-    try {
-      await appApi.sessionRename(sessionId, newTitle);
-      setSessions(prev => prev.map(s =>
-        s.session_id === sessionId ? { ...s, title: newTitle } : s
-      ));
-      notify("Session renamed", "success");
-    } catch (e) {
-      await handleApiError(e, "Failed to rename session");
-    }
-  };
-
   return {
     loadSession,
     refreshSessions,
     createSession,
     deleteSession,
-    renameSession,
   };
 }

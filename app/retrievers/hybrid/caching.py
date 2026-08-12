@@ -1,7 +1,7 @@
 import json
 import logging
 
-from app.services.resilience import TTLCache
+from app.services.runtime.resilience import TTLCache
 
 logger = logging.getLogger(__name__)
 

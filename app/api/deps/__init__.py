@@ -1,0 +1,1 @@
+"""Canonical API dependency capabilities."""

@@ -1,5 +1,5 @@
-import type { SessionMessage } from "@/types/api";
-import { EMPTY_METADATA } from "@/pages/chat/constants";
+import type { SessionMessage } from "../../../types/api";
+import { EMPTY_METADATA } from "../constants";
 
 /**
  * 解析流式请求错误响应
@@ -7,8 +7,21 @@ import { EMPTY_METADATA } from "@/pages/chat/constants";
 export function parseStreamError(raw: string): string {
   if (!raw) return "Stream request failed";
   try {
-    const parsed = JSON.parse(raw);
-    return String(parsed?.detail || raw);
+    const parsed: unknown = JSON.parse(raw);
+    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+      const detail = (parsed as Record<string, unknown>).detail;
+      if (typeof detail === "string" && detail.trim()) return detail.trim();
+      if (Array.isArray(detail)) {
+        const first = detail.find((item): item is Record<string, unknown> => (
+          !!item && typeof item === "object" && !Array.isArray(item)
+        ));
+        if (first && typeof first.msg === "string" && first.msg.trim()) {
+          return `Invalid request: ${first.msg.trim()}`;
+        }
+        return "Invalid request";
+      }
+    }
+    return "Stream request failed";
   } catch {
     return raw;
   }

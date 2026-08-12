@@ -4,14 +4,14 @@ import uuid
 from datetime import UTC, datetime
 from typing import Any
 
-from app.agents.graph_rag_agent import run_graph_rag
-from app.agents.vector_rag_agent import run_vector_rag
-from app.agents.web_research_agent import run_web_research
-from app.services.bulkhead import bulkhead
-from app.services.resilience import call_with_circuit_breaker
-from app.services.retrieval_logger import RetrievalLog, RetrievalLogger
-from app.services.retry_policy import call_with_retry
-from app.services.tracing import traced_span
+from app.agents.rag.graph import run_graph_rag
+from app.agents.rag.vector import run_vector_rag
+from app.agents.rag.web import run_web_research
+from app.services.runtime.bulkhead import bulkhead
+from app.services.runtime.resilience import call_with_circuit_breaker
+from app.services.retrieval.logger import RetrievalLog, RetrievalLogger
+from app.services.runtime.retry_policy import call_with_retry
+from app.services.observability.tracing import traced_span
 
 logger = logging.getLogger(__name__)
 
@@ -117,7 +117,7 @@ def safe_vector_result(
         except Exception as log_error:
             logger.warning(f"Failed to log retrieval: {log_error}")
 
-        return {"context": "", "citations": [], "retrieved_count": 0, "error": f"vector_error:{type(e).__name__}"}
+        return {"context": "", "citations": [], "retrieved_count": 0, "effective_hit_count": 0, "retrieval_diagnostics": {}, "diagnostics": {}, "error": f"vector_error:{type(e).__name__}"}
 
 
 def safe_graph_result(
@@ -214,7 +214,7 @@ def safe_graph_result(
         except Exception as log_error:
             logger.warning(f"Failed to log retrieval: {log_error}")
 
-        return {"context": "", "entities": [], "neighbors": [], "error": f"graph_error:{type(e).__name__}"}
+        return {"context": "", "entities": [], "neighbors": [], "paths": [], "citations": [], "retrieved_count": 0, "effective_hit_count": 0, "retrieval_diagnostics": {}, "diagnostics": {}, "error": f"graph_error:{type(e).__name__}"}
 
 
 def safe_web_result(question: str) -> dict[str, Any]:

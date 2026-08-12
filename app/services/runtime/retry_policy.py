@@ -1,0 +1,61 @@
+from __future__ import annotations
+
+import time
+from collections.abc import Callable
+from contextlib import contextmanager
+from contextvars import ContextVar
+from typing import Any
+
+from app.core.config import get_settings
+from app.orchestration.request import RetryBudget
+
+_REQUEST_RETRY_BUDGET: ContextVar[RetryBudget | None] = ContextVar("request_retry_budget", default=None)
+
+
+@contextmanager
+def retry_budget_scope(budget: RetryBudget):
+    """Install one request-owned budget for every nested retry call."""
+    token = _REQUEST_RETRY_BUDGET.set(budget)
+    try:
+        yield
+    finally:
+        _REQUEST_RETRY_BUDGET.reset(token)
+
+
+def _is_retryable(exc: Exception) -> bool:
+    text = str(exc or "").lower()
+    name = type(exc).__name__.lower()
+    non_retry = ("validation", "permission", "forbidden", "unauthorized", "notfound", "keyerror")
+    if any(k in name for k in non_retry):
+        return False
+    if any(k in text for k in ("quota exceeded", "rate limit", "duplicate request", "bad request", "status_code=4")):
+        return False
+    retry_hints = ("timeout", "temporarily", "connection", "service unavailable", "429", "503", "circuit_open")
+    return any(k in text for k in retry_hints) or any(k in name for k in ("timeout", "connection", "httperror"))
+
+
+def call_with_retry(op_name: str, fn: Callable[[], Any]) -> Any:
+    settings = get_settings()
+    if not bool(getattr(settings, "query_retry_enabled", True)):
+        return fn()
+    budget = _REQUEST_RETRY_BUDGET.get()
+    attempts = budget.remaining if budget is not None else max(
+        1, int(getattr(settings, "query_retry_max_attempts", 2) or 2)
+    )
+    base_delay = max(10, int(getattr(settings, "query_retry_base_delay_ms", 120) or 120))
+    last_exc: Exception | None = None
+    for i in range(1, attempts + 1):
+        if budget is not None:
+            budget = budget.consume()
+            _REQUEST_RETRY_BUDGET.set(budget)
+        try:
+            return fn()
+        except Exception as e:
+            last_exc = e
+            if i >= attempts or (not _is_retryable(e)):
+                raise
+            time.sleep((base_delay * i) / 1000.0)
+    # This line should never be reached due to the raise in the loop
+    # But if somehow we exit the loop without returning or raising, raise the last exception
+    raise last_exc if last_exc else RuntimeError(f"Retry loop exited unexpectedly for {op_name}")
+

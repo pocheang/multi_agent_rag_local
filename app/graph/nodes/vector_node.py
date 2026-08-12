@@ -2,16 +2,16 @@ import logging
 import time
 from concurrent.futures import TimeoutError as FutureTimeoutError
 
-from app.agents.vector_rag_agent import run_vector_rag
+from app.agents.rag.vector import run_vector_rag
 from app.core.config import get_settings
 from app.graph.nodes.safe_wrappers import safe_graph_result, safe_vector_result
-from app.graph.state import GraphState
-from app.services.bulkhead import bulkhead
+from app.graph.execution.state import GraphState
+from app.services.runtime.bulkhead import bulkhead
 from app.services.hybrid_executor import HybridExecutorRejectedError, submit_hybrid
-from app.services.request_context import deadline_exceeded, remaining_seconds
-from app.services.resilience import call_with_circuit_breaker
-from app.services.retry_policy import call_with_retry
-from app.services.tracing import traced_span
+from app.services.runtime.request_context import deadline_exceeded, remaining_seconds
+from app.services.runtime.resilience import call_with_circuit_breaker
+from app.services.runtime.retry_policy import call_with_retry
+from app.services.observability.tracing import traced_span
 
 logger = logging.getLogger(__name__)
 

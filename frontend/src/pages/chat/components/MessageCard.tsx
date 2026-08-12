@@ -28,7 +28,7 @@ export function MessageCard({ message, onEditMessage, onRemoveMessage }: Props) 
           <span className="message-avatar" aria-hidden="true">{isAssistant ? "AI" : "U"}</span>
           <span className="message-role">{isAssistant ? t("components.messages.assistant") : t("components.messages.you")}</span>
         </div>
-        {message.message_id.startsWith("local-") ? null : (
+        {!message.message_id || message.message_id.startsWith("local-") ? null : (
           <div className="row-actions">
             <button
               type="button"
@@ -106,6 +106,12 @@ export function MessageCard({ message, onEditMessage, onRemoveMessage }: Props) 
                   </div>
                 ))}
               </div>
+            </CollapsibleSection>
+          )}
+
+          {metadata.quality_report && Object.keys(metadata.quality_report).length > 0 && (
+            <CollapsibleSection title={t("components.messages.qualityReport")} ariaLabel={t("components.messages.toggleQualityReport")}>
+              <pre className="graph-context">{JSON.stringify(metadata.quality_report, null, 2)}</pre>
             </CollapsibleSection>
           )}
 

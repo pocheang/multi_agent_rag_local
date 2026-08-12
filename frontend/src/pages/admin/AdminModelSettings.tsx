@@ -2,6 +2,7 @@
 import { useTranslation } from "react-i18next";
 import { AdminFormField, AdminFormSelect } from "@/components/AdminFormField";
 import { appApi } from "@/lib/api";
+import { normalizeModelTemperature } from "@/lib/model-temperature";
 import type {
   AdminModelSettingsView,
   ModelCatalogItem,
@@ -184,7 +185,9 @@ export function AdminModelSettings({
 
           <label className="admin-field admin-model-slider">
             <span>Temperature {Number(modelSettings.temperature || 0).toFixed(1)}</span>
-            <input type="range" min={0} max={2} step={0.1} value={modelSettings.temperature} onChange={(event) => onPatch({ temperature: Number(event.target.value) })} />
+            <input type="range" min={0} max={1} step={0.1} value={modelSettings.temperature} onChange={(event) => onPatch({
+              temperature: normalizeModelTemperature(Number(event.target.value), modelSettings.temperature),
+            })} />
           </label>
 
           {modelTestResult && <div className={`admin-state-panel ${modelTestResult.type === "error" ? "is-error" : "is-success"}`}>{modelTestResult.message}</div>}

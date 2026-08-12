@@ -363,8 +363,8 @@ Output shows uncovered lines:
 Name                                    Stmts   Miss  Cover   Missing
 ---------------------------------------------------------------------
 app/ingestion/loaders/pdf_loader.py        45      3    93%   67-69
-app/ingestion/utils/performance.py         120     15    88%   145-150, 200-205
-app/ingestion/utils/chart_extractor.py     80      10    88%   120-125, 180
+app/ingestion/processing/performance.py         120     15    88%   145-150, 200-205
+app/ingestion/extraction/charts.py     80      10    88%   120-125, 180
 ---------------------------------------------------------------------
 TOTAL                                      245     28    89%
 ```

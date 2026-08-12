@@ -1,0 +1,67 @@
+{
+  "scope": {
+    "include": [
+      "app/api",
+      "app/core",
+      "app/domain",
+      "app/graph",
+      "app/ingestion",
+      "app/retrievers",
+      "app/services",
+      "app/pipeline",
+      "app/orchestration",
+      "app/mcp",
+      "app/evaluation",
+      "app/tools",
+      "app/workflow",
+      "app/baselines",
+      "app/models",
+      "related config/scripts/docs"
+    ],
+    "exclude": ["app/agents", "app/prompts", "frontend", "product behavior changes", "git operations"]
+  },
+  "baseline": {
+    "non_agent_python_modules": 295,
+    "ast": "pass",
+    "ruff_E9_F63_F7_F82": "pass",
+    "services_python_files": 101,
+    "services_direct_python_files": 81,
+    "api_route_modules": 31,
+    "same_stem_file_package_collisions": [
+      "app/graph/streaming.py + app/graph/streaming/",
+      "app/ingestion/loaders.py + app/ingestion/loaders/"
+    ]
+  },
+  "findings": [
+    {"severity": "P1", "id": "services-flat", "summary": "services root owns too many unrelated capabilities"},
+    {"severity": "P1", "id": "file-package-collisions", "summary": "two same-stem file/package collisions"},
+    {"severity": "P1", "id": "core-reverse-dependency", "summary": "core/models imports five services modules"},
+    {"severity": "P1", "id": "api-flat", "summary": "routes mix transport and query execution collaborators"},
+    {"severity": "P1", "id": "graph-mixed-owner", "summary": "Neo4j and LangGraph execution share one flat package"},
+    {"severity": "P1", "id": "evaluation-dual-owner", "summary": "two EvaluationService and two baseline families"},
+    {"severity": "P2", "id": "config-debt", "summary": "duplicate Settings field and unconsumed optimized_config"},
+    {"severity": "P2", "id": "compatibility-inventory", "summary": "non-agent compatibility allowlist is incomplete"}
+  ],
+  "waves": [
+    {"wave": 0, "days": "1-2", "goal": "freeze ownership, contracts, imports, dynamic loads and compatibility map"},
+    {"wave": 1, "days": "2-4", "goal": "remove same-stem collisions and clarify config/evaluation owners"},
+    {"wave": 2, "days": "3-5", "goal": "converge core, domain, API schemas and model runtime"},
+    {"wave": 3, "days": "6-9", "goal": "organize graph, ingestion, retrievers, evaluation and tools"},
+    {"wave": 4, "days": "8-12", "goal": "split services into capability packages"},
+    {"wave": 5, "days": "5-8", "goal": "organize API application, deps, query internals and route groups"},
+    {"wave": 6, "days": "4-6", "goal": "converge pipeline, orchestration, MCP and legacy workflow boundaries"},
+    {"wave": 7, "days": "2-3", "goal": "exports, compatibility retirement, documentation and verification"}
+  ],
+  "roadmap": {
+    "7_days": "waves 0-1",
+    "30_days": "waves 2-4 substantially complete",
+    "90_days": "waves 5-7 complete with compatibility evidence"
+  },
+  "constraints": [
+    "preserve HTTP and SSE contracts",
+    "preserve public imports with import-only wrappers",
+    "do not change retrieval, model or workflow behavior during moves",
+    "delete only after app/scripts/tests/docs/config audit and removal-register evidence",
+    "never create another same-stem .py file and package pair"
+  ]
+}

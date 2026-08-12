@@ -16,7 +16,7 @@ from pathlib import Path
 from typing import Any
 
 from app.core.config import get_settings
-from app.graph.neo4j_client import Neo4jClient
+from app.graph.knowledge.client import Neo4jClient
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)

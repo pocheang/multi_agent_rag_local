@@ -413,7 +413,54 @@
   "features": {
     "multiAgent": "多智能体编排",
     "hybridSearch": "混合检索引擎",
-    "enterpriseSecurity": "企业级安全"
+    "enterpriseSecurity": "企业级安全",
+    "executionTrace": {
+      "title": "执行追踪",
+      "ariaLabel": "执行追踪",
+      "empty": "暂无执行事件。",
+      "event": "{{stage}}：{{message}}（{{duration}}ms）"
+    },
+    "toolApproval": {
+      "title": "工具审批",
+      "ariaLabel": "工具审批",
+      "confirm": "确认",
+      "confirming": "确认中…",
+      "errorFallback": "无法确认此工具请求，请重试。"
+    },
+    "integrations": {
+      "title": "集成连接",
+      "ariaLabel": "集成连接",
+      "description": "连接密钥只会发送到服务器一次，之后不会再次显示。",
+      "connectTitle": "连接集成",
+      "integrationId": "集成 ID",
+      "name": "名称",
+      "baseUrl": "基础 URL",
+      "allowedHosts": "允许的主机",
+      "allowedHostsPlaceholder": "api.example.com",
+      "accessSecret": "访问密钥",
+      "addConnector": "添加连接器",
+      "connecting": "连接中…",
+      "loading": "正在加载集成…",
+      "empty": "暂无已连接的集成。",
+      "connected": "集成已连接",
+      "enable": "启用",
+      "disable": "停用",
+      "test": "测试",
+      "testStatusLabel": "测试",
+      "status": {
+        "enabled": "已启用",
+        "disabled": "已停用"
+      },
+      "testStatus": {
+        "not_tested": "未测试",
+        "passed": "通过",
+        "failed": "失败"
+      },
+      "loadError": "无法加载集成。",
+      "connectError": "无法连接集成。",
+      "updateError": "无法更新集成。",
+      "testError": "无法测试集成。"
+    }
   },
   "pages": {
     "landing": {
@@ -714,6 +761,8 @@
       "thoughts": "思考摘要",
       "toggleThoughts": "展开或收起思考摘要",
       "citations": "引用证据",
+      "qualityReport": "质量报告",
+      "toggleQualityReport": "展开或收起质量报告",
       "toggleCitations": "展开或收起引用证据",
       "graph": "图谱关系",
       "toggleGraph": "展开或收起图谱关系",
@@ -816,6 +865,13 @@
       "reasoningTitle": "开启后使用深度推理模式",
       "retrievalStrategy": "检索策略",
       "retrievalStrategyAria": "选择检索策略",
+      "profile": "查询模式",
+      "profileAria": "选择查询模式",
+      "profileOptions": {
+        "standard": "标准流式",
+        "strict_quality": "严格质量",
+        "advanced": "高级 RAG"
+      },
       "agentTypeAria": "选择 Agent 类型",
       "processingQuestion": "正在处理问题",
       "startAnalysisAria": "开始分析问题",
@@ -829,7 +885,10 @@
       "modeHint": {
         "local": "本地快速模式，{{strategy}}检索：适合低延迟问答和已入库资料分析。",
         "web": "联网增强已开启，{{strategy}}检索：适合需要最新资料的问题，响应可能稍慢。",
-        "reasoning": "推理增强已开启，{{strategy}}检索：适合复杂分析、审计和多步骤归纳。"
+        "reasoning": "推理增强已开启，{{strategy}}检索：适合复杂分析、审计和多步骤归纳。",
+        "strictQuality": "严格质量 Profile，使用{{strategy}}检索和智能体路由。",
+        "advanced": "高级 RAG Profile，使用{{strategy}}检索；可开启推理以启用查询分解与 Self-RAG。",
+        "advancedReasoning": "高级 RAG 推理已开启，使用{{strategy}}检索、查询分解与 Self-RAG。"
       },
       "stop": "停止",
       "stopAria": "停止当前处理",
@@ -941,6 +1000,6 @@
         "响应式设计：移动端适配"
       ]
     },
-    "apiEndpoints": "# 认证与用户\nPOST /auth/register\nPOST /auth/login\nPOST /auth/logout\nPOST /auth/refresh\nGET  /auth/me\n\n# 查询与会话\nPOST /query\nPOST /query/stream\nGET  /sessions\nPOST /sessions\nDELETE /sessions/{id}\nPATCH /sessions/{id}/strategy\nPATCH /sessions/{id}/messages/{message_id}\nGET  /sessions/{id}/memory\nPOST /sessions/{id}/memory/clear\n\n# 文档管理\nGET  /documents\nDELETE /documents/{doc_id}\nPOST /documents/reindex\nPOST /upload\n\n# Prompt 管理\nGET  /prompts\nPOST /prompts\nPUT  /prompts/{id}\nPOST /prompts/check\nPOST /prompts/{id}/approve\nPOST /prompts/{id}/rollback\n\n# 管理员 - 用户管理\nGET  /admin/users\nPOST /admin/users\nPATCH /admin/users/{user_id}/role\nPATCH /admin/users/{user_id}/status\nDELETE /admin/users/{user_id}\n\n# 管理员 - 运维操作\nGET  /admin/ops/profiles\nPOST /admin/ops/profiles\nPOST /admin/ops/canary\nPOST /admin/ops/rollback\nPOST /admin/ops/benchmark\nPOST /admin/ops/replay\nGET  /admin/ops/report\n\n# 管理员 - 模型配置\nGET  /admin/model-settings\nPUT  /admin/model-settings\n\n# 用户 - API 设置\nGET  /user/api-settings\nPUT  /user/api-settings\n\n# 评估与追踪\nPOST /api/evaluation/compare\nGET  /api/evaluation/baselines\nGET  /agent-tracking/trace/{id}\nGET  /agent-tracking/stream/{id}\nGET  /agent-tracking/history\n\n# 高级 RAG\nPOST /api/advanced-rag/decompose\nPOST /api/advanced-rag/self-rag\n\n# 健康检查\nGET  /health\nGET  /ready\nGET  /metrics"
+    "apiEndpoints": "# 认证\nPOST /auth/register\nPOST /auth/login\nPOST /auth/logout\nGET  /auth/me\nPUT  /auth/profile\nPOST /auth/change-password\nGET  /auth/google/login\n\n# 查询 Profile\nPOST /query\nPOST /query/stream\nPOST /api/v1/enhanced/query\nPOST /api/advanced-rag/query\n\n# 会话\nGET, POST /sessions\nGET, DELETE /sessions/{session_id}\nGET, POST /sessions/{session_id}/strategy-lock\nGET /sessions/{session_id}/memories/long\nDELETE /sessions/{session_id}/memories/long/{memory_id}\nPATCH, DELETE /sessions/{session_id}/messages/{message_id}\n\n# 文档与 Prompt\nGET /documents\nPOST /upload\nPOST /documents/{filename}/reindex\nDELETE /documents/{filename}\nGET, POST /prompts\nPOST /prompts/check\nPATCH, DELETE /prompts/{prompt_id}\n\n# 管理运维与设置\nGET /admin/ops/runtime\nGET /admin/ops/overview\nGET, POST /admin/ops/retrieval-profile\nPOST /admin/ops/canary\nPOST /admin/ops/benchmark/run\nGET /admin/model-settings\nPOST /admin/model-settings\nGET, POST /user/api-settings\n\n# 评估与追踪\nGET /api/evaluation/queries\nPOST /api/evaluation/run\nGET /api/evaluation/results/{run_id}\nPOST /api/evaluation/compare\nGET /api/evaluation/systems\nGET /agent-tracking/trace/{execution_id}\nGET /agent-tracking/stream/{execution_id}\nGET /agent-tracking/history\n\n# 健康检查\nGET /health\nGET /ready\nGET /metrics"
   }
 }

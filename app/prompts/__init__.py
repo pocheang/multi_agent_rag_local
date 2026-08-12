@@ -26,12 +26,12 @@
 """
 
 # 核心模块提示词
-from .ai_knowledge_prompts import (
+from .skills.ai_knowledge_prompts import (
     AI_KNOWLEDGE_ASSISTANT_SYSTEM_PROMPT,
     AI_KNOWLEDGE_ASSISTANT_USER_PROMPT_TEMPLATE,
     get_ai_knowledge_assistant_prompts,
 )
-from .comparison_timeline_prompts import (
+from .skills.comparison_timeline_prompts import (
     COMPARE_ENTITIES_SYSTEM_PROMPT,
     COMPARE_ENTITIES_USER_PROMPT_TEMPLATE,
     TIMELINE_BUILDER_SYSTEM_PROMPT,
@@ -39,9 +39,17 @@ from .comparison_timeline_prompts import (
     get_compare_entities_prompts,
     get_timeline_builder_prompts,
 )
+from .core.canonical_agent_prompts import (
+    ANSWER_PROMPT as CANONICAL_ANSWER_PROMPT,
+    QUERY_DECOMPOSITION_PROMPT,
+    REACT_SYSTEM_PROMPT as CANONICAL_REACT_SYSTEM_PROMPT,
+    REVIEW_PROMPT as CANONICAL_REVIEW_PROMPT,
+    ROUTER_PROMPT_TEMPLATE as CANONICAL_ROUTER_PROMPT_TEMPLATE,
+    build_router_prompt,
+)
 
 # 专业技能提示词
-from .cybersecurity_skills_prompts import (
+from .skills.cybersecurity_skills_prompts import (
     CYBER_ATTACK_ANALYSIS_SYSTEM_PROMPT,
     CYBER_ATTACK_ANALYSIS_USER_PROMPT_TEMPLATE,
     CYBER_DEFENSE_HARDENING_SYSTEM_PROMPT,
@@ -52,7 +60,7 @@ from .cybersecurity_skills_prompts import (
     get_cyber_defense_hardening_prompts,
     get_incident_response_playbook_prompts,
 )
-from .intent_prompts import (
+from .core.intent_prompts import (
     INTENT_CLASSIFICATION_SYSTEM_PROMPT,
     INTENT_CLASSIFICATION_USER_PROMPT_TEMPLATE,
 )
@@ -60,7 +68,7 @@ from .manager import (
     PromptManager,
     get_prompt_manager,
 )
-from .pdf_web_prompts import (
+from .skills.pdf_web_prompts import (
     PDF_TEXT_READER_SYSTEM_PROMPT,
     PDF_TEXT_READER_USER_PROMPT_TEMPLATE,
     WEB_FACT_CHECK_SYSTEM_PROMPT,
@@ -68,7 +76,7 @@ from .pdf_web_prompts import (
     get_pdf_text_reader_prompts,
     get_web_fact_check_prompts,
 )
-from .rag_quick_retrieval_prompts import (
+from .retrieval.rag_quick_retrieval_prompts import (
     CONTEXT_SUMMARY_SYSTEM_PROMPT,
     CONTEXT_SUMMARY_USER_PROMPT_TEMPLATE,
     DOCUMENT_SEARCH_SYSTEM_PROMPT,
@@ -85,23 +93,23 @@ from .rag_quick_retrieval_prompts import (
     get_keyword_search_prompts,
     get_quick_answer_prompts,
 )
-from .react_prompts import (
+from .core.react_prompts import (
     REACT_SYSTEM_PROMPT,
     REACT_USER_PROMPT_TEMPLATE,
 )
-from .review_prompts import (
+from .core.review_prompts import (
     REVIEW_SYSTEM_PROMPT,
     REVIEW_USER_PROMPT_TEMPLATE,
 )
-from .router_prompts import (
+from .core.router_prompts import (
     ROUTER_SYSTEM_PROMPT,
     ROUTER_USER_PROMPT_TEMPLATE,
 )
-from .self_rag_prompts import (
+from .retrieval.self_rag_prompts import (
     SELF_RAG_ANSWER_QUALITY_PROMPT,
     SELF_RAG_RETRIEVAL_PROMPT,
 )
-from .synthesis_prompts import (
+from .core.synthesis_prompts import (
     SYNTHESIS_SYSTEM_PROMPT,
     SYNTHESIS_USER_PROMPT_TEMPLATE,
 )
@@ -134,6 +142,12 @@ def get_review_system_prompt() -> str:
 
 
 __all__ = [
+    "CANONICAL_ANSWER_PROMPT",
+    "CANONICAL_REACT_SYSTEM_PROMPT",
+    "CANONICAL_REVIEW_PROMPT",
+    "CANONICAL_ROUTER_PROMPT_TEMPLATE",
+    "QUERY_DECOMPOSITION_PROMPT",
+    "build_router_prompt",
     # 核心模块 - 路由相关
     "ROUTER_SYSTEM_PROMPT",
     "ROUTER_USER_PROMPT_TEMPLATE",

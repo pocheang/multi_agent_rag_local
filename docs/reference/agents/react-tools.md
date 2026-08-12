@@ -557,7 +557,13 @@ final_answer = synthesize_answer(
 
 ### 1. ReAct System Prompt
 
-**位置**: `react_agent.py:80-108`
+**历史示例位置**: `react_agent.py:80-108`
+
+以下内容保留为历史文档示例，便于理解 ReAct 约束；它不是独立的运行时
+实现。实际运行时唯一 owner 为
+`app.prompts.core.canonical_agent_prompts.REACT_SYSTEM_PROMPT`，
+`app.prompts.canonical_agent_prompts.REACT_SYSTEM_PROMPT` 与
+`app.prompts.react_prompts.REACT_SYSTEM_PROMPT` 仅为兼容 re-export。
 
 ```python
 REACT_SYSTEM_PROMPT = """你是一个使用ReAct模式（Reasoning + Acting）的智能助手。

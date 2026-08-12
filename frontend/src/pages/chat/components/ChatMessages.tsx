@@ -37,9 +37,9 @@ export function ChatMessages({
           onNavigateToArchitecture={onNavigateToArchitecture}
         />
       )}
-      {messages.map((message) => (
+      {messages.map((message, index) => (
         <MessageCard
-          key={message.message_id}
+          key={message.message_id ?? `${message.role}-${message.created_at ?? "undated"}-${index}`}
           message={message}
           onEditMessage={onEditMessage}
           onRemoveMessage={onRemoveMessage}

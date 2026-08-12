@@ -1,7 +1,7 @@
 """Re-index security documentation into the RAG system."""
 
 from pathlib import Path
-from app.services.ingest_service import ingest_paths
+from app.services.documents.ingest import ingest_paths
 
 def main():
     # Get all security markdown files
@@ -23,7 +23,7 @@ def main():
     print(f"  Triplets written: {result.get('triplets_written', 0)}")
 
     # Verify indexing
-    from app.retrievers.corpus_store import read_corpus_records
+    from app.retrievers.stores.corpus import read_corpus_records
     records = read_corpus_records()
     security_records = [r for r in records if 'security' in str(r.get('metadata', {}).get('source', '')).lower()]
 

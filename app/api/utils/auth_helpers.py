@@ -8,7 +8,7 @@ from urllib.parse import urlparse
 from fastapi import Request, Response
 from fastapi.security import HTTPAuthorizationCredentials
 
-from app.api.utils.error_responses import forbidden
+from app.api.transport.errors import forbidden
 from app.core.config import get_settings
 from app.services.auth_db import AuthDBService
 

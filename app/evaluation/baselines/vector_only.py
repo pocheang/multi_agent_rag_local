@@ -3,7 +3,7 @@
 import time
 
 from app.evaluation.models import RetrievalResult
-from app.retrievers.vector_store import similarity_search
+from app.retrievers.stores.vector import similarity_search
 
 
 class VectorOnlyRetriever:

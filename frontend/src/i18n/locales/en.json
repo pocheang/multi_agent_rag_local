@@ -413,7 +413,54 @@
   "features": {
     "multiAgent": "Multi-Agent Orchestration",
     "hybridSearch": "Hybrid Retrieval",
-    "enterpriseSecurity": "Enterprise Security"
+    "enterpriseSecurity": "Enterprise Security",
+    "executionTrace": {
+      "title": "Execution trace",
+      "ariaLabel": "Execution trace",
+      "empty": "No execution events yet.",
+      "event": "{{stage}}: {{message}} ({{duration}}ms)"
+    },
+    "toolApproval": {
+      "title": "Tool approval",
+      "ariaLabel": "Tool approval",
+      "confirm": "Confirm",
+      "confirming": "Confirming…",
+      "errorFallback": "Unable to confirm this tool request. Please try again."
+    },
+    "integrations": {
+      "title": "Integrations",
+      "ariaLabel": "Integrations",
+      "description": "Connection secrets are sent once to the server and are never displayed.",
+      "connectTitle": "Connect integration",
+      "integrationId": "Integration ID",
+      "name": "Name",
+      "baseUrl": "Base URL",
+      "allowedHosts": "Allowed hosts",
+      "allowedHostsPlaceholder": "api.example.com",
+      "accessSecret": "Access secret",
+      "addConnector": "Add connector",
+      "connecting": "Connecting…",
+      "loading": "Loading integrations…",
+      "empty": "No integrations connected.",
+      "connected": "Integration connected",
+      "enable": "Enable",
+      "disable": "Disable",
+      "test": "Test",
+      "testStatusLabel": "test",
+      "status": {
+        "enabled": "enabled",
+        "disabled": "disabled"
+      },
+      "testStatus": {
+        "not_tested": "not tested",
+        "passed": "passed",
+        "failed": "failed"
+      },
+      "loadError": "Unable to load integrations.",
+      "connectError": "Unable to connect integration.",
+      "updateError": "Unable to update integration.",
+      "testError": "Unable to test integration."
+    }
   },
   "pages": {
     "landing": {
@@ -714,6 +761,8 @@
       "thoughts": "Thought summary",
       "toggleThoughts": "Expand or collapse thought summary",
       "citations": "Citations",
+      "qualityReport": "Quality report",
+      "toggleQualityReport": "Expand or collapse quality report",
       "toggleCitations": "Expand or collapse citations",
       "graph": "Graph relations",
       "toggleGraph": "Expand or collapse graph relations",
@@ -816,6 +865,13 @@
       "reasoningTitle": "Use deep reasoning mode when enabled",
       "retrievalStrategy": "Retrieval strategy",
       "retrievalStrategyAria": "Choose retrieval strategy",
+      "profile": "Profile",
+      "profileAria": "Choose query profile",
+      "profileOptions": {
+        "standard": "Standard stream",
+        "strict_quality": "Strict quality",
+        "advanced": "Advanced RAG"
+      },
       "agentTypeAria": "Choose Agent type",
       "processingQuestion": "Processing question",
       "startAnalysisAria": "Start analyzing question",
@@ -829,7 +885,10 @@
       "modeHint": {
         "local": "Local fast mode with {{strategy}} retrieval: suitable for low-latency Q&A and indexed document analysis.",
         "web": "Web-enhanced mode with {{strategy}} retrieval: suitable for questions that need fresh information; responses may be slower.",
-        "reasoning": "Reasoning mode with {{strategy}} retrieval: suitable for complex analysis, audits, and multi-step synthesis."
+        "reasoning": "Reasoning mode with {{strategy}} retrieval: suitable for complex analysis, audits, and multi-step synthesis.",
+        "strictQuality": "Strict-quality profile with {{strategy}} retrieval and agent routing.",
+        "advanced": "Advanced RAG profile with {{strategy}} retrieval; enable reasoning for query decomposition and Self-RAG.",
+        "advancedReasoning": "Advanced RAG reasoning with {{strategy}} retrieval, query decomposition, and Self-RAG."
       },
       "stop": "Stop",
       "stopAria": "Stop current processing",
@@ -941,6 +1000,6 @@
         "Responsive Design: Mobile adaptation"
       ]
     },
-    "apiEndpoints": "# Authentication & Users\nPOST /auth/register\nPOST /auth/login\nPOST /auth/logout\nPOST /auth/refresh\nGET  /auth/me\n\n# Query & Sessions\nPOST /query\nPOST /query/stream\nGET  /sessions\nPOST /sessions\nDELETE /sessions/{id}\nPATCH /sessions/{id}/strategy\nPATCH /sessions/{id}/messages/{message_id}\nGET  /sessions/{id}/memory\nPOST /sessions/{id}/memory/clear\n\n# Document Management\nGET  /documents\nDELETE /documents/{doc_id}\nPOST /documents/reindex\nPOST /upload\n\n# Prompt Management\nGET  /prompts\nPOST /prompts\nPUT  /prompts/{id}\nPOST /prompts/check\nPOST /prompts/{id}/approve\nPOST /prompts/{id}/rollback\n\n# Admin - User Management\nGET  /admin/users\nPOST /admin/users\nPATCH /admin/users/{user_id}/role\nPATCH /admin/users/{user_id}/status\nDELETE /admin/users/{user_id}\n\n# Admin - Operations\nGET  /admin/ops/profiles\nPOST /admin/ops/profiles\nPOST /admin/ops/canary\nPOST /admin/ops/rollback\nPOST /admin/ops/benchmark\nPOST /admin/ops/replay\nGET  /admin/ops/report\n\n# Admin - Model Config\nGET  /admin/model-settings\nPUT  /admin/model-settings\n\n# User - API Settings\nGET  /user/api-settings\nPUT  /user/api-settings\n\n# Evaluation & Tracking\nPOST /api/evaluation/compare\nGET  /api/evaluation/baselines\nGET  /agent-tracking/trace/{id}\nGET  /agent-tracking/stream/{id}\nGET  /agent-tracking/history\n\n# Advanced RAG\nPOST /api/advanced-rag/decompose\nPOST /api/advanced-rag/self-rag\n\n# Health Checks\nGET  /health\nGET  /ready\nGET  /metrics"
+    "apiEndpoints": "# Authentication\nPOST /auth/register\nPOST /auth/login\nPOST /auth/logout\nGET  /auth/me\nPUT  /auth/profile\nPOST /auth/change-password\nGET  /auth/google/login\n\n# Query profiles\nPOST /query\nPOST /query/stream\nPOST /api/v1/enhanced/query\nPOST /api/advanced-rag/query\n\n# Sessions\nGET, POST /sessions\nGET, DELETE /sessions/{session_id}\nGET, POST /sessions/{session_id}/strategy-lock\nGET /sessions/{session_id}/memories/long\nDELETE /sessions/{session_id}/memories/long/{memory_id}\nPATCH, DELETE /sessions/{session_id}/messages/{message_id}\n\n# Documents and prompts\nGET /documents\nPOST /upload\nPOST /documents/{filename}/reindex\nDELETE /documents/{filename}\nGET, POST /prompts\nPOST /prompts/check\nPATCH, DELETE /prompts/{prompt_id}\n\n# Admin operations and settings\nGET /admin/ops/runtime\nGET /admin/ops/overview\nGET, POST /admin/ops/retrieval-profile\nPOST /admin/ops/canary\nPOST /admin/ops/benchmark/run\nGET /admin/model-settings\nPOST /admin/model-settings\nGET, POST /user/api-settings\n\n# Evaluation and tracking\nGET /api/evaluation/queries\nPOST /api/evaluation/run\nGET /api/evaluation/results/{run_id}\nPOST /api/evaluation/compare\nGET /api/evaluation/systems\nGET /agent-tracking/trace/{execution_id}\nGET /agent-tracking/stream/{execution_id}\nGET /agent-tracking/history\n\n# Health\nGET /health\nGET /ready\nGET /metrics"
   }
 }

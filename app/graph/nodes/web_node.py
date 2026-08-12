@@ -1,6 +1,6 @@
 from app.graph.nodes.safe_wrappers import safe_web_result
-from app.graph.state import GraphState
-from app.services.request_context import deadline_exceeded
+from app.graph.execution.state import GraphState
+from app.services.runtime.request_context import deadline_exceeded
 
 
 def web_node(state: GraphState) -> GraphState:

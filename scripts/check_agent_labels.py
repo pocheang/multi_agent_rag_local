@@ -16,7 +16,7 @@ if sys.platform == "win32":
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
-from app.retrievers.corpus_store import read_corpus_records
+from app.retrievers.stores.corpus import read_corpus_records
 
 
 def main():

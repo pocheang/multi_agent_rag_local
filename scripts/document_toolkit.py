@@ -55,12 +55,12 @@ except (ImportError, SyntaxError) as e:
     split_documents_enhanced = split_documents_basic
     ENHANCED_AVAILABLE = False
 from app.ingestion.loaders import load_documents
-from app.services.index_manager import list_indexed_files, rebuild_file_index, delete_file_index
-from app.services.document_registry import list_document_records, create_document_record
+from app.services.documents.index_manager import list_indexed_files, rebuild_file_index, delete_file_index
+from app.services.documents.registry import list_document_records, create_document_record
 
 # Import vector store with fallback
 try:
-    from app.retrievers.vector_store import get_vector_store
+    from app.retrievers.stores.vector import get_vector_store
     VECTOR_STORE_AVAILABLE = True
 except ImportError:
     get_vector_store = None

@@ -3,7 +3,7 @@ import sys
 import types
 
 import app.agents.router_agent as router_agent
-import app.agents.synthesis_agent as synthesis_agent
+import app.agents.synthesizer.generation as synthesis_agent
 from app.core.models import LocalEvidenceChatModel
 
 
@@ -417,7 +417,101 @@ def test_synthesize_uses_high_temperature_for_casual_chat(monkeypatch):
     result = synthesis_agent.synthesize_answer("你是谁", "answer_with_citations", use_reasoning=False)
     assert isinstance(result, dict)
     assert result["answer"] == "ok"
-    assert synthesis_agent.CASUAL_CHAT_HIGH_TEMPERATURE in seen["temps"]
+    assert 0.9 in seen["temps"]
+
+
+def test_synthesize_strips_placeholder_citation_without_evidence(monkeypatch):
+    """A no-evidence answer must not expose a model-invented marker."""
+    received: list[tuple[str, str]] = []
+
+    class FakeModel:
+        def invoke(self, messages):
+            received.extend(messages)
+            return types.SimpleNamespace(content="Hello! [doc_id:page]")
+
+    monkeypatch.setattr(synthesis_agent, "get_chat_model", lambda temperature=None: FakeModel())
+    result = synthesis_agent.synthesize_answer(
+        "hi",
+        "answer_with_citations",
+        enable_fact_verification=False,
+    )
+
+    assert all("[doc_id:page]" not in prompt for _role, prompt in received)
+    assert result["answer"] == "Hello!"
+
+
+def test_synthesize_non_casual_answer_strips_placeholder_citation_without_evidence(monkeypatch):
+    """Citation-free prompts also protect no-evidence factual questions."""
+    received: list[tuple[str, str]] = []
+
+    class FakeModel:
+        def invoke(self, messages):
+            received.extend(messages)
+            return types.SimpleNamespace(content="Hello! [doc_id:page]")
+
+    monkeypatch.setattr(synthesis_agent, "get_chat_model", lambda temperature=None: FakeModel())
+    result = synthesis_agent.synthesize_answer(
+        "What is retrieval augmented generation?",
+        "answer_with_citations",
+        enable_fact_verification=False,
+    )
+
+    assert all("[doc_id:page]" not in prompt for _role, prompt in received)
+    assert result["answer"] == "Hello!"
+
+
+def test_synthesize_preserves_allowed_citation_and_strips_invented_marker(monkeypatch):
+    """Only labels supplied by retrieved evidence may remain visible."""
+    received: list[tuple[str, str]] = []
+
+    class FakeModel:
+        def invoke(self, messages):
+            received.extend(messages)
+            return types.SimpleNamespace(content="RAG uses retrieved evidence [guide:7] [fake:99].")
+
+    monkeypatch.setattr(synthesis_agent, "get_chat_model", lambda temperature=None: FakeModel())
+    result = synthesis_agent.synthesize_answer(
+        "What is RAG?",
+        "answer_with_citations",
+        vector_context="[guide:7] RAG definition",
+        enable_fact_verification=False,
+    )
+
+    assert any("[guide:7]" in prompt for _role, prompt in received)
+    assert any("never invent" in prompt.lower() for _role, prompt in received)
+    assert result["answer"] == "RAG uses retrieved evidence [guide:7]."
+
+
+def test_stream_strict_quality_refines_with_evidence_labels(monkeypatch):
+    """Strict-quality streaming must pass evidence labels to the review path."""
+
+    class FakeModel:
+        def stream(self, _messages):
+            yield types.SimpleNamespace(content="RAG answer [guide:7].")
+
+        def invoke(self, _messages):
+            return types.SimpleNamespace(
+                content=(
+                    '{"is_correct": false, "issues": ["x"], '
+                    '"improved_answer": "Reviewed RAG answer [guide:7].", "analysis": "x"}'
+                )
+            )
+
+    monkeypatch.setattr(synthesis_agent, "get_chat_model", lambda temperature=None: FakeModel())
+    monkeypatch.setattr(synthesis_agent, "get_reasoning_model", lambda temperature=None: FakeModel())
+
+    chunks = list(
+        synthesis_agent.stream_synthesize_answer(
+            "What is RAG?",
+            "answer_with_citations",
+            vector_context="[guide:7] RAG definition",
+            profile="strict_quality",
+        )
+    )
+
+    assert {"type": "reset", "content": "Reviewed RAG answer [guide:7]."} in chunks
+    assert {"type": "metadata", "detected_language": "en"} in chunks
+    assert synthesis_agent.SYNTHESIS_FALLBACK_MESSAGE not in chunks
 
 
 def test_local_evidence_model_does_not_expose_memory_context():

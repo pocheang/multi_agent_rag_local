@@ -7,7 +7,7 @@
 import logging
 from typing import Any
 
-from app.api.utils.error_responses import forbidden
+from app.api.transport.errors import forbidden
 
 logger = logging.getLogger(__name__)
 

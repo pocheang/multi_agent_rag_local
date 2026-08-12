@@ -4,16 +4,16 @@ ReAct node for LangGraph workflow.
 
 import logging
 
-from app.agents.react_agent import run_react_agent
-from app.graph.state import GraphState
+from app.agents.tool.react import run_react_agent
+from app.graph.execution.state import GraphState
 from app.services.answer_safety import sanitize_answer
-from app.services.bulkhead import bulkhead
+from app.services.runtime.bulkhead import bulkhead
 from app.services.citation_grounding import apply_sentence_grounding
 from app.services.explainability import build_explainability_report
-from app.services.request_context import deadline_exceeded
-from app.services.retry_policy import call_with_retry
-from app.services.session_language import get_language_preference, update_language_history
-from app.services.tracing import traced_span
+from app.services.runtime.request_context import deadline_exceeded
+from app.services.runtime.retry_policy import call_with_retry
+from app.services.sessions.language import get_language_preference, update_language_history
+from app.services.observability.tracing import traced_span
 
 logger = logging.getLogger(__name__)
 

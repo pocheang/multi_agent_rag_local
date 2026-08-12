@@ -3,7 +3,7 @@ import re
 from functools import lru_cache
 
 from app.core.config import get_settings
-from app.services.resilience import call_with_circuit_breaker
+from app.services.runtime.resilience import call_with_circuit_breaker
 
 logger = logging.getLogger(__name__)
 

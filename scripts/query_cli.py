@@ -1,7 +1,10 @@
 import argparse
 import json
+from collections.abc import Mapping
 
-from app.graph.workflow import run_query
+from app.pipeline.contracts import PipelineRequest
+from app.pipeline.profiles import PipelineProfile
+from app.pipeline.rag_pipeline import RAGPipeline
 
 
 if __name__ == "__main__":
@@ -18,5 +21,14 @@ if __name__ == "__main__":
     }
     if str(args.retrieval_strategy or "").strip():
         kwargs["retrieval_strategy"] = str(args.retrieval_strategy).strip().lower()
-    result = run_query(args.question, **kwargs)
+    pipeline_result = RAGPipeline().execute_sync(
+        PipelineRequest(
+            question=args.question,
+            profile=PipelineProfile.STANDARD,
+            **kwargs,
+        )
+    )
+    result = pipeline_result.execution_metadata.get("compatibility_payload")
+    if not isinstance(result, Mapping):
+        raise RuntimeError("standard pipeline did not provide its compatibility payload")
     print(json.dumps(result, ensure_ascii=False, indent=2, default=str))

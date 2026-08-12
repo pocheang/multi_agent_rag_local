@@ -31,7 +31,7 @@ def _hit_case(result: list[dict], must_contain: list[str]) -> bool:
 
 def evaluate(cases: list[dict[str, Any]], retrieval_strategy: str | None = None) -> dict[str, Any]:
     try:
-        from app.retrievers.hybrid_retriever import hybrid_search_with_diagnostics
+        from app.retrievers.hybrid.retriever import hybrid_search_with_diagnostics
     except Exception as e:
         return {
             "total": len(cases),
@@ -60,7 +60,7 @@ def evaluate(cases: list[dict[str, Any]], retrieval_strategy: str | None = None)
 def autotune(cases: list[dict[str, Any]], retrieval_strategy: str | None = None) -> dict[str, Any]:
     try:
         from app.core.config import get_settings
-        from app.retrievers.hybrid_retriever import hybrid_search_with_diagnostics  # noqa: F401
+        from app.retrievers.hybrid.retriever import hybrid_search_with_diagnostics  # noqa: F401
     except Exception as e:
         return {"score": 0.0, "params": None, "metrics": {"error": f"retrieval_runtime_unavailable:{type(e).__name__}"}}
     settings = get_settings()

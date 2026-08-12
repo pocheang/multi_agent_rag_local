@@ -1,40 +1,20 @@
-import hashlib
-import hmac
 import json
 import secrets
 import uuid
-from datetime import UTC, datetime, timedelta
+from datetime import timedelta
 from pathlib import Path
 from typing import Any
 
 from app.core.config import get_settings
+from app.services.auth.password_utils import generate_salt, hash_password, verify_password
+from app.services.auth.utils import iso, now, parse_iso
+from app.services.auth.validation import validate_username
 
-
-def _now() -> datetime:
-    return datetime.now(UTC)
-
-
-def _iso(dt: datetime) -> str:
-    return dt.isoformat()
-
-
-def _parse_iso(value: str) -> datetime:
-    return datetime.fromisoformat(value)
-
-
-def _hash_password(password: str, salt_hex: str, iterations: int = 200_000) -> str:
-    salt = bytes.fromhex(salt_hex)
-    return hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), salt, iterations).hex()
-
-
-def _validate_username(username: str) -> str:
-    value = (username or "").strip()
-    if len(value) < 3 or len(value) > 32:
-        raise ValueError("username length must be 3-32")
-    allowed = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789._-"
-    if any(ch not in allowed for ch in value):
-        raise ValueError("username contains unsupported characters")
-    return value
+_now = now
+_iso = iso
+_parse_iso = parse_iso
+_hash_password = hash_password
+_validate_username = validate_username
 
 
 def _validate_password(password: str) -> str:
@@ -51,7 +31,15 @@ def _validate_password(password: str) -> str:
 
 
 class AuthService:
-    """Compatibility file-backed auth service used by legacy tests and scripts."""
+    """Compatibility file-backed auth service used by legacy callers.
+
+    This class intentionally remains separate from :class:`AuthDBService`.
+    Its ``users_path``/``sessions_path`` constructor contract and JSON storage
+    format are part of the legacy compatibility surface.  Shared time,
+    username, and PBKDF2 primitives are imported from the canonical auth
+    modules; the older password policy below is retained because changing it
+    would make existing file-backed users behave differently.
+    """
 
     def __init__(
         self,
@@ -83,7 +71,7 @@ class AuthService:
         if key in users:
             raise ValueError("username already exists")
 
-        salt_hex = secrets.token_hex(16)
+        salt_hex = generate_salt()
         users[key] = {
             "user_id": uuid.uuid4().hex,
             "username": username,
@@ -101,8 +89,7 @@ class AuthService:
         row = users.get(username.lower())
         if not row:
             raise ValueError("invalid credentials")
-        hashed = _hash_password(password or "", row["salt"])
-        if not hmac.compare_digest(hashed, row["password_hash"]):
+        if not verify_password(password or "", row["salt"], row["password_hash"]):
             raise ValueError("invalid credentials")
 
         token = secrets.token_urlsafe(40)

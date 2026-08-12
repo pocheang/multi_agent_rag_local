@@ -49,6 +49,7 @@ export type ChatMetadata = {
   graph_entities: string[];
   graph_result?: GraphResult;
   citations: Citation[];
+  quality_report?: Record<string, unknown>;
   current_status?: string;
   execution_steps?: Array<{
     kind: string;

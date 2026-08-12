@@ -181,7 +181,7 @@ PDF文件
 ### 新增文件
 
 ```
-app/ingestion/utils/
+app/ingestion/extraction/
 └── chart_extractor.py          # 图表检测和提取
 
 app/ingestion/loaders/
@@ -197,7 +197,7 @@ docs/
 ### 修改文件
 
 ```
-app/ingestion/loaders.py        # 集成图表提取
+app/ingestion/loaders/dispatch.py # 集成图表提取
 app/core/config.py              # 添加配置项
 ```
 
