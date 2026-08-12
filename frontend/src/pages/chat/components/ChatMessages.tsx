@@ -28,7 +28,7 @@ export function ChatMessages({
   const { t } = useTranslation();
 
   return (
-    <section className="chat-window panel" ref={containerRef} role="log" aria-live="polite" aria-label={t("components.messages.logLabel")}>
+    <section className="chat-window" ref={containerRef} role="log" aria-live="polite" aria-label={t("components.messages.logLabel")}>
       {messages.length === 0 && (
         <WelcomeScreen
           documentsCount={documentsCount}
