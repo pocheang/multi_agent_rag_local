@@ -642,6 +642,8 @@
   background: var(--chat-bg-surface-soft);
   border: 1px solid var(--chat-border-soft);
   box-shadow: 0 2px 8px rgba(15, 23, 42, 0.04);
+  width: 100%;
+  max-width: 100%;
 }
 
 :root[data-theme="light"] .page-shell .bubble.user::before {
@@ -663,6 +665,8 @@
   border: 1px solid var(--chat-border-soft);
   box-shadow: 0 2px 8px rgba(15, 23, 42, 0.04);
   backdrop-filter: none;
+  width: 100%;
+  max-width: 100%;
 }
 
 :root[data-theme="light"] .page-shell .bubble.assistant::after {
