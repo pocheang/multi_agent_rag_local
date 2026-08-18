@@ -10,9 +10,17 @@ from app.domain.contracts import RouteDecision
 from app.orchestration.request import OrchestrationRequest
 
 LegacyRouteDecider = Callable[..., object]
+
+# Explicit connector/integration commands pattern
+# Matches commands like: "disable connector X", "enable integration Y", "configure connector Z"
+# Supports both uppercase and lowercase connector names, and various command verbs
 _EXPLICIT_CONNECTOR_COMMAND = re.compile(
-    r"^\s*(?:please\s+)?disable\s+(?:the\s+)?(?:connector|integration)\s+"
-    r"[a-z][a-z0-9_-]{0,63}\s*[.!]?\s*$",
+    r"^\s*(?:please\s+)?"  # Optional "please"
+    r"(disable|enable|configure|remove|add|setup|connect|disconnect)\s+"  # Action verbs
+    r"(?:the\s+)?"  # Optional "the"
+    r"(connector|integration|plugin|extension)\s+"  # Target type
+    r"([a-zA-Z][a-zA-Z0-9_\-]{0,63})"  # Connector name (now allows uppercase)
+    r"\s*[.!]?\s*$",  # Optional punctuation
     re.IGNORECASE,
 )
 

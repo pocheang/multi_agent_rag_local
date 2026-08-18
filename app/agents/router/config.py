@@ -4,6 +4,7 @@ Router configuration for calibration parameters.
 Externalizes calibration settings to support tuning without code changes.
 """
 
+import os
 from typing import Final
 
 # ============================================================================
@@ -60,4 +61,8 @@ AUTO_SAVE_CALIBRATION: Final[bool] = True
 
 # Whether to enable confidence calibration
 # Set to False to disable calibration and use raw confidence scores
-ENABLE_CALIBRATION: Final[bool] = True
+ENABLE_CALIBRATION: Final[bool] = os.getenv("ENABLE_ROUTER_CALIBRATION", "true").lower() == "true"
+
+# Enable web route downgrade (downgrade web queries to local vector search first)
+# Reason: Prioritize local knowledge base to reduce latency and API costs
+ENABLE_WEB_ROUTE_DOWNGRADE: Final[bool] = os.getenv("ENABLE_WEB_ROUTE_DOWNGRADE", "true").lower() == "true"

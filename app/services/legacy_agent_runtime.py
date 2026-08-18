@@ -4,10 +4,10 @@ from __future__ import annotations
 
 
 def warm_nli_model() -> None:
-    """Load the legacy NLI model during application startup."""
-    from app.agents.answer_validator_agent import _get_nli_model
+    """Load the NLI model during application startup."""
+    from app.agents.validation.nli import get_nli_model
 
-    _get_nli_model()
+    get_nli_model()
 
 
 def start_context_tracker_cleanup() -> None:

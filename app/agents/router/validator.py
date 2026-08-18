@@ -17,7 +17,7 @@ from app.agents.shared.quality_config import (
     ROUTE_LOW_CONFIDENCE_THRESHOLD,
     ROUTE_VALIDATOR_TIMEOUT_MS,
 )
-from app.agents.router.routing import RouteDecision
+from app.agents.router.routing import LegacyRouteDecision
 from app.agents.shared.config import VALID_ROUTES, VALID_SKILLS
 from app.core.models import get_chat_model
 from app.agents.router.accuracy import RouteAccuracyTracker
@@ -34,19 +34,35 @@ def _extract_query_features(query: str) -> Dict[str, Any]:
     query_lower = query.lower()
 
     features = {
-        "has_relation_keywords": any(kw in query_lower for kw in ["关系", "依赖", "连接", "关联", "relationship", "dependency"]),
-        "has_comparison_keywords": any(kw in query_lower for kw in ["对比", "区别", "差异", "vs", "比较", "compare", "difference"]),
-        "has_graph_keywords": any(kw in query_lower for kw in ["路径", "拓扑", "网络", "path", "topology", "network"]),
-        "has_pdf_keywords": any(kw in query_lower for kw in ["pdf", "文档", "文件", "提取", "document", "file", "extract"]),
-        "has_security_keywords": any(kw in query_lower for kw in ["安全", "漏洞", "攻击", "防护", "security", "vulnerability", "attack"]),
-        "question_words": [w for w in ["什么", "为什么", "如何", "怎么", "what", "why", "how"] if w in query_lower],
+        "has_relation_keywords": any(
+            kw in query_lower
+            for kw in ["关系", "依赖", "连接", "关联", "relationship", "dependency"]
+        ),
+        "has_comparison_keywords": any(
+            kw in query_lower
+            for kw in ["对比", "区别", "差异", "vs", "比较", "compare", "difference"]
+        ),
+        "has_graph_keywords": any(
+            kw in query_lower for kw in ["路径", "拓扑", "网络", "path", "topology", "network"]
+        ),
+        "has_pdf_keywords": any(
+            kw in query_lower
+            for kw in ["pdf", "文档", "文件", "提取", "document", "file", "extract"]
+        ),
+        "has_security_keywords": any(
+            kw in query_lower
+            for kw in ["安全", "漏洞", "攻击", "防护", "security", "vulnerability", "attack"]
+        ),
+        "question_words": [
+            w for w in ["什么", "为什么", "如何", "怎么", "what", "why", "how"] if w in query_lower
+        ],
         "has_entities": len(re.findall(r'[一-鿿]{2,}|[A-Z][a-z]+', query)) > 1,
     }
 
     return features
 
 
-def _rule_based_validation(query: str, route_decision: RouteDecision) -> Dict[str, Any]:
+def _rule_based_validation(query: str, route_decision: LegacyRouteDecision) -> Dict[str, Any]:
     """Fast rule-based validation"""
     features = _extract_query_features(query)
     issues = []
@@ -92,7 +108,7 @@ def _rule_based_validation(query: str, route_decision: RouteDecision) -> Dict[st
     }
 
 
-async def _llm_validation(query: str, route_decision: RouteDecision) -> Dict[str, Any]:
+async def _llm_validation(query: str, route_decision: LegacyRouteDecision) -> Dict[str, Any]:
     """LLM-based validation for uncertain cases"""
     model = get_chat_model(temperature=0.0)
 
@@ -171,7 +187,7 @@ ALTERNATIVE_SKILL: skill (if VALID=no)
 
 async def validate_route_decision(
     query: str,
-    route_decision: RouteDecision,
+    route_decision: LegacyRouteDecision,
     use_cache: bool = True
 ) -> RouteValidationResult:
     """
@@ -259,7 +275,7 @@ async def validate_route_decision(
 
 def record_route_outcome(
     query: str,
-    route_decision: RouteDecision,
+    route_decision: LegacyRouteDecision,
     was_successful: bool,
     execution_time_ms: int
 ):

@@ -99,19 +99,28 @@ EXAMPLE_HYBRID_QUERIES = [
 # ReAct examples - complex multi-step reasoning
 EXAMPLE_REACT_QUERIES = [
     {
-        "query": "Find all Python experts, check their current projects, and recommend who should lead the new ML initiative",
+        "query": (
+            "Find all Python experts, check their current projects, "
+            "and recommend who should lead the new ML initiative"
+        ),
         "route": "react",
         "reason": "Multi-step task: search experts, analyze projects, make recommendation",
         "confidence": 0.89
     },
     {
-        "query": "Compare the performance of different database solutions and suggest the best one for our use case",
+        "query": (
+            "Compare the performance of different database solutions "
+            "and suggest the best one for our use case"
+        ),
         "route": "react",
         "reason": "Requires research, comparison, and contextual reasoning",
         "confidence": 0.85
     },
     {
-        "query": "Analyze recent security incidents, identify common attack patterns, then recommend preventive measures",
+        "query": (
+            "Analyze recent security incidents, identify common attack patterns, "
+            "then recommend preventive measures"
+        ),
         "route": "react",
         "reason": "Sequential investigation: retrieve incidents, analyze patterns, synthesize recommendations",
         "confidence": 0.87

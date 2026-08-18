@@ -7,7 +7,7 @@ import os
 from collections.abc import Iterable
 from typing import Any
 
-from app.agents.router.routing import RouteDecision, decide_route
+from app.agents.router.routing import LegacyRouteDecision, decide_route
 from app.services.query_decomposer import QueryDecomposer
 
 logger = logging.getLogger(__name__)
@@ -23,7 +23,7 @@ class RoutingService:
         use_reasoning: bool = False,
         agent_class_hint: str | None = None,
         use_llm_intent: bool = True,
-    ) -> RouteDecision:
+    ) -> LegacyRouteDecision:
         return decide_route(
             question,
             use_reasoning=use_reasoning,
@@ -37,7 +37,7 @@ class RoutingService:
         *,
         use_reasoning: bool = False,
         agent_class_hint: str | None = None,
-    ) -> list[RouteDecision]:
+    ) -> list[LegacyRouteDecision]:
         return [
             self.route(
                 question,

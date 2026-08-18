@@ -13,7 +13,7 @@ Key features:
 
 import json
 import logging
-from dataclasses import asdict, dataclass, field
+from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 from typing import Final
@@ -31,12 +31,10 @@ CONFIDENCE_BUCKETS: Final[list[tuple[float, float]]] = [
 
 MIN_SAMPLES_FOR_CALIBRATION: Final[int] = 5  # Minimum predictions before applying calibration
 DEFAULT_ACCURACY: Final[float] = 0.5  # Default accuracy when no history
-# ``calibration.py`` lives at ``app/agents/router``.  Anchor configuration at
-# the repository root rather than at the package directory so this remains
-# stable if the router package is reorganized internally.
+
+# Configuration file path - anchored at repository root
 REPOSITORY_ROOT: Final[Path] = Path(__file__).resolve().parents[3]
-CALIBRATION_CONFIG_DIR: Final[Path] = REPOSITORY_ROOT / "config" / "application"
-DEFAULT_CALIBRATION_FILE: Final[str] = "router_calibration.json"
+CALIBRATION_CONFIG_PATH: Final[Path] = REPOSITORY_ROOT / "config" / "router_calibration.json"
 
 
 def get_bucket_for_confidence(confidence: float) -> str:
@@ -160,14 +158,13 @@ def load_calibration_data(config_path: Path | None = None) -> CalibrationData:
     Load calibration data from file.
 
     Args:
-        config_path: Path to calibration config file
+        config_path: Path to calibration config file (defaults to config/router_calibration.json)
 
     Returns:
         CalibrationData instance (new if file doesn't exist)
     """
     if config_path is None:
-        CALIBRATION_CONFIG_DIR.mkdir(parents=True, exist_ok=True)
-        config_path = CALIBRATION_CONFIG_DIR / DEFAULT_CALIBRATION_FILE
+        config_path = CALIBRATION_CONFIG_PATH
 
     try:
         if config_path.exists():
@@ -187,11 +184,10 @@ def save_calibration_data(data: CalibrationData, config_path: Path | None = None
 
     Args:
         data: CalibrationData to save
-        config_path: Path to calibration config file
+        config_path: Path to calibration config file (defaults to config/router_calibration.json)
     """
     if config_path is None:
-        CALIBRATION_CONFIG_DIR.mkdir(parents=True, exist_ok=True)
-        config_path = CALIBRATION_CONFIG_DIR / DEFAULT_CALIBRATION_FILE
+        config_path = CALIBRATION_CONFIG_PATH
 
     try:
         config_path.parent.mkdir(parents=True, exist_ok=True)
@@ -298,11 +294,10 @@ class ConfidenceCalibrator:
         Initialize calibrator.
 
         Args:
-            config_path: Path to calibration config file (optional)
+            config_path: Path to calibration config file (defaults to config/router_calibration.json)
         """
         if config_path is None:
-            CALIBRATION_CONFIG_DIR.mkdir(parents=True, exist_ok=True)
-            config_path = CALIBRATION_CONFIG_DIR / DEFAULT_CALIBRATION_FILE
+            config_path = CALIBRATION_CONFIG_PATH
 
         self.config_path = config_path
         self.calibration_data = load_calibration_data(config_path)

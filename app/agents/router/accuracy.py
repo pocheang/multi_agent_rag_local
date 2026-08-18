@@ -7,12 +7,12 @@ and query pattern to enable confidence recalibration.
 
 import json
 import logging
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
-from app.agents.router.routing import RouteDecision
+from app.agents.router.routing import LegacyRouteDecision
 
 logger = logging.getLogger(__name__)
 
@@ -109,7 +109,7 @@ class RouteAccuracyTracker:
     def record_outcome(
         self,
         query: str,
-        route_decision: RouteDecision,
+        route_decision: LegacyRouteDecision,
         was_successful: bool,
         execution_time_ms: int
     ):
@@ -189,7 +189,7 @@ class RouteAccuracyTracker:
 
         return AccuracyStats(total_routes=total, successful_routes=successful)
 
-    def recalibrate_confidence(self, route_decision: RouteDecision) -> float:
+    def recalibrate_confidence(self, route_decision: LegacyRouteDecision) -> float:
         """
         Recalibrate confidence based on historical accuracy.
 

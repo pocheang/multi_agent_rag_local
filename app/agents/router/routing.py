@@ -11,8 +11,7 @@ Optimizations:
 import json
 import logging
 import re
-
-from pydantic import BaseModel
+from dataclasses import dataclass
 
 from app.agents.shared.config import (
     AGENT_CLASS_GENERAL,
@@ -25,7 +24,7 @@ from app.agents.shared.config import (
     VALID_SKILLS,
 )
 from app.agents.router.calibration import ConfidenceCalibrator
-from app.agents.router.config import ENABLE_CALIBRATION
+from app.agents.router.config import ENABLE_CALIBRATION, ENABLE_WEB_ROUTE_DOWNGRADE
 from app.agents.router.examples import get_mixed_examples
 from app.agents.shared.cache import cached_router_decision
 from app.domain.text import normalize_string
@@ -39,7 +38,7 @@ logger = logging.getLogger(__name__)
 
 
 __all__ = [
-    "RouteDecision",
+    "LegacyRouteDecision",
     "ROUTER_PROMPT",
     "decide_route",
     "decide_route_simple",
@@ -51,8 +50,13 @@ __all__ = [
 _calibrator = ConfidenceCalibrator() if ENABLE_CALIBRATION else None
 
 
-class RouteDecision(BaseModel):
-    """Router decision with route, skill, and agent class."""
+@dataclass
+class LegacyRouteDecision:
+    """Legacy router decision with route, skill, and agent class.
+
+    NOTE: This is maintained for backward compatibility with code that expects
+    these specific fields. New code should use app.domain.contracts.RouteDecision.
+    """
 
     route: str
     reason: str
@@ -168,7 +172,7 @@ Suggested skill: {skill}"""
 @cached_router_decision
 def decide_route(
     question: str, use_reasoning: bool = False, agent_class_hint: str | None = None, use_llm_intent: bool = True
-) -> RouteDecision:
+) -> LegacyRouteDecision:
     """
     Decide query route and skill.
 
@@ -181,7 +185,7 @@ def decide_route(
         use_llm_intent: Use LLM for intent classification (default True)
 
     Returns:
-        RouteDecision: Route decision with route, skill, and agent class
+        LegacyRouteDecision: Route decision with route, skill, and agent class
     """
     forced = _normalize_agent_class_hint(agent_class_hint)
 
@@ -189,7 +193,7 @@ def decide_route(
         raw_confidence = 0.95  # High confidence for smalltalk detection
         calibrated_confidence = _calibrator.calibrate(raw_confidence) if _calibrator else raw_confidence
 
-        return RouteDecision(
+        return LegacyRouteDecision(
             route=ROUTE_VECTOR,
             reason=_append_reason(
                 "smalltalk_local_only",
@@ -264,9 +268,13 @@ Suggested skill: {skill}"""
                 reason = _append_reason(reason, f"invalid_skill={llm_skill}")
                 # Keep the pre-determined skill (don't override with invalid value)
 
-        if route == ROUTE_WEB:
+        # Web route downgrade (configurable)
+        # Reason: In production, we prioritize local knowledge base first to reduce latency
+        # and API costs. Web search is only used when explicitly enabled or local retrieval fails.
+        if route == ROUTE_WEB and ENABLE_WEB_ROUTE_DOWNGRADE:
             route = ROUTE_VECTOR
             reason = _append_reason(reason, "web_downgraded_to_local_first")
+            logger.debug("Web route downgraded to vector (ENABLE_WEB_ROUTE_DOWNGRADE=True)")
 
         if forced_reason:
             reason = _append_reason(reason, forced_reason)
@@ -329,7 +337,7 @@ Suggested skill: {skill}"""
     else:
         calibrated_confidence = raw_confidence
 
-    return RouteDecision(
+    return LegacyRouteDecision(
         route=route,
         reason=reason,
         skill=skill,
