@@ -28,15 +28,25 @@ _ROLE_ACTIONS: dict[str, set[str]] = {
         "upload:create",
     },
     "viewer": {
-        # Viewers can work with their own lightweight content and settings.
+        # Viewers can manage their own content (sessions, messages, prompts, documents)
         "query:run",
         "session:read",
         "session:create",
+        "session:delete",           # Added: can delete own sessions
+        "session:update",           # Added: can update own sessions (rename, pin)
+        "session:lock_strategy",    # Added: can lock strategy
         "message:read",
+        "message:edit",             # Added: can edit own messages
+        "message:delete",           # Added: can delete own messages
         "prompt:read",
+        "prompt:create",            # Added: can create prompts
+        "prompt:edit",              # Added: can edit own prompts
+        "prompt:delete",            # Added: can delete own prompts
         "prompt:manage",
         "document:read",
         "document:manage_own",
+        "document:delete_own",      # Added: can delete own documents
+        "document:reindex_own",     # Added: can reindex own documents
         "upload:create",
     },
 }

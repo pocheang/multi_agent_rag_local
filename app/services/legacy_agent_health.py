@@ -41,7 +41,7 @@ def validate_agent(agent_name: str) -> dict[str, Any]:
 
 def get_agent_config_values() -> dict[str, Any]:
     """Load the legacy agent configuration values exposed by the API."""
-    from app.agents.agent_config import (
+    from app.agents.shared.config import (
         CHUNK_PREVIEW_LENGTH,
         DENSE_SCORE_THRESHOLD,
         VALID_AGENT_CLASSES,

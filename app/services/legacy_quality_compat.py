@@ -7,14 +7,14 @@ from typing import Any, Type
 
 def get_quality_report_model() -> Type[Any]:
     """Return the legacy Pydantic quality-report model for response schemas."""
-    from app.agents.quality_models import QualityReport
+    from app.agents.shared.quality_models import QualityReport
 
     return QualityReport
 
 
 def get_enhanced_quality_config_values() -> dict[str, Any]:
     """Load legacy quality settings exposed by the enhanced-query config endpoint."""
-    from app.agents.quality_config import (
+    from app.agents.shared.quality_config import (
         ANSWER_APPROVE_THRESHOLD,
         ANSWER_FLAG_THRESHOLD,
         QUALITY_HIGH_THRESHOLD,

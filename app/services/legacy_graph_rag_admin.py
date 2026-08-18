@@ -7,21 +7,21 @@ from typing import Any
 
 def get_graph_rag_cache_stats() -> dict[str, Any]:
     """Delegate Graph RAG cache statistics to the legacy cache module."""
-    from app.agents.graph_rag_cache import get_cache_stats
+    from app.agents.rag.cache import get_cache_stats
 
     return get_cache_stats()
 
 
 def clear_graph_rag_caches() -> None:
     """Delegate clearing all legacy Graph RAG caches."""
-    from app.agents.graph_rag_cache import clear_all_caches
+    from app.agents.rag.cache import clear_all_caches
 
     clear_all_caches()
 
 
 def get_graph_rag_config_values() -> dict[str, Any]:
     """Load legacy Graph RAG settings needed by the administration response."""
-    from app.agents.graph_rag_config import (
+    from app.agents.rag.config import (
         DENSITY_ACCEPTABLE_MAX,
         DENSITY_ACCEPTABLE_MIN,
         DENSITY_OPTIMAL_MAX,

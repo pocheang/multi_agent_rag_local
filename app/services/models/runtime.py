@@ -167,7 +167,29 @@ class LocalEvidenceChatModel:
         return SimpleNamespace(content=self._answer(human_text))
 
     def stream(self, messages):
-        yield SimpleNamespace(content=self.invoke(messages).content)
+        """Stream response with simulated typing effect for better UX."""
+        import time
+
+        full_content = self.invoke(messages).content
+
+        # Split into chunks for simulated streaming
+        # Simulate realistic token-by-token generation
+        words = full_content.split()
+        buffer = []
+
+        for i, word in enumerate(words):
+            buffer.append(word)
+
+            # Yield every 3-5 words to simulate chunk generation
+            if len(buffer) >= 3 or i == len(words) - 1:
+                chunk_text = " ".join(buffer)
+                if i < len(words) - 1:
+                    chunk_text += " "
+                yield SimpleNamespace(content=chunk_text)
+                buffer = []
+
+                # Small delay to simulate network/generation latency
+                time.sleep(0.05)  # 50ms between chunks
 
 
 class AnthropicRelayChatModel:
@@ -495,7 +517,11 @@ def _build_chat_model_cached(
     if backend == "openai":
         from langchain_openai import ChatOpenAI
 
-        kwargs = {"model": openai_model, "temperature": temperature}
+        kwargs = {
+            "model": openai_model,
+            "temperature": temperature,
+            "streaming": True,  # Enable real-time streaming
+        }
         if openai_api_key:
             kwargs["api_key"] = openai_api_key
         if openai_base_url:
@@ -513,13 +539,18 @@ def _build_chat_model_cached(
                     base_url=anthropic_base_url,
                     temperature=temperature,
                     max_tokens=max_tokens if max_tokens > 0 else 2048,
+                    streaming=True,  # Enable real-time streaming
                 ),
                 provider=provider,
             )
 
         from langchain_anthropic import ChatAnthropic
 
-        kwargs = {"model": anthropic_model, "temperature": temperature}
+        kwargs = {
+            "model": anthropic_model,
+            "temperature": temperature,
+            "streaming": True,  # Enable real-time streaming
+        }
         if anthropic_api_key:
             kwargs["api_key"] = anthropic_api_key
         if anthropic_base_url:
@@ -530,11 +561,12 @@ def _build_chat_model_cached(
 
     from langchain_ollama import ChatOllama
 
-    kwargs = dict(
-        model=ollama_model,
-        base_url=ollama_base_url,
-        temperature=temperature,
-    )
+    kwargs = {
+        "model": ollama_model,
+        "base_url": ollama_base_url,
+        "temperature": temperature,
+        "streaming": True,  # Enable real-time streaming
+    }
     if max_tokens > 0:
         kwargs["num_predict"] = max_tokens
     return ChatOllama(**kwargs)

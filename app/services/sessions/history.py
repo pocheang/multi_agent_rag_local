@@ -66,6 +66,13 @@ class HistoryStore:
             "updated_at": now,
             "messages": [],
             "runtime_policy": {"strategy_lock": None},
+            "clarification_context": {
+                "collected_info": {},
+                "asked_questions": [],
+                "clarification_round": 0,
+                "max_rounds": 10,
+                "intent": "",
+            },
         }
         with self._lock:
             self._write(session_id, data)
@@ -91,6 +98,7 @@ class HistoryStore:
                     "created_at": data.get("created_at"),
                     "updated_at": data.get("updated_at"),
                     "message_count": len(data.get("messages", [])),
+                    "pinned": data.get("pinned", False),
                 }
             )
         items.sort(key=lambda x: x.get("updated_at") or "", reverse=True)
@@ -129,6 +137,36 @@ class HistoryStore:
             policy = dict(data.get("runtime_policy", {}) or {})
             policy["strategy_lock"] = normalize_string(strategy, lowercase=True) or None
             data["runtime_policy"] = policy
+            data["updated_at"] = self._now()
+            self._write(session_id, data)
+            return data
+
+    def update_session_title(self, session_id: str, title: str) -> dict[str, Any] | None:
+        """Update session title."""
+        try:
+            session_id = validate_session_id(session_id)
+        except ValueError:
+            return None
+        with self._lock:
+            data = self.get_session(session_id)
+            if data is None:
+                return None
+            data["title"] = str(title).strip()[:200] or DEFAULT_TITLE
+            data["updated_at"] = self._now()
+            self._write(session_id, data)
+            return data
+
+    def update_session_pinned(self, session_id: str, pinned: bool) -> dict[str, Any] | None:
+        """Update session pinned status."""
+        try:
+            session_id = validate_session_id(session_id)
+        except ValueError:
+            return None
+        with self._lock:
+            data = self.get_session(session_id)
+            if data is None:
+                return None
+            data["pinned"] = bool(pinned)
             data["updated_at"] = self._now()
             self._write(session_id, data)
             return data
@@ -464,4 +502,121 @@ class HistoryStore:
     @staticmethod
     def _now() -> str:
         return datetime.now(UTC).isoformat()
+
+    # Clarification context management methods
+
+    def update_clarification_context(
+        self,
+        session_id: str,
+        field_name: str,
+        value: str,
+    ) -> dict[str, Any] | None:
+        """Update clarification context for a session.
+
+        Args:
+            session_id: Session ID
+            field_name: Field name being clarified (e.g. 'scenario')
+            value: User's answer
+
+        Returns:
+            Updated session data, or None if session not found
+        """
+        try:
+            session_id = validate_session_id(session_id)
+        except ValueError:
+            return None
+
+        with self._lock:
+            data = self.get_session(session_id)
+            if data is None:
+                return None
+
+            ctx = data.get("clarification_context", {})
+            if not isinstance(ctx, dict):
+                ctx = {
+                    "collected_info": {},
+                    "asked_questions": [],
+                    "clarification_round": 0,
+                    "max_rounds": 10,
+                    "intent": "",
+                }
+
+            # Update collected information
+            ctx.setdefault("collected_info", {})[field_name] = value
+
+            # Record asked field
+            if field_name not in ctx.get("asked_questions", []):
+                ctx.setdefault("asked_questions", []).append(field_name)
+
+            # Increment round
+            ctx["clarification_round"] = ctx.get("clarification_round", 0) + 1
+
+            data["clarification_context"] = ctx
+            data["updated_at"] = self._now()
+            self._write(session_id, data)
+            return data
+
+    def reset_clarification_context(self, session_id: str) -> dict[str, Any] | None:
+        """Reset clarification context for a session.
+
+        Called when entering CONTINUE phase (information is sufficient).
+
+        Args:
+            session_id: Session ID
+
+        Returns:
+            Updated session data, or None if session not found
+        """
+        try:
+            session_id = validate_session_id(session_id)
+        except ValueError:
+            return None
+
+        with self._lock:
+            data = self.get_session(session_id)
+            if data is None:
+                return None
+
+            data["clarification_context"] = {
+                "collected_info": {},
+                "asked_questions": [],
+                "clarification_round": 0,
+                "max_rounds": 10,
+                "intent": "",
+            }
+            data["updated_at"] = self._now()
+            self._write(session_id, data)
+            return data
+
+    def get_clarification_context(self, session_id: str) -> dict[str, Any] | None:
+        """Get clarification context for a session.
+
+        Args:
+            session_id: Session ID
+
+        Returns:
+            Clarification context dict, or None if session not found
+        """
+        try:
+            session_id = validate_session_id(session_id)
+        except ValueError:
+            return None
+
+        with self._lock:
+            data = self.get_session(session_id)
+            if data is None:
+                return None
+
+            ctx = data.get("clarification_context")
+            if not isinstance(ctx, dict):
+                # Return default context
+                return {
+                    "collected_info": {},
+                    "asked_questions": [],
+                    "clarification_round": 0,
+                    "max_rounds": 10,
+                    "intent": "",
+                }
+
+            return ctx
 
