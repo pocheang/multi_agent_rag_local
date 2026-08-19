@@ -48,9 +48,15 @@ class RouterAgentService:
             use_reasoning=request.use_reasoning,
             agent_class_hint=request.source_scope.agent_class_hint,
         )
-        route = str(getattr(legacy, "route", "vector") or "vector").lower()
-        confidence = float(getattr(legacy, "confidence", 0.5) or 0.5)
-        reason = str(getattr(legacy, "reason", "legacy_router") or "legacy_router")
+
+        # Extract with validation instead of defensive defaults
+        try:
+            route = str(legacy.route).lower() if hasattr(legacy, "route") and legacy.route else "vector"
+            confidence = float(legacy.confidence) if hasattr(legacy, "confidence") and legacy.confidence is not None else 0.5
+            reason = str(legacy.reason) if hasattr(legacy, "reason") and legacy.reason else "legacy_router"
+        except (AttributeError, ValueError, TypeError) as exc:
+            raise ValueError(f"Legacy router returned invalid response: {exc}") from exc
+
         return _to_domain_route(route, confidence, reason)
 
     @staticmethod

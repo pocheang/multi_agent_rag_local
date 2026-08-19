@@ -16,9 +16,8 @@ import logging
 from pathlib import Path
 from typing import Any
 
-from app.agents.shared.config import CHUNK_PREVIEW_LENGTH, DENSE_SCORE_THRESHOLD
+from app.agents.shared.config import CHUNK_PREVIEW_LENGTH, DENSE_SCORE_THRESHOLD, get_vector_rag_config
 from app.agents.shared.base import BaseAgent
-from app.agents.shared.unified_config import get_vector_rag_config
 from app.core.config import get_settings
 from app.retrievers.hybrid_retriever import hybrid_search_with_diagnostics
 from app.retrievers.parameter_tuning import apply_dynamic_parameters

@@ -11,7 +11,7 @@ import re
 from typing import Dict, Any
 
 from app.agents.shared.quality_models import RouteValidationResult
-from app.agents.shared.quality_config import (
+from app.agents.shared.config import (
     ROUTE_HIGH_CONFIDENCE_THRESHOLD,
     ROUTE_MEDIUM_CONFIDENCE_THRESHOLD,
     ROUTE_LOW_CONFIDENCE_THRESHOLD,

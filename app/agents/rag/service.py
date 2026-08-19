@@ -63,13 +63,20 @@ class RAGAgentService:
             return_exceptions=True,
         )
         bundles: list[EvidenceBundle] = []
+        failed_retrievers: list[str] = []
         for (name, _, _), result in zip(jobs, results, strict=True):
             if isinstance(result, BaseException):
+                failed_retrievers.append(name)
                 await self._report_degradation(
                     ExecutionEvent(stage="rag", status="skipped", message=f"{name}: {type(result).__name__}")
                 )
                 continue
             bundles.append(result)
+
+        # If all retrievers failed, raise an error instead of returning empty bundle
+        if not bundles and jobs:
+            raise RuntimeError(f"All {len(jobs)} retrieval attempts failed: {', '.join(failed_retrievers)}")
+
         return fuse_evidence(bundles)
 
     def _enabled_retrievers(self, route: RouteDecision) -> tuple[tuple[str, TypedRetriever], ...]:

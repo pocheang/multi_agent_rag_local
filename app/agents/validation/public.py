@@ -6,7 +6,7 @@ import logging
 from collections.abc import Mapping, Sequence
 from typing import Any
 
-from app.agents.shared.quality_config import (
+from app.agents.shared.config import (
     ANSWER_APPROVE_THRESHOLD,
     ANSWER_FLAG_THRESHOLD,
     ANSWER_WEIGHT_CITATION,

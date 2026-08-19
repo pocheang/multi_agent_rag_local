@@ -14,7 +14,7 @@ def get_quality_report_model() -> Type[Any]:
 
 def get_enhanced_quality_config_values() -> dict[str, Any]:
     """Load legacy quality settings exposed by the enhanced-query config endpoint."""
-    from app.agents.shared.quality_config import (
+    from app.agents.shared.config import (
         ANSWER_APPROVE_THRESHOLD,
         ANSWER_FLAG_THRESHOLD,
         QUALITY_HIGH_THRESHOLD,

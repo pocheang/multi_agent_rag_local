@@ -18,7 +18,7 @@ from typing import List, Dict, Optional
 from collections import Counter
 
 from app.agents.shared.quality_models import RetrievalQualityResult, RetrievalQualityMetrics
-from app.agents.shared.quality_config import (
+from app.agents.shared.config import (
     RETRIEVAL_WEIGHT_COVERAGE,
     RETRIEVAL_WEIGHT_RELEVANCE,
     RETRIEVAL_WEIGHT_DIVERSITY,

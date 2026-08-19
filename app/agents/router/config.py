@@ -1,68 +1,68 @@
 """
-Router configuration for calibration parameters.
+Router module configuration.
 
-Externalizes calibration settings to support tuning without code changes.
+Combines router-specific constants and hybrid clarification settings.
 """
 
 import os
 from typing import Final
 
 # ============================================================================
-# Confidence Calibration Configuration
+# Router Decision Configuration
 # ============================================================================
 
-# Minimum number of predictions in a bucket before applying calibration
-# Higher values = more conservative (requires more data before adjusting)
-# Lower values = more aggressive (adjusts confidence sooner)
-MIN_SAMPLES_FOR_CALIBRATION: Final[int] = 5
+# Web route control
+DISABLE_WEB_ROUTE: Final[bool] = os.getenv("DISABLE_WEB_ROUTE", "false").lower() == "true"
 
-# Default accuracy to assume when no historical data exists
-# 0.5 = neutral assumption (50% accuracy)
-DEFAULT_HISTORICAL_ACCURACY: Final[float] = 0.5
+# Reasoning model fallback
+USE_REASONING_FOR_LOW_CONFIDENCE: Final[bool] = os.getenv(
+    "USE_REASONING_FOR_LOW_CONFIDENCE", "false"
+).lower() == "true"
 
-# Confidence bucket boundaries
-# Predictions are grouped into these ranges for calibration tracking
-CONFIDENCE_BUCKET_BOUNDARIES: Final[list[tuple[float, float]]] = [
-    (0.5, 0.6),  # Low confidence
-    (0.6, 0.7),  # Below average
-    (0.7, 0.8),  # Average
-    (0.8, 0.9),  # Above average
-    (0.9, 1.0),  # High confidence
-]
+# Router accuracy tracking
+ENABLE_ROUTER_ACCURACY_TRACKING: Final[bool] = os.getenv(
+    "ENABLE_ROUTER_ACCURACY_TRACKING", "false"
+).lower() == "true"
+
+ROUTER_ACCURACY_LOG_FILE: Final[str] = os.getenv(
+    "ROUTER_ACCURACY_LOG_FILE", "logs/router_accuracy.jsonl"
+)
 
 # ============================================================================
-# Cache Versioning Configuration
+# Hybrid Clarification Configuration (from hybrid_config.py)
 # ============================================================================
 
-# Cache version for router decisions
-# Increment this when calibration logic changes to invalidate old cached decisions
-ROUTER_CACHE_VERSION: Final[str] = "v2_calibrated"
+# Enable hybrid clarification mode (rule + LLM fallback)
+USE_HYBRID_CLARIFICATION: Final[bool] = (
+    os.getenv("USE_HYBRID_CLARIFICATION", "false").lower() == "true"
+)
 
-# Whether to include cache version in cache keys
-# True = separate caches for different calibration versions
-# False = share cache across versions (may return stale calibrated values)
-USE_CACHE_VERSIONING: Final[bool] = True
+# LLM fallback threshold: use LLM when rule confidence is below this
+LLM_FALLBACK_THRESHOLD: Final[float] = float(
+    os.getenv("LLM_FALLBACK_THRESHOLD", "0.8")
+)
+
+# LLM-enhanced information extraction
+LLM_ENHANCED_EXTRACTION: Final[bool] = (
+    os.getenv("LLM_ENHANCED_EXTRACTION", "false").lower() == "true"
+)
+
+# LLM dynamic question generation
+LLM_DYNAMIC_QUESTIONS: Final[bool] = (
+    os.getenv("LLM_DYNAMIC_QUESTIONS", "false").lower() == "true"
+)
+
 
 # ============================================================================
-# Calibration Persistence Configuration
+# Helper Functions
 # ============================================================================
 
-# Filename for calibration data storage
-CALIBRATION_DATA_FILE: Final[str] = "router_calibration.json"
 
-# Whether to auto-save calibration data after each feedback
-# True = immediate persistence (safer, slight performance cost)
-# False = manual save required (faster, risk of data loss)
-AUTO_SAVE_CALIBRATION: Final[bool] = True
+def should_disable_web_route() -> bool:
+    """Check if web route should be disabled."""
+    return DISABLE_WEB_ROUTE
 
-# ============================================================================
-# Calibration Behavior Configuration
-# ============================================================================
 
-# Whether to enable confidence calibration
-# Set to False to disable calibration and use raw confidence scores
-ENABLE_CALIBRATION: Final[bool] = os.getenv("ENABLE_ROUTER_CALIBRATION", "true").lower() == "true"
-
-# Enable web route downgrade (downgrade web queries to local vector search first)
-# Reason: Prioritize local knowledge base to reduce latency and API costs
-ENABLE_WEB_ROUTE_DOWNGRADE: Final[bool] = os.getenv("ENABLE_WEB_ROUTE_DOWNGRADE", "true").lower() == "true"
+def should_use_reasoning_fallback() -> bool:
+    """Check if reasoning model should be used for low confidence routes."""
+    return USE_REASONING_FOR_LOW_CONFIDENCE

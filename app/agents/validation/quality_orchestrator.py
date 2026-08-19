@@ -17,7 +17,7 @@ from app.agents.shared.quality_models import (
     RetrievalQualityResult,
     AnswerValidationResult
 )
-from app.agents.shared.quality_config import (
+from app.agents.shared.config import (
     QUALITY_WEIGHT_ROUTE,
     QUALITY_WEIGHT_RETRIEVAL,
     QUALITY_WEIGHT_ANSWER_FACT,

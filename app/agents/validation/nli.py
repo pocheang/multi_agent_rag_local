@@ -8,7 +8,7 @@ import time
 from collections.abc import Mapping, Sequence
 from typing import Any
 
-from app.agents.shared.quality_config import NLI_MAX_CHECKS, NLI_MODEL_NAME
+from app.agents.shared.config import NLI_MAX_CHECKS, NLI_MODEL_NAME
 from app.agents.validation.models import CascadeLevel, CascadeResult, RuleBasisIssue, ValidationRequest
 from app.agents.validation.rules import extract_dates, extract_numbers, numbers_match
 
