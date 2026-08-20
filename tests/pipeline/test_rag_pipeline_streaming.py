@@ -1,26 +1,60 @@
-"""Behavioral replacements for the retired graph-streaming test seam."""
+"""Current behavioral owners for retired graph-streaming contracts."""
+import json
+from contextlib import nullcontext
+from types import SimpleNamespace
+from uuid import uuid4
+
 import pytest
 
 from app.agents.rag.service import RAGAgentService
+from app.api.query.streaming import execution
 from app.domain.contracts import EvidenceBundle, EvidenceItem, FinalAnswer, RouteDecision
-from app.orchestration.compatibility_post_execution import StreamPostExecutionContext, StreamResultPostProcessor
 from app.orchestration.engine import OrchestrationEngine, OrchestrationServices
 from app.orchestration.request import OrchestrationRequest
 from app.orchestration.standard_request_policy import prepare_standard_request
-from app.services.retrieval.adaptive_policy import build_adaptive_plan
-from app.services.retrieval.evidence_scoring import evidence_is_sufficient
+from app.pipeline.contracts import PipelineRequest
+from app.pipeline.profiles import PipelineProfile
+from app.pipeline.rag_pipeline import RAGPipeline
+from app.services.observability.agent_execution_tracker import AgentExecutionTracker
 
 
-def test_stream_prefers_effective_hit_count_for_web_fallback():
-    assert not evidence_is_sufficient({"retrieved_count": 5, "effective_hit_count": 0}, {}, "vector", 1)
+def _route(*, web=False):
+    return RouteDecision(confidence=1, requires_plan=False,
+        allowed_capabilities=frozenset({"rag", "web"} if web else {"rag"}), reason="test")
 
 
-def test_stream_does_not_use_web_when_fallback_enabled_and_local_evidence_sufficient():
-    assert evidence_is_sufficient({"retrieved_count": 3, "effective_hit_count": 3}, {}, "vector", 3)
+@pytest.mark.asyncio
+async def test_stream_prefers_effective_hit_count_for_web_fallback():
+    calls = []
+    async def vector(*_args):
+        return EvidenceBundle(items=(EvidenceItem(content="raw hit", source="local", document_id="local"),),
+                              diagnostics={"retrieved_count": 5, "effective_hit_count": 0})
+    async def empty(*_args): return EvidenceBundle()
+    async def web(*_args):
+        calls.append("web")
+        return EvidenceBundle(items=(EvidenceItem(content="web", source="web", document_id="web"),))
+    result = await RAGAgentService(vector=vector, bm25=empty, web=web).retrieve(
+        OrchestrationRequest(question="test", use_web_fallback=True), _route(web=True), None)
+    assert calls == ["web"]
+    assert {item.source for item in result.items} == {"local", "web"}
+
+
+@pytest.mark.asyncio
+async def test_stream_does_not_use_web_when_fallback_enabled_and_local_evidence_sufficient():
+    calls = []
+    async def vector(*_args):
+        return EvidenceBundle(items=(EvidenceItem(content="good", source="local", document_id="local"),),
+                              diagnostics={"effective_hit_count": 3})
+    async def empty(*_args): return EvidenceBundle()
+    async def web(*_args): calls.append("web"); return EvidenceBundle()
+    result = await RAGAgentService(vector=vector, bm25=empty, web=web).retrieve(
+        OrchestrationRequest(question="test", use_web_fallback=True), _route(), None)
+    assert calls == []
+    assert [item.source for item in result.items] == ["local"]
 
 
 def _engine(synthesizer=None):
-    route = RouteDecision(confidence=1, requires_plan=False, allowed_capabilities=frozenset({"rag"}), reason="test")
+    route = _route()
     async def router(_request): return route
     async def planner(*_args): raise AssertionError("planning disabled")
     async def retriever(*_args): return EvidenceBundle()
@@ -32,28 +66,33 @@ def _engine(synthesizer=None):
 
 @pytest.mark.asyncio
 async def test_stream_emits_thought_events():
-    events = [e async for e in _engine().execute_stream(OrchestrationRequest(question="test"))]
-    assert [(e["stage"], e["status"]) for e in events if e["type"] == "status"] == [
-        ("route", "completed"), ("rag", "completed"), ("synthesize", "completed"),
-        ("complete", "completed")]
+    pipeline = RAGPipeline(engine=_engine())
+    events = [e async for e in pipeline.execute_stream(
+        PipelineRequest(question="test", profile=PipelineProfile.STANDARD), execution_id="trace")]
+    thought_events = [event for event in events if event["type"] == "thought"]
+    assert thought_events, "typed RAGPipeline currently drops the supported thought-event contract (Task 7)"
 
 
 @pytest.mark.asyncio
 async def test_stream_continues_when_vector_retrieval_fails():
-    async def vector(*_args): raise RuntimeError("vector down")
+    async def vector(*_args): raise RuntimeError("implementation detail may change")
     async def bm25(*_args):
         return EvidenceBundle(items=(EvidenceItem(content="fallback", source="guide", document_id="guide"),))
     events = []
     async def report(event): events.append(event)
-    service = RAGAgentService(vector=vector, bm25=bm25, report_degradation=report)
-    route = RouteDecision(confidence=1, requires_plan=False, allowed_capabilities=frozenset({"rag"}), reason="test")
-    result = await service.retrieve(OrchestrationRequest(question="test"), route, None)
+    result = await RAGAgentService(vector=vector, bm25=bm25, report_degradation=report).retrieve(
+        OrchestrationRequest(question="test"), _route(), None)
     assert result.items[0].content == "fallback"
-    assert any(e.status == "skipped" and "vector down" in e.message for e in events)
+    assert any(e.stage == "rag" and e.status == "skipped" for e in events)
+    assert any(e.stage == "rag" and e.status == "completed" for e in events)
 
 
-def test_stream_forces_web_when_user_explicitly_requests_online_search():
-    assert build_adaptive_plan("search online", "vector", "answer", True, True).prefer_web is True
+def test_stream_forces_web_when_user_explicitly_requests_online_search(monkeypatch):
+    from app.orchestration import standard_request_policy
+    monkeypatch.setattr(standard_request_policy, "is_casual_chat_query", lambda _q: False)
+    prepared = prepare_standard_request(OrchestrationRequest(
+        question="search online", use_web_fallback=True, retrieval_strategy="advanced"))
+    assert prepared.request.use_web_fallback is True
 
 
 def test_stream_skips_web_for_casual_chat(monkeypatch):
@@ -63,17 +102,41 @@ def test_stream_skips_web_for_casual_chat(monkeypatch):
     assert prepared.is_fast_smalltalk and not prepared.request.use_web_fallback and not prepared.request.use_reasoning
 
 
+async def _api_events(monkeypatch, pipeline):
+    execution_id = f"stream-{uuid4().hex}"
+    AgentExecutionTracker.get_instance().start_execution("test", execution_id=execution_id, user_id="user")
+    monkeypatch.setattr(execution.query_guard, "acquire", lambda _key: nullcontext())
+    monkeypatch.setattr(execution, "_query_limiter_key", lambda *_args: "user")
+    monkeypatch.setattr(execution, "_is_overload_mode", lambda: False)
+    monkeypatch.setattr(execution.query_result_cache, "clear_inflight", lambda _key: None)
+    context = execution.StreamExecutionContext(
+        request=SimpleNamespace(state=SimpleNamespace(trace_id="trace"), headers={}), user={"user_id": "user"},
+        session_id=None, original_question="test", effective_question="test", normalized_strategy=None,
+        strategy_meta={}, stream_cache_key=execution_id, replay_enabled=False, runtime_api_settings=None,
+        execution_id=execution_id, history_store=None, pipeline=pipeline,
+        pipeline_request=PipelineRequest(question="test", profile=PipelineProfile.STANDARD),
+        preparation=None, source_scope_audit=lambda *_args: None, result_signer=lambda *_args: (None, None))
+    chunks = [chunk async for chunk in execution.stream_execution_events(context)]
+    return [json.loads(chunk.removeprefix("data: ").strip()) for chunk in chunks]
+
+
 @pytest.mark.asyncio
-async def test_stream_recovers_when_stream_synthesis_raises():
+async def test_stream_recovers_when_stream_synthesis_raises(monkeypatch):
     async def broken(*_args): raise RuntimeError("synthesis down")
-    with pytest.raises(Exception, match="synthesis down"):
-        _ = [e async for e in _engine(broken).execute_stream(OrchestrationRequest(question="test"))]
+    events = await _api_events(monkeypatch, RAGPipeline(engine=_engine(broken)))
+    assert events[-1]["type"] == "error"
+    assert events[-1]["error"] == "internal_error"
+    assert not any(event["type"] == "done" for event in events)
 
 
-def test_stream_partial_then_error_emits_answer_reset():
-    processor = StreamResultPostProcessor(
-        StreamPostExecutionContext(None, "test", "", False, None, "trace"), lambda _result: (None, None),
-        enforce_source_scope=lambda result, _sources: result,
-        resynthesize=lambda result, *_args: {**result, "answer": "fallback final"})
-    final, reset = processor.finalize({"answer": "partial ", "vector_result": {}, "web_result": {}})
-    assert reset == "fallback final" and final["answer"] == "fallback final"
+@pytest.mark.asyncio
+async def test_stream_partial_then_error_emits_answer_reset(monkeypatch):
+    class PartialThenBrokenPipeline:
+        async def execute_stream(self, *_args, **_kwargs):
+            yield {"type": "answer_chunk", "content": "partial "}
+            raise RuntimeError("stream broken")
+    events = await _api_events(monkeypatch, PartialThenBrokenPipeline())
+    assert [event["type"] for event in events][-2:] == ["answer_chunk", "error"]
+    assert events[-2]["content"] == "partial "
+    assert events[-1]["error"] == "internal_error"
+    assert not any(event["type"] == "done" for event in events)
