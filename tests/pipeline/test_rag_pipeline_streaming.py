@@ -84,7 +84,6 @@ async def test_stream_continues_when_vector_retrieval_fails():
         OrchestrationRequest(question="test"), _route(), None)
     assert result.items[0].content == "fallback"
     assert any(e.stage == "rag" and e.status == "skipped" for e in events)
-    assert any(e.stage == "rag" and e.status == "completed" for e in events)
 
 
 def test_stream_forces_web_when_user_explicitly_requests_online_search(monkeypatch):

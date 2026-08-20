@@ -77,13 +77,14 @@ this task's file list.
 
 ## Task 4 RAG/ReAct/scope/resilience/query/web/weight migration (2026-08-20)
 
-The seven Task 4 files plus the dedicated current streaming suite collect **109 tests**. Focused
-execution reports **97 passed / 1 failed / 1 skipped**. The remaining failure,
-`test_local_evidence_model_does_not_expose_memory_context`, is a live canonical
+The seven Task 4 files plus the dedicated current streaming suite collect **109 tests**.
+Focused execution reports **104 passed / 4 failed / 1 skipped**. The failures are
+the live `test_local_evidence_model_does_not_expose_memory_context` canonical
 `LocalEvidenceChatModel` defect: the no-evidence response is mojibake rather
 than the asserted Chinese message, while the test still proves memory text is
-not exposed. It remains visible for Task 7. The one skip is the pre-existing
-real-LLM ReAct integration gate.
+not exposed; the two restored missing A/B-script contracts; and the restored
+thought-event gap at the active pipeline. All remain visible for Task 7. The
+one skip is the pre-existing real-LLM ReAct integration gate.
 
 ReAct patches target `app.agents.tool.react`, where models and RAG/synthesis
 functions are looked up, and graph fixtures now use the canonical string entity
@@ -94,9 +95,9 @@ a live network call. Quality scoring imports `validation.quality_orchestrator`
 and reloads both shared configuration and the consuming orchestrator when
 testing environment-provided weights.
 
-Eight resilience functions were deleted individually because their sole
-subject was `app.graph.streaming.stream_processor`, explicitly deleted by
-`5d05e6f5` when service orchestration replaced LangGraph streaming:
+Eight resilience functions formerly bound to the deleted
+`app.graph.streaming.stream_processor` are mapped individually to active
+RAG/pipeline/request-policy/API seams in the table below:
 `test_stream_prefers_effective_hit_count_for_web_fallback`,
 `test_stream_does_not_use_web_when_fallback_enabled_and_local_evidence_sufficient`,
 `test_stream_emits_thought_events`,
@@ -108,15 +109,14 @@ subject was `app.graph.streaming.stream_processor`, explicitly deleted by
 vector normalization, synthesis fallback, citation, strict-review, and local
 evidence resilience assertions remain in the file.
 
-`test_correlation_calculation` and `test_ab_testing_script_exists` were removed
-because their only owner, the development-only `scripts/test_quality_weights.py`,
-was explicitly deleted by `828aa796`; current/alternative weighted scoring and
-the sum-to-one boundary remain covered against the canonical orchestrator.
+`test_correlation_calculation` and `test_ab_testing_script_exists` are restored
+and fail visibly because their only owner, development-only
+`scripts/test_quality_weights.py`, was explicitly deleted by `828aa796`.
 
 The required retired-path scan has no matches in the seven Task 4 files. Its
 repository-wide results are confined to separately inventoried Task 5/6 files.
-Fresh full collection reports **1958 collected items / 12 collection errors**
-(17.73s); every error is outside Task 4.
+Fresh full collection reports **1984 collected items / 12 collection errors**;
+every error is outside Task 4.
 
 ## 47-file matrix
 
@@ -178,11 +178,11 @@ Fresh full collection reports **1958 collected items / 12 collection errors**
 | `test_stream_prefers_effective_hit_count_for_web_fallback` | `RAGAgentService.retrieve/_enabled_retrievers`: web execution is route-capability-owned now; a web-capable route invokes web and fuses its evidence even when vector diagnostics report zero effective hits |
 | `test_stream_does_not_use_web_when_fallback_enabled_and_local_evidence_sufficient` | `RAGAgentService.retrieve/_enabled_retrievers`: a RAG-only route never invokes web and returns local evidence; the retired hit-threshold selection is no longer active |
 | `test_stream_emits_thought_events` | `RAGPipeline.execute_stream` → `OrchestrationEngine.execute_stream`: the active seam emits no thought events; the restored behavioral assertion stays visibly failing as a Task 7 contract gap (status frames are not claimed as replacement coverage) |
-| `test_stream_continues_when_vector_retrieval_fails` | `RAGAgentService.retrieve`: BM25 evidence survives vector failure; public typed skipped/completed degradation statuses are emitted without asserting private error text |
+| `test_stream_continues_when_vector_retrieval_fails` | `RAGAgentService.retrieve`: BM25 evidence survives vector failure and public typed `rag/skipped` is emitted without asserting private error text |
 | `test_stream_forces_web_when_user_explicitly_requests_online_search` | `query_stream` → `prepare_standard_request`: explicit web selection is now the request flag, which policy preserves for non-smalltalk requests |
 | `test_stream_skips_web_for_casual_chat` | `query_stream` → `prepare_standard_request`: smalltalk policy clears web and reasoning before pipeline execution |
 | `test_stream_recovers_when_stream_synthesis_raises` | `stream_execution_events` → `RAGPipeline.execute_stream` → engine: synthesis failure now becomes a safe `internal_error` SSE with no false done event, replacing fallback-answer recovery |
-| `test_stream_partial_then_error_emits_answer_reset` | `stream_execution_events`: a real partial chunk followed by a pipeline exception is forwarded as `answer_chunk`, then safe `internal_error`, with no done event; the retired answer-reset recovery contract no longer exists |
+| `test_stream_partial_then_error_emits_answer_reset` | `stream_execution_events`: the active API transport forwards a test-double-supplied partial chunk, then converts the test-double exception to safe `internal_error`, with no done event; the retired answer-reset recovery contract no longer exists |
 
 `test_correlation_calculation` and `test_ab_testing_script_exists` are restored.
 There is no current owner for `scripts.test_quality_weights`; both failures stay
