@@ -12,7 +12,7 @@ Target: <5ms per check
 
 import pytest
 import time
-from app.agents.hallucination_patterns import (
+from app.agents.validation.hallucination_patterns import (
     detect_date_hallucinations,
     detect_number_hallucinations,
     detect_entity_hallucinations,

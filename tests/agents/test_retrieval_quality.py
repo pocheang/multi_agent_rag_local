@@ -4,7 +4,7 @@ Tests for Retrieval Quality Agent.
 
 import pytest
 import asyncio
-from app.agents.retrieval_quality_agent import (
+from app.agents.rag.retrieval_quality import (
     evaluate_retrieval_quality,
     _calculate_coverage_score,
     _calculate_relevance_score,

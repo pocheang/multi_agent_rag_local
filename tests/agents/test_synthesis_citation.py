@@ -5,8 +5,8 @@ Task 13: Verify citation discipline enforcement and template-based generation.
 """
 
 import pytest
-from app.agents.synthesis_agent import synthesize_answer
-from app.agents.synthesis_templates import (
+from app.agents.synthesizer.generation import synthesize_answer
+from app.agents.synthesizer.templates import (
     get_answer_template,
     QUERY_TYPE_CONCEPT,
     QUERY_TYPE_COMPARISON,

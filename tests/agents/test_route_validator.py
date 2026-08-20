@@ -3,8 +3,8 @@ Tests for Route Validator Agent.
 """
 
 import pytest
-from app.agents.route_validator_agent import validate_route_decision
-from app.agents.router_agent import RouteDecision
+from app.agents.router.validator import validate_route_decision
+from app.agents.router.routing import LegacyRouteDecision as RouteDecision
 
 
 @pytest.mark.asyncio

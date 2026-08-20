@@ -1,6 +1,6 @@
 """Manual accuracy tests for router with sample queries."""
 import pytest
-from app.agents.router_agent import decide_route
+from app.agents.router.routing import decide_route
 
 
 @pytest.mark.parametrize("query,expected_route", [

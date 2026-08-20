@@ -4,13 +4,15 @@ Tests for Answer Validator Agent with NLI hallucination detection.
 
 import pytest
 import time
-from app.agents.answer_validator_agent import (
+from app.agents.validation.public import (
     validate_answer,
     _quick_validation,
     _validate_citations,
-    _extract_factual_spans,
     _assess_answer_quality,
-    _check_hallucination
+)
+from app.agents.validation.nli import (
+    check_hallucination as _check_hallucination,
+    extract_factual_spans as _extract_factual_spans,
 )
 from app.agents.quality_models import AnswerValidationResult
 

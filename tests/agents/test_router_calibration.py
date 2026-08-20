@@ -12,7 +12,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from app.agents.router_calibration import (
+from app.agents.router.calibration import (
     CalibrationBucket,
     CalibrationData,
     ConfidenceCalibrator,

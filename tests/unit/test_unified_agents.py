@@ -10,8 +10,8 @@ Tests:
 
 import pytest
 from unittest.mock import Mock, patch
-from app.agents.base_agent import BaseAgent, AgentError, AgentValidationError, AgentTimeoutError
-from app.agents.unified_config import (
+from app.agents.shared.base import BaseAgent, AgentError, AgentValidationError, AgentTimeoutError
+from app.agents.shared.config import (
     UnifiedAgentConfig,
     get_agent_config,
     set_agent_config,
@@ -23,7 +23,7 @@ from app.agents.result_schemas import (
     GraphRAGResult,
     RouterResult,
 )
-from app.agents.shared_utils import (
+from app.agents.shared.utils import (
     ContextFormatter,
     ResultValidator,
     CacheKeyGenerator,
@@ -132,13 +132,12 @@ class TestUnifiedConfig:
     def test_config_retrieval_strategy_validation(self):
         """Test retrieval strategy validation."""
         # Valid strategy
-        config = UnifiedAgentConfig()
-        config.vector_rag.retrieval_strategy = "hybrid"
+        config = UnifiedAgentConfig(vector_rag={"retrieval_strategy": "hybrid"})
         assert config.vector_rag.retrieval_strategy == "hybrid"
 
         # Invalid strategy
         with pytest.raises(ValueError):
-            config.vector_rag.retrieval_strategy = "invalid_strategy"
+            UnifiedAgentConfig(vector_rag={"retrieval_strategy": "invalid_strategy"})
 
     def test_config_singleton(self):
         """Test config singleton pattern."""
@@ -156,7 +155,7 @@ class TestUnifiedConfig:
     def test_config_reset(self):
         """Test config can be reset to defaults."""
         config = get_agent_config()
-        config.timeout_seconds = 999
+        config.timeout_seconds = 100
 
         reset_agent_config()
 
@@ -339,19 +338,19 @@ class TestSharedUtils:
 class TestUnifiedVectorRAGAgent:
     """Test UnifiedVectorRAGAgent functionality."""
 
-    @patch('app.agents.vector_rag_agent_unified.hybrid_search_with_diagnostics')
+    @patch('app.agents.rag.vector.hybrid_search_with_diagnostics')
     def test_agent_initialization(self, mock_search):
         """Test agent can be initialized."""
-        from app.agents.vector_rag_agent_unified import UnifiedVectorRAGAgent
+        from app.agents.rag.vector import UnifiedVectorRAGAgent
 
         agent = UnifiedVectorRAGAgent()
         assert agent is not None
         assert agent.vector_config is not None
 
-    @patch('app.agents.vector_rag_agent_unified.hybrid_search_with_diagnostics')
+    @patch('app.agents.rag.vector.hybrid_search_with_diagnostics')
     def test_agent_execute(self, mock_search):
         """Test agent execution."""
-        from app.agents.vector_rag_agent_unified import UnifiedVectorRAGAgent
+        from app.agents.rag.vector import UnifiedVectorRAGAgent
 
         # Mock retrieval results
         mock_search.return_value = (
@@ -366,10 +365,10 @@ class TestUnifiedVectorRAGAgent:
         assert "context" in result
         assert "citations" in result
 
-    @patch('app.agents.vector_rag_agent_unified.hybrid_search_with_diagnostics')
+    @patch('app.agents.rag.vector.hybrid_search_with_diagnostics')
     def test_backward_compatible_function(self, mock_search):
         """Test backward-compatible function interface."""
-        from app.agents.vector_rag_agent_unified import run_vector_rag
+        from app.agents.rag.vector import run_vector_rag
 
         # Mock retrieval results
         mock_search.return_value = (

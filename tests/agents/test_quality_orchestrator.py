@@ -15,7 +15,7 @@ from app.agents.quality_models import (
     AnswerIssue,
     QualityReport
 )
-from app.agents.quality_orchestrator_agent import orchestrate_quality, _classify_quality_level
+from app.agents.validation.quality_orchestrator import orchestrate_quality, _classify_quality_level
 
 
 class TestQualityLevelClassification:

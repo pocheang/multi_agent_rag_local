@@ -8,7 +8,7 @@ import pytest
 import asyncio
 from typing import List, Dict
 
-from app.agents.relevance_scoring import (
+from app.agents.rag.relevance import (
     RelevanceScore,
     BatchRelevanceResult,
     score_relevance,

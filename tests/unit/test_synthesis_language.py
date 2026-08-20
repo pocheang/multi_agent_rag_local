@@ -1,6 +1,6 @@
 from unittest.mock import MagicMock, Mock, patch
 
-from app.agents.synthesis_agent import _build_prompt_with_language, synthesize_answer
+from app.agents.synthesizer.generation import _build_prompt_with_language, synthesize_answer
 
 
 def test_build_prompt_with_language_chinese():
@@ -30,9 +30,9 @@ def test_build_prompt_with_language_english():
     assert "What is RAG?" in prompt
 
 
-@patch("app.agents.synthesis_agent.detect_language")
-@patch("app.agents.synthesis_agent.get_chat_model")
-@patch("app.agents.synthesis_agent.bulkhead")
+@patch("app.agents.synthesizer.generation.detect_language")
+@patch("app.agents.synthesizer.generation.get_chat_model")
+@patch("app.agents.synthesizer.generation.bulkhead")
 def test_synthesize_answer_detects_chinese(mock_bulkhead, mock_get_chat_model, mock_detect_language):
     """Test synthesize_answer detects Chinese and returns detected_language"""
     # Setup mocks
@@ -59,9 +59,9 @@ def test_synthesize_answer_detects_chinese(mock_bulkhead, mock_get_chat_model, m
     assert isinstance(result["answer"], str)
 
 
-@patch("app.agents.synthesis_agent.detect_language")
-@patch("app.agents.synthesis_agent.get_chat_model")
-@patch("app.agents.synthesis_agent.bulkhead")
+@patch("app.agents.synthesizer.generation.detect_language")
+@patch("app.agents.synthesizer.generation.get_chat_model")
+@patch("app.agents.synthesizer.generation.bulkhead")
 def test_synthesize_answer_detects_english(mock_bulkhead, mock_get_chat_model, mock_detect_language):
     """Test synthesize_answer detects English and returns detected_language"""
     # Setup mocks
@@ -89,9 +89,9 @@ def test_synthesize_answer_detects_english(mock_bulkhead, mock_get_chat_model, m
     assert result["detected_language"] == "en"
 
 
-@patch("app.agents.synthesis_agent.detect_language")
-@patch("app.agents.synthesis_agent.get_chat_model")
-@patch("app.agents.synthesis_agent.bulkhead")
+@patch("app.agents.synthesizer.generation.detect_language")
+@patch("app.agents.synthesizer.generation.get_chat_model")
+@patch("app.agents.synthesizer.generation.bulkhead")
 def test_synthesize_answer_force_language_override(mock_bulkhead, mock_get_chat_model, mock_detect_language):
     """Test force_language parameter overrides auto-detection"""
     # Setup mocks
@@ -111,9 +111,9 @@ def test_synthesize_answer_force_language_override(mock_bulkhead, mock_get_chat_
     assert result["detected_language"] == "en"
 
 
-@patch("app.agents.synthesis_agent.detect_language")
-@patch("app.agents.synthesis_agent.get_chat_model")
-@patch("app.agents.synthesis_agent.bulkhead")
+@patch("app.agents.synthesizer.generation.detect_language")
+@patch("app.agents.synthesizer.generation.get_chat_model")
+@patch("app.agents.synthesizer.generation.bulkhead")
 def test_synthesize_answer_returns_fallback_on_error(mock_bulkhead, mock_get_chat_model, mock_detect_language):
     """Test synthesize_answer returns fallback message on error"""
     # Setup mocks to raise exception

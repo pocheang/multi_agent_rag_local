@@ -1,14 +1,21 @@
 """Tests for router agent fallback strategies."""
 import pytest
 from unittest.mock import Mock, patch
-from app.agents.router_agent import decide_route, RouteDecision
-from app.agents.agent_config import (
+from app.agents.router.routing import decide_route, LegacyRouteDecision as RouteDecision
+from app.agents.shared.config import (
     ROUTE_VECTOR,
-    ROUTE_GRAPH,
-    ROUTE_HYBRID,
     AGENT_CLASS_GENERAL,
     SKILL_DEFAULT,
 )
+from app.agents.shared.cache import clear_agent_caches
+
+
+@pytest.fixture(autouse=True)
+def clear_router_cache():
+    """Keep mocked routing decisions isolated from the process-wide cache."""
+    clear_agent_caches()
+    yield
+    clear_agent_caches()
 
 
 class TestFallbackDetection:
@@ -17,7 +24,7 @@ class TestFallbackDetection:
     def test_low_confidence_triggers_fallback(self):
         """Test that confidence < threshold triggers fallback."""
         # Mock LLM to return low confidence decision
-        with patch("app.agents.router_agent.get_chat_model") as mock_model:
+        with patch("app.agents.router.routing.get_chat_model") as mock_model:
             mock_response = Mock()
             mock_response.content = '{"route":"graph","reason":"uncertain","skill":"answer_with_citations","confidence":0.45}'
             mock_model.return_value.invoke.return_value = mock_response
@@ -30,7 +37,7 @@ class TestFallbackDetection:
 
     def test_medium_confidence_no_fallback(self):
         """Test that confidence >= threshold does not trigger fallback."""
-        with patch("app.agents.router_agent.get_chat_model") as mock_model:
+        with patch("app.agents.router.routing.get_chat_model") as mock_model:
             mock_response = Mock()
             mock_response.content = '{"route":"graph","reason":"clear entity query","skill":"answer_with_citations","confidence":0.75}'
             mock_model.return_value.invoke.return_value = mock_response
@@ -38,12 +45,12 @@ class TestFallbackDetection:
             decision = decide_route("What is entity X?")
 
             # Should keep original decision
-            assert decision.route == ROUTE_GRAPH
+            assert decision.route == "graph"
             assert "fallback" not in decision.reason.lower()
 
     def test_high_confidence_no_fallback(self):
         """Test that high confidence does not trigger fallback."""
-        with patch("app.agents.router_agent.get_chat_model") as mock_model:
+        with patch("app.agents.router.routing.get_chat_model") as mock_model:
             mock_response = Mock()
             mock_response.content = '{"route":"hybrid","reason":"complex query","skill":"compare_entities","confidence":0.92}'
             mock_model.return_value.invoke.return_value = mock_response
@@ -51,7 +58,7 @@ class TestFallbackDetection:
             decision = decide_route("Compare A and B")
 
             # Should keep original decision
-            assert decision.route == ROUTE_HYBRID
+            assert decision.route == "hybrid"
             assert "fallback" not in decision.reason.lower()
 
 
@@ -60,8 +67,8 @@ class TestFallbackStrategy:
 
     def test_fallback_tries_reasoning_model(self):
         """Test that fallback tries reasoning model on low confidence."""
-        with patch("app.agents.router_agent.get_chat_model") as mock_chat:
-            with patch("app.agents.router_agent.get_reasoning_model") as mock_reasoning:
+        with patch("app.agents.router.routing.get_chat_model") as mock_chat:
+            with patch("app.agents.router.routing.get_reasoning_model") as mock_reasoning:
                 # First call (chat model) returns low confidence
                 mock_chat_response = Mock()
                 mock_chat_response.content = '{"route":"graph","reason":"uncertain","skill":"answer_with_citations","confidence":0.45}'
@@ -80,9 +87,9 @@ class TestFallbackStrategy:
 
     def test_fallback_to_safe_route_when_reasoning_fails(self):
         """Test that fallback defaults to vector when reasoning model also fails."""
-        with patch("app.agents.router_agent.get_chat_model") as mock_chat:
-            with patch("app.agents.router_agent.get_reasoning_model") as mock_reasoning:
-                with patch("app.agents.router_agent._calibrator", None):  # Disable calibration
+        with patch("app.agents.router.routing.get_chat_model") as mock_chat:
+            with patch("app.agents.router.routing.get_reasoning_model") as mock_reasoning:
+                with patch("app.agents.router.routing._calibrator", None):  # Disable calibration
                     # First call returns low confidence
                     mock_chat_response = Mock()
                     mock_chat_response.content = '{"route":"graph","reason":"uncertain","skill":"answer_with_citations","confidence":0.45}'
@@ -102,8 +109,8 @@ class TestFallbackStrategy:
 
     def test_fallback_when_reasoning_model_throws_exception(self):
         """Test fallback handles reasoning model exceptions gracefully."""
-        with patch("app.agents.router_agent.get_chat_model") as mock_chat:
-            with patch("app.agents.router_agent.get_reasoning_model") as mock_reasoning:
+        with patch("app.agents.router.routing.get_chat_model") as mock_chat:
+            with patch("app.agents.router.routing.get_reasoning_model") as mock_reasoning:
                 # First call returns low confidence
                 mock_chat_response = Mock()
                 mock_chat_response.content = '{"route":"graph","reason":"uncertain","skill":"answer_with_citations","confidence":0.45}'
@@ -126,7 +133,7 @@ class TestAmbiguousQueryDetection:
         """Test detection when multiple routes have similar scores."""
         # This would require returning multiple route scores from LLM
         # For now, we detect ambiguity via low confidence
-        with patch("app.agents.router_agent.get_chat_model") as mock_model:
+        with patch("app.agents.router.routing.get_chat_model") as mock_model:
             mock_response = Mock()
             # Low confidence indicates ambiguity
             mock_response.content = '{"route":"hybrid","reason":"could be vector or graph","skill":"answer_with_citations","confidence":0.52}'
@@ -140,8 +147,8 @@ class TestAmbiguousQueryDetection:
 
     def test_clear_query_not_ambiguous(self):
         """Test that clear queries are not marked as ambiguous."""
-        with patch("app.agents.router_agent.get_chat_model") as mock_model:
-            with patch("app.agents.router_agent._calibrator", None):  # Disable calibration
+        with patch("app.agents.router.routing.get_chat_model") as mock_model:
+            with patch("app.agents.router.routing._calibrator", None):  # Disable calibration
                 mock_response = Mock()
                 mock_response.content = '{"route":"vector","reason":"clear definition query","skill":"answer_with_citations","confidence":0.88}'
                 mock_model.return_value.invoke.return_value = mock_response
@@ -161,12 +168,12 @@ class TestFallbackLogging:
         import logging
 
         # Set log level for the router agent module
-        logger = logging.getLogger('app.agents.router_agent')
+        logger = logging.getLogger('app.agents.router.routing')
         logger.setLevel(logging.INFO)
-        caplog.set_level(logging.INFO, logger='app.agents.router_agent')
+        caplog.set_level(logging.INFO, logger='app.agents.router.routing')
 
-        with patch("app.agents.router_agent.get_chat_model") as mock_chat:
-            with patch("app.agents.router_agent.get_reasoning_model") as mock_reasoning:
+        with patch("app.agents.router.routing.get_chat_model") as mock_chat:
+            with patch("app.agents.router.routing.get_reasoning_model") as mock_reasoning:
                 # Low confidence triggers fallback
                 mock_chat_response = Mock()
                 mock_chat_response.content = '{"route":"graph","reason":"uncertain","skill":"answer_with_citations","confidence":0.48}'
@@ -190,7 +197,7 @@ class TestFallbackLogging:
         import logging
         caplog.set_level(logging.INFO)
 
-        with patch("app.agents.router_agent.get_chat_model") as mock_model:
+        with patch("app.agents.router.routing.get_chat_model") as mock_model:
             mock_response = Mock()
             mock_response.content = '{"route":"vector","reason":"clear query","skill":"answer_with_citations","confidence":0.85}'
             mock_model.return_value.invoke.return_value = mock_response
@@ -207,7 +214,7 @@ class TestConfigurableThreshold:
 
     def test_threshold_from_config(self):
         """Test that threshold is read from agent_config."""
-        from app.agents.agent_config import ROUTER_LOW_CONFIDENCE_THRESHOLD
+        from app.agents.shared.config import ROUTER_LOW_CONFIDENCE_THRESHOLD
 
         # Should be defined in config
         assert hasattr(ROUTER_LOW_CONFIDENCE_THRESHOLD, '__class__')
@@ -216,7 +223,7 @@ class TestConfigurableThreshold:
 
     def test_fallback_uses_configured_threshold(self):
         """Test that fallback logic uses the configured threshold."""
-        with patch("app.agents.router_agent.get_chat_model") as mock_model:
+        with patch("app.agents.router.routing.get_chat_model") as mock_model:
             # Return confidence just below threshold (0.6)
             mock_response = Mock()
             mock_response.content = '{"route":"graph","reason":"uncertain","skill":"answer_with_citations","confidence":0.59}'
@@ -241,7 +248,7 @@ class TestFallbackImprovesHandling:
         ]
 
         for query in ambiguous_queries:
-            with patch("app.agents.router_agent.get_chat_model") as mock_model:
+            with patch("app.agents.router.routing.get_chat_model") as mock_model:
                 # Return low confidence for ambiguous queries
                 mock_response = Mock()
                 mock_response.content = '{"route":"hybrid","reason":"unclear","skill":"answer_with_citations","confidence":0.40}'
@@ -262,8 +269,8 @@ class TestFallbackImprovesHandling:
         ]
 
         for query in clear_queries:
-            with patch("app.agents.router_agent.get_chat_model") as mock_model:
-                with patch("app.agents.router_agent._calibrator", None):  # Disable calibration
+            with patch("app.agents.router.routing.get_chat_model") as mock_model:
+                with patch("app.agents.router.routing._calibrator", None):  # Disable calibration
                     # Return high confidence for clear queries
                     mock_response = Mock()
                     mock_response.content = '{"route":"vector","reason":"clear definition query","skill":"answer_with_citations","confidence":0.85}'
@@ -281,7 +288,7 @@ class TestBackwardCompatibility:
 
     def test_existing_api_unchanged(self):
         """Test that decide_route signature is unchanged."""
-        with patch("app.agents.router_agent.get_chat_model") as mock_model:
+        with patch("app.agents.router.routing.get_chat_model") as mock_model:
             mock_response = Mock()
             mock_response.content = '{"route":"vector","reason":"test","skill":"answer_with_citations","confidence":0.75}'
             mock_model.return_value.invoke.return_value = mock_response
@@ -298,7 +305,7 @@ class TestBackwardCompatibility:
 
     def test_route_decision_has_required_fields(self):
         """Test that RouteDecision maintains required fields."""
-        with patch("app.agents.router_agent.get_chat_model") as mock_model:
+        with patch("app.agents.router.routing.get_chat_model") as mock_model:
             mock_response = Mock()
             mock_response.content = '{"route":"vector","reason":"test","skill":"answer_with_citations","confidence":0.75}'
             mock_model.return_value.invoke.return_value = mock_response
@@ -318,7 +325,7 @@ class TestEnglishAndChineseQueries:
 
     def test_fallback_handles_chinese_query(self):
         """Test that fallback works for Chinese queries."""
-        with patch("app.agents.router_agent.get_chat_model") as mock_model:
+        with patch("app.agents.router.routing.get_chat_model") as mock_model:
             mock_response = Mock()
             # Low confidence for Chinese query
             mock_response.content = '{"route":"graph","reason":"不确定","skill":"answer_with_citations","confidence":0.45}'
@@ -332,7 +339,7 @@ class TestEnglishAndChineseQueries:
 
     def test_fallback_handles_english_query(self):
         """Test that fallback works for English queries."""
-        with patch("app.agents.router_agent.get_chat_model") as mock_model:
+        with patch("app.agents.router.routing.get_chat_model") as mock_model:
             mock_response = Mock()
             mock_response.content = '{"route":"hybrid","reason":"uncertain","skill":"answer_with_citations","confidence":0.50}'
             mock_model.return_value.invoke.return_value = mock_response

@@ -10,7 +10,7 @@ Verifies that:
 """
 
 import pytest
-from app.agents.fact_verification import (
+from app.agents.validation.fact_verification import (
     FactVerifier,
     FactClaim,
     VerificationResult,

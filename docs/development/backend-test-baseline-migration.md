@@ -29,27 +29,68 @@ The same full collection command now reports **1478 collected items / 37 collect
   `rg -n "app\\.(agents|graph)\\.(answer_validator_agent|router_agent|vector_rag_agent|graph_rag_agent|react_agent|synthesis_agent|workflow|state|nodes)" app --glob "*.py"`.
   Thus historic strings do not establish a current dependency.
 
+## Task 3 context-contract disposition (2026-08-20)
+
+`tests/agents/test_context_tracker.py` now exercises the tenant-scoped
+`app.services.sessions.context_tracker` store through `(user_id, session_id)`
+lookups. The migrated coverage retains history limits, entity and topic
+tracking, routing hints, TTL cleanup, public English reference resolution,
+and explicit cross-user isolation. The stale Chinese-only wrapper cases were
+removed: four direct `_detect_intent` assertions, one tautological short-
+follow-up assertion, one direct `_detect_reference_pronouns` case, and one
+Chinese-only `resolve_query_with_context` case. No active production caller depends on
+those wrapper-internal Unicode fixtures; the canonical service does not expose
+them as a supported contract, while the equivalent English public behavior
+remains covered.
+
+## Task 3 validation/router/config/synthesis migration (2026-08-20)
+
+All 18 Task 3 files now collect from their canonical backend owners: **348
+items collected**. The focused execution reports **337 passed / 11 failed**
+(69.83s). Root-cause tracing assigned every remaining failure to a live
+external gate, without changing production fallbacks or weakening assertions:
+
+| gate | focused failures | observed boundary |
+| --- | ---: | --- |
+| validation NLI model | 1 | Hugging Face model access is blocked; the deterministic lexical fallback returns the documented conservative issue |
+| relevance scoring | 3 | configured Ollama runtime is not running; the canonical scorer returns its `0.5/somewhat_relevant` error fallback |
+| router accuracy samples | 3 | OpenAI credentials are absent; canonical routing returns its safe vector fallback |
+| synthesis citation generation | 4 | OpenAI credentials are absent; canonical synthesis returns its service-unavailable fallback |
+
+All other **337 current-contract assertions pass**, including 29 tenant-scoped
+context tests, 18 cache-isolated router fallback tests, and 24 shared
+base/config/utils/vector tests. The canonical vector imports in
+`test_unified_agents.py` target `app.agents.rag.vector`, and its patches target
+the lookup in that module.
+
+The required repository-wide retired-path scan still reports matches only in
+files outside Task 3 (notably the separately inventoried resilience, session
+language, weight-optimization, and synthesis-agent suites); the 18 Task 3
+paths have no matches. The fresh full collection command reports **1826
+collected items / 19 collection errors** (19.56s), with all 19 errors outside
+this task's file list.
+
 ## 47-file matrix
 
 | test file | missing import/dependency | retirement evidence | current owner | action | focused verification |
 | --- | --- | --- | --- | --- | --- |
-| `tests/agents/test_answer_validator.py` | `app.agents.answer_validator_agent` | `d1075732` deleted wrapper | `app.agents.validation.public` | migrate | collect this file after remapping public validation exports |
-| `tests/agents/test_answer_validator_cascade.py` | `app.agents.validation_cascade` | `54192131` deleted wrapper | `app.agents.validation.cascade` | migrate | collect this file against `ValidationCascade` |
-| `tests/agents/test_context_tracker.py` | `app.agents.context_tracker_agent` | `d1075732` deleted wrapper | `app.services.sessions.context_tracker` | migrate | collect this file against session context owner |
-| `tests/agents/test_fact_verification.py` | `app.agents.fact_verification` | `54192131` deleted wrapper | `app.agents.validation.fact_verification` | migrate | collect fact-verification tests |
-| `tests/agents/test_hallucination_detection.py` | `app.agents.hallucination_patterns` | `54192131` deleted wrapper | `app.agents.validation.hallucination_patterns` | migrate | collect pattern tests |
-| `tests/agents/test_quality_orchestrator.py` | `app.agents.quality_orchestrator_agent` | `d1075732` deleted wrapper | `app.agents.validation.quality_orchestrator` | migrate | collect orchestrator tests |
+| `tests/agents/test_answer_validator.py` | `app.agents.answer_validator_agent` | `d1075732` deleted wrapper | `app.agents.validation.public`; NLI helpers in `validation.nli` | migrated | passes focused current-contract execution |
+| `tests/agents/test_answer_validator_cascade.py` | `app.agents.validation_cascade` | `54192131` deleted wrapper | `app.agents.validation.cascade` | migrated / external gate | collects; one NLI-model gate remains explicit |
+| `tests/agents/test_context_tracker.py` | `app.agents.context_tracker_agent` | `d1075732` deleted wrapper | `app.services.sessions.context_tracker` | migrated | 29 tenant-scoped tests pass |
+| `tests/agents/test_fact_verification.py` | `app.agents.fact_verification` | `54192131` deleted wrapper | `app.agents.validation.fact_verification` | migrated | passes focused current-contract execution |
+| `tests/agents/test_hallucination_detection.py` | `app.agents.hallucination_patterns` | `54192131` deleted wrapper | `app.agents.validation.hallucination_patterns` | migrated | passes focused current-contract execution |
+| `tests/agents/test_quality_orchestrator.py` | `app.agents.quality_orchestrator_agent` | `d1075732` deleted wrapper | `app.agents.validation.quality_orchestrator` | migrated | passes focused current-contract execution |
 | `tests/agents/test_react_agent_tools.py` | `app.agents.react_agent` | `d1075732` deleted wrapper | `app.agents.tool.react` | migrate | collect tool-react tests |
-| `tests/agents/test_relevance_scoring.py` | `app.agents.relevance_scoring` | `54192131` deleted wrapper | `app.agents.rag.relevance` | migrate | collect relevance tests |
-| `tests/agents/test_retrieval_quality.py` | `app.agents.retrieval_quality_agent` | `d1075732` deleted wrapper | `app.agents.rag.retrieval_quality` | migrate | collect retrieval-quality tests |
-| `tests/agents/test_route_accuracy.py` | `app.agents.route_accuracy_tracker` | `54192131` deleted wrapper | `app.agents.router.accuracy`, `app.domain.contracts` | migrate | collect route-accuracy tests with current decision contract |
-| `tests/agents/test_route_validator.py` | `app.agents.route_validator_agent` | `d1075732` deleted wrapper | `app.agents.router.validator` | migrate | collect route-validator tests |
-| `tests/agents/test_router_accuracy.py` | `app.agents.router_agent` | `d1075732` deleted wrapper | `app.agents.router.routing` | migrate | collect routing samples against `decide_route` |
-| `tests/agents/test_router_calibration.py` | `app.agents.router_calibration` | `54192131` deleted wrapper | `app.agents.router.calibration` | migrate | collect calibrator tests |
-| `tests/agents/test_router_calibration_integration.py` | `app.agents.router_agent` | `d1075732` deleted wrapper | `app.agents.router.routing`, `app.agents.router.calibration` | migrate | collect router/calibrator integration |
-| `tests/agents/test_router_enhanced.py` | `app.agents.router_examples` | `54192131` deleted wrapper | `app.agents.router.examples` | migrate | collect few-shot example tests |
-| `tests/agents/test_router_fallback.py` | `app.agents.router_agent` | `d1075732`, `54192131`, and `e322be7e` removed compatibility contract; the later `agent_config` import is migration analysis, not this collection failure | none; typed router owns supported routing | delete-retired-contract | confirm no supported replacement of legacy fallback/config API |
-| `tests/agents/test_synthesis_citation.py` | `app.agents.synthesis_agent` | `d1075732` deleted wrapper | `app.agents.synthesizer.generation`, `templates` | migrate | collect citation tests against typed synthesizer |
+| `tests/agents/test_relevance_scoring.py` | `app.agents.relevance_scoring` | `54192131` deleted wrapper | `app.agents.rag.relevance` | migrated / external gate | collects; three live-Ollama semantic cases remain explicit |
+| `tests/agents/test_retrieval_quality.py` | `app.agents.retrieval_quality_agent` | `d1075732` deleted wrapper | `app.agents.rag.retrieval_quality` | migrated | passes focused current-contract execution |
+| `tests/agents/test_route_accuracy.py` | `app.agents.route_accuracy_tracker` | `54192131` deleted wrapper | `app.agents.router.accuracy`, `router.routing.LegacyRouteDecision` | migrated | compatibility fixture matches current routing dataclass; passes |
+| `tests/agents/test_route_validator.py` | `app.agents.route_validator_agent` | `d1075732` deleted wrapper | `app.agents.router.validator`, `router.routing.LegacyRouteDecision` | migrated | patches/current dataclass pass |
+| `tests/agents/test_router_accuracy.py` | `app.agents.router_agent` | `d1075732` deleted wrapper | `app.agents.router.routing` | migrated / external gate | collects; three credentialed accuracy samples remain explicit |
+| `tests/agents/test_router_calibration.py` | `app.agents.router_calibration` | `54192131` deleted wrapper | `app.agents.router.calibration` | migrated | passes focused current-contract execution |
+| `tests/agents/test_router_calibration_integration.py` | `app.agents.router_agent` | `d1075732` deleted wrapper | `app.agents.router.routing`, `app.agents.router.calibration` | migrated | patch lookup sites pass |
+| `tests/agents/test_router_enhanced.py` | `app.agents.router_examples` | `54192131` deleted wrapper | `app.agents.router.examples` | migrated | passes focused current-contract execution |
+| `tests/agents/test_router_fallback.py` | `app.agents.router_agent` | `d1075732`, `54192131`, and `e322be7e` removed wrapper paths | `app.agents.router.routing`, `app.agents.shared.config` | migrated | 18 deterministic cache-isolated fallback tests pass |
+| `tests/agents/test_synthesis_citation.py` | `app.agents.synthesis_agent` | `d1075732` deleted wrapper | `app.agents.synthesizer.generation`, `templates` | migrated / external gate | collects; four credentialed generation cases remain explicit |
 | `tests/graph/test_critical_fixes.py` | `app.graph.neo4j_client` | `5d05e6f5` moved legacy graph layout | `app.graph.knowledge.client`, `app.agents.rag.graph` | migrate | collect after split-client/RAG remap |
 | `tests/graph/test_cypher_validation.py` | `app.graph.cypher_validation` | `5d05e6f5` deleted old module | `app.graph.knowledge.cypher_validation` | migrate | collect Cypher validation tests |
 | `tests/graph/test_graph_rag_validation.py` | `app.agents.graph_rag_agent` | `d1075732` deleted wrapper | `app.agents.rag.graph` | migrate | collect graph-RAG validation tests |
@@ -77,8 +118,8 @@ The same full collection command now reports **1478 collected items / 37 collect
 | `tests/unit/test_chinese_document_indexer.py` | `jieba` | declared in `pyproject.toml`; absent in probe | `app.services.language.chinese_document_indexer` | install-dependency | install sync, then collect indexer tests |
 | `tests/unit/test_chinese_query_preprocessor.py` | `jieba` | declared in `pyproject.toml`; absent in probe | `app.services.language.chinese_query_preprocessor` | install-dependency | install sync, then collect preprocessor tests |
 | `tests/unit/test_chinese_tokenizer.py` | `jieba` | declared in `pyproject.toml`; absent in probe | `app.services.language.chinese_tokenizer` | install-dependency | install sync, then collect tokenizer tests |
-| `tests/unit/test_synthesis_language.py` | `app.agents.synthesis_agent` | `d1075732` deleted wrapper | `app.agents.synthesizer.generation` | migrate | collect language synthesis tests |
-| `tests/unit/test_unified_agents.py` | `base_agent`, `unified_config`, `shared_utils` wrappers | `d1075732`/`54192131` deleted wrappers | `app.agents.shared.base`, `config`, `utils`, `result_schemas` | migrate | collect shared-agent contract tests |
+| `tests/unit/test_synthesis_language.py` | `app.agents.synthesis_agent` | `d1075732` deleted wrapper | `app.agents.synthesizer.generation` | migrated | canonical lookup patches pass |
+| `tests/unit/test_unified_agents.py` | `base_agent`, `unified_config`, `shared_utils` wrappers | `d1075732`/`54192131` deleted wrappers | `app.agents.shared.base`, `config`, `utils`, `result_schemas`; `app.agents.rag.vector` | migrated | 24 current shared/vector contract tests pass |
 | `tests/unit/test_web_research_agent.py` | `app.agents.web_research_agent` | `d1075732` deleted wrapper | `app.agents.rag.web`, `app.agents.rag.web_utils` | migrate | collect web-research utility tests |
 
 ## Matrix review

@@ -10,12 +10,12 @@ from unittest.mock import patch
 
 import pytest
 
-from app.agents.router_agent import (
+from app.agents.router.routing import (
     decide_route,
     get_calibration_stats,
     record_routing_feedback,
 )
-from app.agents.router_calibration import ConfidenceCalibrator
+from app.agents.router.calibration import ConfidenceCalibrator
 
 
 class TestRouterCalibrationIntegration:
@@ -78,11 +78,11 @@ class TestRouterCalibrationIntegration:
 
     def test_calibration_disabled_returns_raw_confidence(self):
         """Test that disabling calibration returns raw confidence."""
-        with patch("app.agents.router_agent.ENABLE_CALIBRATION", False):
-            with patch("app.agents.router_agent._calibrator", None):
+        with patch("app.agents.router.routing.ENABLE_CALIBRATION", False):
+            with patch("app.agents.router.routing._calibrator", None):
                 # When calibration is disabled, confidence should not be adjusted
                 # This test verifies the fallback behavior
-                from app.agents.router_agent import decide_route
+                from app.agents.router.routing import decide_route
 
                 decision = decide_route("What is deep learning?")
                 # Just verify it doesn't crash when calibrator is None

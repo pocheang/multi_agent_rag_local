@@ -1,6 +1,6 @@
 """Tests for enhanced router agent with few-shot examples."""
 import pytest
-from app.agents.router_examples import (
+from app.agents.router.examples import (
     get_few_shot_examples_by_route,
     format_examples_for_prompt,
     EXAMPLE_VECTOR_QUERIES,
@@ -47,7 +47,7 @@ def test_example_vector_queries_content():
 
 def test_enhanced_router_prompt_includes_examples():
     """Test that enhanced prompt includes few-shot examples."""
-    from app.agents.router_agent import ROUTER_PROMPT
+    from app.agents.router.routing import ROUTER_PROMPT
 
     # Should include few-shot examples
     assert "Example" in ROUTER_PROMPT or "examples" in ROUTER_PROMPT.lower()
@@ -63,7 +63,7 @@ def test_enhanced_router_prompt_includes_examples():
 
 def test_decide_route_returns_enhanced_decision():
     """Test that decide_route returns decision with reasoning."""
-    from app.agents.router_agent import decide_route
+    from app.agents.router.routing import decide_route
 
     decision = decide_route("What is machine learning?")
 

@@ -9,12 +9,12 @@ import json
 import tempfile
 from pathlib import Path
 from datetime import datetime
-from app.agents.route_accuracy_tracker import (
+from app.agents.router.accuracy import (
     RouteAccuracyTracker,
     RouteOutcome,
     AccuracyStats,
 )
-from app.agents.router_agent import RouteDecision
+from app.agents.router.routing import LegacyRouteDecision as RouteDecision
 
 
 @pytest.fixture

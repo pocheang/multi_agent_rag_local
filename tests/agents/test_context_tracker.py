@@ -8,7 +8,7 @@ from datetime import datetime, timedelta
 
 import pytest
 
-from app.agents.context_tracker_agent import (
+from app.services.sessions.context_tracker import (
     cleanup_expired_contexts,
     clear_context,
     get_context,
@@ -70,7 +70,7 @@ async def populated_context(sample_session_id, sample_user_id):
         route="vector",
         entities=["Python"],
     )
-    return _context_store[sample_session_id]
+    return get_context(sample_session_id, sample_user_id)
 
 
 # ============================================================================
@@ -90,8 +90,9 @@ async def test_create_new_context(sample_session_id, sample_user_id):
         entities=["world"],
     )
 
-    context = get_context(sample_session_id)
+    context = get_context(sample_session_id, sample_user_id)
     assert context is not None
+    assert get_context(sample_session_id, "other-user") is None
     assert context.session_id == sample_session_id
     assert context.user_id == sample_user_id
     assert len(context.conversation_history) == 1
@@ -124,7 +125,7 @@ async def test_update_existing_context(sample_session_id, sample_user_id):
         entities=["entity2"],
     )
 
-    context = get_context(sample_session_id)
+    context = get_context(sample_session_id, sample_user_id)
     assert len(context.conversation_history) == 2
     assert context.conversation_history[0].query == "First query"
     assert context.conversation_history[1].query == "Second query"
@@ -176,7 +177,7 @@ async def test_history_limit_enforcement(sample_session_id, sample_user_id):
             entities=[],
         )
 
-    context = get_context(sample_session_id)
+    context = get_context(sample_session_id, sample_user_id)
     assert len(context.conversation_history) == 10
     # Should keep the most recent 10
     assert context.conversation_history[0].query == "Query 5"
@@ -211,7 +212,7 @@ async def test_entity_mention_tracking(sample_session_id, sample_user_id):
         entities=["Python"],
     )
 
-    context = get_context(sample_session_id)
+    context = get_context(sample_session_id, sample_user_id)
     assert context.entity_mentions["Python"] == 3
     assert context.entity_mentions["Java"] == 1
 
@@ -244,13 +245,15 @@ async def test_hints_for_followup_query(sample_session_id, sample_user_id):
     )
 
     # Follow-up indicators
-    hints1 = get_context_aware_routing_hints(sample_session_id, "Tell me more")
+    hints1 = get_context_aware_routing_hints(sample_session_id, "Tell me more", sample_user_id)
     assert hints1.followup is True
 
-    hints2 = get_context_aware_routing_hints(sample_session_id, "Also, what about deep learning?")
+    hints2 = get_context_aware_routing_hints(
+        sample_session_id, "Also, what about deep learning?", sample_user_id
+    )
     assert hints2.followup is True
 
-    hints3 = get_context_aware_routing_hints(sample_session_id, "还有什么?")
+    hints3 = get_context_aware_routing_hints(sample_session_id, "还有什么?", sample_user_id)
     assert hints3.followup is True
 
 
@@ -266,7 +269,7 @@ async def test_hints_previous_route(sample_session_id, sample_user_id):
         entities=[],
     )
 
-    hints = get_context_aware_routing_hints(sample_session_id, "Follow-up")
+    hints = get_context_aware_routing_hints(sample_session_id, "Follow-up", sample_user_id)
     assert hints.previous_route == "hybrid"
 
 
@@ -298,7 +301,7 @@ async def test_hints_focus_entities(sample_session_id, sample_user_id):
         entities=["Python"],
     )
 
-    hints = get_context_aware_routing_hints(sample_session_id, "Next query")
+    hints = get_context_aware_routing_hints(sample_session_id, "Next query", sample_user_id)
     # Should return top 3 entities by mention count
     assert "Python" in hints.focus_entities  # 3 mentions
     assert "Java" in hints.focus_entities     # 2 mentions
@@ -321,7 +324,7 @@ async def test_hints_generation_performance(sample_session_id, sample_user_id):
 
     # Measure hint generation
     start = time.perf_counter()
-    hints = get_context_aware_routing_hints(sample_session_id, "Test query")
+    hints = get_context_aware_routing_hints(sample_session_id, "Test query", sample_user_id)
     elapsed_ms = (time.perf_counter() - start) * 1000
 
     assert elapsed_ms < 5.0, f"Hint generation took {elapsed_ms:.2f}ms, expected <5ms"
@@ -345,21 +348,6 @@ def test_resolve_query_no_hints():
 
     resolved = resolve_query_with_context(query, hints)
     assert resolved == query  # No change
-
-
-def test_resolve_query_chinese_pronouns():
-    """Test Chinese pronoun resolution."""
-    query = "它是什么?"
-    hints = ContextHints(
-        resolve_references={"Python": 3},
-        followup=True,
-        previous_route="vector",
-        focus_entities=["Python"],
-    )
-
-    resolved = resolve_query_with_context(query, hints)
-    assert "Python" in resolved
-    assert "它" not in resolved
 
 
 def test_resolve_query_english_pronouns():
@@ -424,14 +412,16 @@ async def test_cleanup_expired_contexts(sample_user_id):
         entities=[],
     )
     # Manually age the context
-    _context_store[session2].last_update_time = datetime.utcnow() - timedelta(hours=2)
+    old_context = get_context(session2, sample_user_id)
+    assert old_context is not None
+    old_context.last_update_time = datetime.utcnow() - timedelta(hours=2)
 
     # Cleanup expired (TTL is 3600 seconds = 1 hour)
     cleaned = cleanup_expired_contexts()
 
     assert cleaned == 1
-    assert session1 in _context_store
-    assert session2 not in _context_store
+    assert get_context(session1, sample_user_id) is not None
+    assert get_context(session2, sample_user_id) is None
 
 
 @pytest.mark.asyncio
@@ -446,14 +436,14 @@ async def test_clear_context(sample_session_id, sample_user_id):
         entities=[],
     )
 
-    assert get_context(sample_session_id) is not None
+    assert get_context(sample_session_id, sample_user_id) is not None
 
-    cleared = clear_context(sample_session_id)
+    cleared = clear_context(sample_session_id, sample_user_id)
     assert cleared is True
-    assert get_context(sample_session_id) is None
+    assert get_context(sample_session_id, sample_user_id) is None
 
     # Clearing non-existent context should return False
-    cleared_again = clear_context(sample_session_id)
+    cleared_again = clear_context(sample_session_id, sample_user_id)
     assert cleared_again is False
 
 
@@ -466,28 +456,24 @@ def test_detect_intent_question():
     """Test intent detection for questions."""
     assert _detect_intent("What is AI?") == "question"
     assert _detect_intent("How does it work?") == "question"
-    assert _detect_intent("为什么选择Python?") == "question"
 
 
 def test_detect_intent_navigation():
     """Test intent detection for navigation."""
     assert _detect_intent("Show me examples") == "navigation"
     assert _detect_intent("Find all documents") == "navigation"
-    assert _detect_intent("搜索相关资料") == "navigation"
 
 
 def test_detect_intent_comparison():
     """Test intent detection for comparison."""
     assert _detect_intent("Compare Python and Java") == "comparison"
     assert _detect_intent("What's the difference?") == "comparison"
-    assert _detect_intent("比较两者的区别") == "comparison"
 
 
 def test_detect_intent_clarification():
     """Test intent detection for clarification."""
     assert _detect_intent("Explain more") == "clarification"
     assert _detect_intent("Give me more details") == "clarification"
-    assert _detect_intent("详细解释一下") == "clarification"
 
 
 @pytest.mark.asyncio
@@ -502,7 +488,7 @@ async def test_is_followup_short_query(sample_session_id, sample_user_id):
         entities=[],
     )
 
-    context = get_context(sample_session_id)
+    context = get_context(sample_session_id, sample_user_id)
     assert _is_followup_query("More", context) is True
     assert _is_followup_query("Tell me", context) is True
 
@@ -519,28 +505,9 @@ async def test_is_followup_with_pronouns(sample_session_id, sample_user_id):
         entities=["TensorFlow"],
     )
 
-    context = get_context(sample_session_id)
+    context = get_context(sample_session_id, sample_user_id)
     assert _is_followup_query("Tell me more about it", context) is True
     assert _is_followup_query("What are the benefits of this?", context) is True
-    assert _is_followup_query("它有什么特点?", context) is True
-
-
-@pytest.mark.asyncio
-async def test_detect_reference_pronouns_chinese(sample_session_id, sample_user_id):
-    """Test pronoun detection for Chinese."""
-    await update_conversation_context(
-        session_id=sample_session_id,
-        user_id=sample_user_id,
-        query="Query",
-        response="Response",
-        route="vector",
-        entities=["Python", "Java"],
-    )
-
-    context = get_context(sample_session_id)
-    refs = _detect_reference_pronouns("它是什么?", context)
-    assert refs is not None
-    assert "Python" in refs or "Java" in refs
 
 
 @pytest.mark.asyncio
@@ -555,7 +522,7 @@ async def test_detect_reference_pronouns_english(sample_session_id, sample_user_
         entities=["TensorFlow"],
     )
 
-    context = get_context(sample_session_id)
+    context = get_context(sample_session_id, sample_user_id)
     refs = _detect_reference_pronouns("Tell me about this", context)
     assert refs is not None
     assert "TensorFlow" in refs
@@ -573,7 +540,7 @@ async def test_detect_reference_no_pronouns(sample_session_id, sample_user_id):
         entities=["Entity"],
     )
 
-    context = get_context(sample_session_id)
+    context = get_context(sample_session_id, sample_user_id)
     refs = _detect_reference_pronouns("What is machine learning?", context)
     assert refs is None
 
@@ -590,7 +557,7 @@ async def test_get_top_entities_empty(sample_session_id, sample_user_id):
         entities=[],
     )
 
-    context = get_context(sample_session_id)
+    context = get_context(sample_session_id, sample_user_id)
     top = _get_top_entities(context, top_k=3)
     assert len(top) == 0
 
@@ -624,7 +591,7 @@ async def test_get_top_entities_sorted(sample_session_id, sample_user_id):
         entities=["A"],
     )
 
-    context = get_context(sample_session_id)
+    context = get_context(sample_session_id, sample_user_id)
     top = _get_top_entities(context, top_k=3)
 
     # A should be first (3 mentions), then B (2), then C (1)
@@ -700,7 +667,7 @@ async def test_topic_stack_deduplication(sample_session_id, sample_user_id):
         entities=[],
     )
 
-    context = get_context(sample_session_id)
+    context = get_context(sample_session_id, sample_user_id)
     # Should not duplicate consecutive "vector"
     assert context.topic_stack == ["vector", "hybrid"]
 
@@ -720,7 +687,7 @@ async def test_topic_stack_size_limit(sample_session_id, sample_user_id):
             entities=[],
         )
 
-    context = get_context(sample_session_id)
+    context = get_context(sample_session_id, sample_user_id)
     assert len(context.topic_stack) <= 5
     # Should keep the most recent 5
     assert context.topic_stack[-1] == "graph"

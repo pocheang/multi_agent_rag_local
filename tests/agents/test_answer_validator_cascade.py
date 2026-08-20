@@ -6,7 +6,7 @@ Test-Driven Development: These tests are written FIRST to drive implementation.
 
 import pytest
 import time
-from app.agents.validation_cascade import (
+from app.agents.validation.cascade import (
     ValidationCascade,
     CascadeLevel,
     CascadeResult,
