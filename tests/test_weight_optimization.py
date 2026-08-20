@@ -5,7 +5,7 @@ Tests for quality weight optimization A/B testing.
 import pytest
 from unittest.mock import MagicMock
 from app.agents.validation.quality_orchestrator import orchestrate_quality
-from app.agents.quality_models import (
+from app.agents.shared.quality_models import (
     RouteValidationResult,
     RetrievalQualityResult,
     RetrievalQualityMetrics,
@@ -127,6 +127,27 @@ def test_weight_optimization_alternative_weights():
     del os.environ["QUALITY_WEIGHT_CITATION"]
     importlib.reload(quality_config)
     importlib.reload(quality_orchestrator)
+
+
+def test_correlation_calculation():
+    """Keep the retired A/B script gap visible for Task 7."""
+    from scripts.test_quality_weights import calculate_correlation
+
+    correlation = calculate_correlation(
+        [0.85, 0.90, 0.75, 0.65, 0.88],
+        [0.83, 0.92, 0.78, 0.60, 0.85],
+    )
+    assert 0.7 <= correlation <= 1.0
+
+
+def test_ab_testing_script_exists():
+    """Keep the missing A/B owner visible for Task 7."""
+    try:
+        import scripts.test_quality_weights as quality_weights
+    except ImportError:
+        pytest.fail("A/B testing script should exist and be importable")
+    assert hasattr(quality_weights, "run_ab_test")
+    assert hasattr(quality_weights, "calculate_correlation")
 
 
 def test_weight_sum_equals_one():

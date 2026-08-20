@@ -161,7 +161,28 @@ Fresh full collection reports **1958 collected items / 12 collection errors**
 | `tests/test_react_agent.py` | `app.agents.react_agent` | `d1075732` deleted wrapper | `app.agents.tool.react` | migrated / external gate | canonical model/tool/synthesis lookup patches pass; real-LLM integration remains explicit |
 | `tests/test_streaming_analytics_logging.py` | `app.graph.streaming.safe_wrappers` | `5d05e6f5` removed wrappers | `app.api.query.streaming.execution`, retrieval logger | migrate | collect analytics at current streaming boundary |
 | `tests/test_streaming_react_agent_class.py` | `app.graph.streaming.stream_processor` | `5d05e6f5` removed processor | `app.api.query.streaming.execution`, `app.agents.tool.react` | migrate | collect streaming agent-class propagation |
-| `tests/test_weight_optimization.py` | `app.agents.quality_orchestrator_agent`; deleted A/B helper script | `d1075732` deleted wrapper; `828aa796` deleted development test script | `app.agents.validation.quality_orchestrator`, `app.agents.shared.config` | migrated; two retired-script tests deleted | current/alternative weighting and sum-to-one boundary pass |
+| `tests/test_weight_optimization.py` | `app.agents.quality_orchestrator_agent`; deleted A/B helper script | `d1075732` deleted wrapper; `828aa796` deleted development test script | `app.agents.validation.quality_orchestrator`, `app.agents.shared.config` | migrated; two missing-script tests restored and visibly failing for Task 7 | current/alternative weighting and sum-to-one boundary pass; missing A/B owner remains visible |
+
+### Task 4 Fix Round 1 exact replacements
+
+The eight former `app.graph.streaming.run_query_stream` tests are restored as
+behavioral tests in `tests/pipeline/test_rag_pipeline_streaming.py`:
+
+| Old test | Current owner and assertion |
+|---|---|
+| `test_stream_prefers_effective_hit_count_for_web_fallback` | `services.retrieval.evidence_scoring.evidence_is_sufficient`: zero effective hits are insufficient despite five raw hits |
+| `test_stream_does_not_use_web_when_fallback_enabled_and_local_evidence_sufficient` | same owner: three effective hits satisfy the three-hit threshold |
+| `test_stream_emits_thought_events` | `OrchestrationEngine.execute_stream`: typed route/rag/synthesize/complete status events are emitted |
+| `test_stream_continues_when_vector_retrieval_fails` | `RAGAgentService.retrieve`: BM25 evidence survives vector failure and a typed skipped degradation event is reported |
+| `test_stream_forces_web_when_user_explicitly_requests_online_search` | `adaptive_policy.build_adaptive_plan`: explicit force sets `prefer_web` |
+| `test_stream_skips_web_for_casual_chat` | `standard_request_policy.prepare_standard_request`: smalltalk clears web and reasoning flags |
+| `test_stream_recovers_when_stream_synthesis_raises` | `OrchestrationEngine.execute_stream`: synthesis failure is surfaced rather than producing a false done result |
+| `test_stream_partial_then_error_emits_answer_reset` | `StreamResultPostProcessor.finalize`: changed resynthesis returns exact reset content and terminal answer |
+
+`test_correlation_calculation` and `test_ab_testing_script_exists` are restored.
+There is no current owner for `scripts.test_quality_weights`; both failures stay
+visible and are classified for Task 7. The canonical `shared.quality_models`
+import is now part of the self-contained Task 4 head.
 | `tests/test_workflow_fixes.py` | `app.graph.workflow` | `5d05e6f5` removed LangGraph workflow; `ccbaec34` removed last legacy workflow test | none; supported orchestration is not that public API | delete-retired-contract | confirm each assertion is only a removed workflow helper contract |
 | `tests/unit/test_chinese_document_indexer.py` | `jieba` | declared in `pyproject.toml`; absent in probe | `app.services.language.chinese_document_indexer` | install-dependency | install sync, then collect indexer tests |
 | `tests/unit/test_chinese_query_preprocessor.py` | `jieba` | declared in `pyproject.toml`; absent in probe | `app.services.language.chinese_query_preprocessor` | install-dependency | install sync, then collect preprocessor tests |
