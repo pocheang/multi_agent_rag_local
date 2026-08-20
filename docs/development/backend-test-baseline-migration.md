@@ -13,6 +13,12 @@ No broken requirements found.
 
 `pyproject.toml` declares `jieba`, `psutil`, and `mcp`; they are absent from this virtual environment. `pandas` and the `fitz` provider (`PyMuPDF`) are absent as well and must be resolved before their current multimodal tests can collect.
 
+## Task 2 environment repair (2026-08-20)
+
+The declared `.venv` test environment was installed with `.[dev,multimodal]` after adding the `multimodal` optional extra (`pandas`, `PyMuPDF`, `pdfplumber`, and `tabulate`) and including it in `full`. The import probe for `jieba`, `mcp`, `pandas`, `psutil`, `fitz`, `pdfplumber`, and `tabulate` passed, and `pip check` reported no broken requirements.
+
+The same full collection command now reports **1478 collected items / 37 collection errors** (17.38s, exit 1), down from the frozen 47-error baseline. The remaining collection errors are the documented retired-path and chart-extractor migrations; this environment-only task made no behavioral or assertion changes. The eight focused files now collect 79 tests, with 66 passing, 1 skipped, and 12 current-contract/runtime failures (including optional `docling` absence), rather than import failures.
+
 ## Retirement and ownership evidence
 
 * `d1075732` explicitly deleted 14 legacy agent compatibility wrappers and added the typed router modules.

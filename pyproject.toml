@@ -62,6 +62,13 @@ paddle = [
 docling = [
   "docling>=2.93.0",
 ]
+# PDF/image/table extraction support.
+multimodal = [
+  "pandas>=2.2.0,<3.0",
+  "PyMuPDF>=1.24.0",
+  "pdfplumber>=0.11.0",
+  "tabulate>=0.9.0",
+]
 # Cross-encoder reranking via sentence-transformers (BAAI/bge-reranker-v2-m3
 # by default). Falls back to lexical scoring when missing.
 reranker = [
@@ -69,7 +76,7 @@ reranker = [
 ]
 # Convenience meta-extra: equivalent to the historical full install.
 full = [
-  "querymind[ocr,paddle,docling,reranker]",
+  "querymind[ocr,paddle,docling,reranker,multimodal]",
 ]
 dev = [
   "pytest>=8.0.0",
