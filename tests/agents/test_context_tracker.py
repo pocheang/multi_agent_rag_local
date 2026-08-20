@@ -350,6 +350,21 @@ def test_resolve_query_no_hints():
     assert resolved == query  # No change
 
 
+def test_resolve_query_chinese_pronouns():
+    """Test Chinese pronoun resolution."""
+    query = "它是什么?"
+    hints = ContextHints(
+        resolve_references={"Python": 3},
+        followup=True,
+        previous_route="vector",
+        focus_entities=["Python"],
+    )
+
+    resolved = resolve_query_with_context(query, hints)
+    assert "Python" in resolved
+    assert "它" not in resolved
+
+
 def test_resolve_query_english_pronouns():
     """Test English pronoun resolution."""
     query = "Tell me more about it"
@@ -456,24 +471,28 @@ def test_detect_intent_question():
     """Test intent detection for questions."""
     assert _detect_intent("What is AI?") == "question"
     assert _detect_intent("How does it work?") == "question"
+    assert _detect_intent("为什么选择Python?") == "question"
 
 
 def test_detect_intent_navigation():
     """Test intent detection for navigation."""
     assert _detect_intent("Show me examples") == "navigation"
     assert _detect_intent("Find all documents") == "navigation"
+    assert _detect_intent("搜索相关资料") == "navigation"
 
 
 def test_detect_intent_comparison():
     """Test intent detection for comparison."""
     assert _detect_intent("Compare Python and Java") == "comparison"
     assert _detect_intent("What's the difference?") == "comparison"
+    assert _detect_intent("比较两者的区别") == "comparison"
 
 
 def test_detect_intent_clarification():
     """Test intent detection for clarification."""
     assert _detect_intent("Explain more") == "clarification"
     assert _detect_intent("Give me more details") == "clarification"
+    assert _detect_intent("详细解释一下") == "clarification"
 
 
 @pytest.mark.asyncio
@@ -508,6 +527,24 @@ async def test_is_followup_with_pronouns(sample_session_id, sample_user_id):
     context = get_context(sample_session_id, sample_user_id)
     assert _is_followup_query("Tell me more about it", context) is True
     assert _is_followup_query("What are the benefits of this?", context) is True
+
+
+@pytest.mark.asyncio
+async def test_detect_reference_pronouns_chinese(sample_session_id, sample_user_id):
+    """Test pronoun detection for Chinese."""
+    await update_conversation_context(
+        session_id=sample_session_id,
+        user_id=sample_user_id,
+        query="Query",
+        response="Response",
+        route="vector",
+        entities=["Python", "Java"],
+    )
+
+    context = get_context(sample_session_id, sample_user_id)
+    refs = _detect_reference_pronouns("它是什么?", context)
+    assert refs is not None
+    assert "Python" in refs or "Java" in refs
 
 
 @pytest.mark.asyncio

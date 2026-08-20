@@ -34,31 +34,36 @@ The same full collection command now reports **1478 collected items / 37 collect
 `tests/agents/test_context_tracker.py` now exercises the tenant-scoped
 `app.services.sessions.context_tracker` store through `(user_id, session_id)`
 lookups. The migrated coverage retains history limits, entity and topic
-tracking, routing hints, TTL cleanup, public English reference resolution,
-and explicit cross-user isolation. The stale Chinese-only wrapper cases were
-removed: four direct `_detect_intent` assertions, one tautological short-
-follow-up assertion, one direct `_detect_reference_pronouns` case, and one
-Chinese-only `resolve_query_with_context` case. No active production caller depends on
-those wrapper-internal Unicode fixtures; the canonical service does not expose
-them as a supported contract, while the equivalent English public behavior
-remains covered.
+tracking, routing hints, TTL cleanup, English and Chinese reference resolution,
+and explicit cross-user isolation. `_detect_intent` is called by
+`update_conversation_context`; `_detect_reference_pronouns` is called by the
+public routing-hint and follow-up paths; and `resolve_query_with_context`
+documents both English and Chinese behavior. Their Chinese assertions therefore
+remain current canonical contract coverage. The restored suite reports **26
+passed / 5 failed**: Chinese resolution, navigation/comparison/clarification
+intent, and pronoun detection are live context-service defects assigned to Task
+7. Only `_is_followup_query("它有什么特点?", context)` remains excluded because
+the seven-character input returns at the unconditional `<30`-character branch
+before pronoun detection, so that assertion tested no Chinese behavior.
 
 ## Task 3 validation/router/config/synthesis migration (2026-08-20)
 
-All 18 Task 3 files now collect from their canonical backend owners: **348
-items collected**. The focused execution reports **337 passed / 11 failed**
-(69.83s). Root-cause tracing assigned every remaining failure to a live
-external gate, without changing production fallbacks or weakening assertions:
+All 18 Task 3 files now collect from their canonical backend owners: **350
+items collected**. The focused execution reports **334 passed / 16 failed**
+(68.66s). Root-cause tracing assigns 5 failures to the live canonical context
+service and 11 to external gates, without changing production behavior or
+weakening assertions:
 
 | gate | focused failures | observed boundary |
 | --- | ---: | --- |
+| canonical context service | 5 | Chinese resolution, three intent categories, and pronoun detection fail in the active owner; assigned to Task 7 |
 | validation NLI model | 1 | Hugging Face model access is blocked; the deterministic lexical fallback returns the documented conservative issue |
 | relevance scoring | 3 | configured Ollama runtime is not running; the canonical scorer returns its `0.5/somewhat_relevant` error fallback |
 | router accuracy samples | 3 | OpenAI credentials are absent; canonical routing returns its safe vector fallback |
 | synthesis citation generation | 4 | OpenAI credentials are absent; canonical synthesis returns its service-unavailable fallback |
 
-All other **337 current-contract assertions pass**, including 29 tenant-scoped
-context tests, 18 cache-isolated router fallback tests, and 24 shared
+The other **334 focused assertions pass**, including 26 tenant-scoped context
+tests, 18 cache-isolated router fallback tests, and 24 shared
 base/config/utils/vector tests. The canonical vector imports in
 `test_unified_agents.py` target `app.agents.rag.vector`, and its patches target
 the lookup in that module.
@@ -76,7 +81,7 @@ this task's file list.
 | --- | --- | --- | --- | --- | --- |
 | `tests/agents/test_answer_validator.py` | `app.agents.answer_validator_agent` | `d1075732` deleted wrapper | `app.agents.validation.public`; NLI helpers in `validation.nli` | migrated | passes focused current-contract execution |
 | `tests/agents/test_answer_validator_cascade.py` | `app.agents.validation_cascade` | `54192131` deleted wrapper | `app.agents.validation.cascade` | migrated / external gate | collects; one NLI-model gate remains explicit |
-| `tests/agents/test_context_tracker.py` | `app.agents.context_tracker_agent` | `d1075732` deleted wrapper | `app.services.sessions.context_tracker` | migrated | 29 tenant-scoped tests pass |
+| `tests/agents/test_context_tracker.py` | `app.agents.context_tracker_agent` | `d1075732` deleted wrapper | `app.services.sessions.context_tracker` | migrated / Task 7 defect | 31 collect; 26 pass and 5 live Chinese contract failures remain visible |
 | `tests/agents/test_fact_verification.py` | `app.agents.fact_verification` | `54192131` deleted wrapper | `app.agents.validation.fact_verification` | migrated | passes focused current-contract execution |
 | `tests/agents/test_hallucination_detection.py` | `app.agents.hallucination_patterns` | `54192131` deleted wrapper | `app.agents.validation.hallucination_patterns` | migrated | passes focused current-contract execution |
 | `tests/agents/test_quality_orchestrator.py` | `app.agents.quality_orchestrator_agent` | `d1075732` deleted wrapper | `app.agents.validation.quality_orchestrator` | migrated | passes focused current-contract execution |
