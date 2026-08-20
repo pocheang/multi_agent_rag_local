@@ -10,13 +10,14 @@ Tests cover:
 """
 
 import pytest
-from app.agents.web_research_agent import (
+import app.agents.rag.web as web_research_agent
+from app.agents.rag.web import (
     _sanitize_query,
     _source_score,
     _parse_allowlist,
     run_web_research,
 )
-from app.agents.web_research_utils import (
+from app.agents.rag.web_utils import (
     validate_url,
     is_time_sensitive_query,
     WebSearchMetrics,
@@ -268,27 +269,46 @@ class TestMetricsTracking:
 class TestWebResearchIntegration:
     """Integration tests for web research agent."""
 
-    @pytest.mark.skip(reason="Requires external API access")
-    def test_run_web_research_basic(self):
+    def test_run_web_research_basic(self, monkeypatch):
         """Test basic web research execution."""
+        monkeypatch.setattr(
+            web_research_agent,
+            "search_web",
+            lambda _query, max_results: [
+                {
+                    "title": "CISA guidance",
+                    "href": "https://cisa.gov/guidance",
+                    "body": "RAG security guidance",
+                }
+            ],
+        )
+
         result = run_web_research("What is RAG in AI?")
 
         assert "context" in result
         assert "citations" in result
-        assert "used" in result
+        assert result["used"] is True
         assert "metrics" in result
 
-    @pytest.mark.skip(reason="Requires external API access")
-    def test_run_web_research_with_sensitive_data(self):
+    def test_run_web_research_with_sensitive_data(self, monkeypatch):
         """Test web research with sensitive data."""
+        queries = []
+
+        def fake_search(query, max_results):
+            queries.append(query)
+            return []
+
+        monkeypatch.setattr(web_research_agent, "search_web", fake_search)
         result = run_web_research("Contact admin@example.com about 192.168.1.1")
 
         # Query should be sanitized
         assert result["metrics"]["sanitized"] is True
+        assert "admin@example.com" not in queries[0]
+        assert "192.168.1.1" not in queries[0]
 
-    @pytest.mark.skip(reason="Requires external API access")
-    def test_run_web_research_metrics(self):
+    def test_run_web_research_metrics(self, monkeypatch):
         """Test web research returns metrics."""
+        monkeypatch.setattr(web_research_agent, "search_web", lambda _query, max_results: [])
         result = run_web_research("Python programming")
 
         metrics = result.get("metrics", {})

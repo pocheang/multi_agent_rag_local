@@ -6,7 +6,7 @@ from unittest.mock import Mock, patch
 
 import pytest
 
-from app.agents.react_agent import (
+from app.agents.tool.react import (
     ReActAgent,
     run_react_agent,
 )
@@ -25,9 +25,9 @@ class TestReActAgent:
         assert "graph" in agent.accumulated_context
         assert "web" in agent.accumulated_context
 
-    @patch("app.agents.react_agent.run_vector_rag")
-    @patch("app.agents.react_agent.synthesize_answer")
-    @patch("app.agents.react_agent.get_chat_model")
+    @patch("app.agents.tool.react.run_vector_rag")
+    @patch("app.agents.tool.react.synthesize_answer")
+    @patch("app.agents.tool.react.get_chat_model")
     def test_react_simple_query(
         self,
         mock_get_model,
@@ -88,9 +88,9 @@ class TestReActAgent:
         assert mock_vector.called
         assert mock_synthesize.called
 
-    @patch("app.agents.react_agent.run_vector_rag")
-    @patch("app.agents.react_agent.synthesize_answer")
-    @patch("app.agents.react_agent.get_chat_model")
+    @patch("app.agents.tool.react.run_vector_rag")
+    @patch("app.agents.tool.react.synthesize_answer")
+    @patch("app.agents.tool.react.get_chat_model")
     def test_react_resets_accumulated_context_between_runs(
         self,
         mock_get_model,
@@ -131,10 +131,10 @@ class TestReActAgent:
         assert first["contexts"]["vector"].strip() == "first run context"
         assert second["contexts"]["vector"] == ""
 
-    @patch("app.agents.react_agent.run_vector_rag")
-    @patch("app.agents.react_agent.run_graph_rag")
-    @patch("app.agents.react_agent.synthesize_answer")
-    @patch("app.agents.react_agent.get_chat_model")
+    @patch("app.agents.tool.react.run_vector_rag")
+    @patch("app.agents.tool.react.run_graph_rag")
+    @patch("app.agents.tool.react.synthesize_answer")
+    @patch("app.agents.tool.react.get_chat_model")
     def test_react_multi_tool_query(
         self,
         mock_get_model,
@@ -167,7 +167,7 @@ class TestReActAgent:
 
         mock_graph.return_value = {
             "context": "graph context",
-            "entities": [{"name": "Entity1"}],
+            "entities": ["Entity1"],
             "relationships": [],
         }
 
@@ -185,7 +185,7 @@ class TestReActAgent:
         assert mock_graph.called
         assert result["iterations_used"] == 3
 
-    @patch("app.agents.react_agent.run_graph_rag")
+    @patch("app.agents.tool.react.run_graph_rag")
     def test_react_graph_tool_passes_allowed_sources(self, mock_graph):
         """Test that graph tool reuses the same source scope as the workflow."""
         mock_graph.return_value = {
@@ -199,7 +199,7 @@ class TestReActAgent:
 
         mock_graph.assert_called_once_with("test", allowed_sources=["allowed.md"])
 
-    @patch("app.agents.react_agent.run_graph_rag")
+    @patch("app.agents.tool.react.run_graph_rag")
     def test_react_graph_summary_uses_neighbors_and_paths_when_relationships_missing(self, mock_graph):
         """Test that graph observations count neighbor/path evidence from the graph agent output."""
         mock_graph.return_value = {
@@ -218,7 +218,7 @@ class TestReActAgent:
         assert len(agent.tool_results["graph"]["neighbors"]) == 1
         assert len(agent.tool_results["graph"]["paths"]) == 1
 
-    @patch("app.agents.react_agent.run_vector_rag")
+    @patch("app.agents.tool.react.run_vector_rag")
     def test_react_accumulates_vector_results_across_multiple_tool_calls(self, mock_vector):
         """Test that repeated vector searches keep earlier evidence instead of overwriting it."""
         mock_vector.side_effect = [
@@ -252,7 +252,7 @@ class TestReActAgent:
         """Test ReAct respects max iterations limit."""
         agent = ReActAgent(max_iterations=2)
 
-        with patch("app.agents.react_agent.get_chat_model") as mock_get_model:
+        with patch("app.agents.tool.react.get_chat_model") as mock_get_model:
             mock_model = Mock()
             mock_get_model.return_value = mock_model
 
@@ -261,7 +261,7 @@ class TestReActAgent:
                 content='{"thought":"继续","action":"vector_search","action_input":"test","reasoning":"继续搜索"}'
             )
 
-            with patch("app.agents.react_agent.run_vector_rag") as mock_vector:
+            with patch("app.agents.tool.react.run_vector_rag") as mock_vector:
                 mock_vector.return_value = {
                     "context": "",
                     "citations": [],
@@ -269,7 +269,7 @@ class TestReActAgent:
                     "effective_hit_count": 0,
                 }
 
-                with patch("app.agents.react_agent.synthesize_answer") as mock_synthesize:
+                with patch("app.agents.tool.react.synthesize_answer") as mock_synthesize:
                     mock_synthesize.return_value = {
                         "answer": "Timeout answer",
                         "detected_language": "zh",
@@ -307,7 +307,7 @@ class TestReActAgent:
 
     def test_run_react_agent_convenience_function(self):
         """Test convenience function wrapper."""
-        with patch("app.agents.react_agent.ReActAgent") as mock_class:
+        with patch("app.agents.tool.react.ReActAgent") as mock_class:
             mock_instance = Mock()
             mock_class.return_value = mock_instance
             mock_instance.run.return_value = {"answer": "test"}
@@ -345,7 +345,7 @@ class TestReActIntegration:
         assert result["iterations_used"] > 0
 
 
-@patch("app.agents.react_agent.run_vector_rag")
+@patch("app.agents.tool.react.run_vector_rag")
 def test_react_vector_tool_passes_agent_class(mock_vector):
     mock_vector.return_value = {
         "context": "vector context",
@@ -366,7 +366,7 @@ def test_react_vector_tool_passes_agent_class(mock_vector):
     )
 
 
-@patch("app.agents.react_agent.run_graph_rag")
+@patch("app.agents.tool.react.run_graph_rag")
 def test_react_graph_tool_passes_agent_class(mock_graph):
     mock_graph.return_value = {
         "context": "graph context",

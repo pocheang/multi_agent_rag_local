@@ -75,6 +75,49 @@ paths have no matches. The fresh full collection command reports **1826
 collected items / 19 collection errors** (19.56s), with all 19 errors outside
 this task's file list.
 
+## Task 4 RAG/ReAct/scope/resilience/query/web/weight migration (2026-08-20)
+
+The seven Task 4 files now collect **99 tests** from canonical owners. Focused
+execution reports **97 passed / 1 failed / 1 skipped**. The remaining failure,
+`test_local_evidence_model_does_not_expose_memory_context`, is a live canonical
+`LocalEvidenceChatModel` defect: the no-evidence response is mojibake rather
+than the asserted Chinese message, while the test still proves memory text is
+not exposed. It remains visible for Task 7. The one skip is the pre-existing
+real-LLM ReAct integration gate.
+
+ReAct patches target `app.agents.tool.react`, where models and RAG/synthesis
+functions are looked up, and graph fixtures now use the canonical string entity
+list. Scope tests alias the active `rag.graph` and `rag.vector` module objects.
+Query expansion patches `rag.vector` at construction-time dependency lookups.
+Web integration behavior now patches `rag.web.search_web`; no focused test makes
+a live network call. Quality scoring imports `validation.quality_orchestrator`
+and reloads both shared configuration and the consuming orchestrator when
+testing environment-provided weights.
+
+Eight resilience functions were deleted individually because their sole
+subject was `app.graph.streaming.stream_processor`, explicitly deleted by
+`5d05e6f5` when service orchestration replaced LangGraph streaming:
+`test_stream_prefers_effective_hit_count_for_web_fallback`,
+`test_stream_does_not_use_web_when_fallback_enabled_and_local_evidence_sufficient`,
+`test_stream_emits_thought_events`,
+`test_stream_continues_when_vector_retrieval_fails`,
+`test_stream_forces_web_when_user_explicitly_requests_online_search`,
+`test_stream_skips_web_for_casual_chat`,
+`test_stream_recovers_when_stream_synthesis_raises`, and
+`test_stream_partial_then_error_emits_answer_reset`. Current router fallback,
+vector normalization, synthesis fallback, citation, strict-review, and local
+evidence resilience assertions remain in the file.
+
+`test_correlation_calculation` and `test_ab_testing_script_exists` were removed
+because their only owner, the development-only `scripts/test_quality_weights.py`,
+was explicitly deleted by `828aa796`; current/alternative weighted scoring and
+the sum-to-one boundary remain covered against the canonical orchestrator.
+
+The required retired-path scan has no matches in the seven Task 4 files. Its
+repository-wide results are confined to separately inventoried Task 5/6 files.
+Fresh full collection reports **1958 collected items / 12 collection errors**
+(17.73s); every error is outside Task 4.
+
 ## 47-file matrix
 
 | test file | missing import/dependency | retirement evidence | current owner | action | focused verification |
@@ -85,7 +128,7 @@ this task's file list.
 | `tests/agents/test_fact_verification.py` | `app.agents.fact_verification` | `54192131` deleted wrapper | `app.agents.validation.fact_verification` | migrated | passes focused current-contract execution |
 | `tests/agents/test_hallucination_detection.py` | `app.agents.hallucination_patterns` | `54192131` deleted wrapper | `app.agents.validation.hallucination_patterns` | migrated | passes focused current-contract execution |
 | `tests/agents/test_quality_orchestrator.py` | `app.agents.quality_orchestrator_agent` | `d1075732` deleted wrapper | `app.agents.validation.quality_orchestrator` | migrated | passes focused current-contract execution |
-| `tests/agents/test_react_agent_tools.py` | `app.agents.react_agent` | `d1075732` deleted wrapper | `app.agents.tool.react` | migrate | collect tool-react tests |
+| `tests/agents/test_react_agent_tools.py` | `app.agents.react_agent` | `d1075732` deleted wrapper | `app.agents.tool.react` | migrated | canonical tool lookup patches and string-entity fixtures pass |
 | `tests/agents/test_relevance_scoring.py` | `app.agents.relevance_scoring` | `54192131` deleted wrapper | `app.agents.rag.relevance` | migrated / external gate | collects; three live-Ollama semantic cases remain explicit |
 | `tests/agents/test_retrieval_quality.py` | `app.agents.retrieval_quality_agent` | `d1075732` deleted wrapper | `app.agents.rag.retrieval_quality` | migrated | passes focused current-contract execution |
 | `tests/agents/test_route_accuracy.py` | `app.agents.route_accuracy_tracker` | `54192131` deleted wrapper | `app.agents.router.accuracy`, `router.routing.LegacyRouteDecision` | migrated | compatibility fixture matches current routing dataclass; passes |
@@ -106,26 +149,26 @@ this task's file list.
 | `tests/mcp/test_server_transport.py` | `mcp` | declared in `pyproject.toml`; absent in probe | `app.mcp.server` | install-dependency | install sync, then collect MCP transport |
 | `tests/performance/test_batch_benchmarks.py` | `psutil` | declared in `pyproject.toml`; absent in probe | `tests.performance.benchmark_pdf_processing` (called by `tests.performance.run_all_benchmarks`) | install-dependency | install sync, then collect benchmarks |
 | `tests/performance/test_benchmarks.py` | `psutil` | declared in `pyproject.toml`; absent in probe | `tests.performance.benchmark_pdf_processing` (called by `tests.performance.run_all_benchmarks`) | install-dependency | install sync, then collect benchmarks |
-| `tests/retrievers/test_query_expansion_integration.py` | `app.agents.vector_rag_agent` | `d1075732` deleted wrapper | `app.agents.rag.vector`, `app.retrievers.query_expansion` | migrate | collect query-expansion integration |
+| `tests/retrievers/test_query_expansion_integration.py` | `app.agents.vector_rag_agent` | `d1075732` deleted wrapper | `app.agents.rag.vector`, `app.retrievers.query_expansion` | migrated | expansion, disabled, fallback, ratio, filtering, and retrieval-quality cases pass |
 | `tests/services/multimodal/test_image_processor.py` | `fitz` | current processor remains an active multimodal owner | `app.services.multimodal.image_processor` | install-dependency | install PyMuPDF provider, then collect image processor |
 | `tests/services/multimodal/test_table_extractor.py` | `pandas` | current processor remains an active multimodal owner | `app.services.multimodal.table_extractor` | install-dependency | install pandas, then collect table extractor |
-| `tests/test_agent_resilience.py` | `app.agents.router_agent` | `d1075732` deleted wrapper | `app.agents.router.routing`, `app.agents.synthesizer.generation`, API streaming | migrate | collect resilience tests against current boundaries |
-| `tests/test_agent_scope_filtering.py` | `ImportError: cannot import name 'graph_rag_agent' from 'app.agents'` | `d1075732` deleted wrappers | `app.agents.rag.graph`, `app.agents.rag.vector` | migrate | collect scoped retrieval tests |
+| `tests/test_agent_resilience.py` | `app.agents.router_agent` plus fake retired `sys.modules` patchpoints | `d1075732` deleted agent wrappers; `5d05e6f5` deleted `stream_processor` | `app.agents.router.routing`, `app.agents.rag.vector`, `app.agents.synthesizer.generation` | migrated / Task 7 defect; eight retired-stream functions deleted | current fallback/normalization/review assertions pass; one live LocalEvidence Chinese-encoding defect remains visible |
+| `tests/test_agent_scope_filtering.py` | `ImportError: cannot import name 'graph_rag_agent' from 'app.agents'` | `d1075732` deleted wrappers | `app.agents.rag.graph`, `app.agents.rag.vector` | migrated | module-alias monkeypatches preserve explicit/class scope intersections |
 | `tests/test_batch_chart_extractor.py` | `app.ingestion.extraction.chart_extractor` | current `charts_batch` still names old sibling | `app.ingestion.extraction.charts` | repair-test-import | collect after targeting current chart extractor API |
 | `tests/test_graph_rag_agent_enhanced.py` | `app.agents.graph_rag_agent_enhanced` | `54192131` deleted wrapper | `app.agents.rag.enhanced_graph` | migrate | collect entity extraction tests |
 | `tests/test_graph_rag_optimization.py` | `app.agents.graph_rag_agent` | `d1075732`/`54192131` deleted wrappers | `app.agents.rag.graph`, `app.agents.rag.enhanced_graph`, `app.agents.rag.cache` | migrate | collect split graph-RAG/cache tests |
 | `tests/test_neo4j_delete_by_source.py` | `app.graph.neo4j_client` | `5d05e6f5` deleted old path | `app.graph.knowledge.client` | migrate | collect `Neo4jClient` deletion behavior |
-| `tests/test_react_agent.py` | `app.agents.react_agent` | `d1075732` deleted wrapper | `app.agents.tool.react` | migrate | collect ReAct tool tests |
+| `tests/test_react_agent.py` | `app.agents.react_agent` | `d1075732` deleted wrapper | `app.agents.tool.react` | migrated / external gate | canonical model/tool/synthesis lookup patches pass; real-LLM integration remains explicit |
 | `tests/test_streaming_analytics_logging.py` | `app.graph.streaming.safe_wrappers` | `5d05e6f5` removed wrappers | `app.api.query.streaming.execution`, retrieval logger | migrate | collect analytics at current streaming boundary |
 | `tests/test_streaming_react_agent_class.py` | `app.graph.streaming.stream_processor` | `5d05e6f5` removed processor | `app.api.query.streaming.execution`, `app.agents.tool.react` | migrate | collect streaming agent-class propagation |
-| `tests/test_weight_optimization.py` | `app.agents.quality_orchestrator_agent` | `d1075732` deleted wrapper | `app.agents.validation.quality_orchestrator` | migrate | collect quality weighting tests |
+| `tests/test_weight_optimization.py` | `app.agents.quality_orchestrator_agent`; deleted A/B helper script | `d1075732` deleted wrapper; `828aa796` deleted development test script | `app.agents.validation.quality_orchestrator`, `app.agents.shared.config` | migrated; two retired-script tests deleted | current/alternative weighting and sum-to-one boundary pass |
 | `tests/test_workflow_fixes.py` | `app.graph.workflow` | `5d05e6f5` removed LangGraph workflow; `ccbaec34` removed last legacy workflow test | none; supported orchestration is not that public API | delete-retired-contract | confirm each assertion is only a removed workflow helper contract |
 | `tests/unit/test_chinese_document_indexer.py` | `jieba` | declared in `pyproject.toml`; absent in probe | `app.services.language.chinese_document_indexer` | install-dependency | install sync, then collect indexer tests |
 | `tests/unit/test_chinese_query_preprocessor.py` | `jieba` | declared in `pyproject.toml`; absent in probe | `app.services.language.chinese_query_preprocessor` | install-dependency | install sync, then collect preprocessor tests |
 | `tests/unit/test_chinese_tokenizer.py` | `jieba` | declared in `pyproject.toml`; absent in probe | `app.services.language.chinese_tokenizer` | install-dependency | install sync, then collect tokenizer tests |
 | `tests/unit/test_synthesis_language.py` | `app.agents.synthesis_agent` | `d1075732` deleted wrapper | `app.agents.synthesizer.generation` | migrated | canonical lookup patches pass |
 | `tests/unit/test_unified_agents.py` | `base_agent`, `unified_config`, `shared_utils` wrappers | `d1075732`/`54192131` deleted wrappers | `app.agents.shared.base`, `config`, `utils`, `result_schemas`; `app.agents.rag.vector` | migrated | 24 current shared/vector contract tests pass |
-| `tests/unit/test_web_research_agent.py` | `app.agents.web_research_agent` | `d1075732` deleted wrapper | `app.agents.rag.web`, `app.agents.rag.web_utils` | migrate | collect web-research utility tests |
+| `tests/unit/test_web_research_agent.py` | `app.agents.web_research_agent` | `d1075732` deleted wrapper | `app.agents.rag.web`, `app.agents.rag.web_utils` | migrated | 37 utility/integration cases pass through deterministic `search_web` seam |
 
 ## Matrix review
 

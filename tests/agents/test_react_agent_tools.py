@@ -13,7 +13,7 @@ ReactAgent工具使用单元测试
 
 import pytest
 from unittest.mock import Mock, patch, MagicMock
-from app.agents.react_agent import ReactAgent, ReActThought, ReActObservation
+from app.agents.tool.react import ReactAgent, ReActThought, ReActObservation
 
 
 class TestReactAgentTools:
@@ -45,10 +45,7 @@ class TestReactAgentTools:
         """Mock图谱查询结果"""
         return {
             "context": "Transformer (type: Model) -[USES]-> Self-Attention (type: Mechanism)",
-            "entities": [
-                {"name": "Transformer", "type": "Model"},
-                {"name": "Self-Attention", "type": "Mechanism"}
-            ],
+            "entities": ["Transformer", "Self-Attention"],
             "neighbors": [
                 {"source": "Transformer", "relation": "USES", "target": "Self-Attention"}
             ],
@@ -69,7 +66,7 @@ class TestReactAgentTools:
 
     def test_tool_vector_search(self, react_agent, mock_vector_result):
         """测试vector_search工具"""
-        with patch('app.agents.react_agent.run_vector_rag', return_value=mock_vector_result):
+        with patch('app.agents.tool.react.run_vector_rag', return_value=mock_vector_result):
             summary, metadata = react_agent._tool_vector_search(
                 query="What is Transformer?",
                 allowed_sources=None,
@@ -93,7 +90,7 @@ class TestReactAgentTools:
 
     def test_tool_graph_query(self, react_agent, mock_graph_result):
         """测试graph_query工具"""
-        with patch('app.agents.react_agent.run_graph_rag', return_value=mock_graph_result):
+        with patch('app.agents.tool.react.run_graph_rag', return_value=mock_graph_result):
             summary, metadata = react_agent._tool_graph_query(
                 query="What is Transformer?",
                 allowed_sources=None,
@@ -117,7 +114,7 @@ class TestReactAgentTools:
 
     def test_tool_web_search(self, react_agent, mock_web_result):
         """测试web_search工具"""
-        with patch('app.agents.react_agent.run_web_research', return_value=mock_web_result):
+        with patch('app.agents.tool.react.run_web_research', return_value=mock_web_result):
             summary, metadata = react_agent._tool_web_search(
                 query="What is Transformer?",
                 allowed_sources=None,
@@ -139,7 +136,7 @@ class TestReactAgentTools:
     def test_multiple_tool_calls_accumulation(self, react_agent, mock_vector_result):
         """测试多次工具调用的结果累积"""
         # 第一次调用
-        with patch('app.agents.react_agent.run_vector_rag', return_value=mock_vector_result):
+        with patch('app.agents.tool.react.run_vector_rag', return_value=mock_vector_result):
             react_agent._tool_vector_search("Query 1", None, None)
 
         assert react_agent.tool_results["vector"]["retrieved_count"] == 15
@@ -152,7 +149,7 @@ class TestReactAgentTools:
             "effective_hit_count": 8,
         }
 
-        with patch('app.agents.react_agent.run_vector_rag', return_value=mock_vector_result2):
+        with patch('app.agents.tool.react.run_vector_rag', return_value=mock_vector_result2):
             react_agent._tool_vector_search("Query 2", None, None)
 
         # 验证累积效果
@@ -215,7 +212,7 @@ class TestReactAgentTools:
         """测试图谱结果合并逻辑"""
         result1 = {
             "context": "Graph Context 1",
-            "entities": [{"name": "Entity1"}],
+            "entities": ["Entity1"],
             "neighbors": [{"relation": "R1"}],
             "paths": [{"path": "P1"}],
             "graph_signal_score": 0.7,
@@ -229,7 +226,7 @@ class TestReactAgentTools:
         # 第二次合并（信号分数应取最大值）
         result2 = {
             "context": "Graph Context 2",
-            "entities": [{"name": "Entity2"}],
+            "entities": ["Entity2"],
             "neighbors": [],
             "paths": [],
             "graph_signal_score": 0.9,  # 更高的分数
@@ -255,7 +252,7 @@ class TestReactAgentTools:
 
     def test_act_with_tool_error(self, react_agent):
         """测试工具执行错误处理"""
-        with patch('app.agents.react_agent.run_vector_rag', side_effect=Exception("API Error")):
+        with patch('app.agents.tool.react.run_vector_rag', side_effect=Exception("API Error")):
             observation = react_agent._act(
                 action="vector_search",
                 action_input="test query",
@@ -270,7 +267,7 @@ class TestReactAgentTools:
     def test_format_history(self, react_agent):
         """测试执行历史格式化"""
         # 添加一些历史记录
-        from app.agents.react_agent import ReActStep, ReActThought, ReActObservation
+        from app.agents.tool.react import ReActStep, ReActThought, ReActObservation
 
         step1 = ReActStep(
             iteration=1,
@@ -391,10 +388,10 @@ class TestReactAgentToolIntegration:
         agent = ReactAgent(max_iterations=5, use_reasoning=False)
 
         # Mock LLM调用
-        with patch('app.agents.react_agent.get_chat_model') as mock_model_getter, \
-             patch('app.agents.react_agent.run_vector_rag') as mock_vector, \
-             patch('app.agents.react_agent.run_graph_rag') as mock_graph, \
-             patch('app.agents.react_agent.synthesize_answer') as mock_synthesis:
+        with patch('app.agents.tool.react.get_chat_model') as mock_model_getter, \
+             patch('app.agents.tool.react.run_vector_rag') as mock_vector, \
+             patch('app.agents.tool.react.run_graph_rag') as mock_graph, \
+             patch('app.agents.tool.react.synthesize_answer') as mock_synthesis:
 
             # 配置mock
             mock_model = Mock()
@@ -410,7 +407,7 @@ class TestReactAgentToolIntegration:
 
             mock_graph.return_value = {
                 "context": "Transformer -[USES]-> Attention",
-                "entities": [{"name": "Transformer"}],
+                "entities": ["Transformer"],
                 "neighbors": [],
                 "paths": [],
                 "graph_signal_score": 0.8,

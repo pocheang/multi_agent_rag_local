@@ -7,14 +7,14 @@ Tests that query expansion improves retrieval quality for abbreviated/incomplete
 import pytest
 from unittest.mock import patch, MagicMock
 
-from app.agents.vector_rag_agent import run_vector_rag
+from app.agents.rag.vector import run_vector_rag
 from app.core.config import get_settings
 
 
 class TestQueryExpansionIntegration:
     """Test query expansion integration with vector RAG."""
 
-    @patch("app.agents.vector_rag_agent.hybrid_search_with_diagnostics")
+    @patch("app.agents.rag.vector.hybrid_search_with_diagnostics")
     def test_expansion_enabled_expands_query(self, mock_search):
         """When enabled, query expansion should expand abbreviations."""
         # Mock search to return empty results
@@ -46,7 +46,7 @@ class TestQueryExpansionIntegration:
         finally:
             settings.query_expansion_enabled = original_enabled
 
-    @patch("app.agents.vector_rag_agent.hybrid_search_with_diagnostics")
+    @patch("app.agents.rag.vector.hybrid_search_with_diagnostics")
     def test_expansion_disabled_uses_original(self, mock_search):
         """When disabled, should use original query."""
         mock_search.return_value = ([], {"test": "diagnostics"})
@@ -74,7 +74,7 @@ class TestQueryExpansionIntegration:
         finally:
             settings.query_expansion_enabled = original_enabled
 
-    @patch("app.agents.vector_rag_agent.hybrid_search_with_diagnostics")
+    @patch("app.agents.rag.vector.hybrid_search_with_diagnostics")
     def test_expansion_multiple_acronyms(self, mock_search):
         """Should expand multiple acronyms."""
         mock_search.return_value = ([], {"test": "diagnostics"})
@@ -103,7 +103,7 @@ class TestQueryExpansionIntegration:
         finally:
             settings.query_expansion_enabled = original_enabled
 
-    @patch("app.agents.vector_rag_agent.hybrid_search_with_diagnostics")
+    @patch("app.agents.rag.vector.hybrid_search_with_diagnostics")
     def test_expansion_chinese_query(self, mock_search):
         """Should handle Chinese queries without errors."""
         mock_search.return_value = ([], {"test": "diagnostics"})
@@ -122,7 +122,7 @@ class TestQueryExpansionIntegration:
         finally:
             settings.query_expansion_enabled = original_enabled
 
-    @patch("app.agents.vector_rag_agent.hybrid_search_with_diagnostics")
+    @patch("app.agents.rag.vector.hybrid_search_with_diagnostics")
     def test_expansion_failure_fallback(self, mock_search):
         """If expansion fails, should fall back to original query."""
         mock_search.return_value = ([], {"test": "diagnostics"})
@@ -133,7 +133,7 @@ class TestQueryExpansionIntegration:
 
         try:
             # Mock expand_query to raise exception
-            with patch("app.agents.vector_rag_agent.expand_query") as mock_expand:
+            with patch("app.agents.rag.vector.expand_query") as mock_expand:
                 mock_expand.side_effect = Exception("Expansion failed")
 
                 result = run_vector_rag("What is ML?")
@@ -149,7 +149,7 @@ class TestQueryExpansionIntegration:
         finally:
             settings.query_expansion_enabled = original_enabled
 
-    @patch("app.agents.vector_rag_agent.hybrid_search_with_diagnostics")
+    @patch("app.agents.rag.vector.hybrid_search_with_diagnostics")
     def test_expansion_preserves_agent_class_filtering(self, mock_search):
         """Expansion should not interfere with agent class filtering."""
         mock_search.return_value = ([], {"test": "diagnostics"})
@@ -171,7 +171,7 @@ class TestQueryExpansionIntegration:
         finally:
             settings.query_expansion_enabled = original_enabled
 
-    @patch("app.agents.vector_rag_agent.hybrid_search_with_diagnostics")
+    @patch("app.agents.rag.vector.hybrid_search_with_diagnostics")
     def test_expansion_respects_max_ratio(self, mock_search):
         """Expansion should respect max ratio configuration."""
         mock_search.return_value = ([], {"test": "diagnostics"})
@@ -203,7 +203,7 @@ class TestQueryExpansionIntegration:
 class TestExpansionQualityMetrics:
     """Test that expansion improves retrieval quality metrics."""
 
-    @patch("app.agents.vector_rag_agent.hybrid_search_with_diagnostics")
+    @patch("app.agents.rag.vector.hybrid_search_with_diagnostics")
     def test_expanded_query_finds_more_results(self, mock_search):
         """Expanded query should potentially find more relevant results."""
         # Simulate that expanded query finds more results

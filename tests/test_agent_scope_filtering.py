@@ -1,6 +1,7 @@
 from types import SimpleNamespace
 
-from app.agents import graph_rag_agent, vector_rag_agent
+import app.agents.rag.graph as graph_rag_agent
+import app.agents.rag.vector as vector_rag_agent
 from app.services.agent_document_filter import get_sources_by_agent_class
 
 
