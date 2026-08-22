@@ -48,5 +48,3 @@ def request_context(*, timeout_ms: int, overload_mode: bool, api_settings: dict 
         _REQUEST_DEADLINE_TS.reset(token_deadline)
         _REQUEST_OVERLOAD.reset(token_overload)
         _REQUEST_API_SETTINGS.reset(token_api_settings)
-
-

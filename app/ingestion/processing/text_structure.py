@@ -316,5 +316,3 @@ def blocks_to_plain_text(blocks: list[TextBlock]) -> str:
             lines.append(block.content)
 
     return "\n".join(lines)
-
-

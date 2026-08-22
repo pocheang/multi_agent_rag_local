@@ -194,5 +194,3 @@ TOKEN_PATTERN_STRING: Final[str] = (
     r"[一-鿿]{2,}|"  # Chinese (min 2 chars)
     r"[A-Z]{2,}"  # Acronyms in caps
 )
-
-

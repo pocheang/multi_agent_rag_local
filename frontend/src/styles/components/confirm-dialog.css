@@ -1,0 +1,176 @@
+/* ============================================
+   Confirm Dialog
+   ============================================ */
+
+.confirm-dialog-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10000;
+  animation: overlayFadeIn 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+@keyframes overlayFadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.confirm-dialog {
+  min-width: 320px;
+  max-width: 420px;
+  background: var(--surface);
+  border-radius: 16px;
+  border: 1px solid var(--border-medium);
+  box-shadow: var(--shadow-2xl);
+  animation: dialogSlideIn 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  overflow: hidden;
+}
+
+:root[data-theme="dark"] .confirm-dialog {
+  background: linear-gradient(135deg, rgba(25, 35, 60, 0.98), rgba(18, 26, 45, 0.98));
+  border-color: rgba(91, 140, 255, 0.25);
+  box-shadow:
+    0 20px 48px rgba(0, 0, 0, 0.8),
+    0 8px 24px rgba(91, 140, 255, 0.2),
+    inset 0 1px 0 rgba(255, 255, 255, 0.1);
+}
+
+@keyframes dialogSlideIn {
+  from {
+    opacity: 0;
+    transform: scale(0.9) translateY(-20px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+.confirm-dialog-header {
+  padding: 20px 24px 16px;
+  border-bottom: 1px solid var(--border-light);
+}
+
+:root[data-theme="dark"] .confirm-dialog-header {
+  border-bottom-color: rgba(91, 140, 255, 0.15);
+}
+
+.confirm-dialog-title {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--text-primary);
+  letter-spacing: -0.01em;
+}
+
+.confirm-dialog-body {
+  padding: 20px 24px;
+}
+
+.confirm-dialog-message {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--text-secondary);
+}
+
+.confirm-dialog-footer {
+  padding: 16px 24px 20px;
+  display: flex;
+  gap: 12px;
+  justify-content: flex-end;
+}
+
+.confirm-dialog-btn {
+  min-width: 80px;
+  padding: 10px 20px;
+  border-radius: 8px;
+  border: 1px solid transparent;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.confirm-dialog-btn-cancel {
+  background: var(--surface-secondary);
+  color: var(--text-secondary);
+  border-color: var(--border-medium);
+}
+
+.confirm-dialog-btn-cancel:hover {
+  background: var(--surface-tertiary);
+  color: var(--text-primary);
+  border-color: var(--border-strong);
+}
+
+:root[data-theme="dark"] .confirm-dialog-btn-cancel {
+  background: rgba(100, 122, 180, 0.15);
+  border-color: rgba(100, 122, 180, 0.25);
+  color: var(--text-secondary);
+}
+
+:root[data-theme="dark"] .confirm-dialog-btn-cancel:hover {
+  background: rgba(100, 122, 180, 0.25);
+  border-color: rgba(100, 122, 180, 0.35);
+  color: var(--text-primary);
+}
+
+.confirm-dialog-btn-confirm {
+  background: var(--accent);
+  color: white;
+  border-color: var(--accent);
+}
+
+.confirm-dialog-btn-confirm:hover {
+  background: var(--accent-hover);
+  border-color: var(--accent-hover);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
+}
+
+:root[data-theme="dark"] .confirm-dialog-btn-confirm {
+  background: linear-gradient(135deg, #5b8cff, #8b7aff);
+  border-color: rgba(139, 122, 255, 0.5);
+}
+
+:root[data-theme="dark"] .confirm-dialog-btn-confirm:hover {
+  background: linear-gradient(135deg, #6b9cff, #9b8aff);
+  box-shadow: 0 4px 16px rgba(91, 140, 255, 0.4);
+}
+
+.confirm-dialog-btn-confirm.danger {
+  background: var(--danger);
+  border-color: var(--danger);
+}
+
+.confirm-dialog-btn-confirm.danger:hover {
+  background: var(--danger-hover);
+  border-color: var(--danger-hover);
+  box-shadow: 0 4px 12px rgba(239, 68, 68, 0.3);
+}
+
+:root[data-theme="dark"] .confirm-dialog-btn-confirm.danger {
+  background: linear-gradient(135deg, rgba(255, 85, 112, 0.9), rgba(255, 100, 130, 0.9));
+  border-color: rgba(255, 85, 112, 0.5);
+}
+
+:root[data-theme="dark"] .confirm-dialog-btn-confirm.danger:hover {
+  background: linear-gradient(135deg, rgba(255, 100, 130, 1), rgba(255, 115, 145, 1));
+  box-shadow: 0 4px 16px rgba(255, 85, 112, 0.4);
+}
+
+.confirm-dialog-btn:active {
+  transform: scale(0.97);
+}

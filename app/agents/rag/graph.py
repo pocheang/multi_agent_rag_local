@@ -271,7 +271,7 @@ def _fallback_to_vector_rag(
             "vector_rag_result": vector_result,
         }
     except Exception as e:
-        logger.error("Vector RAG fallback also failed: %s", e)
+        logger.error("Vector RAG fallback also failed: %s", e, exc_info=True)
         return {
             "context": "",
             "entities": [],
@@ -282,6 +282,8 @@ def _fallback_to_vector_rag(
             "fallback_reason": reason,
             "fallback_error": str(e),
         }
+
+
 class GraphRetrievalService:
     """Single graph retrieval implementation with unified vector fallback."""
 
@@ -325,8 +327,10 @@ class GraphRetrievalService:
             diagnostics = dict(vector_result.get("retrieval_diagnostics") or {})
         else:
             citations = list(normalized.get("citations") or [])
-            retrieved_count = len(normalized.get("entities") or []) + len(normalized.get("neighbors") or []) + len(
-                normalized.get("paths") or []
+            retrieved_count = (
+                len(normalized.get("entities") or [])
+                + len(normalized.get("neighbors") or [])
+                + len(normalized.get("paths") or [])
             )
             effective_hit_count = retrieved_count
             diagnostics = dict(normalized.get("retrieval_diagnostics") or {})

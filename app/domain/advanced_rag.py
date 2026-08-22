@@ -77,5 +77,3 @@ class AdvancedRAGResult(BaseModel):
     metadata: dict[str, Any] = Field(
         default_factory=dict, description="Additional metadata (latency, token usage, etc.)"
     )
-
-

@@ -259,11 +259,11 @@ class QueryLoadGuard:
                 if elapsed < 0.5:
                     sleep_time = 0.05  # 50ms for first 0.5s
                 elif elapsed < 2.0:
-                    sleep_time = 0.1   # 100ms for next 1.5s
+                    sleep_time = 0.1  # 100ms for next 1.5s
                 elif elapsed < 5.0:
-                    sleep_time = 0.2   # 200ms for next 3s
+                    sleep_time = 0.2  # 200ms for next 3s
                 else:
-                    sleep_time = 0.5   # 500ms after 5s
+                    sleep_time = 0.5  # 500ms after 5s
                 time.sleep(sleep_time)
             yield
         finally:

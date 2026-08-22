@@ -195,5 +195,3 @@ def merge_cross_page_tables(pages_content: list[str]) -> list[str]:
         i += 1
 
     return merged
-
-

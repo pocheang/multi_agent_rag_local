@@ -12,7 +12,7 @@ from app.agents.rag.retrieval_quality import (
     _calculate_completeness_score,
     LLM_SCORING_AVAILABLE,
 )
-from app.agents.quality_models import RetrievalQualityResult, RetrievalQualityMetrics
+from app.agents.shared.quality_models import RetrievalQualityResult, RetrievalQualityMetrics
 
 
 @pytest.mark.asyncio

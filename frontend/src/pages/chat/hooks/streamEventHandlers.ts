@@ -134,6 +134,23 @@ function toGraphResult(value: unknown): StoredGraphResult {
 }
 
 function pushExecutionStep(ctx: StreamEventContext, kind: string, label: string, detail = ""): StreamEventContext {
+  // Filter out technical/debug labels that shouldn't be shown to users
+  const technicalKeywords = ["execution started", "trace", "STATUS", "execution_started"];
+  const shouldFilter = technicalKeywords.some((keyword) =>
+    label.toLowerCase().includes(keyword.toLowerCase())
+  );
+
+  if (shouldFilter) {
+    // Update current_status but don't add to execution steps
+    return {
+      ...ctx,
+      meta: {
+        ...ctx.meta,
+        current_status: label,
+      },
+    };
+  }
+
   const step: ExecutionStep = { kind, label, detail, at: new Date().toISOString() };
   const updatedSteps = [...ctx.executionSteps, step].slice(-24);
   return {

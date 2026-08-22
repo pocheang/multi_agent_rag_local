@@ -1,4 +1,4 @@
-﻿"""
+"""
 Structured Logging Configuration for QueryMind System.
 
 This module configures structlog for production-grade structured logging

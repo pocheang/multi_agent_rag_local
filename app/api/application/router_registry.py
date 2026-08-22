@@ -8,6 +8,7 @@ legacy flat paths are compatibility aliases.
 from fastapi import FastAPI
 
 from app.api import dependencies as api_dependencies
+from app.api.routes import sessions as sessions_management
 from app.api.routes.admin import agent_quality as admin_agent_quality
 from app.api.routes.admin import graph_rag as admin_graph_rag
 from app.api.routes.admin import language_stats as admin_language_stats
@@ -17,7 +18,9 @@ from app.api.routes.admin import users as admin_users
 from app.api.routes.admin import web_activity as web_activity_admin
 from app.api.routes.compatibility import advanced_rag, enhanced_query, orchestration, pipeline_compat
 from app.api.routes.operations import agent_health, agent_tracking, analytics, evaluation, health
-from app.api.routes.public import auth, connectors, documents, prompts, query, sessions
+from app.api.routes.optimization import performance as optimization_performance
+from app.api.routes.public import auth, clarification, connectors, documents, prompts, query
+from app.api.routes.public import sessions as public_sessions
 from app.api.utils import (
     admin_helpers,
     auth_dependencies,
@@ -43,7 +46,8 @@ _ROUTE_MODULES = (
     session_helpers,
     auth,
     query,
-    sessions,
+    public_sessions,
+    sessions_management,
     documents,
     prompts,
     admin_users,
@@ -56,6 +60,7 @@ _ROUTE_MODULES = (
     advanced_rag,
     analytics,
     enhanced_query,
+    optimization_performance,
 )
 
 # Public spelling for application-composition callers; it is the same tuple so
@@ -67,9 +72,11 @@ ROUTE_MODULES = _ROUTE_MODULES
 ROUTER_MODULES = (
     health,
     auth,
+    clarification,
     connectors,
     query,
-    sessions,
+    public_sessions,
+    sessions_management,
     documents,
     prompts,
     admin_users,
@@ -86,6 +93,7 @@ ROUTER_MODULES = (
     enhanced_query,
     orchestration,
     web_activity_admin,
+    optimization_performance,
 )
 
 

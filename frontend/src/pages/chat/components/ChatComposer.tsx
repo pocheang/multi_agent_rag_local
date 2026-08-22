@@ -8,6 +8,7 @@ import {
   profileModeHint,
 } from "@/pages/chat/components/profileCapabilities";
 import type { PipelineProfile } from "@/types/api";
+import { AnimatedButtonLite as AnimatedButton } from "@/components/animations/AnimatedButtonLite";
 
 type Props = {
   composerDropActive: boolean;
@@ -68,7 +69,7 @@ export function ChatComposer({
   isSending,
   quickPrompts,
   runStatus,
-  error,
+  // error, // Now shown via Toast instead of inline
   useWeb,
   useReasoning,
   agentClassHint,
@@ -197,17 +198,17 @@ export function ChatComposer({
           )}
         </div>
 
-        <button
-          type="button"
-          className="composer-primary-btn"
-          onClick={() => void onAsk()}
+        <AnimatedButton
+          onClick={onAsk}
+          state={isSending ? 'loading' : 'idle'}
+          variant="primary"
+          size="large"
           disabled={isSending}
-          aria-label={isSending ? t("components.chat.processingQuestion") : t("components.chat.startAnalysisAria")}
+          className="composer-primary-btn"
         >
-          {isSending && <span className="spinner" aria-hidden="true"></span>}
           <span className="btn-text">{isSending ? t("components.chat.analyzing") : t("components.chat.startAnalysis")}</span>
           {!isSending && <span className="btn-shortcut">Ctrl / Cmd + Enter</span>}
-        </button>
+        </AnimatedButton>
       </div>
 
       <div className="composer-hint" id="composer-hint">
@@ -224,7 +225,7 @@ export function ChatComposer({
       />
 
       {runStatus && <div className="status">{runStatus}</div>}
-      {error && <div className="status error">{error}</div>}
+      {/* Error now shown via Toast in top-right corner */}
     </section>
   );
 }

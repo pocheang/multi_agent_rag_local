@@ -12,12 +12,13 @@ except ImportError:
     RecursiveCharacterTextSplitter = None  # type: ignore[assignment]
 
 from app.core.config import get_settings
-from .metadata import enhance_chunk_metadata
 
+from .metadata import enhance_chunk_metadata
 
 # ============================================================================
 # 智能分隔符选择
 # ============================================================================
+
 
 def get_smart_separators(doc_type: str | None = None, language: str = "mixed") -> list[str]:
     """
@@ -33,74 +34,75 @@ def get_smart_separators(doc_type: str | None = None, language: str = "mixed") -
     # Markdown文档
     if doc_type == "markdown":
         return [
-            "\n## ",      # 二级标题
-            "\n### ",     # 三级标题
-            "\n\n",       # 段落
-            "\n- ",       # 列表项
-            "\n* ",       # 列表项
-            "\n1. ",      # 数字列表
-            "\n",         # 换行
-            ". ",         # 句子
-            " ",          # 空格
-            "",           # 字符
+            "\n## ",  # 二级标题
+            "\n### ",  # 三级标题
+            "\n\n",  # 段落
+            "\n- ",  # 列表项
+            "\n* ",  # 列表项
+            "\n1. ",  # 数字列表
+            "\n",  # 换行
+            ". ",  # 句子
+            " ",  # 空格
+            "",  # 字符
         ]
 
     # 代码文档
     if doc_type == "code":
         return [
-            "\nclass ",   # 类定义
-            "\ndef ",     # 函数定义
-            "\n\n",       # 空行
-            "\n",         # 换行
-            ";",          # 语句结束
-            " ",          # 空格
-            "",           # 字符
+            "\nclass ",  # 类定义
+            "\ndef ",  # 函数定义
+            "\n\n",  # 空行
+            "\n",  # 换行
+            ";",  # 语句结束
+            " ",  # 空格
+            "",  # 字符
         ]
 
     # PDF文档（可能包含多列）
     if doc_type == "pdf":
         if language == "zh":
             return [
-                "\n\n",   # 段落
-                "。\n",   # 句号+换行
-                "。",     # 句号
-                "；",     # 分号
-                "，",     # 逗号
-                "\n",     # 换行
-                " ",      # 空格
-                "",       # 字符
+                "\n\n",  # 段落
+                "。\n",  # 句号+换行
+                "。",  # 句号
+                "；",  # 分号
+                "，",  # 逗号
+                "\n",  # 换行
+                " ",  # 空格
+                "",  # 字符
             ]
         else:
             return [
-                "\n\n",   # 段落
-                ". \n",   # 句号+换行
-                ". ",     # 句号
-                "; ",     # 分号
-                ", ",     # 逗号
-                "\n",     # 换行
-                " ",      # 空格
-                "",       # 字符
+                "\n\n",  # 段落
+                ". \n",  # 句号+换行
+                ". ",  # 句号
+                "; ",  # 分号
+                ", ",  # 逗号
+                "\n",  # 换行
+                " ",  # 空格
+                "",  # 字符
             ]
 
     # 默认：混合语言
     return [
-        "\n\n",       # 段落
-        "。\n",       # 中文句号+换行
-        ". \n",       # 英文句号+换行
-        "。",         # 中文句号
-        ". ",         # 英文句号
-        "！",         # 感叹号
-        "？",         # 问号
-        "；",         # 分号
-        "\n",         # 换行
-        " ",          # 空格
-        "",           # 字符
+        "\n\n",  # 段落
+        "。\n",  # 中文句号+换行
+        ". \n",  # 英文句号+换行
+        "。",  # 中文句号
+        ". ",  # 英文句号
+        "！",  # 感叹号
+        "？",  # 问号
+        "；",  # 分号
+        "\n",  # 换行
+        " ",  # 空格
+        "",  # 字符
     ]
 
 
 # ============================================================================
 # 优化的文档切分函数
 # ============================================================================
+
 
 def _clone_document(doc: Any, text: str, metadata: dict[str, Any]):
     """Clone document object"""
@@ -119,6 +121,7 @@ def _sanitize_chunk_params(chunk_size: int, chunk_overlap: int) -> tuple[int, in
 
 class _SimpleTextSplitter:
     """Simple text splitter (fallback)"""
+
     def __init__(self, chunk_size: int, chunk_overlap: int):
         self.chunk_size, self.chunk_overlap = _sanitize_chunk_params(chunk_size, chunk_overlap)
 
@@ -255,5 +258,3 @@ def split_documents_enhanced(
 def split_documents(documents: list[Any]) -> tuple[list[Any], list[dict[str, Any]]]:
     """Backward compatible document splitting."""
     return split_documents_enhanced(documents, True, True)
-
-

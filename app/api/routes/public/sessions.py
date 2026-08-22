@@ -14,15 +14,16 @@ from app.api.dependencies import (
     _require_permission,
     _require_user,
     _require_valid_session_id,
+    _reserve_chat_credit,
 )
 from app.api.routes.compatibility.pipeline_compat import execute_standard_compatibility
-from app.api.transport.errors import bad_request, not_found
 from app.api.schemas import (
     LongTermMemoryItem,
     MessageUpdateRequest,
     SessionDetail,
     SessionSummary,
 )
+from app.api.transport.errors import bad_request, not_found
 from app.pipeline.contracts import PipelineUser
 from app.services.input_normalizer import (
     enhance_user_question_for_completion,
@@ -117,6 +118,70 @@ def delete_session(session_id: str, request: Request, user: dict[str, Any] = Dep
     return {"ok": True, "session_id": session_id}
 
 
+@router.patch("/{session_id}", response_model=SessionDetail)
+def update_session(
+    session_id: str,
+    payload: dict[str, Any],
+    request: Request,
+    user: dict[str, Any] = Depends(_require_user),
+):
+    """Update session properties (title, pinned status, etc.)"""
+    session_id = _require_valid_session_id(session_id)
+    _require_permission(user, "session:update", request, "session", resource_id=session_id)
+
+    store = _history_store_for_user(user)
+
+    # Check if session exists
+    session = store.get_session(session_id)
+    if session is None:
+        raise not_found("Session")
+
+    # Update title if provided
+    if "title" in payload:
+        title = str(payload["title"]).strip()
+        if not title:
+            raise bad_request("Title cannot be empty")
+        if len(title) > 200:
+            raise bad_request("Title too long (max 200 characters)")
+
+        updated = store.update_session_title(session_id, title)
+        if updated is None:
+            raise not_found("Session")
+
+        _audit(
+            request,
+            action="session.rename",
+            resource_type="session",
+            result="success",
+            user=user,
+            resource_id=session_id,
+            detail=f"title={title}",
+        )
+
+    # Update pinned status if provided
+    if "pinned" in payload:
+        pinned = bool(payload["pinned"])
+        updated = store.update_session_pinned(session_id, pinned)
+        if updated is None:
+            raise not_found("Session")
+
+        _audit(
+            request,
+            action="session.pin" if pinned else "session.unpin",
+            resource_type="session",
+            result="success",
+            user=user,
+            resource_id=session_id,
+        )
+
+    # Return updated session
+    updated_session = store.get_session(session_id)
+    if updated_session is None:
+        raise not_found("Session")
+
+    return updated_session
+
+
 @router.get("/{session_id}/memories/long", response_model=list[LongTermMemoryItem])
 def list_long_term_memories(session_id: str, request: Request, user: dict[str, Any] = Depends(_require_user)):
     session_id = _require_valid_session_id(session_id)
@@ -175,37 +240,39 @@ def update_session_message(
         memory_context = _build_memory_context_for_session(
             user=user, session_id=session_id, question=effective_question
         )
-        result = execute_standard_compatibility(
-            question=effective_question,
-            use_web_fallback=use_web_fallback,
-            use_reasoning=use_reasoning,
-            memory_context=memory_context,
-            allowed_sources=_allowed_sources_for_user(user),
-            user=PipelineUser(
-                user_id=str(user.get("user_id", "") or "") or None,
-                username=str(user.get("username", "") or "") or None,
-                role=str(user.get("role", "") or "") or None,
-                permissions=frozenset(user.get("permissions") or []),
-            ),
-            session_id=session_id,
-        )
-        data = history_store.upsert_assistant_after_user(
-            session_id=session_id,
-            user_message_id=message_id,
-            assistant_content=result.get("answer", ""),
-            metadata={
-                "route": result.get("route", "unknown"),
-                "agent_class": result.get("agent_class", "general"),
-                "web_used": result.get("web_result", {}).get("used", False),
-                "thoughts": result.get("thoughts", []),
-                "graph_entities": result.get("graph_result", {}).get("entities", []),
-                "citations": result.get("vector_result", {}).get("citations", [])
-                + result.get("web_result", {}).get("citations", []),
-            },
-        )
-        if data is None:
-            raise not_found("Message")
-        _promote_long_term_memory(user=user, session_id=session_id, question=content, result=result)
+        with _reserve_chat_credit(request, user, "message_rerun") as credit:
+            result = execute_standard_compatibility(
+                question=effective_question,
+                use_web_fallback=use_web_fallback,
+                use_reasoning=use_reasoning,
+                memory_context=memory_context,
+                allowed_sources=_allowed_sources_for_user(user),
+                user=PipelineUser(
+                    user_id=str(user.get("user_id", "") or "") or None,
+                    username=str(user.get("username", "") or "") or None,
+                    role=str(user.get("role", "") or "") or None,
+                    permissions=frozenset(user.get("permissions") or []),
+                ),
+                session_id=session_id,
+            )
+            data = history_store.upsert_assistant_after_user(
+                session_id=session_id,
+                user_message_id=message_id,
+                assistant_content=result.get("answer", ""),
+                metadata={
+                    "route": result.get("route", "unknown"),
+                    "agent_class": result.get("agent_class", "general"),
+                    "web_used": result.get("web_result", {}).get("used", False),
+                    "thoughts": result.get("thoughts", []),
+                    "graph_entities": result.get("graph_result", {}).get("entities", []),
+                    "citations": result.get("vector_result", {}).get("citations", [])
+                    + result.get("web_result", {}).get("citations", []),
+                },
+            )
+            if data is None:
+                raise not_found("Message")
+            _promote_long_term_memory(user=user, session_id=session_id, question=content, result=result)
+            credit.commit()
     _audit(
         request, action="message.update", resource_type="message", result="success", user=user, resource_id=message_id
     )

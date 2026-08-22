@@ -1,5 +1,5 @@
-from app.domain.text import normalize_string
 from app.core.config import get_settings
+from app.domain.text import normalize_string
 
 _ALLOWED = {"baseline", "advanced", "safe"}
 

@@ -217,5 +217,3 @@ async def cleanup_old_traces(request: Request, user: dict[str, Any] = Depends(_r
     removed_count = tracker.cleanup_old_traces()
 
     return {"message": f"Cleaned up {removed_count} old execution traces", "removed_count": removed_count}
-
-

@@ -14,15 +14,26 @@ def _load_cross_encoder():
     try:
         from sentence_transformers import CrossEncoder
 
-        return CrossEncoder(
+        model = CrossEncoder(
             settings.reranker_model_name,
             trust_remote_code=True,
             local_files_only=True,
         )
+        logger.info(f"Successfully loaded reranker model: {settings.reranker_model_name}")
+        return model
     except ImportError as e:
         logger.warning(f"sentence-transformers not installed: {e}")
         return None
-    except (OSError, RuntimeError) as e:
+    except OSError as e:
+        logger.error(
+            f"Reranker model '{settings.reranker_model_name}' not found locally. "
+            f"Please download it first:\n"
+            f"  from sentence_transformers import CrossEncoder\n"
+            f"  CrossEncoder('{settings.reranker_model_name}')\n"
+            f"Error: {e}"
+        )
+        return None
+    except RuntimeError as e:
         logger.warning(f"Failed to load reranker model: {e}")
         return None
 

@@ -23,6 +23,20 @@ from app.pipeline.contracts import (
 from app.pipeline.profiles import PipelineProfile, get_profile_definition
 
 
+def _parse_citation_label(label: str) -> PipelineCitation:
+    """Parse citation label like 'doc1:5' into PipelineCitation with document_id and page."""
+    if ":" in label:
+        parts = label.rsplit(":", 1)
+        try:
+            return PipelineCitation(source=label, document_id=parts[0], page=int(parts[1]))
+        except (ValueError, IndexError) as e:
+            # Log parse failure but continue with fallback
+            import logging
+
+            logging.getLogger(__name__).debug(f"Failed to parse citation label '{label}': {e}. Using label as-is.")
+    return PipelineCitation(source=label)
+
+
 class PipelineExecutionEngine(Protocol):
     async def execute(self, request: Any) -> FinalAnswer: ...
 
@@ -108,7 +122,9 @@ class RAGPipeline:
             raise TypeError("an injected pipeline engine cannot prepare standard requests")
         return engine.prepare_standard_request(to_orchestration_request(request))
 
-    def bind_standard_runtime_context(self, prepared: PreparedStandardRequest, **runtime_ports: Any) -> PreparedStandardRequest:
+    def bind_standard_runtime_context(
+        self, prepared: PreparedStandardRequest, **runtime_ports: Any
+    ) -> PreparedStandardRequest:
         engine = self._engine_for(PipelineProfile.STANDARD)
         if not isinstance(engine, OrchestrationEngine):
             raise TypeError("an injected pipeline engine cannot bind standard runtime context")
@@ -118,7 +134,12 @@ class RAGPipeline:
         engine = self._engine_for(PipelineProfile.STANDARD)
         if not isinstance(engine, OrchestrationEngine):
             raise TypeError("an injected pipeline engine cannot execute prepared requests")
-        return self._result_from_final_answer(PipelineProfile.STANDARD, await engine.execute_prepared_standard(prepared))
+        return self._result_from_final_answer(
+            PipelineProfile.STANDARD, await engine.execute_prepared_standard(prepared)
+        )
+
+    def execute_prepared_standard_sync(self, prepared: PreparedStandardRequest) -> PipelineResult:
+        return asyncio.run(self.execute_prepared_standard(prepared))
 
     async def execute_prepared_standard_stream(
         self, prepared: PreparedStandardRequest, *, execution_id: str, result_postprocessor: object | None = None
@@ -132,10 +153,15 @@ class RAGPipeline:
 
     @staticmethod
     def _result_from_final_answer(profile: PipelineProfile, answer: FinalAnswer) -> PipelineResult:
-        citations = tuple(
-            PipelineCitation(source=item.source, content=item.content, document_id=item.document_id, page=item.page)
-            for item in answer.evidence.items
-        ) or tuple(PipelineCitation(source=value) for value in answer.citations)
+        # Prefer structured evidence items for citations (preserves document_id and page)
+        if answer.evidence.items:
+            citations = tuple(
+                PipelineCitation(source=item.source, content=item.content, document_id=item.document_id, page=item.page)
+                for item in answer.evidence.items
+            )
+        else:
+            # Fallback: parse citation labels like "doc1:5" to extract document_id and page
+            citations = tuple(_parse_citation_label(label) for label in answer.citations)
         contexts = tuple(
             PipelineContext(
                 content=item.content,
@@ -155,8 +181,14 @@ class RAGPipeline:
             "grounding": dict(answer.grounding),
             "safety": dict(answer.safety),
         }
-        degradations = () if answer.validation.state == "validated" else (
-            DegradationEvent(stage="validation", reason="; ".join(answer.validation.issues) or answer.validation.state),
+        degradations = (
+            ()
+            if answer.validation.state == "validated"
+            else (
+                DegradationEvent(
+                    stage="validation", reason="; ".join(answer.validation.issues) or answer.validation.state
+                ),
+            )
         )
         return PipelineResult(
             answer=answer.answer,

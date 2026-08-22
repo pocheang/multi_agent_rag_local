@@ -1,0 +1,277 @@
+/**
+ * Color Tokens - Design System
+ *
+ * 定义应用程序的完整色彩系统，包括主题色、状态色、中性色和暗色模式支持。
+ * 所有颜色使用CSS自定义属性（CSS Variables），支持运行时主题切换。
+ *
+ * 使用方式：
+ * - background: var(--color-primary);
+ * - color: var(--color-text-primary);
+ *
+ * @version 1.0.0
+ * @created 2026-08-16
+ */
+
+:root {
+  /* ================================
+     主题色（Primary Colors）
+     用于主要操作、链接、强调元素
+     ================================ */
+  --color-primary: #5B8CFF;
+  --color-primary-light: #8B7AFF;
+  --color-primary-dark: #4A73E6;
+  --color-primary-hover: #6B9CFF;
+  --color-primary-active: #3B6BCC;
+
+  /* 渐变主题色 */
+  --gradient-primary: linear-gradient(135deg, #5B8CFF, #8B7AFF);
+  --gradient-primary-hover: linear-gradient(135deg, #6B9CFF, #9B8AFF);
+
+  /* ================================
+     次要色（Secondary Colors）
+     用于次要操作、辅助元素
+     ================================ */
+  --color-secondary: rgba(255, 255, 255, 0.1);
+  --color-secondary-hover: rgba(255, 255, 255, 0.15);
+  --color-secondary-active: rgba(255, 255, 255, 0.08);
+  --color-secondary-border: rgba(255, 255, 255, 0.2);
+
+  /* ================================
+     状态色（Status Colors）
+     用于反馈、通知、表单验证
+     ================================ */
+
+  /* 成功状态 */
+  --color-success: #4CAF50;
+  --color-success-light: #66BB6A;
+  --color-success-dark: #388E3C;
+  --color-success-bg: rgba(76, 175, 80, 0.1);
+  --gradient-success: linear-gradient(135deg, #4CAF50, #66BB6A);
+
+  /* 警告状态 */
+  --color-warning: #FFC857;
+  --color-warning-light: #FFD67A;
+  --color-warning-dark: #FFB534;
+  --color-warning-bg: rgba(255, 200, 87, 0.1);
+  --gradient-warning: linear-gradient(135deg, #FFC857, #FFD67A);
+
+  /* 错误状态 */
+  --color-error: #FF5B5B;
+  --color-error-light: #FF8787;
+  --color-error-dark: #E63946;
+  --color-error-bg: rgba(255, 91, 91, 0.1);
+  --gradient-error: linear-gradient(135deg, #FF5B5B, #FF8787);
+
+  /* 信息状态 */
+  --color-info: #5B8CFF;
+  --color-info-light: #7DA3FF;
+  --color-info-dark: #3B6BCC;
+  --color-info-bg: rgba(91, 140, 255, 0.1);
+  --gradient-info: linear-gradient(135deg, #5B8CFF, #7DA3FF);
+
+  /* ================================
+     中性色（Neutral Colors）
+     用于文本、边框、背景、分隔线
+     ================================ */
+
+  /* 文本颜色 */
+  --color-text-primary: rgba(255, 255, 255, 0.95);
+  --color-text-secondary: rgba(255, 255, 255, 0.7);
+  --color-text-tertiary: rgba(255, 255, 255, 0.5);
+  --color-text-disabled: rgba(255, 255, 255, 0.3);
+  --color-text-inverse: rgba(0, 0, 0, 0.85);
+
+  /* 背景颜色 */
+  --color-bg-primary: #0C1323;
+  --color-bg-secondary: #121A2D;
+  --color-bg-tertiary: #1A2538;
+  --color-bg-elevated: #1F2D45;
+  --color-bg-hover: rgba(255, 255, 255, 0.05);
+  --color-bg-active: rgba(255, 255, 255, 0.1);
+  --color-bg-overlay: rgba(12, 19, 35, 0.95);
+
+  /* 边框颜色 */
+  --color-border-primary: rgba(255, 255, 255, 0.12);
+  --color-border-secondary: rgba(255, 255, 255, 0.08);
+  --color-border-focus: var(--color-primary);
+  --color-border-error: var(--color-error);
+
+  /* 分隔线颜色 */
+  --color-divider: rgba(255, 255, 255, 0.1);
+  --color-divider-light: rgba(255, 255, 255, 0.05);
+
+  /* 灰度色阶（Gray Scale）*/
+  --color-gray-50: rgba(255, 255, 255, 0.05);
+  --color-gray-100: rgba(255, 255, 255, 0.1);
+  --color-gray-200: rgba(255, 255, 255, 0.2);
+  --color-gray-300: rgba(255, 255, 255, 0.3);
+  --color-gray-400: rgba(255, 255, 255, 0.4);
+  --color-gray-500: rgba(255, 255, 255, 0.5);
+  --color-gray-600: rgba(255, 255, 255, 0.6);
+  --color-gray-700: rgba(255, 255, 255, 0.7);
+  --color-gray-800: rgba(255, 255, 255, 0.8);
+  --color-gray-900: rgba(255, 255, 255, 0.9);
+
+  /* ================================
+     阴影（Shadows）
+     用于卡片、弹窗、悬浮元素
+     ================================ */
+  --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.1);
+  --shadow-sm: 0 2px 4px rgba(0, 0, 0, 0.15);
+  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.2);
+  --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.3);
+  --shadow-xl: 0 16px 48px rgba(0, 0, 0, 0.4);
+
+  /* 彩色阴影（用于按钮等元素）*/
+  --shadow-primary: 0 4px 12px rgba(91, 140, 255, 0.3);
+  --shadow-primary-hover: 0 6px 20px rgba(91, 140, 255, 0.4);
+  --shadow-success: 0 4px 12px rgba(76, 175, 80, 0.3);
+  --shadow-error: 0 4px 12px rgba(255, 91, 91, 0.3);
+
+  /* ================================
+     特殊效果（Effects）
+     ================================ */
+
+  /* 毛玻璃效果 */
+  --backdrop-blur: blur(20px);
+  --backdrop-blur-sm: blur(10px);
+  --backdrop-blur-lg: blur(40px);
+
+  /* 渐变背景 */
+  --gradient-bg-primary: linear-gradient(135deg,
+    rgba(18, 26, 45, 0.98),
+    rgba(12, 19, 35, 0.95)
+  );
+
+  --gradient-bg-elevated: linear-gradient(135deg,
+    rgba(31, 45, 69, 0.95),
+    rgba(26, 37, 56, 0.9)
+  );
+
+  /* 光效渐变（用于高亮、焦点）*/
+  --gradient-glow: radial-gradient(circle at center,
+    rgba(91, 140, 255, 0.3) 0%,
+    transparent 70%
+  );
+
+  /* 波纹效果 */
+  --ripple-color: rgba(255, 255, 255, 0.5);
+}
+
+/* ================================
+   暗色模式（Dark Mode Override）
+
+   注意：当前设计默认为暗色主题，此处预留亮色模式支持。
+   当根元素添加 data-theme="light" 时激活。
+   ================================ */
+
+[data-theme="light"] {
+  /* 主题色保持不变 */
+  --color-primary: #5B8CFF;
+  --color-primary-dark: #4A73E6;
+
+  /* 文本颜色反转 */
+  --color-text-primary: rgba(0, 0, 0, 0.95);
+  --color-text-secondary: rgba(0, 0, 0, 0.7);
+  --color-text-tertiary: rgba(0, 0, 0, 0.5);
+  --color-text-disabled: rgba(0, 0, 0, 0.3);
+  --color-text-inverse: rgba(255, 255, 255, 0.95);
+
+  /* 背景颜色反转 */
+  --color-bg-primary: #FFFFFF;
+  --color-bg-secondary: #F5F7FA;
+  --color-bg-tertiary: #E8ECF2;
+  --color-bg-elevated: #FFFFFF;
+  --color-bg-hover: rgba(0, 0, 0, 0.04);
+  --color-bg-active: rgba(0, 0, 0, 0.08);
+  --color-bg-overlay: rgba(255, 255, 255, 0.95);
+
+  /* 边框颜色调整 */
+  --color-border-primary: rgba(0, 0, 0, 0.12);
+  --color-border-secondary: rgba(0, 0, 0, 0.08);
+
+  /* 分隔线调整 */
+  --color-divider: rgba(0, 0, 0, 0.1);
+  --color-divider-light: rgba(0, 0, 0, 0.05);
+
+  /* 灰度色阶反转 */
+  --color-gray-50: rgba(0, 0, 0, 0.05);
+  --color-gray-100: rgba(0, 0, 0, 0.1);
+  --color-gray-200: rgba(0, 0, 0, 0.2);
+  --color-gray-300: rgba(0, 0, 0, 0.3);
+  --color-gray-400: rgba(0, 0, 0, 0.4);
+  --color-gray-500: rgba(0, 0, 0, 0.5);
+  --color-gray-600: rgba(0, 0, 0, 0.6);
+  --color-gray-700: rgba(0, 0, 0, 0.7);
+  --color-gray-800: rgba(0, 0, 0, 0.8);
+  --color-gray-900: rgba(0, 0, 0, 0.9);
+
+  /* 阴影调整（亮色模式下更柔和）*/
+  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.08);
+  --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.12);
+
+  /* 渐变背景调整 */
+  --gradient-bg-primary: linear-gradient(135deg,
+    rgba(255, 255, 255, 0.98),
+    rgba(245, 247, 250, 0.95)
+  );
+
+  /* 次要色调整 */
+  --color-secondary: rgba(0, 0, 0, 0.08);
+  --color-secondary-hover: rgba(0, 0, 0, 0.12);
+  --color-secondary-active: rgba(0, 0, 0, 0.16);
+  --color-secondary-border: rgba(0, 0, 0, 0.15);
+}
+
+/* ================================
+   高对比度模式（Accessibility）
+   当系统启用高对比度模式时自动激活
+   ================================ */
+
+@media (prefers-contrast: high) {
+  :root {
+    --color-text-primary: #FFFFFF;
+    --color-text-secondary: rgba(255, 255, 255, 0.85);
+    --color-border-primary: rgba(255, 255, 255, 0.3);
+    --color-border-focus: #FFFFFF;
+  }
+
+  [data-theme="light"] {
+    --color-text-primary: #000000;
+    --color-text-secondary: rgba(0, 0, 0, 0.85);
+    --color-border-primary: rgba(0, 0, 0, 0.3);
+    --color-border-focus: #000000;
+  }
+}
+
+/* ================================
+   使用示例
+   ================================ */
+
+/*
+.button-primary {
+  background: var(--gradient-primary);
+  color: var(--color-text-inverse);
+  box-shadow: var(--shadow-primary);
+}
+
+.button-primary:hover {
+  background: var(--gradient-primary-hover);
+  box-shadow: var(--shadow-primary-hover);
+}
+
+.card {
+  background: var(--color-bg-secondary);
+  border: 1px solid var(--color-border-primary);
+  box-shadow: var(--shadow-md);
+  backdrop-filter: var(--backdrop-blur);
+}
+
+.text-primary {
+  color: var(--color-text-primary);
+}
+
+.text-secondary {
+  color: var(--color-text-secondary);
+}
+*/

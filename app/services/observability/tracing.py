@@ -24,5 +24,3 @@ def traced_span(name: str, attributes: dict[str, Any] | None = None) -> Iterator
             except (ValueError, TypeError):
                 continue
         yield
-
-

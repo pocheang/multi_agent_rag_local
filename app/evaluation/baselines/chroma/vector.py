@@ -91,5 +91,3 @@ def create_vector_baseline(vectorstore: Chroma, k: int = 5, score_threshold: flo
         Configured VectorBaseline instance
     """
     return VectorBaseline(vectorstore=vectorstore, k=k, score_threshold=score_threshold)
-
-

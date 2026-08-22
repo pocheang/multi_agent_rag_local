@@ -10,13 +10,11 @@ Web Activity Data Management
 - 数据恢复
 """
 
-import logging
 import gzip
+import logging
 import shutil
-import json
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import List, Optional, Dict
 
 logger = logging.getLogger("app.agents.web_activity_data_manager")
 
@@ -32,7 +30,7 @@ class WebActivityDataManager:
         self,
         log_dir: str = "logs/web_activity",
         backup_dir: str = "backups/web_activity",
-        archive_dir: str = "archives/web_activity"
+        archive_dir: str = "archives/web_activity",
     ):
         """
         初始化数据管理器
@@ -50,9 +48,9 @@ class WebActivityDataManager:
         self.backup_dir.mkdir(parents=True, exist_ok=True)
         self.archive_dir.mkdir(parents=True, exist_ok=True)
 
-        logger.info(f"WebActivityDataManager initialized")
+        logger.info("WebActivityDataManager initialized")
 
-    def backup_logs(self, days: int = 7) -> Dict:
+    def backup_logs(self, days: int = 7) -> dict:
         """
         备份最近N天的日志
 
@@ -85,14 +83,11 @@ class WebActivityDataManager:
 
         if not files_to_backup:
             logger.warning("No files to backup")
-            return {
-                "success": False,
-                "message": "No files to backup",
-                "file_count": 0
-            }
+            return {"success": False, "message": "No files to backup", "file_count": 0}
 
         # 创建tar.gz备份
         import tarfile
+
         try:
             with tarfile.open(backup_path, "w:gz") as tar:
                 for file in files_to_backup:
@@ -108,13 +103,9 @@ class WebActivityDataManager:
             }
         except Exception as e:
             logger.error(f"Backup failed: {e}")
-            return {
-                "success": False,
-                "message": str(e),
-                "file_count": 0
-            }
+            return {"success": False, "message": str(e), "file_count": 0}
 
-    def archive_old_logs(self, days: int = 30) -> Dict:
+    def archive_old_logs(self, days: int = 30) -> dict:
         """
         归档超过N天的日志（压缩）
 
@@ -128,6 +119,7 @@ class WebActivityDataManager:
 
         cutoff_date = datetime.now() - timedelta(days=days)
         archived_files = []
+        failed_files = []
 
         for log_file in self.log_dir.glob("web_activity_*.jsonl"):
             try:
@@ -139,18 +131,20 @@ class WebActivityDataManager:
                     # 压缩并移动到归档目录
                     archive_path = self.archive_dir / f"{log_file.name}.gz"
 
-                    with open(log_file, 'rb') as f_in:
-                        with gzip.open(archive_path, 'wb') as f_out:
+                    with open(log_file, "rb") as f_in:
+                        with gzip.open(archive_path, "wb") as f_out:
                             shutil.copyfileobj(f_in, f_out)
 
                     # 删除原文件
                     log_file.unlink()
 
-                    archived_files.append({
-                        "original": str(log_file),
-                        "archived": str(archive_path),
-                        "date": file_date.strftime("%Y-%m-%d")
-                    })
+                    archived_files.append(
+                        {
+                            "original": str(log_file),
+                            "archived": str(archive_path),
+                            "date": file_date.strftime("%Y-%m-%d"),
+                        }
+                    )
 
                     logger.info(f"Archived: {log_file.name}")
 
@@ -158,14 +152,17 @@ class WebActivityDataManager:
                 logger.warning(f"Skip file with invalid date format: {log_file}")
             except Exception as e:
                 logger.error(f"Failed to archive {log_file}: {e}")
+                failed_files.append({"file": str(log_file), "error": str(e)})
 
         return {
-            "success": True,
+            "success": not failed_files,
             "archived_count": len(archived_files),
-            "files": archived_files
+            "failed_count": len(failed_files),
+            "failures": failed_files,
+            "files": archived_files,
         }
 
-    def clean_old_logs(self, days: int = 90) -> Dict:
+    def clean_old_logs(self, days: int = 90) -> dict:
         """
         删除超过N天的日志
 
@@ -179,6 +176,7 @@ class WebActivityDataManager:
 
         cutoff_date = datetime.now() - timedelta(days=days)
         deleted_files = []
+        failed_files = []
 
         # 清理未压缩的日志
         for log_file in self.log_dir.glob("web_activity_*.jsonl"):
@@ -195,6 +193,7 @@ class WebActivityDataManager:
                 pass
             except Exception as e:
                 logger.error(f"Failed to delete {log_file}: {e}")
+                failed_files.append({"file": str(log_file), "error": str(e)})
 
         # 清理归档文件
         for archive_file in self.archive_dir.glob("web_activity_*.jsonl.gz"):
@@ -211,14 +210,17 @@ class WebActivityDataManager:
                 pass
             except Exception as e:
                 logger.error(f"Failed to delete {archive_file}: {e}")
+                failed_files.append({"file": str(archive_file), "error": str(e)})
 
         return {
-            "success": True,
+            "success": not failed_files,
             "deleted_count": len(deleted_files),
-            "files": deleted_files
+            "failed_count": len(failed_files),
+            "failures": failed_files,
+            "files": deleted_files,
         }
 
-    def clean_old_backups(self, days: int = 30) -> Dict:
+    def clean_old_backups(self, days: int = 30) -> dict:
         """
         删除超过N天的备份文件
 
@@ -232,6 +234,7 @@ class WebActivityDataManager:
 
         cutoff_date = datetime.now() - timedelta(days=days)
         deleted_backups = []
+        failed_backups = []
 
         for backup_file in self.backup_dir.glob("web_activity_backup_*.tar.gz"):
             try:
@@ -245,14 +248,17 @@ class WebActivityDataManager:
 
             except Exception as e:
                 logger.error(f"Failed to delete backup {backup_file}: {e}")
+                failed_backups.append({"file": str(backup_file), "error": str(e)})
 
         return {
-            "success": True,
+            "success": not failed_backups,
             "deleted_count": len(deleted_backups),
-            "files": deleted_backups
+            "failed_count": len(failed_backups),
+            "failures": failed_backups,
+            "files": deleted_backups,
         }
 
-    def restore_backup(self, backup_file: str) -> Dict:
+    def restore_backup(self, backup_file: str) -> dict:
         """
         从备份恢复数据
 
@@ -266,10 +272,7 @@ class WebActivityDataManager:
 
         backup_path = Path(backup_file)
         if not backup_path.exists():
-            return {
-                "success": False,
-                "message": f"Backup file not found: {backup_file}"
-            }
+            return {"success": False, "message": f"Backup file not found: {backup_file}"}
 
         try:
             restored_files = []
@@ -281,31 +284,25 @@ class WebActivityDataManager:
                     restored_files.append(member.name)
                     logger.info(f"Restored: {member.name}")
 
-            return {
-                "success": True,
-                "restored_count": len(restored_files),
-                "files": restored_files
-            }
+            return {"success": True, "restored_count": len(restored_files), "files": restored_files}
 
         except Exception as e:
             logger.error(f"Restore failed: {e}")
-            return {
-                "success": False,
-                "message": str(e)
-            }
+            return {"success": False, "message": str(e)}
 
-    def get_storage_info(self) -> Dict:
+    def get_storage_info(self) -> dict:
         """
         获取存储空间信息
 
         Returns:
             存储信息字典
         """
+
         def get_dir_size(path: Path) -> int:
             """计算目录大小"""
             total = 0
             if path.exists():
-                for file in path.rglob('*'):
+                for file in path.rglob("*"):
                     if file.is_file():
                         total += file.stat().st_size
             return total
@@ -320,18 +317,18 @@ class WebActivityDataManager:
             "log_dir": {
                 "path": str(self.log_dir),
                 "size_bytes": get_dir_size(self.log_dir),
-                "file_count": get_file_count(self.log_dir, "*.jsonl")
+                "file_count": get_file_count(self.log_dir, "*.jsonl"),
             },
             "archive_dir": {
                 "path": str(self.archive_dir),
                 "size_bytes": get_dir_size(self.archive_dir),
-                "file_count": get_file_count(self.archive_dir, "*.gz")
+                "file_count": get_file_count(self.archive_dir, "*.gz"),
             },
             "backup_dir": {
                 "path": str(self.backup_dir),
                 "size_bytes": get_dir_size(self.backup_dir),
-                "file_count": get_file_count(self.backup_dir, "*.tar.gz")
-            }
+                "file_count": get_file_count(self.backup_dir, "*.tar.gz"),
+            },
         }
 
     def scheduled_maintenance(self):
@@ -349,16 +346,16 @@ class WebActivityDataManager:
         results = {}
 
         # 1. 备份
-        results['backup'] = self.backup_logs(days=7)
+        results["backup"] = self.backup_logs(days=7)
 
         # 2. 归档
-        results['archive'] = self.archive_old_logs(days=30)
+        results["archive"] = self.archive_old_logs(days=30)
 
         # 3. 清理旧日志
-        results['clean_logs'] = self.clean_old_logs(days=90)
+        results["clean_logs"] = self.clean_old_logs(days=90)
 
         # 4. 清理旧备份
-        results['clean_backups'] = self.clean_old_backups(days=30)
+        results["clean_backups"] = self.clean_old_backups(days=30)
 
         logger.info("Scheduled maintenance completed")
 

@@ -1,22 +1,20 @@
 """
-Shared caching utilities for all RAG agents.
+Shared caching utilities - 使用统一的缓存后端
 
-Provides centralized caching for:
-- Vector search results
-- Router decisions
-- Web research results
-- Synthesis outputs
+迁移说明:
+- 之前: 自定义 SimpleCache 实现
+- 现在: 使用 app/services/caching/cache_manager.py 的 LRUMemoryCache
+- API保持不变，确保向后兼容
 
 Cache versioning: Router cache includes version to support calibration updates.
 """
 
 import hashlib
+import json
 import logging
-from collections import OrderedDict
 from collections.abc import Callable
-from dataclasses import dataclass
-from datetime import datetime, timedelta
-from typing import Any
+
+from app.services.caching.cache_manager import LRUMemoryCache
 
 logger = logging.getLogger(__name__)
 
@@ -29,114 +27,25 @@ DEFAULT_TTL_SECONDS = 1800  # 30 minutes
 # Router cache version - increment when calibration logic changes
 ROUTER_CACHE_VERSION = "v2_calibrated"
 
+# 全局缓存实例
+_vector_search_cache = LRUMemoryCache(max_size=DEFAULT_VECTOR_CACHE_SIZE, default_ttl=DEFAULT_TTL_SECONDS)
 
-@dataclass
-class CacheEntry:
-    """Cache entry with value and metadata."""
+_router_decision_cache = LRUMemoryCache(max_size=DEFAULT_ROUTER_CACHE_SIZE, default_ttl=DEFAULT_TTL_SECONDS)
 
-    value: Any
-    created_at: datetime
-    hits: int = 0
-
-
-class SimpleCache:
-    """
-    Simple LRU cache with TTL support.
-
-    Shared implementation for all agent caching needs.
-    """
-
-    def __init__(self, max_size: int = 100, ttl_seconds: int = 1800):
-        self.max_size = max_size
-        self.ttl = timedelta(seconds=ttl_seconds)
-        self._cache: OrderedDict[str, CacheEntry] = OrderedDict()
-        self._hits = 0
-        self._misses = 0
-
-    def get(self, key: str) -> Any | None:
-        """Get value from cache."""
-        if key not in self._cache:
-            self._misses += 1
-            return None
-
-        entry = self._cache[key]
-
-        # Check expiration
-        if datetime.now() - entry.created_at > self.ttl:
-            logger.debug(f"Cache entry expired: {key[:16]}")
-            del self._cache[key]
-            self._misses += 1
-            return None
-
-        # Move to end (most recently used)
-        self._cache.move_to_end(key)
-        entry.hits += 1
-        self._hits += 1
-
-        return entry.value
-
-    def set(self, key: str, value: Any) -> None:
-        """Store value in cache."""
-        # Remove oldest if at capacity
-        if key not in self._cache and len(self._cache) >= self.max_size:
-            oldest_key = next(iter(self._cache))
-            del self._cache[oldest_key]
-
-        self._cache[key] = CacheEntry(
-            value=value,
-            created_at=datetime.now(),
-        )
-        self._cache.move_to_end(key)
-
-    def clear(self) -> None:
-        """Clear all cache entries."""
-        self._cache.clear()
-        self._hits = 0
-        self._misses = 0
-
-    def stats(self) -> dict:
-        """Get cache statistics."""
-        total_requests = self._hits + self._misses
-        hit_rate = self._hits / total_requests if total_requests > 0 else 0.0
-
-        return {
-            "size": len(self._cache),
-            "max_size": self.max_size,
-            "hits": self._hits,
-            "misses": self._misses,
-            "hit_rate": hit_rate,
-        }
-
-
-# Global cache instances
-_vector_search_cache = SimpleCache(max_size=DEFAULT_VECTOR_CACHE_SIZE, ttl_seconds=DEFAULT_TTL_SECONDS)
-
-_router_decision_cache = SimpleCache(max_size=DEFAULT_ROUTER_CACHE_SIZE, ttl_seconds=DEFAULT_TTL_SECONDS)
-
-_synthesis_cache = SimpleCache(
+_synthesis_cache = LRUMemoryCache(
     max_size=DEFAULT_SYNTHESIS_CACHE_SIZE,
-    ttl_seconds=3600,  # Longer TTL for synthesis
+    default_ttl=3600,  # Longer TTL for synthesis
 )
 
 
 def _make_cache_key(*args, **kwargs) -> str:
     """Create a cache key from arguments."""
-    key_parts = []
-
-    for arg in args:
-        if isinstance(arg, str):
-            key_parts.append(arg[:100])  # Truncate long strings
-        elif isinstance(arg, list | tuple):
-            key_parts.append(str(sorted(arg))[:100])
-        else:
-            key_parts.append(str(arg)[:50])
-
-    for k, v in sorted(kwargs.items()):
-        if v is not None:
-            key_parts.append(f"{k}={str(v)[:50]}")
-
-    key_string = "|".join(key_parts)
-    return hashlib.md5(key_string.encode("utf-8")).hexdigest()
+    payload = {
+        "args": args,
+        "kwargs": {key: value for key, value in sorted(kwargs.items()) if value is not None},
+    }
+    key_string = json.dumps(payload, ensure_ascii=False, sort_keys=True, default=str, separators=(",", ":"))
+    return hashlib.sha256(key_string.encode("utf-8")).hexdigest()
 
 
 def cached_vector_search(func: Callable) -> Callable:
@@ -154,7 +63,15 @@ def cached_vector_search(func: Callable) -> Callable:
         cache_key = _make_cache_key("vector", question, kwargs.get("allowed_sources"), kwargs.get("retrieval_strategy"))
 
         # Try cache first
-        cached_result = _vector_search_cache.get(cache_key)
+        import asyncio
+
+        try:
+            loop = asyncio.get_event_loop()
+        except RuntimeError:
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+
+        cached_result = loop.run_until_complete(_vector_search_cache.get(cache_key))
         if cached_result is not None:
             logger.debug(f"Vector search cache hit: {cache_key[:16]}")
             return cached_result
@@ -163,7 +80,7 @@ def cached_vector_search(func: Callable) -> Callable:
         result = func(question, *args, **kwargs)
 
         # Cache result
-        _vector_search_cache.set(cache_key, result)
+        loop.run_until_complete(_vector_search_cache.set(cache_key, result))
         logger.debug(f"Vector search cache miss: {cache_key[:16]}")
 
         return result
@@ -197,7 +114,15 @@ def cached_router_decision(func: Callable) -> Callable:
         )
 
         # Try cache first
-        cached_result = _router_decision_cache.get(cache_key)
+        import asyncio
+
+        try:
+            loop = asyncio.get_event_loop()
+        except RuntimeError:
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+
+        cached_result = loop.run_until_complete(_router_decision_cache.get(cache_key))
         if cached_result is not None:
             logger.debug(f"Router decision cache hit: {cache_key[:16]}")
             return cached_result
@@ -206,7 +131,7 @@ def cached_router_decision(func: Callable) -> Callable:
         result = func(question, *args, **kwargs)
 
         # Cache result
-        _router_decision_cache.set(cache_key, result)
+        loop.run_until_complete(_router_decision_cache.set(cache_key, result))
         logger.debug(f"Router decision cache miss: {cache_key[:16]}")
 
         return result
@@ -221,16 +146,33 @@ def get_agent_cache_stats() -> dict:
     Returns:
         Dictionary with stats for each cache
     """
+    import asyncio
+
+    try:
+        loop = asyncio.get_event_loop()
+    except RuntimeError:
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+
+    # LRUMemoryCache.get_stats() is synchronous
     return {
-        "vector_search": _vector_search_cache.stats(),
-        "router_decision": _router_decision_cache.stats(),
-        "synthesis": _synthesis_cache.stats(),
+        "vector_search": _vector_search_cache.get_stats(),
+        "router_decision": _router_decision_cache.get_stats(),
+        "synthesis": _synthesis_cache.get_stats(),
     }
 
 
 def clear_agent_caches() -> None:
     """Clear all agent caches."""
-    _vector_search_cache.clear()
-    _router_decision_cache.clear()
-    _synthesis_cache.clear()
+    import asyncio
+
+    try:
+        loop = asyncio.get_event_loop()
+    except RuntimeError:
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+
+    loop.run_until_complete(_vector_search_cache.clear())
+    loop.run_until_complete(_router_decision_cache.clear())
+    loop.run_until_complete(_synthesis_cache.clear())
     logger.info("All agent caches cleared")

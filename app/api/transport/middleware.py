@@ -37,23 +37,49 @@ async def request_timing_middleware(request: Request, call_next):
 
         # Security headers - prevent common attacks
         response.headers.setdefault("X-Content-Type-Options", "nosniff")
-        response.headers.setdefault("X-Frame-Options", "DENY")
+        response.headers.setdefault("X-Frame-Options", "SAMEORIGIN")  # Changed from DENY to allow same-origin frames
         response.headers.setdefault("X-XSS-Protection", "1; mode=block")
         response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
-        response.headers.setdefault("Permissions-Policy", "geolocation=(), microphone=(), camera=()")
+        response.headers.setdefault(
+            "Permissions-Policy", "geolocation=(), microphone=(), camera=(), payment=(), usb=()"
+        )
 
         # Content Security Policy - prevent XSS and injection attacks
-        csp_directives = [
-            "default-src 'self'",
-            "script-src 'self' 'unsafe-inline' 'unsafe-eval'",  # Allow inline scripts for React
-            "style-src 'self' 'unsafe-inline'",  # Allow inline styles
-            "img-src 'self' data: https:",  # Allow images from self, data URIs, and HTTPS
-            "font-src 'self' data:",
-            "connect-src 'self'",  # API calls to same origin
-            "frame-ancestors 'none'",  # Prevent framing
-            "base-uri 'self'",
-            "form-action 'self'",
-        ]
+        # Check if strict CSP is enabled (requires nonce support in frontend)
+        use_strict_csp = os.getenv("STRICT_CSP", "false").lower() == "true"
+
+        if use_strict_csp:
+            # Stricter CSP without unsafe-inline/unsafe-eval
+            # Requires frontend to use nonces for inline scripts/styles
+            csp_directives = [
+                "default-src 'self'",
+                "script-src 'self'",  # No unsafe-inline or unsafe-eval
+                "style-src 'self'",  # No unsafe-inline
+                "img-src 'self' data: blob: https:",
+                "font-src 'self' data:",
+                "connect-src 'self' http://localhost:8000 http://127.0.0.1:8000",
+                "frame-ancestors 'self'",
+                "base-uri 'self'",
+                "form-action 'self'",
+                "object-src 'none'",
+                "upgrade-insecure-requests",
+            ]
+        else:
+            # Relaxed CSP for compatibility with React/Vite
+            csp_directives = [
+                "default-src 'self'",
+                "script-src 'self' 'unsafe-inline' 'unsafe-eval'",  # Allow inline scripts for React
+                "style-src 'self' 'unsafe-inline'",  # Allow inline styles
+                "img-src 'self' data: blob: https:",  # Allow images from self, data URIs, blob, and HTTPS
+                "font-src 'self' data:",
+                "connect-src 'self' http://localhost:8000 http://127.0.0.1:8000",  # API calls (dev + prod)
+                "frame-ancestors 'self'",  # Allow framing from same origin
+                "base-uri 'self'",
+                "form-action 'self'",
+                "object-src 'none'",  # Block plugins
+                "upgrade-insecure-requests",  # Upgrade HTTP to HTTPS
+            ]
+
         response.headers.setdefault("Content-Security-Policy", "; ".join(csp_directives))
 
         # HSTS - force HTTPS (only if using HTTPS)
@@ -85,5 +111,3 @@ def get_request_metrics() -> list[dict[str, Any]]:
     """Get recent request metrics."""
     with _request_metrics_lock:
         return list(_request_metrics)
-
-

@@ -231,5 +231,3 @@ def extract_formula_relationships(text: str) -> list[dict[str, str]]:
                         relationships.append({"head": left, "relation": "DEPENDS_ON", "tail": rv, "formula": formula})
 
     return relationships
-
-

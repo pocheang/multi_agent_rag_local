@@ -10,7 +10,7 @@ from urllib.parse import urlparse
 
 import httpx
 
-from app.core.config import get_settings
+from app.core.config import get_settings, resolve_response_signing_secret
 
 logger = logging.getLogger(__name__)
 
@@ -66,26 +66,7 @@ def sign_payload(payload: dict[str, Any], secret: str) -> str:
 
 
 def resolve_signing_secret() -> tuple[str | None, str | None]:
-    settings = get_settings()
-    active_kid = str(getattr(settings, "response_signing_active_kid", "v1") or "v1").strip() or "v1"
-    raw_keys = str(getattr(settings, "response_signing_keys", "") or "").strip()
-    if raw_keys:
-        pairs = [x.strip() for x in raw_keys.split(";") if x.strip()]
-        mapping: dict[str, str] = {}
-        for p in pairs:
-            if ":" not in p:
-                continue
-            kid, secret = p.split(":", 1)
-            k = kid.strip()
-            s = secret.strip()
-            if k and s:
-                mapping[k] = s
-        if active_kid in mapping:
-            return active_kid, mapping[active_kid]
-    legacy_secret = str(getattr(settings, "response_signing_secret", "") or "").strip()
-    if legacy_secret:
-        return active_kid, legacy_secret
-    return None, None
+    return resolve_response_signing_secret(get_settings())
 
 
 def _is_webhook_allowed(url: str) -> bool:
@@ -102,5 +83,3 @@ def _is_webhook_allowed(url: str) -> bool:
         if host == domain or host.endswith(f".{domain}"):
             return True
     return False
-
-

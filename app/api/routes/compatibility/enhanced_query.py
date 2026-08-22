@@ -9,12 +9,15 @@ GET /api/v1/enhanced/config - Configuration info
 import logging
 from typing import Any, Literal
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 
-from app.api.dependencies import _require_permission, _require_user
+from app.api.dependencies import _require_permission, _require_user, _reserve_chat_credit
+from app.api.deps.auth import require_admin
 from app.api.deps.documents import _allowed_sources_for_user
 from app.api.transport.errors import internal_error
+from app.api.utils.context_management import process_query_with_context
+from app.api.utils.query_optimization import analyze_query_for_api
 from app.pipeline.contracts import PipelineRequest, PipelineUser, SourceScope
 from app.pipeline.profiles import PipelineProfile
 from app.pipeline.rag_pipeline import RAGPipeline
@@ -75,8 +78,8 @@ class ExecutionStats(BaseModel):
     answer_retry: int = 0
 
 
-class QualityReport(BaseModel):
-    """API schema boundary for legacy quality-report payloads."""
+class LegacyQualityReportDTO(BaseModel):
+    """API DTO for legacy quality-report payloads (compatibility layer)."""
 
     overall_confidence: float = Field(ge=0.0, le=1.0)
     quality_level: Literal["high", "medium", "low", "very_low"]
@@ -99,6 +102,14 @@ class EnhancedQueryResponse(BaseModel):
     skill_used: str = Field(..., description="Skill that was used")
     agent_class: str = Field(..., description="Agent class used")
     execution_metadata: dict = Field(..., description="Performance metrics")
+    query_optimization: dict | None = Field(
+        default=None,
+        description="Query optimization suggestions (if query quality is low)",
+    )
+    context_resolution: dict | None = Field(
+        default=None,
+        description="Context resolution result (coreference resolution, entities, topic)",
+    )
 
 
 # ============================================================================
@@ -138,11 +149,10 @@ def _resolve_allowed_sources(
 # ============================================================================
 
 
-@router.post("/query", response_model=EnhancedQueryResponse)
-async def execute_enhanced_query(
+async def _execute_enhanced_query_impl(
     request_data: EnhancedQueryRequest,
     request: Request,
-    user: dict[str, Any] = Depends(_require_user),
+    user: dict[str, Any],
 ):
     """
     Execute quality-enhanced RAG query with comprehensive QA pipeline.
@@ -177,8 +187,24 @@ async def execute_enhanced_query(
         # Resolve allowed sources based on user permissions
         allowed_sources = _resolve_allowed_sources(user, request_data.allowed_sources)
 
+        # Analyze query for optimization suggestions
+        optimization_result = analyze_query_for_api(request_data.query)
+
+        # Process query with context management
+        context_result = None
+        actual_query = request_data.query
+        if request_data.enable_context_tracking:
+            context_result = process_query_with_context(
+                request_data.query,
+                request_data.session_id,
+            )
+            # Use resolved query if confidence is high enough
+            if context_result["confidence"] >= 0.7 and not context_result["needs_clarification"]:
+                actual_query = context_result["resolved_query"]
+
+        # Create pipeline request once with the actual query
         pipeline_request = PipelineRequest(
-            question=request_data.query,
+            question=actual_query,
             profile=PipelineProfile.STRICT_QUALITY,
             session_id=request_data.session_id,
             user=PipelineUser(
@@ -194,6 +220,7 @@ async def execute_enhanced_query(
             retrieval_strategy=request_data.retrieval_strategy,
             enable_context_tracking=request_data.enable_context_tracking,
         )
+
         pipeline_result = await RAGPipeline().execute(pipeline_request)
         result = {
             "answer": pipeline_result.answer,
@@ -204,6 +231,11 @@ async def execute_enhanced_query(
             "skill_used": pipeline_result.route.skill,
             "agent_class": pipeline_result.route.agent_class,
             "execution_metadata": dict(pipeline_result.execution_metadata),
+            "query_optimization": optimization_result if optimization_result["should_optimize"] else None,
+            "context_resolution": context_result
+            if context_result
+            and (context_result["resolved_query"] != context_result["original_query"] or context_result["topic_switch"])
+            else None,
         }
 
         logger.info(
@@ -215,9 +247,39 @@ async def execute_enhanced_query(
 
         return EnhancedQueryResponse(**result)
 
-    except Exception as e:
-        logger.exception(f"Enhanced query failed: {e}")
-        raise internal_error(f"Error processing enhanced query: {str(e)}")
+    except ValueError as e:
+        # Validation errors should return 400 Bad Request
+        logger.warning(f"Enhanced query validation error: {e}")
+        from fastapi import HTTPException
+
+        raise HTTPException(status_code=400, detail=f"Invalid request: {str(e)}")
+    except PermissionError as e:
+        # Permission errors should return 403 Forbidden
+        logger.warning(f"Enhanced query permission error: {e}")
+        from fastapi import HTTPException
+
+        raise HTTPException(status_code=403, detail=f"Permission denied: {str(e)}")
+    except TimeoutError as e:
+        # Timeout errors should return 504 Gateway Timeout
+        logger.warning(f"Enhanced query timeout: {e}")
+        from fastapi import HTTPException
+
+        raise HTTPException(status_code=504, detail=f"Request timeout: {str(e)}")
+    except Exception:
+        logger.exception("Enhanced query failed")
+        raise internal_error("Unable to process enhanced query")
+
+
+@router.post("/query", response_model=EnhancedQueryResponse)
+async def execute_enhanced_query(
+    request_data: EnhancedQueryRequest,
+    request: Request,
+    user: dict[str, Any] = Depends(_require_user),
+):
+    with _reserve_chat_credit(request, user, "enhanced_query") as credit:
+        response = await _execute_enhanced_query_impl(request_data, request, user)
+        credit.commit()
+        return response
 
 
 @router.get("/health")
@@ -242,7 +304,7 @@ async def health_check():
     }
 
 
-@router.get("/config")
+@router.get("/config", dependencies=[Depends(require_admin)])
 async def get_config():
     """
     Get current enhanced RAG configuration.
@@ -279,23 +341,7 @@ async def get_config():
     }
 
 
-@router.get("/stats")
+@router.get("/stats", dependencies=[Depends(require_admin)])
 async def get_stats():
-    """
-    Get runtime statistics (placeholder for future implementation).
-
-    Returns:
-        Runtime statistics for quality agents
-    """
-    return {
-        "message": "Statistics collection not yet implemented",
-        "suggested_metrics": [
-            "total_queries_processed",
-            "average_quality_score",
-            "route_retry_rate",
-            "answer_retry_rate",
-            "average_latency_ms",
-            "quality_level_distribution",
-        ],
-    }
-
+    """Reject the unsupported compatibility endpoint explicitly."""
+    raise HTTPException(status_code=501, detail="Enhanced query statistics are not implemented")

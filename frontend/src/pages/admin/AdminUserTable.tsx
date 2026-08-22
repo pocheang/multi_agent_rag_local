@@ -7,6 +7,7 @@ type Props = {
   statusOptions: string[];
   onUpdateRole: (user: AdminUserSummary, role: string) => Promise<void>;
   onUpdateStatus: (user: AdminUserSummary, status: string) => Promise<void>;
+  onAddCredits: (user: AdminUserSummary) => Promise<void>;
   onOpenClassEditor: (user: AdminUserSummary) => void;
   onResetPassword: (user: AdminUserSummary) => Promise<void>;
   onResetApprovalToken: (user: AdminUserSummary) => Promise<void>;
@@ -18,6 +19,7 @@ export function AdminUserTable({
   statusOptions,
   onUpdateRole,
   onUpdateStatus,
+  onAddCredits,
   onOpenClassEditor,
   onResetPassword,
   onResetApprovalToken,
@@ -33,6 +35,7 @@ export function AdminUserTable({
           <th>{t("admin.ui.username")}</th>
           <th>{t("admin.ui.role")}</th>
           <th>{t("admin.ui.status")}</th>
+          <th>{t("admin.ui.credits")}</th>
           <th>{t("admin.ui.operation")}</th>
           <th>{t("admin.ui.businessUnit")}</th>
           <th>{t("admin.ui.type")}</th>
@@ -78,6 +81,11 @@ export function AdminUserTable({
               </div>
             </td>
             <td>
+              <span className="admin-user-flag token-set">
+                {(row.role || "").toLowerCase() === "admin" ? t("admin.ui.unlimited") : row.credit_balance}
+              </span>
+            </td>
+            <td>
               <div className="row-actions user-row-actions user-table-actions">
                 <button type="button" className="secondary tiny-btn" onClick={() => onOpenClassEditor(row)}>
                   {t("admin.ui.classify")}
@@ -85,6 +93,11 @@ export function AdminUserTable({
                 <button type="button" className="secondary tiny-btn" onClick={() => void onResetPassword(row)}>
                   {t("admin.ui.resetPassword")}
                 </button>
+                {(row.role || "").toLowerCase() !== "admin" ? (
+                  <button type="button" className="secondary tiny-btn" onClick={() => void onAddCredits(row)}>
+                    {t("admin.ui.addCredits")}
+                  </button>
+                ) : null}
                 {(row.role || "").toLowerCase() === "admin" ? (
                   <button type="button" className="secondary tiny-btn" onClick={() => void onResetApprovalToken(row)}>
                     {t("admin.ui.resetToken")}

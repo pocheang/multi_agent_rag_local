@@ -246,4 +246,3 @@ def get_chunker(chunk_size: int = 500, chunk_overlap: int = 50) -> ChineseAwareC
     if _chunker is None:
         _chunker = ChineseAwareChunker(chunk_size, chunk_overlap)
     return _chunker
-

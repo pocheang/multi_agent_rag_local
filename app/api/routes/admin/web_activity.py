@@ -2,13 +2,14 @@
 
 import logging
 from datetime import datetime, timedelta
-from typing import Any, Optional
+from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
 
-from app.api.dependencies import _require_permission, _require_user
+from app.api.dependencies import _require_user
+from app.api.deps.auth import require_admin
 from app.services.legacy_web_activity import (
     check_and_alert,
     get_activity_analyzer,
@@ -20,7 +21,11 @@ from app.services.legacy_web_activity import (
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/api/v1/admin/web-activity", tags=["Admin - Web Activity"])
+router = APIRouter(
+    prefix="/api/v1/admin/web-activity",
+    tags=["Admin - Web Activity"],
+    dependencies=[Depends(require_admin)],
+)
 
 
 class StatsResponse(BaseModel):
@@ -40,7 +45,7 @@ class LogEntry(BaseModel):
     search_success: bool
     results_count: int
     websites_accessed: list
-    ip_address: Optional[str] = None
+    ip_address: str | None = None
 
 
 class WebsiteStats(BaseModel):
@@ -54,7 +59,7 @@ class UserStats(BaseModel):
     search_count: int
 
 
-def parse_date(date_str: Optional[str]) -> Optional[datetime]:
+def parse_date(date_str: str | None) -> datetime | None:
     if not date_str:
         return None
     try:
@@ -65,9 +70,9 @@ def parse_date(date_str: Optional[str]) -> Optional[datetime]:
 
 @router.get("/stats", response_model=StatsResponse)
 async def get_web_activity_stats(
-    start_date: Optional[str] = Query(None, description="å¼€å§‹æ—¥æœŸ (ISO format: YYYY-MM-DD)"),
-    end_date: Optional[str] = Query(None, description="ç»“æŸæ—¥æœŸ (ISO format: YYYY-MM-DD)"),
-    user_id: Optional[str] = Query(None, description="ç­›é€‰ç‰¹å®šç”¨æˆ·"),
+    start_date: str | None = Query(None, description="å¼€å§‹æ—¥æœŸ (ISO format: YYYY-MM-DD)"),
+    end_date: str | None = Query(None, description="ç»“æŸæ—¥æœŸ (ISO format: YYYY-MM-DD)"),
+    user_id: str | None = Query(None, description="ç­›é€‰ç‰¹å®šç”¨æˆ·"),
     current_user: dict[str, Any] = Depends(_require_user),
 ):
     start = parse_date(start_date)
@@ -85,8 +90,8 @@ async def get_web_activity_stats(
 
 @router.get("/report")
 async def get_web_activity_report(
-    start_date: Optional[str] = Query(None, description="å¼€å§‹æ—¥æœŸ (YYYY-MM-DD)"),
-    end_date: Optional[str] = Query(None, description="ç»“æŸæ—¥æœŸ (YYYY-MM-DD)"),
+    start_date: str | None = Query(None, description="å¼€å§‹æ—¥æœŸ (YYYY-MM-DD)"),
+    end_date: str | None = Query(None, description="ç»“æŸæ—¥æœŸ (YYYY-MM-DD)"),
     format: str = Query("html", description="è¾“å‡ºæ ¼å¼: text, json, html"),
 ):
     if format not in ["text", "json", "html"]:
@@ -101,22 +106,22 @@ async def get_web_activity_report(
 
 @router.get("/logs")
 async def get_web_activity_logs(
-    start_date: Optional[str] = Query(None, description="å¼€å§‹æ—¥æœŸ (YYYY-MM-DD)"),
-    end_date: Optional[str] = Query(None, description="ç»“æŸæ—¥æœŸ (YYYY-MM-DD)"),
-    user_id: Optional[str] = Query(None, description="ç­›é€‰ç‰¹å®šç”¨æˆ·"),
+    start_date: str | None = Query(None, description="å¼€å§‹æ—¥æœŸ (YYYY-MM-DD)"),
+    end_date: str | None = Query(None, description="ç»“æŸæ—¥æœŸ (YYYY-MM-DD)"),
+    user_id: str | None = Query(None, description="ç­›é€‰ç‰¹å®šç”¨æˆ·"),
     limit: int = Query(100, description="è¿”å›žè®°å½•æ•°é™åˆ¶", ge=1, le=1000),
     offset: int = Query(0, description="è·³è¿‡è®°å½•æ•°", ge=0),
 ):
     start = parse_date(start_date)
     end = parse_date(end_date)
     logs = get_activity_logger().get_logs(start_date=start, end_date=end, user_id=user_id)
-    return {"total": len(logs), "offset": offset, "limit": limit, "logs": logs[offset:offset + limit]}
+    return {"total": len(logs), "offset": offset, "limit": limit, "logs": logs[offset : offset + limit]}
 
 
 @router.get("/top-websites", response_model=list[WebsiteStats])
 async def get_top_websites(
-    start_date: Optional[str] = Query(None, description="å¼€å§‹æ—¥æœŸ (YYYY-MM-DD)"),
-    end_date: Optional[str] = Query(None, description="ç»“æŸæ—¥æœŸ (YYYY-MM-DD)"),
+    start_date: str | None = Query(None, description="å¼€å§‹æ—¥æœŸ (YYYY-MM-DD)"),
+    end_date: str | None = Query(None, description="ç»“æŸæ—¥æœŸ (YYYY-MM-DD)"),
     limit: int = Query(20, description="è¿”å›žæ•°é‡", ge=1, le=100),
 ):
     analysis = get_activity_analyzer().analyze(start_date=parse_date(start_date), end_date=parse_date(end_date))
@@ -125,8 +130,8 @@ async def get_top_websites(
 
 @router.get("/top-users", response_model=list[UserStats])
 async def get_top_users(
-    start_date: Optional[str] = Query(None, description="å¼€å§‹æ—¥æœŸ (YYYY-MM-DD)"),
-    end_date: Optional[str] = Query(None, description="ç»“æŸæ—¥æœŸ (YYYY-MM-DD)"),
+    start_date: str | None = Query(None, description="å¼€å§‹æ—¥æœŸ (YYYY-MM-DD)"),
+    end_date: str | None = Query(None, description="ç»“æŸæ—¥æœŸ (YYYY-MM-DD)"),
     limit: int = Query(20, description="è¿”å›žæ•°é‡", ge=1, le=100),
 ):
     analysis = get_activity_analyzer().analyze(start_date=parse_date(start_date), end_date=parse_date(end_date))
@@ -135,18 +140,21 @@ async def get_top_users(
 
 @router.get("/hourly-distribution")
 async def get_hourly_distribution(
-    start_date: Optional[str] = Query(None, description="å¼€å§‹æ—¥æœŸ (YYYY-MM-DD)"),
-    end_date: Optional[str] = Query(None, description="ç»“æŸæ—¥æœŸ (YYYY-MM-DD)"),
+    start_date: str | None = Query(None, description="å¼€å§‹æ—¥æœŸ (YYYY-MM-DD)"),
+    end_date: str | None = Query(None, description="ç»“æŸæ—¥æœŸ (YYYY-MM-DD)"),
 ):
     analysis = get_activity_analyzer().analyze(start_date=parse_date(start_date), end_date=parse_date(end_date))
     distribution = analysis["hourly_distribution"]
-    return {"distribution": distribution, "peak_hour": max(distribution.items(), key=lambda x: x[1])[0] if distribution else None}
+    return {
+        "distribution": distribution,
+        "peak_hour": max(distribution.items(), key=lambda x: x[1])[0] if distribution else None,
+    }
 
 
 @router.get("/export")
 async def export_logs(
-    start_date: Optional[str] = Query(None, description="å¼€å§‹æ—¥æœŸ (YYYY-MM-DD)"),
-    end_date: Optional[str] = Query(None, description="ç»“æŸæ—¥æœŸ (YYYY-MM-DD)"),
+    start_date: str | None = Query(None, description="å¼€å§‹æ—¥æœŸ (YYYY-MM-DD)"),
+    end_date: str | None = Query(None, description="ç»“æŸæ—¥æœŸ (YYYY-MM-DD)"),
     format: str = Query("csv", description="å¯¼å‡ºæ ¼å¼: csv, json"),
 ):
     if format not in ["csv", "json"]:
@@ -179,14 +187,24 @@ async def get_dashboard(days: int = Query(7, description="æ˜¾ç¤ºæœ€è�
 @router.get("/alerts")
 async def get_alerts(
     hours: int = Query(24, description="èŽ·å–æœ€è¿‘å‡ å°æ—¶çš„å‘Šè­¦", ge=1, le=168),
-    level: Optional[str] = Query(None, description="å‘Šè­¦çº§åˆ«ç­›é€‰: info, warning, error, critical"),
+    level: str | None = Query(None, description="å‘Šè­¦çº§åˆ«ç­›é€‰: info, warning, error, critical"),
     current_user: dict[str, Any] = Depends(_require_user),
 ):
     alerts = get_alert_system().get_recent_alerts(hours=hours, level=get_alert_level(level) if level else None)
-    return {"total": len(alerts), "alerts": [{
-        "timestamp": alert.timestamp.isoformat(), "rule_name": alert.rule_name, "level": alert.level.value,
-        "message": alert.message, "metric_value": alert.metric_value, "threshold": alert.threshold,
-    } for alert in alerts]}
+    return {
+        "total": len(alerts),
+        "alerts": [
+            {
+                "timestamp": alert.timestamp.isoformat(),
+                "rule_name": alert.rule_name,
+                "level": alert.level.value,
+                "message": alert.message,
+                "metric_value": alert.metric_value,
+                "threshold": alert.threshold,
+            }
+            for alert in alerts
+        ],
+    }
 
 
 @router.get("/alerts/summary")

@@ -4,14 +4,13 @@ from pathlib import Path
 
 from langchain_core.documents import Document
 
-from app.ingestion.loaders import dispatch as loaders_module
-
-from app.ingestion.loaders.image_loader import load_image_file
-from app.ingestion.loaders.pdf_loader import load_pdf_image_ocr, load_pdf_text
-from app.ingestion.loaders.text_loader import load_text_file
 from app.ingestion.extraction.ocr import normalize_ocr_text, parse_psm_modes
 from app.ingestion.extraction.people import build_people_summary, detect_people_in_image
 from app.ingestion.extraction.vision import build_vision_summary, describe_image_with_vision
+from app.ingestion.loaders import dispatch as loaders_module
+from app.ingestion.loaders.image_loader import load_image_file
+from app.ingestion.loaders.pdf_loader import load_pdf_image_ocr, load_pdf_text
+from app.ingestion.loaders.text_loader import load_text_file
 
 IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".bmp", ".tif", ".tiff", ".webp", ".gif"}
 TEXT_EXTENSIONS = {".txt", ".md", ".csv", ".log", ".json", ".yaml", ".yml", ".toml", ".ini"}

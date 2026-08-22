@@ -23,6 +23,7 @@ from app.api.dependencies import (
 from app.api.deps.admin import handle_service_exception
 from app.api.schemas import (
     AdminCreateAdminRequest,
+    AdminCreditAddRequest,
     AdminResetApprovalTokenRequest,
     AdminResetPasswordRequest,
     AdminRoleUpdateRequest,
@@ -73,6 +74,39 @@ def admin_list_users(request: Request, user: dict[str, Any] = Depends(_require_u
     _require_permission(user, "admin:user_manage", request, "admin")
     rows = auth_service.list_users()
     return [AdminUserSummary(**x) for x in rows]
+
+
+@router.post("/users/{user_id}/credits/add", response_model=AdminUserSummary)
+@limiter.limit(get_rate_limit("credit_add"))
+def admin_add_user_credits(
+    user_id: str,
+    req: AdminCreditAddRequest,
+    request: Request,
+    user: dict[str, Any] = Depends(_require_user),
+):
+    """Add chat credits to a non-admin user and record the adjustment."""
+    _require_permission(user, "admin:user_manage", request, "admin", resource_id=user_id)
+    try:
+        row = auth_service.add_user_credits(user_id=user_id, amount=req.amount)
+    except Exception as exc:
+        handle_service_exception(exc, _audit, request, "admin.user.credits_add", user, user_id)
+    if row is None:
+        raise not_found("User")
+
+    _audit(
+        request,
+        action="admin.user.credits_add",
+        resource_type="user_credits",
+        result="success",
+        user=user,
+        resource_id=user_id,
+        detail=_audit_detail(
+            target=row.get("username"),
+            amount=req.amount,
+            balance=row.get("credit_balance"),
+        ),
+    )
+    return AdminUserSummary(**row)
 
 
 @router.get("")

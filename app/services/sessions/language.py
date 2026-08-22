@@ -76,4 +76,3 @@ def clear_session_history(session_id: str) -> None:
 def clear_all_history() -> None:
     """Clear all session language history. Useful for testing."""
     _session_history.clear()
-

@@ -17,7 +17,7 @@ class RecordingEngine:
     async def execute(self, request: OrchestrationRequest) -> FinalAnswer:
         self.requests.append(request)
         return FinalAnswer(
-            text="Typed answer",
+            answer="Typed answer",
             citations=(),
             route=RouteDecision(
                 intent="knowledge_retrieval",
@@ -98,7 +98,7 @@ class _TypedSynthesizer:
         assert plan is None
         assert evidence == EvidenceBundle()
         assert tool_results == ()
-        return FinalAnswer(text="Typed default answer", citations=("typed-doc:3",), route=route)
+        return FinalAnswer(answer="Typed default answer", citations=("typed-doc:3",), route=route)
 
 
 @pytest.mark.asyncio

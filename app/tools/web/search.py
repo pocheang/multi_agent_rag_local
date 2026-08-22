@@ -1,4 +1,5 @@
 import logging
+
 from ddgs import DDGS
 
 logger = logging.getLogger(__name__)
@@ -23,12 +24,7 @@ def search_web(query: str, max_results: int = 5, timeout: int = 10) -> list[dict
 
     try:
         with DDGS(timeout=timeout) as ddgs:
-            for item in ddgs.text(
-                query,
-                max_results=max_results,
-                region="wt-wt",
-                safesearch="moderate"
-            ):
+            for item in ddgs.text(query, max_results=max_results, region="wt-wt", safesearch="moderate"):
                 results.append(
                     {
                         "title": item.get("title", ""),
@@ -42,5 +38,3 @@ def search_web(query: str, max_results: int = 5, timeout: int = 10) -> list[dict
         raise
 
     return results
-
-

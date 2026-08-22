@@ -17,7 +17,7 @@ from app.agents.shared.config import (
     set_agent_config,
     reset_agent_config,
 )
-from app.agents.result_schemas import (
+from app.agents.shared.result_schemas import (
     AgentResult,
     VectorRAGResult,
     GraphRAGResult,

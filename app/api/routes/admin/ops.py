@@ -27,12 +27,13 @@ from app.api.dependencies import (
     runtime_metrics,
     settings,
 )
-from app.api.transport.middleware import get_request_metrics
 from app.api.routes.compatibility.pipeline_compat import execute_standard_compatibility
 from app.api.transport.errors import bad_request
+from app.api.transport.middleware import get_request_metrics
 from app.services.consistency_guard import text_similarity
 from app.services.models.config_store import get_global_model_settings, public_global_model_settings
-from app.services.retrieval.profiles import normalize_retrieval_profile, profile_force_local_only
+from app.services.observability.log_buffer import list_log_levels, reset_logger_levels, set_logger_level
+from app.services.retrieval.profiles import profile_force_local_only
 from app.services.runtime.runtime_ops import (
     apply_replay_autotune,
     build_ops_alerts,
@@ -50,7 +51,6 @@ from app.services.runtime.runtime_ops import (
     set_canary,
     system_resource_snapshot,
 )
-from app.services.observability.log_buffer import list_log_levels, reset_logger_levels, set_logger_level
 
 router = APIRouter(prefix="/admin/ops", tags=["admin", "ops"])
 
@@ -179,6 +179,7 @@ def _execute_standard_profile(question: str, strategy: str) -> dict[str, Any]:
 def admin_ops_runtime(request: Request, user: dict[str, Any] = Depends(_require_user)):
     _require_permission(user, "admin:audit_read", request, "admin")
     return _runtime_snapshot_payload()
+
 
 @router.get("/overview")
 def admin_ops_overview(

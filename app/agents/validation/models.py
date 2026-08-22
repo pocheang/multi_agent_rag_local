@@ -4,13 +4,13 @@ from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
-from enum import Enum
+from enum import StrEnum
 from typing import Any
 
 from pydantic import BaseModel, Field
 
 
-class CascadeLevel(str, Enum):
+class CascadeLevel(StrEnum):
     """Ordered validation stages exposed by the compatibility API."""
 
     RULE_BASED = "rule_based"

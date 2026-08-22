@@ -33,7 +33,8 @@ class RouterAgentService:
 
     async def route(self, request: OrchestrationRequest) -> RouteDecision:
         """Delegate routing once and normalize only the public orchestration fields."""
-        if _EXPLICIT_CONNECTOR_COMMAND.fullmatch(request.question.partition("\n")[0]):
+        # Check entire question text for connector commands, not just first line
+        if _EXPLICIT_CONNECTOR_COMMAND.search(request.question):
             return RouteDecision(
                 intent="tool_call",
                 route="react",
@@ -49,13 +50,18 @@ class RouterAgentService:
             agent_class_hint=request.source_scope.agent_class_hint,
         )
 
-        # Extract with validation instead of defensive defaults
+        # Extract and validate fields from legacy router response
         try:
-            route = str(legacy.route).lower() if hasattr(legacy, "route") and legacy.route else "vector"
-            confidence = float(legacy.confidence) if hasattr(legacy, "confidence") and legacy.confidence is not None else 0.5
-            reason = str(legacy.reason) if hasattr(legacy, "reason") and legacy.reason else "legacy_router"
+            # Access attributes directly - let AttributeError bubble up if missing
+            route = str(legacy.route).lower() if legacy.route is not None else "vector"
+            confidence = float(legacy.confidence) if legacy.confidence is not None else 0.5
+            reason = str(legacy.reason) if legacy.reason is not None else "legacy_router"
         except (AttributeError, ValueError, TypeError) as exc:
-            raise ValueError(f"Legacy router returned invalid response: {exc}") from exc
+            # Provide clear error message about what went wrong
+            raise ValueError(
+                f"Legacy router returned invalid response: {type(exc).__name__}: {exc}. "
+                f"Expected object with 'route', 'confidence', and 'reason' attributes."
+            ) from exc
 
         return _to_domain_route(route, confidence, reason)
 
@@ -67,6 +73,14 @@ class RouterAgentService:
 
 
 def _to_domain_route(route: str, confidence: float, reason: str) -> RouteDecision:
+    # Warn if confidence is out of valid range before normalization
+    if confidence < 0.0 or confidence > 1.0:
+        import logging
+
+        logging.getLogger(__name__).warning(
+            f"Router confidence out of range [0.0, 1.0]: {confidence:.4f} for route '{route}'. "
+            f"Normalizing to valid range."
+        )
     normalized_confidence = min(1.0, max(0.0, confidence))
     if route == "react":
         return RouteDecision(
@@ -93,7 +107,9 @@ def _to_domain_route(route: str, confidence: float, reason: str) -> RouteDecisio
             reason=reason,
         )
     if route not in {"vector", "graph"}:
-        raise ValueError(f"router returned unsupported route: {route!r}")
+        raise ValueError(
+            f"router returned unsupported route: {route!r} (expected: vector, graph, react, hybrid, or web)"
+        )
     return RouteDecision(
         intent="knowledge_retrieval",
         route=route,

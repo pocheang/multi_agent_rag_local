@@ -8,12 +8,11 @@ from typing import Any
 
 from fastapi import Request
 
+from app.api import dependencies as api_dependencies
 from app.api.dependencies import (
     _audit,
     _latest_answer_for_same_question,
     _run_with_query_runtime,
-    query_result_cache,
-    shadow_queue,
 )
 from app.pipeline.contracts import PipelineRequest, PipelineUser, SourceScope
 from app.pipeline.profiles import PipelineProfile
@@ -74,6 +73,7 @@ def execute_standard_query(
     session_id: str | None,
     cache_key: str,
     overload_mode_enabled: Callable[[], bool],
+    query_runtime: api_dependencies.QueryRuntime,
 ) -> tuple[dict[str, Any], dict[str, Any]]:
     """Assemble the HTTP request contract and delegate execution to ``RAGPipeline``."""
 
@@ -86,7 +86,7 @@ def execute_standard_query(
             session_id=session_id,
             question=plan.preparation.original_question,
         ),
-        shadow_queue=shadow_queue,
+        shadow_queue=query_runtime.shadow_queue,
         source_scope_audit=lambda outcome, detail: _audit(
             request,
             action="query.source_scope",
@@ -104,7 +104,9 @@ def execute_standard_query(
             "route": pipeline_result.route.route,
             "reason": pipeline_result.route.reason,
             "citations": [citation.model_dump(mode="json") for citation in pipeline_result.citations],
-            "vector_result": {"citations": [citation.model_dump(mode="json") for citation in pipeline_result.citations]},
+            "vector_result": {
+                "citations": [citation.model_dump(mode="json") for citation in pipeline_result.citations]
+            },
             "grounding": pipeline_result.execution_metadata.get("grounding", {}),
             "answer_safety": pipeline_result.execution_metadata.get("safety", {}),
             "validation": pipeline_result.execution_metadata.get("validation", {}),
@@ -113,10 +115,14 @@ def execute_standard_query(
         return payload, {"checked": False, "owner": "typed_finalization"}
 
     try:
-        return _run_with_query_runtime(user=user, request=request, fn=query_pipeline)
+        return _run_with_query_runtime(
+            user=user,
+            request=request,
+            fn=query_pipeline,
+            runtime=query_runtime,
+        )
     finally:
-        query_result_cache.clear_inflight(cache_key)
+        query_runtime.query_result_cache.clear_inflight(cache_key)
 
 
 __all__ = ["StandardQueryPlan", "execute_standard_query", "prepare_standard_query"]
-

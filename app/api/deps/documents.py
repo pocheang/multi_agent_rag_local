@@ -262,5 +262,3 @@ def _is_probably_valid_upload_signature(suffix: str, head: bytes) -> bool:
     if suffix == ".webp":
         return len(prefix) >= 12 and prefix.startswith(b"RIFF") and prefix[8:12] == b"WEBP"
     return True
-
-

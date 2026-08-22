@@ -174,3 +174,7 @@ class TTLCache:
             if len(self._store) > self.max_items or self._should_evict():
                 self._evict()
 
+    def delete(self, key: str) -> None:
+        """Delete one cache entry if it exists."""
+        with self._lock:
+            self._store.pop(key, None)

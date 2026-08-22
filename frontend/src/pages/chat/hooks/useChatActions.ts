@@ -17,6 +17,7 @@ interface UseChatActionsParams {
   setCurrentSessionId: Dispatch<SetStateAction<string | null>>;
   setMessages: Dispatch<SetStateAction<SessionMessage[]>>;
   setBusySessionId: Dispatch<SetStateAction<string | null>>;
+  setIsCreatingSession: Dispatch<SetStateAction<boolean>>;
   setDocuments: Dispatch<SetStateAction<IndexedFileSummary[]>>;
   setDocsLoading: Dispatch<SetStateAction<boolean>>;
   setUploading: Dispatch<SetStateAction<boolean>>;
@@ -31,6 +32,8 @@ interface UseChatActionsParams {
   setPromptContent: Dispatch<SetStateAction<string>>;
   setPromptCheckInfo: Dispatch<SetStateAction<string>>;
   currentSessionId: string | null;
+  sessions: SessionSummary[];
+  messages: SessionMessage[];
   uploadVisibility: "private" | "public";
   fileInputRef: React.RefObject<HTMLInputElement | null>;
   chatUploadInputRef: React.RefObject<HTMLInputElement | null>;
@@ -47,6 +50,7 @@ export function useChatActions(params: UseChatActionsParams) {
     setCurrentSessionId,
     setMessages,
     setBusySessionId,
+    setIsCreatingSession,
     setDocuments,
     setDocsLoading,
     setUploading,
@@ -61,6 +65,8 @@ export function useChatActions(params: UseChatActionsParams) {
     setPromptContent,
     setPromptCheckInfo,
     currentSessionId,
+    sessions,
+    messages,
     uploadVisibility,
     fileInputRef,
     chatUploadInputRef,
@@ -94,7 +100,10 @@ export function useChatActions(params: UseChatActionsParams) {
     setCurrentSessionId,
     setMessages,
     setBusySessionId,
+    setIsCreatingSession,
     currentSessionId,
+    sessions,
+    messages,
     onLogout,
     closeSidebar,
     notify,

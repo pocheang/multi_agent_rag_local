@@ -39,8 +39,8 @@ def call_with_retry(op_name: str, fn: Callable[[], Any]) -> Any:
     if not bool(getattr(settings, "query_retry_enabled", True)):
         return fn()
     budget = _REQUEST_RETRY_BUDGET.get()
-    attempts = budget.remaining if budget is not None else max(
-        1, int(getattr(settings, "query_retry_max_attempts", 2) or 2)
+    attempts = (
+        budget.remaining if budget is not None else max(1, int(getattr(settings, "query_retry_max_attempts", 2) or 2))
     )
     base_delay = max(10, int(getattr(settings, "query_retry_base_delay_ms", 120) or 120))
     last_exc: Exception | None = None
@@ -57,5 +57,6 @@ def call_with_retry(op_name: str, fn: Callable[[], Any]) -> Any:
             time.sleep((base_delay * i) / 1000.0)
     # This line should never be reached due to the raise in the loop
     # But if somehow we exit the loop without returning or raising, raise the last exception
-    raise last_exc if last_exc else RuntimeError(f"Retry loop exited unexpectedly for {op_name}")
-
+    if last_exc is not None:
+        raise last_exc
+    raise RuntimeError(f"Retry loop exited unexpectedly for {op_name}")

@@ -1,5 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
-import { useTranslation } from "react-i18next";
+import { useEffect, useMemo, useState } from "react";
 import {
   AGENT_MODES,
   type AgentClassHint,
@@ -9,6 +8,7 @@ import type { Props } from "@/pages/chat/types";
 import { ChatTopbar } from "@/pages/chat/components/ChatTopbar";
 import { ChatMessages } from "@/pages/chat/components/ChatMessages";
 import { ChatComposer } from "@/pages/chat/components/ChatComposer";
+import { ClarificationPrompt } from "@/pages/chat/components/ClarificationPrompt";
 import { ToastStack } from "@/pages/chat/components/ToastStack";
 import { ChatSidebar } from "@/pages/chat/components/ChatSidebar";
 import { ApiSettings } from "@/components/ApiSettings";
@@ -19,20 +19,28 @@ import { useChatPageState } from "@/pages/chat/hooks/useChatPageState";
 import { useDragHandlers } from "@/pages/chat/hooks/useDragHandlers";
 import { useChatComputed } from "@/pages/chat/hooks/useChatComputed";
 import { useChatHelpers } from "@/pages/chat/hooks/useChatHelpers";
+import { useClarification } from "@/pages/chat/hooks/useClarification";
+import { useSettingsPolling } from "@/pages/chat/hooks/useSettingsPolling";
+import { useAutoRefresh } from "@/pages/chat/hooks/useAutoRefresh";
+import { useTextareaAutoResize } from "@/pages/chat/hooks/useTextareaAutoResize";
+import { useAutoScroll } from "@/pages/chat/hooks/useAutoScroll";
+import { useDragDropPrevention } from "@/pages/chat/hooks/useDragDropPrevention";
 import { KeyboardHelp } from "@/components/KeyboardHelp";
 import { generateSmartPrompts } from "@/pages/chat/utils/smartPrompts";
 import type { UserIdentity } from "@/types/auth";
-import { appApi } from "@/lib/api";
 import { ChatRuntimePanels } from "@/pages/chat/components/ChatRuntimePanels";
+import { SectionToggleButton } from "@/pages/chat/components/SectionToggleButton";
+import { useSectionToggle, useTopbarToggle } from "@/hooks/useSectionToggle";
 
 // Route-specific CSS (code-split by Vite)
 import "@/styles/pages/chat-entry.css";
 
-export function ChatPage({ user, onLogout, themeLabel, onThemeToggle }: Props) {
-  const { t } = useTranslation();
+export function ChatPage({ user, onLogout, onUserRefresh, themeLabel, onThemeToggle }: Props) {
   const [executionId, setExecutionId] = useState<string | null>(null);
-  const lastOverrideStateRef = useRef<{ enabled: boolean; provider: string; model: string } | null>(null);
   const permissionUser: UserIdentity | null = user;
+  const { sectionsHidden, toggleSections } = useSectionToggle();
+  const { topbarHidden, toggleTopbar } = useTopbarToggle();
+
   const {
     sidebarOpen, setSidebarOpen,
     sidebarCollapsed, setSidebarCollapsed,
@@ -41,13 +49,14 @@ export function ChatPage({ user, onLogout, themeLabel, onThemeToggle }: Props) {
     currentSessionId, setCurrentSessionId,
     messages, setMessages,
     busySessionId, setBusySessionId,
+    isCreatingSession, setIsCreatingSession,
     question, setQuestion,
     isSending, setIsSending,
     runStatus, setRunStatus,
     useWeb, setUseWeb,
     useReasoning, setUseReasoning,
     agentClassHint, setAgentClassHint,
-  retrievalStrategy, setRetrievalStrategy,
+    retrievalStrategy, setRetrievalStrategy,
     pipelineProfile, setPipelineProfile,
     pdfTargetFile, setPdfTargetFile,
     documents, setDocuments,
@@ -73,6 +82,7 @@ export function ChatPage({ user, onLogout, themeLabel, onThemeToggle }: Props) {
     questionRef,
     chatScrollRef,
   } = useChatPageState();
+
   const dragHandlers = useDragHandlers(setComposerDropActive);
 
   const computed = useChatComputed({ documents, user });
@@ -96,6 +106,7 @@ export function ChatPage({ user, onLogout, themeLabel, onThemeToggle }: Props) {
     setCurrentSessionId,
     setMessages,
     setBusySessionId,
+    setIsCreatingSession,
     setDocuments,
     setDocsLoading,
     setUploading,
@@ -110,6 +121,8 @@ export function ChatPage({ user, onLogout, themeLabel, onThemeToggle }: Props) {
     setPromptContent,
     setPromptCheckInfo,
     currentSessionId,
+    sessions,
+    messages,
     uploadVisibility,
     fileInputRef,
     chatUploadInputRef,
@@ -148,8 +161,89 @@ export function ChatPage({ user, onLogout, themeLabel, onThemeToggle }: Props) {
     setIsSending,
     setQuestion,
     onExecutionId: setExecutionId,
+    onCreditsChanged: onUserRefresh,
   });
 
+  // Clarification logic extracted to custom hook
+  const {
+    clarification,
+    isClarifying,
+    handleClarificationAnswer,
+    handleClarificationSkip,
+    checkAndInitiateClarification,
+  } = useClarification({
+    currentSessionId,
+    onClarificationComplete: async (originalQuestion) => {
+      await messageActions.ask({
+        question: originalQuestion,
+        isSending: false,
+        useWeb,
+        useReasoning,
+        agentClassHint,
+        retrievalStrategy,
+        pipelineProfile,
+      });
+    },
+    onNotify: actions.notify,
+  });
+
+  const handleSendWithClarification = async (questionText: string) => {
+    if (!questionText.trim()) return;
+
+    setIsSending(true);
+    setRunStatus("preparing");
+    let sessionId = currentSessionId;
+
+    try {
+      sessionId = sessionId || await messageActions.ensureSessionForAsk();
+      if (!sessionId) {
+        setIsSending(false);
+        setRunStatus("");
+        return;
+      }
+
+      const needsClarification = await checkAndInitiateClarification(questionText, sessionId);
+      if (needsClarification) {
+        setIsSending(false);
+        setRunStatus("");
+        return;
+      }
+
+      // Information is sufficient, execute query directly
+      await messageActions.ask({
+        question: questionText,
+        isSending: false,
+        sessionId,
+        useWeb,
+        useReasoning,
+        agentClassHint,
+        retrievalStrategy,
+        pipelineProfile,
+      });
+    } catch (error: unknown) {
+      // Auth errors are already handled by checkAndInitiateClarification
+      if ((error as { response?: { status?: number } })?.response?.status === 403 ||
+          (error as { response?: { status?: number } })?.response?.status === 401) {
+        setIsSending(false);
+        setRunStatus("");
+        return;
+      }
+
+      // Fallback to direct query on other errors
+      await messageActions.ask({
+        question: questionText,
+        isSending: false,
+        sessionId: sessionId || undefined,
+        useWeb,
+        useReasoning,
+        agentClassHint,
+        retrievalStrategy,
+        pipelineProfile,
+      });
+    }
+  };
+
+  // Auto-select first PDF if needed
   useEffect(() => {
     if (!pdfDocuments.length) {
       setPdfTargetFile("");
@@ -160,95 +254,27 @@ export function ChatPage({ user, onLogout, themeLabel, onThemeToggle }: Props) {
     }
   }, [pdfDocuments, pdfTargetFile, setPdfTargetFile]);
 
+  // Initialize on mount
   useEffect(() => {
     void (async () => {
       const rows = await actions.refreshSessions();
       await actions.refreshDocuments();
       await actions.refreshPrompts();
       if (rows.length > 0) await actions.loadSession(rows[0].session_id);
-
-      // Get initial global settings override status
-      try {
-        const res = await appApi.getUserApiSettings();
-        if (res.ok && res.settings) {
-          lastOverrideStateRef.current = {
-            enabled: !!res.settings.global_override_enabled,
-            provider: res.settings.global_provider || "",
-            model: res.settings.global_model || "",
-          };
-        }
-      } catch (e) {
-        // Silent catch
-      }
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  useEffect(() => {
-    const el = questionRef.current;
-    if (!el) return;
-    el.style.height = "auto";
-    el.style.height = `${Math.min(180, el.scrollHeight)}px`;
-  }, [question, questionRef]);
-
-  useEffect(() => {
-    if (chatScrollRef.current) chatScrollRef.current.scrollTop = chatScrollRef.current.scrollHeight;
-  }, [messages, chatScrollRef]);
-
-  useEffect(() => {
-    const timer = window.setInterval(() => {
-      void actions.refreshSessions(false, true);
-      void actions.refreshDocuments(true);
-      void actions.refreshPrompts(true);
-
-      // Check global settings override status periodically
-      void (async () => {
-        try {
-          const res = await appApi.getUserApiSettings();
-          if (res.ok && res.settings) {
-            const enabled = !!res.settings.global_override_enabled;
-            const provider = res.settings.global_provider || "";
-            const model = res.settings.global_model || "";
-
-            if (lastOverrideStateRef.current !== null) {
-              const prev = lastOverrideStateRef.current;
-              if (prev.enabled !== enabled || prev.provider !== provider || prev.model !== model) {
-                if (enabled) {
-                  const desc = t("components.apiSettings.globalOverrideDesc", { provider, model });
-                  actions.notify(
-                    `${t("components.apiSettings.globalOverrideNotice")}: ${desc}`,
-                    "info",
-                    4000
-                  );
-                } else if (prev.enabled) {
-                  actions.notify(
-                    t("components.apiSettings.globalOverrideDisabledNotice"),
-                    "info",
-                    4000
-                  );
-                }
-              }
-            }
-            lastOverrideStateRef.current = { enabled, provider, model };
-          }
-        } catch (e) {
-          // Silent catch
-        }
-      })();
-    }, 25000);
-    return () => window.clearInterval(timer);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  useEffect(() => {
-    const preventDefault = (evt: DragEvent) => evt.preventDefault();
-    window.addEventListener("dragover", preventDefault);
-    window.addEventListener("drop", preventDefault);
-    return () => {
-      window.removeEventListener("dragover", preventDefault);
-      window.removeEventListener("drop", preventDefault);
-    };
-  }, []);
+  // Custom hooks for side effects
+  useTextareaAutoResize({ ref: questionRef, value: question });
+  useAutoScroll({ ref: chatScrollRef, messages });
+  useAutoRefresh({
+    refreshSessions: actions.refreshSessions,
+    refreshDocuments: actions.refreshDocuments,
+    refreshPrompts: actions.refreshPrompts,
+  });
+  useSettingsPolling({ onNotify: actions.notify });
+  useDragDropPrevention();
 
   const handleSidebarToggle = () => {
     if (window.innerWidth <= 1080) {
@@ -258,135 +284,162 @@ export function ChatPage({ user, onLogout, themeLabel, onThemeToggle }: Props) {
     setSidebarCollapsed((value) => !value);
   };
 
-  // 智能生成快速提示
+  // Smart prompt generation
   const smartQuickPrompts = useMemo(() => {
     return generateSmartPrompts(messages);
   }, [messages]);
 
   return (
-    <div className={`page-shell ${sidebarCollapsed ? "sidebar-collapsed" : ""}`}>
-      <ChatSidebar
-        sidebarOpen={sidebarOpen}
+    <>
+      <ChatTopbar
+        themeLabel={themeLabel}
         sidebarCollapsed={sidebarCollapsed}
-        sessions={sessions}
-        sessionLoading={sessionLoading}
-        currentSessionId={currentSessionId}
-        busySessionId={busySessionId}
-        agentClassHint={agentClassHint}
-        agentModes={AGENT_MODES}
-        agentDistribution={agentDistribution}
-        pdfDocuments={pdfDocuments}
-        pdfNeedingReindex={pdfNeedingReindex}
-        pdfTargetFile={pdfTargetFile}
-        documents={documents}
-        docsLoading={docsLoading}
-        uploading={uploading}
-        uploadInfo={uploadInfo}
-        uploadProgress={uploadProgress}
-        uploadProgressText={uploadProgressText}
-        uploadVisibility={uploadVisibility}
-        docDropActive={docDropActive}
-        canUploadAndManageDocs={canUploadAndManageDocs}
-        isAdmin={isAdmin}
         user={permissionUser}
-        prompts={prompts}
-        promptsLoading={promptsLoading}
-        promptTitle={promptTitle}
-        promptContent={promptContent}
-        editingPromptId={editingPromptId}
-        promptCheckInfo={promptCheckInfo}
-        fileInputRef={fileInputRef}
-        onToggleSidebarCollapsed={handleSidebarToggle}
-        onCreateSession={async () => { await actions.createSession(); }}
-        onLoadSession={actions.loadSession}
-        onDeleteSession={actions.deleteSession}
-        onSwitchAgentMode={helpers.switchAgentMode}
-        onPdfTargetFileChange={setPdfTargetFile}
-        onDraftQuestion={helpers.draftPdfQuestion}
-        onRefreshDocuments={actions.refreshDocuments}
-        onUploadVisibilityChange={setUploadVisibility}
-        onMainUploadChange={fileUploadHandlers.onMainUploadChange}
-        onDocsDrop={fileUploadHandlers.onDocsDrop}
-        onDocDropActiveChange={setDocDropActive}
-        onReindexDocument={helpers.reindexDocument}
-        onDeleteDocument={helpers.deleteDocument}
-        onRefreshPrompts={actions.refreshPrompts}
-        onPromptTitleChange={setPromptTitle}
-        onPromptContentChange={setPromptContent}
-        onCheckPrompt={helpers.checkPrompt}
-        onSavePrompt={helpers.savePrompt}
-        onUsePrompt={(p) => {
-          setQuestion(p.content || "");
-          if (p.agent_class) setAgentClassHint((p.agent_class as AgentClassHint) || "");
-        }}
-        onEditPrompt={(p) => {
-          setEditingPromptId(p.prompt_id);
-          setPromptTitle(p.title || "");
-          setPromptContent(p.content || "");
-        }}
-        onDeletePrompt={helpers.deletePrompt}
-        onLogout={onLogout}
+        topbarHidden={topbarHidden}
+        sectionsHidden={sectionsHidden}
+        onToggleSidebar={handleSidebarToggle}
+        onOpenSettings={() => setSettingsOpen(true)}
+        onThemeToggle={onThemeToggle}
+        onToggleTopbar={toggleTopbar}
+        onToggleSections={toggleSections}
       />
 
-      <div className={`backdrop ${sidebarOpen ? "show" : ""}`} onClick={() => setSidebarOpen(false)} />
-      <main className="main">
-        <ChatTopbar
-          themeLabel={themeLabel}
+      <div className={`page-shell ${sidebarCollapsed ? "sidebar-collapsed" : ""}`}>
+        <ChatSidebar
+          sidebarOpen={sidebarOpen}
           sidebarCollapsed={sidebarCollapsed}
-          user={permissionUser}
-          onToggleSidebar={handleSidebarToggle}
-          onOpenSettings={() => setSettingsOpen(true)}
-          onThemeToggle={onThemeToggle}
-        />
-
-        <ChatMessages
-          messages={messages}
-          containerRef={chatScrollRef}
-          documentsCount={documents.length}
-          sessionsCount={sessions.length}
-          onEditMessage={(msg) => messageActions.editMessage(msg, useWeb, useReasoning)}
-          onRemoveMessage={messageActions.removeMessage}
-          onCreateSession={async () => { await actions.createSession(); }}
-          onNavigateToArchitecture={() => window.location.href = '/architecture'}
-        />
-
-        <ChatRuntimePanels executionId={executionId} />
-
-        <ChatComposer
-          composerDropActive={composerDropActive}
-          question={question}
-          questionRef={questionRef}
-          chatUploadInputRef={chatUploadInputRef}
-          isSending={isSending}
-          quickPrompts={smartQuickPrompts}
-          runStatus={runStatus}
-          error={error}
-          useWeb={useWeb}
-          useReasoning={useReasoning}
+          sessions={sessions}
+          sessionLoading={sessionLoading}
+          currentSessionId={currentSessionId}
+          busySessionId={busySessionId}
+          isCreatingSession={isCreatingSession}
           agentClassHint={agentClassHint}
-          retrievalStrategy={retrievalStrategy}
-          pipelineProfile={pipelineProfile}
-          onQuestionChange={setQuestion}
-          onAsk={() => messageActions.ask({ question, isSending, useWeb, useReasoning, agentClassHint, retrievalStrategy, pipelineProfile })}
-          onStop={() => messageActions.stopCurrentRun(isSending)}
-          onClearQuestion={() => setQuestion("")}
-          onPromptPick={setQuestion}
-          onUseWebChange={setUseWeb}
-          onUseReasoningChange={setUseReasoning}
-          onAgentClassHintChange={(v) => setAgentClassHint((v as AgentClassHint) || "")}
-          onRetrievalStrategyChange={(v) => setRetrievalStrategy((v as RetrievalStrategy) || "advanced")}
-          onPipelineProfileChange={(v) => setPipelineProfile(v === "strict_quality" || v === "advanced" ? v : "standard")}
-          onComposerDragEnter={dragHandlers.onComposerDragEnter}
-          onComposerDragOver={dragHandlers.onComposerDragOver}
-          onComposerDragLeave={dragHandlers.onComposerDragLeave}
-          onComposerDrop={fileUploadHandlers.onComposerDrop}
-          onChatUploadChange={fileUploadHandlers.onChatUploadChange}
+          agentModes={AGENT_MODES}
+          agentDistribution={agentDistribution}
+          pdfDocuments={pdfDocuments}
+          pdfNeedingReindex={pdfNeedingReindex}
+          pdfTargetFile={pdfTargetFile}
+          documents={documents}
+          docsLoading={docsLoading}
+          uploading={uploading}
+          uploadInfo={uploadInfo}
+          uploadProgress={uploadProgress}
+          uploadProgressText={uploadProgressText}
+          uploadVisibility={uploadVisibility}
+          docDropActive={docDropActive}
+          canUploadAndManageDocs={canUploadAndManageDocs}
+          isAdmin={isAdmin}
+          user={permissionUser}
+          prompts={prompts}
+          promptsLoading={promptsLoading}
+          promptTitle={promptTitle}
+          promptContent={promptContent}
+          editingPromptId={editingPromptId}
+          promptCheckInfo={promptCheckInfo}
+          fileInputRef={fileInputRef}
+          onToggleSidebarCollapsed={handleSidebarToggle}
+          onCreateSession={async () => { await actions.createSession(); }}
+          onLoadSession={actions.loadSession}
+          onDeleteSession={actions.deleteSession}
+          onRenameSession={actions.renameSession}
+          onPinSession={actions.pinSession}
+          onSwitchAgentMode={helpers.switchAgentMode}
+          onPdfTargetFileChange={setPdfTargetFile}
+          onDraftQuestion={helpers.draftPdfQuestion}
+          onRefreshDocuments={actions.refreshDocuments}
+          onUploadVisibilityChange={setUploadVisibility}
+          onMainUploadChange={fileUploadHandlers.onMainUploadChange}
+          onDocsDrop={fileUploadHandlers.onDocsDrop}
+          onDocDropActiveChange={setDocDropActive}
+          onReindexDocument={helpers.reindexDocument}
+          onDeleteDocument={helpers.deleteDocument}
+          onRefreshPrompts={actions.refreshPrompts}
+          onPromptTitleChange={setPromptTitle}
+          onPromptContentChange={setPromptContent}
+          onCheckPrompt={helpers.checkPrompt}
+          onSavePrompt={helpers.savePrompt}
+          onUsePrompt={(p) => {
+            setQuestion(p.content || "");
+            if (p.agent_class) setAgentClassHint((p.agent_class as AgentClassHint) || "");
+          }}
+          onEditPrompt={(p) => {
+            setEditingPromptId(p.prompt_id);
+            setPromptTitle(p.title || "");
+            setPromptContent(p.content || "");
+          }}
+          onDeletePrompt={helpers.deletePrompt}
+          onLogout={onLogout}
         />
-      </main>
 
-      <ToastStack toasts={toasts} />
-      <ApiSettings isOpen={settingsOpen} onClose={() => setSettingsOpen(false)} />
-      <KeyboardHelp />
-    </div>
+        <div className={`backdrop ${sidebarOpen ? "show" : ""}`} onClick={() => setSidebarOpen(false)} />
+
+        <main className="main">
+          <ChatMessages
+            messages={messages}
+            containerRef={chatScrollRef}
+            documentsCount={documents.length}
+            sessionsCount={sessions.length}
+            onEditMessage={(msg) => messageActions.editMessage(msg, useWeb, useReasoning)}
+            onRemoveMessage={messageActions.removeMessage}
+            onCreateSession={async () => { await actions.createSession(); }}
+            onNavigateToArchitecture={() => window.location.href = '/app/architecture'}
+          />
+
+          <ChatRuntimePanels executionId={executionId} />
+
+          {clarification && clarification.action === "NEED_CLARIFICATION" && clarification.clarification && (
+            <ClarificationPrompt
+              question={clarification.clarification}
+              context={clarification.context}
+              onAnswer={handleClarificationAnswer}
+              onSkip={handleClarificationSkip}
+              isSubmitting={isClarifying}
+            />
+          )}
+
+          <ChatComposer
+            composerDropActive={composerDropActive}
+            question={question}
+            questionRef={questionRef}
+            chatUploadInputRef={chatUploadInputRef}
+            isSending={isSending || !!clarification}
+            quickPrompts={smartQuickPrompts}
+            runStatus={runStatus}
+            error={error}
+            useWeb={useWeb}
+            useReasoning={useReasoning}
+            agentClassHint={agentClassHint}
+            retrievalStrategy={retrievalStrategy}
+            pipelineProfile={pipelineProfile}
+            onQuestionChange={setQuestion}
+            onAsk={async () => {
+              if (clarification) return;
+              await handleSendWithClarification(question);
+            }}
+            onStop={() => messageActions.stopCurrentRun(isSending)}
+            onClearQuestion={() => setQuestion("")}
+            onPromptPick={setQuestion}
+            onUseWebChange={setUseWeb}
+            onUseReasoningChange={setUseReasoning}
+            onAgentClassHintChange={(v) => setAgentClassHint((v as AgentClassHint) || "")}
+            onRetrievalStrategyChange={(v) => setRetrievalStrategy((v as RetrievalStrategy) || "advanced")}
+            onPipelineProfileChange={(v) => setPipelineProfile(v === "strict_quality" || v === "advanced" ? v : "standard")}
+            onComposerDragEnter={dragHandlers.onComposerDragEnter}
+            onComposerDragOver={dragHandlers.onComposerDragOver}
+            onComposerDragLeave={dragHandlers.onComposerDragLeave}
+            onComposerDrop={fileUploadHandlers.onComposerDrop}
+            onChatUploadChange={fileUploadHandlers.onChatUploadChange}
+          />
+        </main>
+
+        <ToastStack
+          toasts={toasts}
+          onRemove={(id) => setToasts((prev) => prev.filter((t) => t.id !== id))}
+        />
+        <SectionToggleButton sectionsHidden={sectionsHidden} onToggle={toggleSections} />
+        <ApiSettings isOpen={settingsOpen} onClose={() => setSettingsOpen(false)} />
+        <KeyboardHelp />
+      </div>
+    </>
   );
 }

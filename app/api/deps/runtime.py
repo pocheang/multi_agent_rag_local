@@ -44,9 +44,7 @@ def build_app_services() -> AppServices:
     """Build governed tools and connector services around shared application state."""
     approvals = ApprovalStore()
     execution_events = ExecutionEventStore()
-    registry = ToolRegistry(
-        authorization=AuthorizationPolicy(), approvals=approvals, execution_events=execution_events
-    )
+    registry = ToolRegistry(authorization=AuthorizationPolicy(), approvals=approvals, execution_events=execution_events)
     seed = str(settings.api_settings_encryption_key or "").strip()
     if not seed:
         raise RuntimeError("API_SETTINGS_ENCRYPTION_KEY is required for connector credentials")
@@ -111,10 +109,10 @@ def get_app_services(app: FastAPI) -> AppServices:
 
 def require_app_services(request: Request) -> AppServices:
     """Fail closed when a router is mounted outside the production application."""
-    try:
-        return get_app_services(request.app)
-    except RuntimeError as exc:
-        raise HTTPException(status_code=503, detail="Application services unavailable") from exc
+    services = getattr(request.app.state, "querymind_services", None)
+    if not isinstance(services, AppServices):
+        raise HTTPException(status_code=503, detail="Application services unavailable")
+    return services
 
 
 def get_approval_store(services: AppServices = Depends(require_app_services)) -> ApprovalStore:
@@ -150,4 +148,3 @@ def require_trace_actor(request: Request, user: dict[str, Any] = Depends(_requir
     """Authorize trace access at the HTTP edge, then expose only a bounded actor."""
     _require_permission(user, "query:run", request, "orchestration")
     return require_request_actor(user)
-

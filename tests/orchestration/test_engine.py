@@ -47,7 +47,7 @@ async def test_simple_question_skips_planner_and_tool_execution() -> None:
     ) -> FinalAnswer:
         log.calls.append("synthesize")
         return FinalAnswer(
-            text="Source fact [guide]",
+            answer="Source fact [guide]",
             citations=("guide",),
             route=route_decision,
             evidence_ids=evidence.item_ids,

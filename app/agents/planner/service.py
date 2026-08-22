@@ -26,7 +26,9 @@ class PlannerAgentService:
                 depends_on=(f"task-{index - 1}",) if index > 1 else (),
                 retrieval_required=True,
                 tool_required=route.intent == "tool_call",
-                budget=TaskBudget(max_retrievals=_retrieval_budget(route), max_tool_calls=1 if route.intent == "tool_call" else 0),
+                budget=TaskBudget(
+                    max_retrievals=_retrieval_budget(route), max_tool_calls=1 if route.intent == "tool_call" else 0
+                ),
             )
             for index, query in enumerate(queries, start=1)
         )

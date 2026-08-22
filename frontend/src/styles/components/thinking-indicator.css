@@ -1,0 +1,150 @@
+/* ============================================
+   THINKING INDICATOR (ChatGPT-style)
+   ============================================ */
+
+.thinking-indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 0;
+  color: var(--text-secondary);
+  font-size: 14px;
+  font-weight: 400;
+  opacity: 0.85;
+}
+
+.thinking-dots {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  font-size: 16px;
+  line-height: 1;
+  color: var(--text-secondary);
+}
+
+.thinking-dots::before {
+  content: "◌";
+  animation: thinking-pulse 1.4s ease-in-out infinite;
+}
+
+.thinking-dots-invisible {
+  opacity: 0;
+}
+
+.thinking-text {
+  color: var(--text-secondary);
+  font-weight: 400;
+}
+
+@keyframes thinking-pulse {
+  0%, 100% {
+    opacity: 0.3;
+    transform: scale(0.95);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.05);
+  }
+}
+
+/* ============================================
+   CURSOR BLINK (Streaming indicator)
+   ============================================ */
+
+.cursor-blink {
+  display: inline-block;
+  margin-left: 2px;
+  color: var(--text-primary);
+  font-weight: 400;
+  animation: cursor-blink 1s step-end infinite;
+  vertical-align: baseline;
+  line-height: inherit;
+}
+
+@keyframes cursor-blink {
+  0%, 50% {
+    opacity: 1;
+  }
+  51%, 100% {
+    opacity: 0;
+  }
+}
+
+/* ============================================
+   PROCESS SUMMARY TOGGLE (Collapsed by default)
+   ============================================ */
+
+.process-summary-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin: 12px 0 8px;
+  padding: 6px 12px;
+  border: 1px solid rgba(111, 132, 189, 0.15);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-tertiary);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  user-select: none;
+  transition: all 0.15s ease;
+  line-height: 1.4;
+}
+
+.process-summary-toggle:hover {
+  background: rgba(91, 140, 255, 0.05);
+  border-color: rgba(128, 151, 255, 0.25);
+  color: var(--text-secondary);
+}
+
+.process-summary-toggle .toggle-arrow {
+  font-size: 9px;
+  transition: transform 0.2s ease;
+  opacity: 0.6;
+}
+
+.process-summary-toggle.expanded .toggle-arrow {
+  transform: rotate(180deg);
+}
+
+/* Simplified process panel when expanded */
+.message-card .process-panel {
+  margin-top: 8px;
+  border-radius: 10px;
+  border-color: rgba(111, 132, 189, 0.12);
+}
+
+/* Light theme overrides */
+:root[data-theme="light"] .thinking-indicator {
+  color: #64748B;
+}
+
+:root[data-theme="light"] .thinking-dots {
+  color: #64748B;
+}
+
+:root[data-theme="light"] .thinking-dots::before {
+  color: #64748B;
+}
+
+:root[data-theme="light"] .thinking-text {
+  color: #64748B;
+}
+
+:root[data-theme="light"] .cursor-blink {
+  color: #1E293B;
+}
+
+:root[data-theme="light"] .process-summary-toggle {
+  background: transparent;
+  border-color: #E2E8F0;
+  color: #64748B;
+}
+
+:root[data-theme="light"] .process-summary-toggle:hover {
+  background: #F1F5F9;
+  border-color: #CBD5E1;
+  color: #475569;
+}
+

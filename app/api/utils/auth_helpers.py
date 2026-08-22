@@ -1,4 +1,4 @@
-﻿"""
+"""
 Authentication helper functions for the QueryMind API.
 """
 

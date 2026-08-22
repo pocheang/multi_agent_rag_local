@@ -1,0 +1,295 @@
+/**
+ * Spacing Tokens - Design System
+ *
+ * 定义应用程序的完整间距系统，基于4px基础单位的8倍数规则。
+ * 提供一致的布局、内边距、外边距和圆角变量。
+ *
+ * 设计原则：
+ * - 基础单位：4px（--spacing-unit）
+ * - 主要间距使用8的倍数（8px, 16px, 24px, 32px...）
+ * - 微调间距使用4px步进（4px, 12px, 20px...）
+ *
+ * 使用方式：
+ * - padding: var(--spacing-md);
+ * - margin: var(--spacing-lg) var(--spacing-md);
+ * - border-radius: var(--radius-md);
+ *
+ * @version 1.0.0
+ * @created 2026-08-16
+ */
+
+:root {
+  /* ================================
+     基础单位（Base Unit）
+     ================================ */
+  --spacing-unit: 4px;
+
+  /* ================================
+     间距比例（Spacing Scale）
+     基于4px系统的完整间距阶梯
+     ================================ */
+
+  /* 超小间距 */
+  --spacing-0: 0;
+  --spacing-1: 4px;   /* 1 unit */
+  --spacing-2: 8px;   /* 2 units */
+
+  /* 小间距 */
+  --spacing-xs: 4px;  /* Extra Small - 紧凑元素间距 */
+  --spacing-sm: 8px;  /* Small - 相关元素间距 */
+
+  /* 中等间距 */
+  --spacing-md: 16px; /* Medium - 标准元素间距 */
+  --spacing-lg: 24px; /* Large - 组件间距 */
+
+  /* 大间距 */
+  --spacing-xl: 32px;  /* Extra Large - 区块间距 */
+  --spacing-2xl: 48px; /* 2X Large - 大区块间距 */
+  --spacing-3xl: 64px; /* 3X Large - 页面级间距 */
+  --spacing-4xl: 96px; /* 4X Large - 特大间距 */
+
+  /* ================================
+     细粒度间距（Fine-grained）
+     用于特殊情况的精确控制
+     ================================ */
+  --spacing-3: 12px;  /* 3 units */
+  --spacing-4: 16px;  /* 4 units */
+  --spacing-5: 20px;  /* 5 units */
+  --spacing-6: 24px;  /* 6 units */
+  --spacing-7: 28px;  /* 7 units */
+  --spacing-8: 32px;  /* 8 units */
+  --spacing-10: 40px; /* 10 units */
+  --spacing-12: 48px; /* 12 units */
+  --spacing-16: 64px; /* 16 units */
+  --spacing-20: 80px; /* 20 units */
+  --spacing-24: 96px; /* 24 units */
+
+  /* ================================
+     内边距预设（Padding Presets）
+     常用的内边距组合
+     ================================ */
+
+  /* 按钮内边距 */
+  --padding-btn-sm: 6px 12px;    /* 小按钮 */
+  --padding-btn-md: 10px 20px;   /* 中按钮 */
+  --padding-btn-lg: 14px 28px;   /* 大按钮 */
+  --padding-btn-xl: 18px 36px;   /* 超大按钮 */
+
+  /* 输入框内边距 */
+  --padding-input-sm: 6px 10px;  /* 小输入框 */
+  --padding-input-md: 10px 14px; /* 中输入框 */
+  --padding-input-lg: 14px 18px; /* 大输入框 */
+
+  /* 卡片内边距 */
+  --padding-card-sm: 12px;  /* 紧凑卡片 */
+  --padding-card-md: 16px;  /* 标准卡片 */
+  --padding-card-lg: 24px;  /* 宽松卡片 */
+  --padding-card-xl: 32px;  /* 超大卡片 */
+
+  /* 容器内边距 */
+  --padding-container-sm: 16px;  /* 小容器 */
+  --padding-container-md: 24px;  /* 中容器 */
+  --padding-container-lg: 32px;  /* 大容器 */
+  --padding-container-xl: 48px;  /* 超大容器 */
+
+  /* ================================
+     圆角（Border Radius）
+     用于卡片、按钮、输入框等元素
+     ================================ */
+
+  /* 基础圆角 */
+  --radius-none: 0;
+  --radius-xs: 2px;   /* 极小圆角 - 分隔线、标签 */
+  --radius-sm: 4px;   /* 小圆角 - 小按钮、徽章 */
+  --radius-md: 8px;   /* 中圆角 - 标准按钮、输入框 */
+  --radius-lg: 10px;  /* 大圆角 - 卡片 */
+  --radius-xl: 12px;  /* 超大圆角 - 大卡片、模态框 */
+  --radius-2xl: 16px; /* 2X圆角 - 特殊容器 */
+  --radius-3xl: 24px; /* 3X圆角 - 超大容器 */
+
+  /* 特殊圆角 */
+  --radius-full: 9999px; /* 完全圆角 - 圆形按钮、头像 */
+  --radius-circle: 50%;  /* 圆形 - 需要固定宽高 */
+
+  /* 组件特定圆角 */
+  --radius-button: 8px;      /* 按钮默认圆角 */
+  --radius-input: 8px;       /* 输入框默认圆角 */
+  --radius-card: 10px;       /* 卡片默认圆角 */
+  --radius-modal: 12px;      /* 模态框默认圆角 */
+  --radius-dropdown: 8px;    /* 下拉菜单默认圆角 */
+  --radius-tooltip: 6px;     /* 提示框默认圆角 */
+  --radius-toast: 10px;      /* Toast通知默认圆角 */
+  --radius-avatar: 50%;      /* 头像默认圆角（圆形）*/
+  --radius-badge: 12px;      /* 徽章默认圆角（药丸形）*/
+  --radius-chip: 16px;       /* 标签默认圆角（药丸形）*/
+
+  /* ================================
+     尺寸预设（Size Presets）
+     常用的高度、宽度、尺寸定义
+     ================================ */
+
+  /* 图标尺寸 */
+  --size-icon-xs: 12px;
+  --size-icon-sm: 16px;
+  --size-icon-md: 20px;
+  --size-icon-lg: 24px;
+  --size-icon-xl: 32px;
+  --size-icon-2xl: 48px;
+
+  /* 头像尺寸 */
+  --size-avatar-xs: 24px;
+  --size-avatar-sm: 32px;
+  --size-avatar-md: 40px;
+  --size-avatar-lg: 48px;
+  --size-avatar-xl: 64px;
+  --size-avatar-2xl: 96px;
+
+  /* 按钮高度 */
+  --height-btn-sm: 28px;
+  --height-btn-md: 36px;
+  --height-btn-lg: 44px;
+  --height-btn-xl: 52px;
+
+  /* 输入框高度 */
+  --height-input-sm: 32px;
+  --height-input-md: 40px;
+  --height-input-lg: 48px;
+
+  /* ================================
+     布局间距（Layout Spacing）
+     用于页面级布局
+     ================================ */
+
+  /* 页面内边距 */
+  --layout-padding-mobile: 16px;  /* 移动端页面内边距 */
+  --layout-padding-tablet: 24px;  /* 平板页面内边距 */
+  --layout-padding-desktop: 32px; /* 桌面端页面内边距 */
+
+  /* 栅格间距 */
+  --grid-gap-sm: 8px;   /* 紧凑栅格 */
+  --grid-gap-md: 16px;  /* 标准栅格 */
+  --grid-gap-lg: 24px;  /* 宽松栅格 */
+  --grid-gap-xl: 32px;  /* 超宽松栅格 */
+
+  /* 列间距 */
+  --column-gap-sm: 12px;
+  --column-gap-md: 16px;
+  --column-gap-lg: 24px;
+
+  /* 行间距 */
+  --row-gap-sm: 8px;
+  --row-gap-md: 12px;
+  --row-gap-lg: 16px;
+
+  /* ================================
+     响应式断点（Responsive Breakpoints）
+     用于媒体查询
+     ================================ */
+  --breakpoint-xs: 320px;   /* 超小屏幕（小手机）*/
+  --breakpoint-sm: 640px;   /* 小屏幕（手机）*/
+  --breakpoint-md: 768px;   /* 中屏幕（平板）*/
+  --breakpoint-lg: 1024px;  /* 大屏幕（小桌面）*/
+  --breakpoint-xl: 1280px;  /* 超大屏幕（桌面）*/
+  --breakpoint-2xl: 1536px; /* 2K屏幕 */
+
+  /* ================================
+     容器宽度（Container Width）
+     最大内容宽度限制
+     ================================ */
+  --container-xs: 480px;
+  --container-sm: 640px;
+  --container-md: 768px;
+  --container-lg: 1024px;
+  --container-xl: 1280px;
+  --container-2xl: 1536px;
+  --container-full: 100%;
+
+  /* ================================
+     Z-index层级（Z-index Layers）
+     统一管理元素层叠顺序
+     ================================ */
+  --z-base: 0;
+  --z-dropdown: 1000;
+  --z-sticky: 1100;
+  --z-fixed: 1200;
+  --z-modal-backdrop: 1300;
+  --z-modal: 1400;
+  --z-popover: 1500;
+  --z-tooltip: 1600;
+  --z-toast: 9999;
+}
+
+/* ================================
+   响应式间距（Responsive Spacing）
+   在不同屏幕尺寸下调整间距
+   ================================ */
+
+/* 移动端（<768px）- 缩小间距 */
+@media (max-width: 767px) {
+  :root {
+    --spacing-md: 12px;
+    --spacing-lg: 16px;
+    --spacing-xl: 24px;
+    --spacing-2xl: 32px;
+
+    --padding-container-md: 16px;
+    --padding-container-lg: 20px;
+
+    --layout-padding: var(--layout-padding-mobile);
+  }
+}
+
+/* 平板（768px - 1023px）*/
+@media (min-width: 768px) and (max-width: 1023px) {
+  :root {
+    --layout-padding: var(--layout-padding-tablet);
+  }
+}
+
+/* 桌面端（≥1024px）*/
+@media (min-width: 1024px) {
+  :root {
+    --layout-padding: var(--layout-padding-desktop);
+  }
+}
+
+/* ================================
+   使用示例
+   ================================ */
+
+/*
+.card {
+  padding: var(--padding-card-md);
+  border-radius: var(--radius-card);
+  gap: var(--spacing-md);
+}
+
+.button {
+  padding: var(--padding-btn-md);
+  border-radius: var(--radius-button);
+  height: var(--height-btn-md);
+}
+
+.avatar {
+  width: var(--size-avatar-md);
+  height: var(--size-avatar-md);
+  border-radius: var(--radius-avatar);
+}
+
+.grid-layout {
+  display: grid;
+  gap: var(--grid-gap-md);
+  padding: var(--layout-padding);
+}
+
+.modal {
+  border-radius: var(--radius-modal);
+  padding: var(--padding-card-lg);
+  z-index: var(--z-modal);
+}
+
+.section {
+  margin-bottom: var(--spacing-2xl);
+  padding: var(--spacing-xl) var(--spacing-lg);
+}
+*/

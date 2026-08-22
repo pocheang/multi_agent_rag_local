@@ -11,25 +11,30 @@ Scoring Scale:
 """
 
 import asyncio
+import logging
 import time
-from typing import List, Dict, Literal
-from pydantic import BaseModel, Field, field_validator
+from typing import Literal
+
 import ollama
+from pydantic import BaseModel, Field, field_validator
 
 from app.core.config import get_settings
 
+logger = logging.getLogger(__name__)
 
 # ============================================================================
 # Data Models
 # ============================================================================
 
+
 class RelevanceScore(BaseModel):
     """Individual relevance score for a query-document pair"""
+
     score: float = Field(ge=0.0, le=1.0, description="Relevance score between 0.0 and 1.0")
     label: Literal["highly_relevant", "somewhat_relevant", "not_relevant"]
     reasoning: str = Field(min_length=1, description="Brief explanation of the score")
 
-    @field_validator('label')
+    @field_validator("label")
     @classmethod
     def validate_label(cls, v: str) -> str:
         """Validate label is one of the allowed values"""
@@ -41,7 +46,8 @@ class RelevanceScore(BaseModel):
 
 class BatchRelevanceResult(BaseModel):
     """Batch relevance scoring result"""
-    scores: List[RelevanceScore]
+
+    scores: list[RelevanceScore]
     average_score: float = Field(ge=0.0, le=1.0)
     execution_time_ms: int
     model_used: str
@@ -50,6 +56,7 @@ class BatchRelevanceResult(BaseModel):
 # ============================================================================
 # Scoring Functions
 # ============================================================================
+
 
 def _get_fast_model() -> str:
     """Get the fast model for relevance scoring"""
@@ -70,7 +77,7 @@ def _parse_llm_response(response: str) -> tuple[float, str, str]:
     Returns:
         tuple of (score, label, reasoning)
     """
-    lines = response.strip().split('\n')
+    lines = response.strip().split("\n")
     score = 0.0
     label = "not_relevant"
     reasoning = "Unable to parse response"
@@ -100,7 +107,7 @@ def _parse_llm_response(response: str) -> tuple[float, str, str]:
     return score, label, reasoning
 
 
-def _parse_batch_llm_response(response: str, num_documents: int) -> List[tuple[float, str, str]]:
+def _parse_batch_llm_response(response: str, num_documents: int) -> list[tuple[float, str, str]]:
     """
     Parse batch LLM response for multiple documents.
 
@@ -124,7 +131,7 @@ def _parse_batch_llm_response(response: str, num_documents: int) -> List[tuple[f
             continue
 
         # Skip the document number line
-        lines = section.strip().split('\n')
+        lines = section.strip().split("\n")
         if len(lines) < 3:
             # Incomplete response, use default
             results.append((0.0, "not_relevant", "Incomplete response"))
@@ -185,7 +192,7 @@ LABEL: <highly_relevant, somewhat_relevant, or not_relevant>
 REASONING: <one sentence explaining your score>"""
 
 
-def _create_batch_scoring_prompt(query: str, documents: List[str]) -> str:
+def _create_batch_scoring_prompt(query: str, documents: list[str]) -> str:
     """Create a batch prompt for scoring multiple documents at once"""
     doc_texts = []
     for i, doc in enumerate(documents, 1):
@@ -235,18 +242,10 @@ async def score_relevance(query: str, document: str, model: str = None) -> Relev
     """
     # Handle empty inputs
     if not query or not query.strip():
-        return RelevanceScore(
-            score=0.0,
-            label="not_relevant",
-            reasoning="Empty query provided"
-        )
+        return RelevanceScore(score=0.0, label="not_relevant", reasoning="Empty query provided")
 
     if not document or not document.strip():
-        return RelevanceScore(
-            score=0.0,
-            label="not_relevant",
-            reasoning="Empty document provided"
-        )
+        return RelevanceScore(score=0.0, label="not_relevant", reasoning="Empty document provided")
 
     # Get model
     if model is None:
@@ -258,35 +257,22 @@ async def score_relevance(query: str, document: str, model: str = None) -> Relev
     try:
         # Call LLM asynchronously
         loop = asyncio.get_event_loop()
-        response = await loop.run_in_executor(
-            None,
-            lambda: ollama.generate(model=model, prompt=prompt)
-        )
+        response = await loop.run_in_executor(None, lambda: ollama.generate(model=model, prompt=prompt))
 
         # Parse response
-        response_text = response.get('response', '')
+        response_text = response.get("response", "")
         score, label, reasoning = _parse_llm_response(response_text)
 
-        return RelevanceScore(
-            score=score,
-            label=label,
-            reasoning=reasoning
-        )
+        return RelevanceScore(score=score, label=label, reasoning=reasoning)
 
     except Exception as e:
         # Graceful fallback
-        return RelevanceScore(
-            score=0.5,
-            label="somewhat_relevant",
-            reasoning=f"Error during scoring: {str(e)}"
-        )
+        logger.error(f"Relevance scoring failed: {e}", exc_info=True)
+        return RelevanceScore(score=0.5, label="somewhat_relevant", reasoning=f"Error during scoring: {str(e)}")
 
 
 async def batch_score_relevance(
-    query: str,
-    documents: List[Dict],
-    model: str = None,
-    max_concurrent: int = 5
+    query: str, documents: list[dict], model: str = None, max_concurrent: int = 5
 ) -> BatchRelevanceResult:
     """
     Batch score multiple documents for relevance to a query.
@@ -311,15 +297,10 @@ async def batch_score_relevance(
 
     # Handle empty documents
     if not documents:
-        return BatchRelevanceResult(
-            scores=[],
-            average_score=0.0,
-            execution_time_ms=0,
-            model_used=model
-        )
+        return BatchRelevanceResult(scores=[], average_score=0.0, execution_time_ms=0, model_used=model)
 
     # Extract content from documents
-    contents = [doc.get('content', '') for doc in documents]
+    contents = [doc.get("content", "") for doc in documents]
 
     # For small batches (<=5), use optimized single LLM call
     if len(contents) <= 5:
@@ -330,12 +311,11 @@ async def batch_score_relevance(
             # Call LLM once for all documents
             loop = asyncio.get_event_loop()
             response = await loop.run_in_executor(
-                None,
-                lambda: ollama.generate(model=model, prompt=prompt, options={"temperature": 0})
+                None, lambda: ollama.generate(model=model, prompt=prompt, options={"temperature": 0})
             )
 
             # Parse batch response
-            response_text = response.get('response', '')
+            response_text = response.get("response", "")
             parsed_results = _parse_batch_llm_response(response_text, len(contents))
 
             # Convert to RelevanceScore objects
@@ -346,12 +326,9 @@ async def batch_score_relevance(
 
         except Exception as e:
             # Fallback to neutral scores on error
+            logger.error(f"Batch relevance scoring failed: {e}", exc_info=True)
             scores = [
-                RelevanceScore(
-                    score=0.5,
-                    label="somewhat_relevant",
-                    reasoning=f"Error during batch scoring: {str(e)}"
-                )
+                RelevanceScore(score=0.5, label="somewhat_relevant", reasoning=f"Error during batch scoring: {str(e)}")
                 for _ in contents
             ]
     else:
@@ -374,8 +351,5 @@ async def batch_score_relevance(
     execution_time_ms = int((time.time() - start_time) * 1000)
 
     return BatchRelevanceResult(
-        scores=scores,
-        average_score=round(average_score, 3),
-        execution_time_ms=execution_time_ms,
-        model_used=model
+        scores=scores, average_score=round(average_score, 3), execution_time_ms=execution_time_ms, model_used=model
     )

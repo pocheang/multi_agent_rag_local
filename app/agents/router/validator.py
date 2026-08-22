@@ -6,21 +6,22 @@ Now includes historical accuracy tracking for confidence recalibration.
 
 import asyncio
 import logging
-import time
 import re
-from typing import Dict, Any
+import time
+from typing import Any
 
-from app.agents.shared.quality_models import RouteValidationResult
+from app.agents.router.accuracy import RouteAccuracyTracker
+from app.agents.router.routing import LegacyRouteDecision
 from app.agents.shared.config import (
     ROUTE_HIGH_CONFIDENCE_THRESHOLD,
-    ROUTE_MEDIUM_CONFIDENCE_THRESHOLD,
     ROUTE_LOW_CONFIDENCE_THRESHOLD,
+    ROUTE_MEDIUM_CONFIDENCE_THRESHOLD,
     ROUTE_VALIDATOR_TIMEOUT_MS,
+    VALID_ROUTES,
+    VALID_SKILLS,
 )
-from app.agents.router.routing import LegacyRouteDecision
-from app.agents.shared.config import VALID_ROUTES, VALID_SKILLS
+from app.agents.shared.quality_models import RouteValidationResult
 from app.core.models import get_chat_model
-from app.agents.router.accuracy import RouteAccuracyTracker
 
 logger = logging.getLogger(__name__)
 
@@ -29,40 +30,32 @@ _accuracy_tracker = RouteAccuracyTracker()
 _accuracy_tracker.load()  # Load historical data on module import
 
 
-def _extract_query_features(query: str) -> Dict[str, Any]:
+def _extract_query_features(query: str) -> dict[str, Any]:
     """Extract features from query for rule-based validation"""
     query_lower = query.lower()
 
     features = {
         "has_relation_keywords": any(
-            kw in query_lower
-            for kw in ["关系", "依赖", "连接", "关联", "relationship", "dependency"]
+            kw in query_lower for kw in ["关系", "依赖", "连接", "关联", "relationship", "dependency"]
         ),
         "has_comparison_keywords": any(
-            kw in query_lower
-            for kw in ["对比", "区别", "差异", "vs", "比较", "compare", "difference"]
+            kw in query_lower for kw in ["对比", "区别", "差异", "vs", "比较", "compare", "difference"]
         ),
-        "has_graph_keywords": any(
-            kw in query_lower for kw in ["路径", "拓扑", "网络", "path", "topology", "network"]
-        ),
+        "has_graph_keywords": any(kw in query_lower for kw in ["路径", "拓扑", "网络", "path", "topology", "network"]),
         "has_pdf_keywords": any(
-            kw in query_lower
-            for kw in ["pdf", "文档", "文件", "提取", "document", "file", "extract"]
+            kw in query_lower for kw in ["pdf", "文档", "文件", "提取", "document", "file", "extract"]
         ),
         "has_security_keywords": any(
-            kw in query_lower
-            for kw in ["安全", "漏洞", "攻击", "防护", "security", "vulnerability", "attack"]
+            kw in query_lower for kw in ["安全", "漏洞", "攻击", "防护", "security", "vulnerability", "attack"]
         ),
-        "question_words": [
-            w for w in ["什么", "为什么", "如何", "怎么", "what", "why", "how"] if w in query_lower
-        ],
-        "has_entities": len(re.findall(r'[一-鿿]{2,}|[A-Z][a-z]+', query)) > 1,
+        "question_words": [w for w in ["什么", "为什么", "如何", "怎么", "what", "why", "how"] if w in query_lower],
+        "has_entities": len(re.findall(r"[一-鿿]{2,}|[A-Z][a-z]+", query)) > 1,
     }
 
     return features
 
 
-def _rule_based_validation(query: str, route_decision: LegacyRouteDecision) -> Dict[str, Any]:
+def _rule_based_validation(query: str, route_decision: LegacyRouteDecision) -> dict[str, Any]:
     """Fast rule-based validation"""
     features = _extract_query_features(query)
     issues = []
@@ -104,11 +97,11 @@ def _rule_based_validation(query: str, route_decision: LegacyRouteDecision) -> D
     return {
         "confidence": confidence,
         "reason": "rule_validation" if not issues else f"rule_validation_issues:{','.join(issues)}",
-        "warnings": issues
+        "warnings": issues,
     }
 
 
-async def _llm_validation(query: str, route_decision: LegacyRouteDecision) -> Dict[str, Any]:
+async def _llm_validation(query: str, route_decision: LegacyRouteDecision) -> dict[str, Any]:
     """LLM-based validation for uncertain cases"""
     model = get_chat_model(temperature=0.0)
 
@@ -133,10 +126,7 @@ ALTERNATIVE_SKILL: skill (if VALID=no)
 """
 
     try:
-        response = await asyncio.wait_for(
-            model.ainvoke(prompt),
-            timeout=ROUTE_VALIDATOR_TIMEOUT_MS / 1000.0
-        )
+        response = await asyncio.wait_for(model.ainvoke(prompt), timeout=ROUTE_VALIDATOR_TIMEOUT_MS / 1000.0)
         content = response.content if hasattr(response, "content") else str(response)
 
         is_valid = "yes" in content.lower().split("valid:")[1].split("\n")[0] if "valid:" in content.lower() else True
@@ -156,39 +146,22 @@ ALTERNATIVE_SKILL: skill (if VALID=no)
                 alternative = {
                     "route": alt_route_match.group(1) if alt_route_match else route_decision.route,
                     "skill": alt_skill_match.group(1) if alt_skill_match else route_decision.skill,
-                    "reason": reason
+                    "reason": reason,
                 }
 
-        return {
-            "is_valid": is_valid,
-            "confidence": confidence,
-            "reason": reason,
-            "alternative": alternative
-        }
+        return {"is_valid": is_valid, "confidence": confidence, "reason": reason, "alternative": alternative}
 
-    except asyncio.TimeoutError:
+    except TimeoutError:
         logger.warning(f"LLM validation timed out after {ROUTE_VALIDATOR_TIMEOUT_MS}ms")
-        return {
-            "is_valid": True,
-            "confidence": 0.7,
-            "reason": "llm_timeout",
-            "alternative": None
-        }
+        return {"is_valid": True, "confidence": 0.7, "reason": "llm_timeout", "alternative": None}
 
     except Exception as e:
         logger.exception(f"LLM validation failed: {e}")
-        return {
-            "is_valid": True,
-            "confidence": 0.7,
-            "reason": f"llm_error:{type(e).__name__}",
-            "alternative": None
-        }
+        return {"is_valid": True, "confidence": 0.7, "reason": f"llm_error:{type(e).__name__}", "alternative": None}
 
 
 async def validate_route_decision(
-    query: str,
-    route_decision: LegacyRouteDecision,
-    use_cache: bool = True
+    query: str, route_decision: LegacyRouteDecision, use_cache: bool = True
 ) -> RouteValidationResult:
     """
     Validate routing decision with layered approach and historical accuracy tracking.
@@ -210,7 +183,7 @@ async def validate_route_decision(
     start_time = time.time()
 
     # Get router confidence if available
-    router_confidence = getattr(route_decision, 'confidence', 0.7)
+    router_confidence = getattr(route_decision, "confidence", 0.7)
 
     # Apply historical accuracy recalibration
     recalibrated_confidence = _accuracy_tracker.recalibrate_confidence(route_decision)
@@ -227,7 +200,7 @@ async def validate_route_decision(
             validation_reason="high_confidence_fast_pass_with_history",
             execution_time_ms=int((time.time() - start_time) * 1000),
             suggested_alternative=None,
-            warnings=[]
+            warnings=[],
         )
 
     # Layer 2: Rule-based validation
@@ -244,7 +217,7 @@ async def validate_route_decision(
             validation_reason=f"{rule_result['reason']}_with_history",
             execution_time_ms=int((time.time() - start_time) * 1000),
             suggested_alternative=None,
-            warnings=rule_result.get("warnings", [])
+            warnings=rule_result.get("warnings", []),
         )
 
     # Layer 3: LLM validation (only for low confidence)
@@ -258,27 +231,22 @@ async def validate_route_decision(
             validation_reason=llm_result["reason"],
             execution_time_ms=int((time.time() - start_time) * 1000),
             suggested_alternative=llm_result.get("alternative"),
-            warnings=[]
+            warnings=[],
         )
 
     # Default: Medium confidence, pass with warning
     return RouteValidationResult(
         is_valid=True,
-        confidence=blended_confidence if 'blended_confidence' in locals() else 0.7,
+        confidence=blended_confidence if "blended_confidence" in locals() else 0.7,
         validation_method="rule_feature",
         validation_reason="medium_confidence_default",
         execution_time_ms=int((time.time() - start_time) * 1000),
         suggested_alternative=None,
-        warnings=["medium_confidence"]
+        warnings=["medium_confidence"],
     )
 
 
-def record_route_outcome(
-    query: str,
-    route_decision: LegacyRouteDecision,
-    was_successful: bool,
-    execution_time_ms: int
-):
+def record_route_outcome(query: str, route_decision: LegacyRouteDecision, was_successful: bool, execution_time_ms: int):
     """
     Record the outcome of a routing decision for historical tracking.
 
@@ -291,8 +259,5 @@ def record_route_outcome(
         execution_time_ms: Execution time
     """
     _accuracy_tracker.record_outcome(
-        query=query,
-        route_decision=route_decision,
-        was_successful=was_successful,
-        execution_time_ms=execution_time_ms
+        query=query, route_decision=route_decision, was_successful=was_successful, execution_time_ms=execution_time_ms
     )

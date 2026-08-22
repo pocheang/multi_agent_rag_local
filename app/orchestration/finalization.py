@@ -29,6 +29,7 @@ class FinalizationService:
         safe, safety = _sanitize(grounded)
         validation = await self._validation_status(request, safe, evidence)
         quality = _quality_report(validation, grounding, policy)
+
         return candidate.model_copy(
             update={
                 "answer": safe,
@@ -40,7 +41,7 @@ class FinalizationService:
                 "validation": validation,
                 "quality_report": quality,
                 "execution_metadata": {
-                    **dict(candidate.execution_metadata),
+                    **(candidate.execution_metadata or {}),
                     "profile": policy.profile.value,
                     "validation_required": policy.require_answer_validation,
                 },
@@ -57,7 +58,9 @@ class FinalizationService:
             {"content": item.content, "source": item.source, "document_id": item.document_id, "page": item.page}
             for item in evidence.items
         ]
-        citations = [{"document_id": item.document_id, "source": item.source, "page": item.page} for item in evidence.items]
+        citations = [
+            {"document_id": item.document_id, "source": item.source, "page": item.page} for item in evidence.items
+        ]
         try:
             result = await self._validator(request.question, answer, documents, citations)
         except Exception as exc:
@@ -67,13 +70,41 @@ class FinalizationService:
                 method="exception",
                 issues=(f"validation exception: {type(exc).__name__}",),
             )
-        approved = bool(getattr(result, "is_valid", False)) and str(getattr(result, "action", "")) == "approve"
-        issues = tuple(str(getattr(issue, "content", issue)) for issue in getattr(result, "issues", ()) or ())
+
+        # Extract validation result with clear error messages
+        try:
+            is_valid = bool(result.is_valid) if hasattr(result, "is_valid") else False
+            action = str(result.action) if hasattr(result, "action") else ""
+            approved = is_valid and action == "approve"
+
+            raw_issues = result.issues if hasattr(result, "issues") else ()
+            # Safely convert issues to strings, handling various types
+            issues = []
+            for issue in raw_issues or ():
+                try:
+                    if hasattr(issue, "content"):
+                        issues.append(str(issue.content))
+                    elif isinstance(issue, str):
+                        issues.append(issue)
+                    else:
+                        issues.append(str(issue))
+                except Exception:
+                    issues.append("[issue conversion failed]")
+
+            method = str(result.validation_method) if hasattr(result, "validation_method") else "cascade"
+        except (AttributeError, ValueError, TypeError) as exc:
+            return ValidationStatus(
+                state="degraded",
+                approved=False,
+                method="extraction_error",
+                issues=(f"Failed to extract validation result: {exc}",),
+            )
+
         return ValidationStatus(
             state="validated" if approved else "rejected",
             approved=approved,
-            method=str(getattr(result, "validation_method", "cascade")),
-            issues=issues,
+            method=method,
+            issues=tuple(issues),
         )
 
 

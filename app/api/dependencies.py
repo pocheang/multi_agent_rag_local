@@ -1,4 +1,4 @@
-﻿"""
+"""
 Shared dependencies, services, and helper functions for the QueryMind API.
 
 This module serves as the central hub for all shared dependencies and re-exports
@@ -8,53 +8,19 @@ helper functions from specialized utility modules.
 import logging
 import re
 import threading
+from dataclasses import dataclass
 from typing import Any
 
 from fastapi import Request
-from fastapi.security import HTTPBearer
 
 from app.api.deps.admin import _runtime_diagnostics_summary as _runtime_diagnostics_summary_impl
 from app.api.deps.auth import (
-    _require_permission,
-    _require_user,
-    _require_user_and_token,
-    auth_scheme,
     auth_service,
 )
-from app.api.utils.auth_helpers import (
-    _audit,
-)
-from app.api.deps.admin import (
-    _check_chroma_ready,
-    _check_ollama_ready,
-    _extract_grounding_support_from_detail,
-    _filter_audit_rows,
-    _load_benchmark_queries,
-    _parse_audit_ts,
-    _parse_request_ts,
-)
-from app.api.utils.auth_helpers import _clear_auth_cookie, _client_ip, _set_auth_cookie
-from app.api.deps.documents import (
-    _allowed_sources_for_user,
-    _build_user_file_inventory_answer,
-    _is_file_inventory_question,
-)
-from app.api.utils.memory_helpers import _memory_store_for_user, _promote_long_term_memory
-from app.api.deps.query import (
-    _call_with_supported_kwargs,
-    _normalize_agent_class_hint,
-    _query_limiter_key,
-    _resolve_effective_agent_class,
-    _trace_id,
-)
-from app.api.transport.responses import _sse_response
-from app.api.deps.sessions import _require_existing_session_for_query, _require_valid_session_id
 from app.api.deps.documents import _enforce_result_source_scope as _enforce_result_source_scope_impl
 from app.api.deps.documents import (
     _visible_index_fingerprint_for_user,
 )
-from app.api.transport.errors import bad_request
-from app.api.utils.memory_helpers import _build_memory_context_for_session as _build_memory_context_for_session_impl
 from app.api.deps.query import _effective_strategy_for_session as _effective_strategy_for_session_impl
 from app.api.deps.query import _is_overload_mode as _is_overload_mode_impl
 from app.api.deps.query import _launch_shadow_run as _launch_shadow_run_impl
@@ -65,24 +31,47 @@ from app.api.deps.query import _user_api_settings_for_runtime as _user_api_setti
 from app.api.deps.sessions import (
     _history_store_for_user,
 )
+from app.api.schemas import AdminModelSettingsResponse, UserApiSettings, UserApiSettingsView
+from app.api.transport.errors import bad_request, forbidden
+from app.api.utils.auth_helpers import (
+    _audit,
+)
+from app.api.utils.memory_helpers import _build_memory_context_for_session as _build_memory_context_for_session_impl
 
 # Import helper functions from utility modules
 from app.api.utils.string_utils import normalize_string
-from app.core.config import get_settings
-from app.api.schemas import AdminModelSettingsResponse, UserApiSettings, UserApiSettingsView
+from app.core.config import Settings, get_settings
+from app.services.auth.user_manager import InsufficientCreditsError
 from app.services.auto_ingest_watcher import AutoIngestWatcher
-from app.services.runtime.background_queue import BackgroundTaskQueue
 from app.services.models.config_store import get_global_model_settings, public_global_model_settings
 from app.services.prompts.store import PromptStore
 from app.services.query_guard import QueryLoadGuard
+from app.services.runtime.background_queue import BackgroundTaskQueue
 from app.services.runtime.query_result_cache import QueryResultCache
+from app.services.runtime.runtime_metrics import RuntimeMetrics
 from app.services.security.quota import QuotaGuard
 from app.services.security.rate_limiter import SlidingWindowLimiter
-from app.services.runtime.runtime_metrics import RuntimeMetrics
 
 # Global settings and logger
 settings = get_settings()
 logger = logging.getLogger(__name__)
+
+
+def _reserve_chat_credit(request: Request, user: dict[str, Any], resource_type: str):
+    """Reserve one chat credit or return a stable quota error to the client."""
+    try:
+        return auth_service.chat_credit_reservation(str(user.get("user_id", "")))
+    except InsufficientCreditsError as exc:
+        _audit(
+            request,
+            action="query.credit_reserve",
+            resource_type=resource_type,
+            result="blocked",
+            user=user,
+            detail="credit_balance_exhausted",
+        )
+        raise forbidden(str(exc)) from exc
+
 
 # Shared service instances
 prompt_store = PromptStore()
@@ -103,29 +92,73 @@ upload_limiter = SlidingWindowLimiter(
     window_seconds=3600,
 )
 
-# Query guard and caching
-query_guard = QueryLoadGuard(
-    per_user_max_requests=settings.query_rate_limit_max_attempts,
-    per_user_window_seconds=settings.query_rate_limit_window_seconds,
-    max_concurrent=settings.query_max_concurrent,
-    max_waiting=settings.query_max_waiting,
-    acquire_timeout_ms=settings.query_acquire_timeout_ms,
-    backend=settings.query_guard_backend,
-)
-query_result_cache = QueryResultCache(
-    backend=settings.query_result_cache_backend,
-    ttl_seconds=settings.query_result_cache_ttl_seconds,
-    max_items=settings.query_result_cache_max_items,
-    session_ttl_seconds=settings.query_result_session_ttl_seconds,
-)
-quota_guard = QuotaGuard()
 
-# Background task queue
-shadow_queue = BackgroundTaskQueue(
-    maxsize=settings.shadow_queue_maxsize,
-    workers=settings.shadow_queue_workers,
-    name="shadow-query",
-)
+@dataclass(frozen=True, slots=True)
+class QueryRuntime:
+    """Atomically replaceable services used by query request paths."""
+
+    settings: Settings
+    query_guard: QueryLoadGuard
+    query_result_cache: QueryResultCache
+    quota_guard: QuotaGuard
+    shadow_queue: BackgroundTaskQueue
+
+
+def _build_query_runtime(new_settings: Settings) -> QueryRuntime:
+    return QueryRuntime(
+        settings=new_settings,
+        query_guard=QueryLoadGuard(
+            per_user_max_requests=new_settings.query_rate_limit_max_attempts,
+            per_user_window_seconds=new_settings.query_rate_limit_window_seconds,
+            max_concurrent=new_settings.query_max_concurrent,
+            max_waiting=new_settings.query_max_waiting,
+            acquire_timeout_ms=new_settings.query_acquire_timeout_ms,
+            backend=new_settings.query_guard_backend,
+        ),
+        query_result_cache=QueryResultCache(
+            backend=new_settings.query_result_cache_backend,
+            ttl_seconds=new_settings.query_result_cache_ttl_seconds,
+            max_items=new_settings.query_result_cache_max_items,
+            session_ttl_seconds=new_settings.query_result_session_ttl_seconds,
+        ),
+        quota_guard=QuotaGuard(),
+        shadow_queue=BackgroundTaskQueue(
+            maxsize=new_settings.shadow_queue_maxsize,
+            workers=new_settings.shadow_queue_workers,
+            name="shadow-query",
+        ),
+    )
+
+
+_query_runtime = _build_query_runtime(settings)
+_runtime_reload_lock = threading.Lock()
+
+
+def get_query_runtime() -> QueryRuntime:
+    """Return one internally consistent snapshot of the query runtime."""
+    return _query_runtime
+
+
+def reload_query_runtime(new_settings: Settings) -> QueryRuntime:
+    """Replace query services without stopping the healthy runtime first."""
+    global _query_runtime, settings
+
+    new_runtime = _build_query_runtime(new_settings)
+    try:
+        new_runtime.shadow_queue.start()
+    except Exception:
+        new_runtime.shadow_queue.stop(timeout=1.0)
+        raise
+
+    with _runtime_reload_lock:
+        old_runtime = _query_runtime
+        _query_runtime = new_runtime
+        settings = new_settings
+        auto_ingest_watcher.settings = new_settings
+
+    old_runtime.shadow_queue.stop(timeout=1.0)
+    return new_runtime
+
 
 # Auto-ingest watcher state
 _auto_ingest_stop_event = threading.Event()
@@ -135,10 +168,27 @@ _auto_ingest_thread: threading.Thread | None = None
 runtime_metrics = RuntimeMetrics()
 
 
-
 def __getattr__(name: str):
     """Resolve legacy helper imports from split utility modules."""
-    from app.api.utils import admin_helpers, auth_dependencies, auth_helpers, document_helpers, memory_helpers, query_helpers, request_helpers, response_helpers, session_helpers
+    runtime_attributes = {
+        "query_guard": "query_guard",
+        "query_result_cache": "query_result_cache",
+        "quota_guard": "quota_guard",
+        "shadow_queue": "shadow_queue",
+    }
+    if name in runtime_attributes:
+        return getattr(_query_runtime, runtime_attributes[name])
+
+    from app.api.utils import (
+        admin_helpers,
+        auth_dependencies,
+        auth_helpers,
+        document_helpers,
+        memory_helpers,
+        query_helpers,
+        request_helpers,
+        session_helpers,
+    )
 
     modules = (
         admin_helpers,
@@ -154,6 +204,7 @@ def __getattr__(name: str):
         if hasattr(module, name):
             return getattr(module, name)
     raise AttributeError(f"module '{__name__}' has no attribute '{name}'")
+
 
 # ============================================================================
 # Dependency-injected helpers
@@ -177,6 +228,7 @@ def _query_cache_key(
     agent_class_hint: str | None,
     request_id: str | None,
     mode: str = "query",
+    conversation: Any = None,
 ) -> str:
     """Compute the query cache key, injecting user-scoped fingerprint helpers."""
     return _query_cache_key_impl(
@@ -189,26 +241,35 @@ def _query_cache_key(
         agent_class_hint=agent_class_hint,
         request_id=request_id,
         mode=mode,
+        conversation=conversation,
         index_fingerprint_fn=_visible_index_fingerprint_for_user,
         model_fingerprint_fn=_query_model_fingerprint_for_user,
     )
 
 
-def _run_with_query_runtime(*, user: dict[str, Any], request: Request, fn):
+def _run_with_query_runtime(
+    *,
+    user: dict[str, Any],
+    request: Request,
+    fn,
+    runtime: QueryRuntime | None = None,
+):
     """Run ``fn`` under the shared query guard / metrics runtime."""
+    runtime = runtime or get_query_runtime()
     return _run_with_query_runtime_impl(
         user=user,
         request=request,
         fn=fn,
-        query_guard=query_guard,
+        query_guard=runtime.query_guard,
         runtime_metrics=runtime_metrics,
         api_settings_fn=_user_api_settings_for_runtime,
     )
 
 
-def _is_overload_mode() -> bool:
+def _is_overload_mode(runtime: QueryRuntime | None = None) -> bool:
     """Return True when the query guard is currently shedding load."""
-    return _is_overload_mode_impl(query_guard)
+    runtime = runtime or get_query_runtime()
+    return _is_overload_mode_impl(runtime.query_guard)
 
 
 def _launch_shadow_run(
@@ -224,7 +285,7 @@ def _launch_shadow_run(
         session_id=session_id,
         question=question,
         primary_result=primary_result,
-        shadow_queue=shadow_queue,
+        shadow_queue=get_query_runtime().shadow_queue,
     )
 
 
@@ -358,5 +419,3 @@ def _api_settings_view(settings_data: UserApiSettings) -> UserApiSettingsView:
 def _admin_model_settings_view(settings_data: dict[str, Any]) -> AdminModelSettingsResponse:
     """Convert model settings to admin view model."""
     return AdminModelSettingsResponse(ok=True, settings=public_global_model_settings(settings_data))
-
-

@@ -6,7 +6,7 @@ Tests weighted scoring fusion, penalty rules, quality classification, and issue 
 
 import pytest
 import time
-from app.agents.quality_models import (
+from app.agents.shared.quality_models import (
     RouteValidationResult,
     RetrievalQualityResult,
     RetrievalQualityMetrics,

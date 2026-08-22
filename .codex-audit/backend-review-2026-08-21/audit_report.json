@@ -1,0 +1,146 @@
+{
+  "repo": "C:\\Users\\pocheang\\Desktop\\llm\\multi_agent_rag_local_v4",
+  "mode": "backend-static-plus-isolated-probes",
+  "repair_status": {
+    "completed": true,
+    "scope": "existing-backend-functionality-only",
+    "fixed": [
+      "profile audit call contract",
+      "clarification RBAC and session-id validation",
+      "atomic query runtime reload and dynamic consumers",
+      "prompt version cleanup on template deletion",
+      "production signing configuration validation",
+      "blocking metadata and evaluation route definitions",
+      "environment example aliases and missing Settings fields",
+      "internal diagnostics authorization",
+      "confirmed internal 500 detail leakage",
+      "duplicate synonym key",
+      "missing SessionMetadataService import",
+      "health version drift"
+    ],
+    "not_mutated": [
+      "544 orphan auth sessions in real app.db",
+      "4 orphan prompt versions in real app.db",
+      "2980 unhashed audit records in real app.db",
+      "4 Chroma foreign-key violations",
+      "ambient CrewAI/chromadb dependency conflict"
+    ]
+  },
+  "findings": [
+    {
+      "severity": "P0",
+      "title": "个人资料更新后审计调用参数错误",
+      "impact": "数据库可能已更新，但接口返回 500，审计记录缺失",
+      "evidence": ["app/api/routes/public/auth.py:126-138", "app/api/utils/auth_helpers.py:124-146"]
+    },
+    {
+      "severity": "P1",
+      "title": "配置重载没有更新真正运行中的共享服务",
+      "impact": "旧查询守卫、缓存和队列继续被消费者引用，旧队列被停止，新队列可能泄漏",
+      "evidence": ["app/api/routes/admin/settings.py:136-155", "app/api/dependencies.py:84-128"]
+    },
+    {
+      "severity": "P1",
+      "title": "澄清接口使用未定义权限 query:execute",
+      "impact": "viewer 和 analyst 无法重置或读取澄清上下文",
+      "evidence": ["app/api/routes/public/clarification.py:157-210", "app/services/security/rbac.py:3-50"]
+    },
+    {
+      "severity": "P1",
+      "title": "应用数据库关系没有外键或级联约束",
+      "impact": "当前存在 544 条孤立认证会话、4 条孤立提示词版本，Chroma 有 4 条外键违规",
+      "evidence": ["app/services/prompts/store.py:48-66,254-257", "read-only SQLite integrity and orphan queries"]
+    },
+    {
+      "severity": "P1",
+      "title": "签名密钥缺失时静默写入无哈希审计记录",
+      "impact": "2980 条现有审计记录没有 event_hash，审计链不可验证",
+      "evidence": ["app/api/query/response.py:76-89", "app/services/auth/audit_logger.py:51-108"]
+    },
+    {
+      "severity": "P1",
+      "title": "异步接口执行同步数据库和评估任务",
+      "impact": "高延迟请求会阻塞事件循环并拖慢其他请求",
+      "evidence": ["app/api/routes/sessions/metadata.py:138-310", "app/api/routes/operations/evaluation.py:131-166,215-243"]
+    },
+    {
+      "severity": "P1",
+      "title": "环境变量示例与 Settings 别名不一致",
+      "impact": "至少 9 个示例配置键会被后端静默忽略",
+      "evidence": [".env.example:77,92,140,170", "app/core/config.py:47,51,219-222,304-307"]
+    },
+    {
+      "severity": "P2",
+      "title": "部分运维和内部配置接口未鉴权",
+      "impact": "暴露运行容量、断路器状态、功能开关和阈值",
+      "evidence": ["isolated FastAPI dependency scan: 164 routes, 20 without auth dependency"]
+    },
+    {
+      "severity": "P2",
+      "title": "内部异常文本直接返回客户端",
+      "impact": "可能泄露文件路径、依赖错误或连接信息",
+      "evidence": ["app/api/routes/compatibility/advanced_rag.py:121", "app/api/routes/compatibility/enhanced_query.py:267"]
+    },
+    {
+      "severity": "P2",
+      "title": "同义词重复键覆盖",
+      "impact": "安全相关查询丢失一组默认同义词",
+      "evidence": ["app/services/query/synonyms.py:36,65", "Ruff F601"]
+    },
+    {
+      "severity": "P2",
+      "title": "会话搜索类型名未导入",
+      "impact": "类型解析工具或未来注解策略变化时会报错",
+      "evidence": ["app/services/sessions/search.py:80", "Ruff F821"]
+    },
+    {
+      "severity": "P2",
+      "title": "健康接口版本号过期",
+      "impact": "部署与故障定位获得错误版本信息",
+      "evidence": ["app/api/routes/operations/health.py:281", "app/__version__.py:3", "pyproject.toml:7"]
+    }
+  ],
+  "checks_before_repair": {
+    "python_ast": {"files": 581, "errors": 0},
+    "fastapi_routes": {"routes": 164, "duplicate_method_paths": 0, "without_auth_dependency": 20},
+    "ruff_f": {"total": 135, "undefined_name": 1, "repeated_key": 1, "unused_import": 126},
+    "sqlite_read_only": {
+      "app_db_integrity": "ok",
+      "querymind_db_integrity": "ok",
+      "chroma_db_integrity": "ok",
+      "orphan_auth_sessions": 544,
+      "orphan_prompt_versions": 4,
+      "unhashed_audit_logs": 2980,
+      "chroma_foreign_key_issues": 4
+    },
+    "dependency_check": {
+      "ok": false,
+      "detail": "crewai 1.15.1 requires chromadb~=1.1.0, installed chromadb is 1.5.9; CrewAI is not a QueryMind dependency"
+    },
+    "tests_run": false,
+    "real_database_writes": false
+  },
+  "verification_after_repair": {
+    "python_ast": {"files": 581, "errors": 0},
+    "ruff_target_rules": {"rules": ["F601", "F821", "F841"], "errors": 0},
+    "fastapi_routes": {"routes": 164, "duplicate_method_paths": 0},
+    "diagnostic_auth_matrix": "ok",
+    "sync_endpoints": 13,
+    "clarification_permissions": "ok",
+    "runtime_reload_probe": "ok",
+    "prompt_delete_probe": {"templates": 0, "versions": 0},
+    "signing_validation_probe": "ok",
+    "failed_reload_preserves_settings": true,
+    "tests_run": false,
+    "real_app_db_sha256_before": "2F9E040F5484DB004D2A5CF7C2C2717D48610BF1D1402E9A0297F1FD7D09D442",
+    "real_app_db_sha256_after": "2F9E040F5484DB004D2A5CF7C2C2717D48610BF1D1402E9A0297F1FD7D09D442"
+  },
+  "feature_additions": [],
+  "implementation_plan": {
+    "immediate": ["修正个人资料审计调用", "统一澄清权限为 query:run", "修复配置重载的共享运行时所有权"],
+    "7_days": ["补充数据库清理和级联策略", "强制生产签名配置并迁移审计哈希", "移出事件循环中的同步重任务", "修正环境变量示例"],
+    "30_days": ["收敛重复路由实现", "统一错误响应", "收紧运维接口鉴权"],
+    "90_days": ["统一数据库迁移、外键、配置和服务生命周期所有权", "结构稳定前继续冻结新功能"]
+  },
+  "summary": "本轮确认的后端代码与功能问题已修复并通过静态、隔离导入和临时数据功能探针；既有真实数据异常、Chroma 第三方数据问题和共享环境冲突未自动修改。"
+}

@@ -1,0 +1,450 @@
+"""Multi-modal retrieval service for RAG."""
+
+import asyncio
+import logging
+from dataclasses import dataclass
+from typing import Any, Literal
+
+from app.core.config import get_settings
+
+logger = logging.getLogger(__name__)
+
+
+@dataclass
+class RetrievalResult:
+    """Multi-modal retrieval result."""
+
+    id: str
+    content: str
+    score: float
+    modality: Literal["text", "image", "table", "chart"]
+    doc_id: str
+    page_number: int
+    metadata: dict[str, Any]
+
+    @property
+    def is_multimodal(self) -> bool:
+        """Check if result is non-text modality."""
+        return self.modality in ["image", "table", "chart"]
+
+
+class MultiModalRetriever:
+    """Retrieve content across text, images, tables, and charts."""
+
+    def __init__(self):
+        self.settings = get_settings()
+        self.default_top_k = 10
+
+        # Fusion method
+        self.fusion_method = getattr(self.settings, "multimodal_fusion_method", "rrf")  # rrf|weighted
+
+        # Modality weights for weighted fusion
+        self.text_weight = getattr(self.settings, "text_weight", 0.4)
+        self.image_weight = getattr(self.settings, "image_weight", 0.3)
+        self.table_weight = getattr(self.settings, "table_weight", 0.3)
+
+    async def retrieve(
+        self,
+        query: str,
+        modalities: list[str] | None = None,
+        top_k: int | None = None,
+        **kwargs: Any,
+    ) -> list[RetrievalResult]:
+        """Multi-modal retrieval across specified modalities.
+
+        Args:
+            query: Search query
+            modalities: List of modalities to search (text, image, table, chart)
+                       If None, searches all modalities
+            top_k: Number of results to return
+            **kwargs: Additional retrieval parameters
+
+        Returns:
+            List of RetrievalResult objects
+        """
+        modalities = modalities or ["text", "image", "table", "chart"]
+        top_k = top_k or self.default_top_k
+
+        try:
+            # Retrieve from each modality in parallel
+            retrieval_tasks = []
+
+            if "text" in modalities:
+                retrieval_tasks.append(self._retrieve_text(query, top_k, **kwargs))
+
+            if "image" in modalities:
+                retrieval_tasks.append(self._retrieve_images(query, top_k, **kwargs))
+
+            if "table" in modalities:
+                retrieval_tasks.append(self._retrieve_tables(query, top_k, **kwargs))
+
+            if "chart" in modalities:
+                retrieval_tasks.append(self._retrieve_charts(query, top_k, **kwargs))
+
+            # Execute all retrievals concurrently
+            all_results = await asyncio.gather(*retrieval_tasks, return_exceptions=True)
+
+            # Filter out exceptions and flatten results
+            valid_results: list[list[RetrievalResult]] = []
+            for i, result in enumerate(all_results):
+                if isinstance(result, Exception):
+                    logger.error(f"Retrieval error for modality {modalities[i]}: {result}")
+                else:
+                    valid_results.append(result)
+
+            # Flatten all results
+            flattened: list[RetrievalResult] = []
+            for results in valid_results:
+                flattened.extend(results)
+
+            # Fuse and rank results
+            if self.fusion_method == "rrf":
+                fused = self._reciprocal_rank_fusion(valid_results, top_k)
+            else:  # weighted
+                fused = self._weighted_fusion(valid_results, top_k)
+
+            logger.info(f"Retrieved {len(fused)} results from {len(modalities)} modalities")
+
+            return fused
+
+        except Exception as e:
+            logger.error(f"Multi-modal retrieval error: {e}")
+            raise
+
+    async def _retrieve_text(self, query: str, top_k: int, **kwargs: Any) -> list[RetrievalResult]:
+        """Retrieve text chunks."""
+        try:
+            from app.retrievers.stores.chroma_store import get_chroma_client
+
+            client = get_chroma_client()
+            collection = client.get_collection(name="text_chunks")
+
+            # Query collection
+            results = collection.query(
+                query_texts=[query],
+                n_results=top_k,
+                include=["documents", "metadatas", "distances"],
+            )
+
+            # Convert to RetrievalResult
+            retrieval_results: list[RetrievalResult] = []
+
+            if results["ids"] and results["ids"][0]:
+                for i, doc_id in enumerate(results["ids"][0]):
+                    metadata = results["metadatas"][0][i] if results["metadatas"] else {}
+                    distance = results["distances"][0][i] if results["distances"] else 1.0
+
+                    # Convert distance to similarity score (inverse)
+                    score = 1.0 / (1.0 + distance)
+
+                    result = RetrievalResult(
+                        id=doc_id,
+                        content=results["documents"][0][i],
+                        score=score,
+                        modality="text",
+                        doc_id=metadata.get("doc_id", ""),
+                        page_number=metadata.get("page_number", 0),
+                        metadata=metadata,
+                    )
+                    retrieval_results.append(result)
+
+            return retrieval_results
+
+        except Exception as e:
+            logger.error(f"Text retrieval error: {e}")
+            return []
+
+    async def _retrieve_images(self, query: str, top_k: int, **kwargs: Any) -> list[RetrievalResult]:
+        """Retrieve image descriptions."""
+        try:
+            from app.retrievers.stores.chroma_store import get_chroma_client
+
+            client = get_chroma_client()
+
+            try:
+                collection = client.get_collection(name="image_descriptions")
+            except Exception:
+                logger.info("Image collection not found, skipping image retrieval")
+                return []
+
+            # Query collection
+            results = collection.query(
+                query_texts=[query],
+                n_results=top_k,
+                include=["documents", "metadatas", "distances"],
+            )
+
+            # Convert to RetrievalResult
+            retrieval_results: list[RetrievalResult] = []
+
+            if results["ids"] and results["ids"][0]:
+                for i, doc_id in enumerate(results["ids"][0]):
+                    metadata = results["metadatas"][0][i] if results["metadatas"] else {}
+                    distance = results["distances"][0][i] if results["distances"] else 1.0
+                    score = 1.0 / (1.0 + distance)
+
+                    result = RetrievalResult(
+                        id=doc_id,
+                        content=results["documents"][0][i],
+                        score=score,
+                        modality="image",
+                        doc_id=metadata.get("doc_id", ""),
+                        page_number=metadata.get("page_number", 0),
+                        metadata=metadata,
+                    )
+                    retrieval_results.append(result)
+
+            return retrieval_results
+
+        except Exception as e:
+            logger.error(f"Image retrieval error: {e}")
+            return []
+
+    async def _retrieve_tables(self, query: str, top_k: int, **kwargs: Any) -> list[RetrievalResult]:
+        """Retrieve table summaries."""
+        try:
+            from app.retrievers.stores.chroma_store import get_chroma_client
+
+            client = get_chroma_client()
+
+            try:
+                collection = client.get_collection(name="table_summaries")
+            except Exception:
+                logger.info("Table collection not found, skipping table retrieval")
+                return []
+
+            # Query collection
+            results = collection.query(
+                query_texts=[query],
+                n_results=top_k,
+                include=["documents", "metadatas", "distances"],
+            )
+
+            # Convert to RetrievalResult
+            retrieval_results: list[RetrievalResult] = []
+
+            if results["ids"] and results["ids"][0]:
+                for i, doc_id in enumerate(results["ids"][0]):
+                    metadata = results["metadatas"][0][i] if results["metadatas"] else {}
+                    distance = results["distances"][0][i] if results["distances"] else 1.0
+                    score = 1.0 / (1.0 + distance)
+
+                    result = RetrievalResult(
+                        id=doc_id,
+                        content=results["documents"][0][i],
+                        score=score,
+                        modality="table",
+                        doc_id=metadata.get("doc_id", ""),
+                        page_number=metadata.get("page_number", 0),
+                        metadata=metadata,
+                    )
+                    retrieval_results.append(result)
+
+            return retrieval_results
+
+        except Exception as e:
+            logger.error(f"Table retrieval error: {e}")
+            return []
+
+    async def _retrieve_charts(self, query: str, top_k: int, **kwargs: Any) -> list[RetrievalResult]:
+        """Retrieve chart descriptions."""
+        try:
+            from app.retrievers.stores.chroma_store import get_chroma_client
+
+            client = get_chroma_client()
+
+            try:
+                collection = client.get_collection(name="chart_descriptions")
+            except Exception:
+                logger.info("Chart collection not found, skipping chart retrieval")
+                return []
+
+            # Query collection
+            results = collection.query(
+                query_texts=[query],
+                n_results=top_k,
+                include=["documents", "metadatas", "distances"],
+            )
+
+            # Convert to RetrievalResult
+            retrieval_results: list[RetrievalResult] = []
+
+            if results["ids"] and results["ids"][0]:
+                for i, doc_id in enumerate(results["ids"][0]):
+                    metadata = results["metadatas"][0][i] if results["metadatas"] else {}
+                    distance = results["distances"][0][i] if results["distances"] else 1.0
+                    score = 1.0 / (1.0 + distance)
+
+                    result = RetrievalResult(
+                        id=doc_id,
+                        content=results["documents"][0][i],
+                        score=score,
+                        modality="chart",
+                        doc_id=metadata.get("doc_id", ""),
+                        page_number=metadata.get("page_number", 0),
+                        metadata=metadata,
+                    )
+                    retrieval_results.append(result)
+
+            return retrieval_results
+
+        except Exception as e:
+            logger.error(f"Chart retrieval error: {e}")
+            return []
+
+    def _reciprocal_rank_fusion(
+        self, results_by_modality: list[list[RetrievalResult]], top_k: int
+    ) -> list[RetrievalResult]:
+        """Fuse results using Reciprocal Rank Fusion (RRF).
+
+        Args:
+            results_by_modality: List of result lists, one per modality
+            top_k: Number of results to return
+
+        Returns:
+            Fused and ranked results
+        """
+        k = 60  # RRF constant
+
+        # Calculate RRF scores
+        rrf_scores: dict[str, float] = {}
+        result_map: dict[str, RetrievalResult] = {}
+
+        for results in results_by_modality:
+            for rank, result in enumerate(results, start=1):
+                # RRF score = 1 / (k + rank)
+                rrf_score = 1.0 / (k + rank)
+
+                if result.id in rrf_scores:
+                    rrf_scores[result.id] += rrf_score
+                else:
+                    rrf_scores[result.id] = rrf_score
+                    result_map[result.id] = result
+
+        # Sort by RRF score
+        sorted_ids = sorted(rrf_scores.keys(), key=lambda x: rrf_scores[x], reverse=True)
+
+        # Create fused results with updated scores
+        fused: list[RetrievalResult] = []
+        for result_id in sorted_ids[:top_k]:
+            result = result_map[result_id]
+            # Update score to RRF score
+            result.score = rrf_scores[result_id]
+            fused.append(result)
+
+        return fused
+
+    def _weighted_fusion(self, results_by_modality: list[list[RetrievalResult]], top_k: int) -> list[RetrievalResult]:
+        """Fuse results using weighted scoring.
+
+        Args:
+            results_by_modality: List of result lists, one per modality
+            top_k: Number of results to return
+
+        Returns:
+            Fused and ranked results
+        """
+        weighted_scores: dict[str, float] = {}
+        result_map: dict[str, RetrievalResult] = {}
+
+        # Weight map
+        weight_map = {
+            "text": self.text_weight,
+            "image": self.image_weight,
+            "table": self.table_weight,
+            "chart": self.image_weight,  # Use image weight for charts
+        }
+
+        for results in results_by_modality:
+            for result in results:
+                weight = weight_map.get(result.modality, 0.25)
+                weighted_score = result.score * weight
+
+                if result.id in weighted_scores:
+                    weighted_scores[result.id] += weighted_score
+                else:
+                    weighted_scores[result.id] = weighted_score
+                    result_map[result.id] = result
+
+        # Sort by weighted score
+        sorted_ids = sorted(weighted_scores.keys(), key=lambda x: weighted_scores[x], reverse=True)
+
+        # Create fused results
+        fused: list[RetrievalResult] = []
+        for result_id in sorted_ids[:top_k]:
+            result = result_map[result_id]
+            result.score = weighted_scores[result_id]
+            fused.append(result)
+
+        return fused
+
+    async def retrieve_by_doc_id(
+        self, doc_id: str, modalities: list[str] | None = None
+    ) -> dict[str, list[RetrievalResult]]:
+        """Retrieve all content for a specific document.
+
+        Args:
+            doc_id: Document identifier
+            modalities: Modalities to retrieve
+
+        Returns:
+            Dictionary mapping modality to results
+        """
+        modalities = modalities or ["text", "image", "table", "chart"]
+
+        results_by_modality: dict[str, list[RetrievalResult]] = {}
+
+        try:
+            from app.retrievers.stores.chroma_store import get_chroma_client
+
+            client = get_chroma_client()
+
+            collection_map = {
+                "text": "text_chunks",
+                "image": "image_descriptions",
+                "table": "table_summaries",
+                "chart": "chart_descriptions",
+            }
+
+            for modality in modalities:
+                collection_name = collection_map.get(modality)
+                if not collection_name:
+                    continue
+
+                try:
+                    collection = client.get_collection(name=collection_name)
+
+                    # Query by metadata filter
+                    results = collection.get(
+                        where={"doc_id": doc_id},
+                        include=["documents", "metadatas"],
+                    )
+
+                    retrieval_results: list[RetrievalResult] = []
+
+                    if results["ids"]:
+                        for i, result_id in enumerate(results["ids"]):
+                            metadata = results["metadatas"][i] if results["metadatas"] else {}
+
+                            result = RetrievalResult(
+                                id=result_id,
+                                content=results["documents"][i],
+                                score=1.0,  # No scoring for direct retrieval
+                                modality=modality,  # type: ignore
+                                doc_id=doc_id,
+                                page_number=metadata.get("page_number", 0),
+                                metadata=metadata,
+                            )
+                            retrieval_results.append(result)
+
+                    results_by_modality[modality] = retrieval_results
+
+                except Exception as e:
+                    logger.error(f"Error retrieving {modality} for doc {doc_id}: {e}")
+                    results_by_modality[modality] = []
+
+            return results_by_modality
+
+        except Exception as e:
+            logger.error(f"Error in retrieve_by_doc_id: {e}")
+            raise

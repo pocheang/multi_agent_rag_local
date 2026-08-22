@@ -8,12 +8,12 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import dataclass
-from enum import Enum
+from enum import StrEnum
 from types import MappingProxyType
 from typing import Final
 
 
-class PipelineProfile(str, Enum):
+class PipelineProfile(StrEnum):
     """The compatibility profiles for the three existing public query APIs."""
 
     STANDARD = "standard"

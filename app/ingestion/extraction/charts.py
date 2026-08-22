@@ -370,4 +370,3 @@ def chart_data_to_markdown(chart_data: dict) -> str:
                     lines.append(f"- {item}")
 
     return "\n".join(lines)
-

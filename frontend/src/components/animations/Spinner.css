@@ -1,0 +1,49 @@
+/**
+ * Spinner Styles
+ *
+ * @version 1.0.0
+ * @created 2026-08-16
+ */
+
+.spinner {
+  display: inline-block;
+  flex-shrink: 0;
+}
+
+.spinner__svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.spinner__circle {
+  opacity: 0.8;
+}
+
+/* 尺寸预设 */
+.spinner--small {
+  width: 16px;
+  height: 16px;
+}
+
+.spinner--medium {
+  width: 24px;
+  height: 24px;
+}
+
+.spinner--large {
+  width: 32px;
+  height: 32px;
+}
+
+/* 无障碍支持 */
+@media (prefers-reduced-motion: reduce) {
+  .spinner {
+    animation: none;
+  }
+
+  .spinner__circle {
+    stroke-dasharray: 0;
+    opacity: 0.5;
+  }
+}

@@ -5,10 +5,11 @@ This module demonstrates how to integrate circuit breakers into critical
 paths like LLM API calls, vector retrieval, and external services.
 """
 
+from collections.abc import Callable
 from functools import wraps
-from typing import Any, Callable, TypeVar
+from typing import Any, TypeVar
 
-from app.services.runtime.resilience import call_with_circuit_breaker, CircuitBreakerOpenError
+from app.services.runtime.resilience import CircuitBreakerOpenError, call_with_circuit_breaker
 
 T = TypeVar("T")
 
@@ -37,9 +38,7 @@ class LLMClientWithCircuitBreaker:
         try:
             return call_with_circuit_breaker(
                 name=f"llm_api_{model}",
-                fn=lambda: self.client.chat.completions.create(
-                    messages=messages, model=model, **kwargs
-                ),
+                fn=lambda: self.client.chat.completions.create(messages=messages, model=model, **kwargs),
             )
         except CircuitBreakerOpenError:
             # Circuit is open - return cached response or fallback
@@ -169,9 +168,7 @@ class WebResearchWithCircuitBreaker:
         Falls back to local knowledge if web search fails.
         """
         try:
-            return call_with_circuit_breaker(
-                name="duckduckgo_api", fn=lambda: self._search_web(query, max_results)
-            )
+            return call_with_circuit_breaker(name="duckduckgo_api", fn=lambda: self._search_web(query, max_results))
         except CircuitBreakerOpenError:
             # Web search unavailable - return empty to trigger local fallback
             return []
@@ -299,4 +296,3 @@ def circuit_breaker_status():
 
     return get_circuit_breaker_metrics()
 """
-

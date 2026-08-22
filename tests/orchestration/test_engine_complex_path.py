@@ -70,7 +70,7 @@ async def test_complex_question_runs_plan_and_governed_tool_before_synthesis() -
     ) -> FinalAnswer:
         log.calls.append("synthesize")
         assert tool_results[0].status == "succeeded"
-        return FinalAnswer(text="Record exists [r-1]", route=route_decision, evidence_ids=evidence.item_ids)
+        return FinalAnswer(answer="Record exists [r-1]", route=route_decision, evidence_ids=evidence.item_ids)
 
     publisher = InMemoryEventPublisher()
     engine = OrchestrationEngine(

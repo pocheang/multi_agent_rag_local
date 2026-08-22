@@ -59,6 +59,7 @@ artifacts/
 
 # 运行时生成
 .runtime/
+.codex-backups/
 
 # ============================================
 # DATABASES & USER DATA
@@ -291,6 +292,7 @@ config/fact_verification.json
 # 运行时环境配置
 config/env/*.env
 config/profiles/*.env
+!config/env/
 !config/env/*.env.example
 !config/profiles/*.env.example
 

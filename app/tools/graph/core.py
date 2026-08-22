@@ -59,7 +59,9 @@ def _relation_weight(rel: str) -> float:
     return 0.6
 
 
-def _fetch_neighbors(client: Neo4jClient, entities_to_lookup: list[str], allowed_sources: list[str] | None) -> dict[str, list[dict]]:
+def _fetch_neighbors(
+    client: Neo4jClient, entities_to_lookup: list[str], allowed_sources: list[str] | None
+) -> dict[str, list[dict]]:
     if hasattr(client, "batch_entity_neighbors"):
         return call_with_circuit_breaker(
             "neo4j.batch_entity_neighbors",
@@ -83,7 +85,9 @@ def _fetch_neighbors(client: Neo4jClient, entities_to_lookup: list[str], allowed
     }
 
 
-def _fetch_paths(client: Neo4jClient, entities_to_lookup: list[str], allowed_sources: list[str] | None) -> dict[str, list[dict]]:
+def _fetch_paths(
+    client: Neo4jClient, entities_to_lookup: list[str], allowed_sources: list[str] | None
+) -> dict[str, list[dict]]:
     if hasattr(client, "batch_entity_paths_2hop"):
         return call_with_circuit_breaker(
             "neo4j.batch_entity_paths_2hop",
@@ -107,7 +111,9 @@ def _fetch_paths(client: Neo4jClient, entities_to_lookup: list[str], allowed_sou
     }
 
 
-def graph_lookup(question: str, allowed_sources: list[str] | None = None, use_robust_extraction: bool | None = None) -> dict:
+def graph_lookup(
+    question: str, allowed_sources: list[str] | None = None, use_robust_extraction: bool | None = None
+) -> dict:
     """
     Look up entities and relationships in the graph.
 
@@ -195,9 +201,7 @@ def graph_lookup(question: str, allowed_sources: list[str] | None = None, use_ro
                         if key in seen_neighbor:
                             continue
                         seen_neighbor.add(key)
-                        neighbor_rows.append(
-                            {"entity": entity, "relation": relation, "other": other, "weight": weight}
-                        )
+                        neighbor_rows.append({"entity": entity, "relation": relation, "other": other, "weight": weight})
 
                 paths_by_entity = _fetch_paths(client, entities_to_lookup, allowed_sources)
                 for paths in paths_by_entity.values():
@@ -253,4 +257,3 @@ def graph_lookup(question: str, allowed_sources: list[str] | None = None, use_ro
             }
         finally:
             client.close()
-

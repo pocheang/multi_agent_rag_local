@@ -104,6 +104,25 @@ export function createUserActions(params: AdminActionsParams, errorHandler: Erro
     }
   };
 
+  const addUserCredits = async (target: AdminUserSummary) => {
+    if ((target.role || "").toLowerCase() === "admin") return;
+    const rawAmount = (window.prompt(`请输入要为 ${target.username} 增加的额度（正整数）`) || "").trim();
+    if (!rawAmount) return;
+    if (!/^\d+$/.test(rawAmount)) return setError("额度必须是正整数");
+    const amount = Number(rawAmount);
+    if (!Number.isSafeInteger(amount) || amount < 1 || amount > 1_000_000) {
+      return setError("单次增加额度必须在 1 到 1000000 之间");
+    }
+    try {
+      const updated = await appApi.adminAddCredits(target.user_id, amount);
+      setUsers((prev) => prev.map((x) => (x.user_id === updated.user_id ? updated : x)));
+      setStatusText(`已为 ${updated.username} 增加 ${amount} 点，当前余额 ${updated.credit_balance} 点`);
+      setError("");
+    } catch (e) {
+      await handleApiError(e, "增加额度失败");
+    }
+  };
+
   const saveClass = async () => {
     if (!editingUser) return;
     setSavingClass(true);
@@ -174,6 +193,7 @@ export function createUserActions(params: AdminActionsParams, errorHandler: Erro
     createAdmin,
     updateRole,
     updateStatus,
+    addUserCredits,
     saveClass,
     resetAdminApprovalToken,
     resetUserPassword,

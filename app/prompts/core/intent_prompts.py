@@ -1,4 +1,4 @@
-﻿"""
+"""
 意图分类提示词 (Intent Classification Prompts)
 
 将用户查询分类到合适的专业领域Agent：

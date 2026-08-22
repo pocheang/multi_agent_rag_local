@@ -26,22 +26,21 @@ except ImportError:
     RecursiveCharacterTextSplitter = None  # type: ignore[assignment]
 
 
-
 # ============================================================================
 # Chunk类型分类
 # ============================================================================
 
 ChunkType = Literal[
-    "heading",        # 标题
-    "paragraph",      # 段落
-    "list",          # 列表
-    "table",         # 表格
-    "code",          # 代码块
-    "quote",         # 引用
-    "definition",    # 定义/术语
-    "procedure",     # 步骤/流程
-    "metadata",      # 元数据信息
-    "mixed",         # 混合内容
+    "heading",  # 标题
+    "paragraph",  # 段落
+    "list",  # 列表
+    "table",  # 表格
+    "code",  # 代码块
+    "quote",  # 引用
+    "definition",  # 定义/术语
+    "procedure",  # 步骤/流程
+    "metadata",  # 元数据信息
+    "mixed",  # 混合内容
 ]
 
 
@@ -56,7 +55,7 @@ def classify_chunk_type(text: str, metadata: dict[str, Any]) -> ChunkType:
     Returns:
         ChunkType: chunk类型
     """
-    text_lower = text.lower().strip()
+    text.lower().strip()
 
     # 检查标题模式
     if _is_heading(text, metadata):
@@ -249,6 +248,3 @@ def _is_metadata_info(text: str) -> bool:
             return True
 
     return False
-
-
-

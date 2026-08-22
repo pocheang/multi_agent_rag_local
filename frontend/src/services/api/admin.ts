@@ -23,6 +23,9 @@ export const adminUserApi = {
   adminUpdateStatus(userId: string, statusValue: string) {
     return buildPatchRequest<AdminUserSummary>(`/admin/users/${encodePathParam(userId)}/status`, { status: statusValue });
   },
+  adminAddCredits(userId: string, amount: number) {
+    return buildPostRequest<AdminUserSummary>(`/admin/users/${encodePathParam(userId)}/credits/add`, { amount });
+  },
   adminUpdateClassification(
     userId: string,
     input: { businessUnit?: string; department?: string; userType?: string; dataScope?: string },

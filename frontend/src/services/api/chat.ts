@@ -1,6 +1,9 @@
 import type {
   AdvancedQueryResponse,
   Citation,
+  ClarificationCheckRequest,
+  ClarificationContext,
+  ClarificationResponse,
   FileIndexActionResponse,
   IndexHealthResponse,
   IndexedFileSummary,
@@ -16,6 +19,7 @@ import type {
 import { ApiError, authFetch, authRequest, getToken, parseOrThrow, safeParsePayload, toUrl } from "@/services/http/client";
 import { authApi } from "@/services/api/auth";
 import { buildGetRequest, buildPatchRequest, buildPostRequest, buildQueryString, encodePathParam } from "@/lib/api-helpers";
+import { addCsrfHeader } from "@/lib/csrf";
 
 type StandardQueryInput = {
   question: string;
@@ -159,6 +163,18 @@ export const sessionApi = {
   sessionDelete(sessionId: string) {
     return authRequest<{ ok: boolean; session_id: string }>(`/sessions/${encodePathParam(sessionId)}`, { method: "DELETE" });
   },
+  sessionRename(sessionId: string, title: string) {
+    return buildPatchRequest<SessionDetail>(
+      `/sessions/${encodePathParam(sessionId)}`,
+      { title },
+    );
+  },
+  sessionPin(sessionId: string, pinned: boolean) {
+    return buildPatchRequest<SessionDetail>(
+      `/sessions/${encodePathParam(sessionId)}`,
+      { pinned },
+    );
+  },
   messageUpdate(
     sessionId: string,
     messageId: string,
@@ -209,7 +225,11 @@ export const documentApi = {
       const xhr = new XMLHttpRequest();
       xhr.open("POST", toUrl("/upload"));
       xhr.withCredentials = true;
-      getToken();
+      const headers = new Headers();
+      const token = getToken();
+      if (token) headers.set("Authorization", `Bearer ${token}`);
+      addCsrfHeader(headers);
+      headers.forEach((value, key) => xhr.setRequestHeader(key, value));
 
       xhr.upload.onprogress = (evt) => {
         if (evt.lengthComputable && evt.total > 0) {
@@ -304,5 +324,25 @@ export const promptApi = {
   async promptDelete(promptId: string) {
     const res = await authFetch(`/prompts/${encodePathParam(promptId)}`, { method: "DELETE" });
     return parseOrThrow<{ ok: boolean; prompt_id: string }>(res);
+  },
+};
+
+export const clarificationApi = {
+  checkClarification(request: ClarificationCheckRequest) {
+    // Increase timeout to 60 seconds for clarification check (includes LLM call)
+    return buildPostRequest<ClarificationResponse>("/api/v1/clarification/check", request, 60_000);
+  },
+
+  resetClarification(sessionId: string) {
+    return buildPostRequest<{ status: string; message: string }>(
+      `/api/v1/clarification/reset/${encodePathParam(sessionId)}`,
+      {}
+    );
+  },
+
+  getClarificationContext(sessionId: string) {
+    return buildGetRequest<ClarificationContext>(
+      `/api/v1/clarification/context/${encodePathParam(sessionId)}`
+    );
   },
 };

@@ -142,9 +142,7 @@ class ShadowRunner:
         if not self._is_selected(request):
             return primary
 
-        candidate_request = request.model_copy(
-            update={"retrieval_strategy": self._rollout.candidate_profile}
-        )
+        candidate_request = request.model_copy(update={"retrieval_strategy": self._rollout.candidate_profile})
 
         def compare() -> None:
             started = time.perf_counter()

@@ -1,4 +1,4 @@
-﻿"""
+"""
 Memory-related helper functions for the QueryMind API.
 """
 

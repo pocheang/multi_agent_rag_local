@@ -231,5 +231,3 @@ def extract_references(text: str) -> list[dict[str, str]]:
         references.append({"id": ref_id, "text": f"{ref_type} {ref_id}", "type": "cross_reference"})
 
     return references
-
-

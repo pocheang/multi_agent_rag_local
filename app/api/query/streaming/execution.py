@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from collections.abc import AsyncIterator, Mapping
 from dataclasses import dataclass
@@ -10,16 +11,16 @@ from typing import Any
 from fastapi import Request
 
 from app.api.dependencies import (
+    QueryRuntime,
     _is_overload_mode,
     _promote_long_term_memory,
     _query_limiter_key,
     _trace_id,
-    query_guard,
-    query_result_cache,
+    get_query_runtime,
     runtime_metrics,
-    settings,
 )
 from app.graph.streaming.sse_encoder import encode_sse
+from app.services.observability.agent_execution_tracker import AgentExecutionTracker
 from app.services.observability.alerting import emit_alert
 from app.services.query_guard import QueryOverloadedError, QueryRateLimitedError
 from app.services.runtime.request_context import request_context
@@ -48,6 +49,8 @@ class StreamExecutionContext:
     preparation: Any | None
     source_scope_audit: Any
     result_signer: Any
+    credit_reservation: Any | None = None
+    query_runtime: QueryRuntime | None = None
 
 
 async def stream_execution_events(context: StreamExecutionContext) -> AsyncIterator[str]:
@@ -55,7 +58,12 @@ async def stream_execution_events(context: StreamExecutionContext) -> AsyncItera
     final_result: dict[str, Any] | None = None
     trace_id = _trace_id(context.request)
     limiter_key = _query_limiter_key(context.user, context.request)
-    overload_mode = _is_overload_mode()
+    query_runtime = context.query_runtime or get_query_runtime()
+    overload_mode = _is_overload_mode(query_runtime)
+    tracker = AgentExecutionTracker.get_instance()
+    query_guard = query_runtime.query_guard
+    query_result_cache = query_runtime.query_result_cache
+    settings = query_runtime.settings
     try:
         with query_guard.acquire(limiter_key):
             with request_context(
@@ -89,6 +97,8 @@ async def stream_execution_events(context: StreamExecutionContext) -> AsyncItera
                 async for event in events:
                     if event.get("type") == "done":
                         final_result = dict(event.get("result", {}) or {})
+                        if context.credit_reservation is not None:
+                            context.credit_reservation.commit()
                         if context.replay_enabled:
                             query_result_cache.append_stream_event(context.stream_cache_key, event, done=True)
                             query_result_cache.mark_stream_done(context.stream_cache_key)
@@ -96,16 +106,22 @@ async def stream_execution_events(context: StreamExecutionContext) -> AsyncItera
                         query_result_cache.append_stream_event(context.stream_cache_key, event, done=False)
                     yield encode_sse(event)
     except QueryRateLimitedError as exc:
+        tracker.fail_execution(context.execution_id, str(exc))
         runtime_metrics.inc("query_stream_rate_limited_total")
         emit_alert("query_stream_rate_limited", {"message": str(exc), "trace_id": trace_id})
         yield encode_sse({"type": "error", "error": "rate_limited", "message": str(exc)})
         return
     except QueryOverloadedError as exc:
+        tracker.fail_execution(context.execution_id, str(exc))
         runtime_metrics.inc("query_stream_overloaded_total")
         emit_alert("query_stream_overloaded", {"message": str(exc), "trace_id": trace_id})
         yield encode_sse({"type": "error", "error": "overloaded", "message": str(exc)})
         return
+    except asyncio.CancelledError:
+        tracker.fail_execution(context.execution_id, "stream cancelled before completion")
+        raise
     except Exception as exc:
+        tracker.fail_execution(context.execution_id, f"{type(exc).__name__}: {exc}")
         runtime_metrics.inc("query_stream_internal_error_total")
         logger.exception("query stream unexpected failure")
         emit_alert(
@@ -123,6 +139,8 @@ async def stream_execution_events(context: StreamExecutionContext) -> AsyncItera
         return
     finally:
         query_result_cache.clear_inflight(context.stream_cache_key)
+        if context.credit_reservation is not None:
+            context.credit_reservation.close()
 
     if context.session_id and final_result is not None:
         context.history_store.append_message(
@@ -145,6 +163,9 @@ async def stream_execution_events(context: StreamExecutionContext) -> AsyncItera
             user_id=str(context.user.get("user_id", "")),
         )
         runtime_metrics.inc("query_stream_success_total")
+        tracker.complete_execution(context.execution_id, final_result)
+    else:
+        tracker.fail_execution(context.execution_id, "stream ended without a final result")
 
 
 def _history_metadata(result: dict[str, Any], context: StreamExecutionContext) -> dict[str, Any]:

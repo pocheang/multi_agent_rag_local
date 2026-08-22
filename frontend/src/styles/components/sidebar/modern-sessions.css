@@ -203,6 +203,15 @@
   letter-spacing: 0;
 }
 
+/* Ensure dropdown menus are not clipped */
+.page-shell .sidebar-history-panel {
+  overflow: visible;
+}
+
+.page-shell .sidebar-history {
+  overflow: visible;
+}
+
 .page-shell .session-create-btn:hover:not(:disabled) {
   background: linear-gradient(135deg, rgba(31, 44, 75, 0.95), rgba(18, 28, 50, 0.9));
   border-color: rgba(91, 140, 255, 0.45);
@@ -264,6 +273,7 @@
   display: grid;
   gap: 8px;
   margin-top: 0;
+  overflow: visible;
 }
 
 .page-shell .session-item {
@@ -289,6 +299,7 @@
 
 .page-shell .session-item:has(.session-dropdown-menu) {
   z-index: 100;
+  overflow: visible;
 }
 
 .page-shell .session-item::before {
@@ -455,7 +466,7 @@
    ============================================ */
 
 .page-shell .session-menu-wrapper {
-  position: static;
+  position: relative;
   display: flex;
   align-items: center;
   margin-right: 6px;
@@ -492,9 +503,9 @@
 
 .page-shell .session-dropdown-menu {
   position: absolute;
-  top: 32px;
-  right: 6px;
-  min-width: 140px;
+  top: calc(100% + 4px);
+  right: 0;
+  min-width: 160px;
   padding: 8px;
   border-radius: 12px;
   border: 1px solid var(--border-medium);
@@ -661,4 +672,74 @@
 .page-shell .sidebar-history-panel .skeleton-list::before,
 .page-shell .sidebar-history-panel .skeleton-list::after {
   height: 48px;
+}
+
+/* ============================================
+   Session Rename Input
+   ============================================ */
+
+.page-shell .session-rename-input {
+  width: 100%;
+  padding: 6px 8px;
+  border-radius: 6px;
+  border: 1px solid var(--accent);
+  background: var(--surface);
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.3;
+  outline: none;
+  box-shadow: 0 0 0 3px var(--accent-soft);
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+:root[data-theme="dark"] .page-shell .session-rename-input {
+  background: rgba(15, 23, 42, 0.8);
+  border-color: rgba(91, 140, 255, 0.6);
+  box-shadow:
+    0 0 0 3px rgba(91, 140, 255, 0.12),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+
+.page-shell .session-rename-input:focus {
+  border-color: var(--accent-hover);
+  box-shadow: 0 0 0 4px var(--accent-soft);
+}
+
+.page-shell .session-rename-input:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* ============================================
+   Session Pin Indicator
+   ============================================ */
+
+.page-shell .session-pin-indicator {
+  display: inline-block;
+  margin-right: 6px;
+  font-size: 11px;
+  opacity: 0.8;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.page-shell .session-item.pinned::before {
+  background: linear-gradient(180deg, #fbbf24, #f59e0b);
+  box-shadow: 0 0 16px rgba(251, 191, 36, 0.6);
+  height: 32px;
+}
+
+.page-shell .session-item.pinned {
+  border-color: rgba(251, 191, 36, 0.3);
+}
+
+:root[data-theme="dark"] .page-shell .session-item.pinned {
+  background: linear-gradient(90deg, rgba(251, 191, 36, 0.12), rgba(245, 158, 11, 0.08));
+  border-color: rgba(251, 191, 36, 0.35);
+}
+
+.page-shell .session-item:hover .session-pin-indicator,
+.page-shell .session-item.active .session-pin-indicator {
+  opacity: 1;
+  transform: scale(1.1);
 }

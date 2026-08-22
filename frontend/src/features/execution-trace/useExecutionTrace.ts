@@ -7,11 +7,13 @@ export function useExecutionTrace(executionId: string | null) {
   const [state, dispatch] = useReducer(reduceExecutionTrace, initialExecutionTraceState);
 
   useEffect(() => {
-    // Only reset state when executionId changes from null to a value
-    if (executionId) {
+    // Reset state when executionId becomes null (query starting)
+    if (!executionId) {
       dispatch({ type: "execution_started" });
+      return;
     }
-    if (!executionId) return;
+
+    // Start streaming when we have an executionId
     const controller = new AbortController();
     void streamExecutionEvents(executionId, controller.signal, (event) => dispatch({ type: "event_received", event }));
     return () => controller.abort();

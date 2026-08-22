@@ -8,7 +8,8 @@ from typing import Any
 from fastapi import APIRouter, Depends, Request
 from pydantic import BaseModel, Field
 
-from app.api.dependencies import _require_permission, _require_user
+from app.api.dependencies import _require_permission, _require_user, _reserve_chat_credit
+from app.api.deps.auth import require_admin
 from app.api.deps.documents import _allowed_sources_for_user
 from app.api.transport.errors import internal_error
 from app.domain.advanced_rag import AdvancedRAGResult
@@ -58,11 +59,10 @@ def _resolve_advanced_allowed_sources(
     return [source for source in visible_sources if source in requested]
 
 
-@router.post("/query", response_model=AdvancedRAGResult)
-async def process_advanced_rag_query(
+async def _process_advanced_rag_query_impl(
     request_data: AdvancedRAGRequest,
     request: Request,
-    user: dict[str, Any] = Depends(_require_user),
+    user: dict[str, Any],
 ):
     """
     Process query with advanced RAG techniques.
@@ -117,8 +117,20 @@ async def process_advanced_rag_query(
         return result
     except Exception as e:
         tracker.fail_execution(execution_id, str(e))
-        logger.error(f"Error processing advanced RAG query: {e}", exc_info=True)
-        raise internal_error(f"Error processing query: {str(e)}")
+        logger.exception("Error processing advanced RAG query")
+        raise internal_error("Unable to process advanced query")
+
+
+@router.post("/query", response_model=AdvancedRAGResult)
+async def process_advanced_rag_query(
+    request_data: AdvancedRAGRequest,
+    request: Request,
+    user: dict[str, Any] = Depends(_require_user),
+):
+    with _reserve_chat_credit(request, user, "advanced_query") as credit:
+        response = await _process_advanced_rag_query_impl(request_data, request, user)
+        credit.commit()
+        return response
 
 
 @router.get("/health")
@@ -134,7 +146,7 @@ async def health_check():
     }
 
 
-@router.get("/config")
+@router.get("/config", dependencies=[Depends(require_admin)])
 async def get_config():
     """Get current advanced RAG configuration."""
     import os
@@ -150,4 +162,3 @@ async def get_config():
             "quality_threshold": float(os.getenv("SELF_RAG_QUALITY_THRESHOLD", "0.7")),
         },
     }
-

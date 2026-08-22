@@ -10,63 +10,62 @@ Frontend-Controlled Hybrid Mode Design (v2 - Fixed)
 5. 降级策略 - 预算耗尽时的优雅降级
 """
 
-from typing import Optional, Literal
-from pydantic import BaseModel, Field, field_validator
-from enum import Enum
+from enum import StrEnum
+from typing import Literal
 
+from pydantic import BaseModel, Field, field_validator
 
 # ============================================================================
 # Enums
 # ============================================================================
 
-class HybridMode(str, Enum):
+
+class HybridMode(StrEnum):
     """混合模式枚举"""
-    RULE_ONLY = "rule_only"           # 纯规则（免费）
-    CONSERVATIVE = "conservative"     # 保守混合（推荐）
-    BALANCED = "balanced"             # 平衡混合
-    AGGRESSIVE = "aggressive"         # 激进混合
+
+    RULE_ONLY = "rule_only"  # 纯规则（免费）
+    CONSERVATIVE = "conservative"  # 保守混合（推荐）
+    BALANCED = "balanced"  # 平衡混合
+    AGGRESSIVE = "aggressive"  # 激进混合
 
 
-class BudgetExceededAction(str, Enum):
+class BudgetExceededAction(StrEnum):
     """预算耗尽时的行为"""
-    DOWNGRADE = "downgrade"           # 自动降级到规则模式
-    REJECT = "reject"                 # 拒绝请求，返回错误
-    CONTINUE_UNTRACKED = "continue"   # 继续但不计费（体验模式）
+
+    DOWNGRADE = "downgrade"  # 自动降级到规则模式
+    REJECT = "reject"  # 拒绝请求，返回错误
+    CONTINUE_UNTRACKED = "continue"  # 继续但不计费（体验模式）
 
 
 # ============================================================================
 # Session-Level Preferences (存储在session中)
 # ============================================================================
 
+
 class SessionClarificationPreferences(BaseModel):
     """会话级别的澄清偏好（在session创建时设置，整个session保持一致）"""
 
     # 混合模式
     mode: HybridMode = Field(
-        default=HybridMode.RULE_ONLY,
-        description="混合模式：rule_only/conservative/balanced/aggressive"
+        default=HybridMode.RULE_ONLY, description="混合模式：rule_only/conservative/balanced/aggressive"
     )
 
     # 预算控制（后端强制限制）
-    session_budget_usd: Optional[float] = Field(
+    session_budget_usd: float | None = Field(
         default=None,
         ge=0.0,
         le=1.0,  # 单session最多$1，后端强制
-        description="本session预算上限（美元），超出后执行budget_exceeded_action"
+        description="本session预算上限（美元），超出后执行budget_exceeded_action",
     )
 
     budget_exceeded_action: BudgetExceededAction = Field(
-        default=BudgetExceededAction.DOWNGRADE,
-        description="预算耗尽时的行为"
+        default=BudgetExceededAction.DOWNGRADE, description="预算耗尽时的行为"
     )
 
     # 用户ID（用于跨session的月度预算控制）
-    user_id: Optional[str] = Field(
-        default=None,
-        description="用户ID，用于月度预算追踪"
-    )
+    user_id: str | None = Field(default=None, description="用户ID，用于月度预算追踪")
 
-    @field_validator('session_budget_usd')
+    @field_validator("session_budget_usd")
     @classmethod
     def validate_budget(cls, v):
         """后端强制：单session预算不能超过$1"""
@@ -79,17 +78,15 @@ class SessionClarificationPreferences(BaseModel):
 # Request-Level Context (每次请求传递澄清上下文)
 # ============================================================================
 
+
 class ClarificationContext(BaseModel):
     """澄清上下文（多轮澄清时传递）"""
 
     round_number: int = Field(default=1, ge=1, description="当前澄清轮次")
 
-    collected_info: dict[str, str] = Field(
-        default_factory=dict,
-        description="已收集的信息 {field_name: value}"
-    )
+    collected_info: dict[str, str] = Field(default_factory=dict, description="已收集的信息 {field_name: value}")
 
-    intent: Optional[str] = Field(None, description="已识别的意图")
+    intent: str | None = Field(None, description="已识别的意图")
 
     # 成本追踪（累计）
     total_llm_calls: int = Field(default=0, description="累计LLM调用次数")
@@ -104,21 +101,18 @@ class EnhancedQueryRequest(BaseModel):
     session_id: str = Field(..., description="会话ID")
 
     # Session偏好（首次创建session时设置，之后从session中读取）
-    session_preferences: Optional[SessionClarificationPreferences] = Field(
-        default=None,
-        description="Session偏好（仅在创建session时传递，后续请求从后端读取）"
+    session_preferences: SessionClarificationPreferences | None = Field(
+        default=None, description="Session偏好（仅在创建session时传递，后续请求从后端读取）"
     )
 
     # 澄清上下文（多轮澄清）
-    clarification_context: Optional[ClarificationContext] = Field(
-        default=None,
-        description="澄清上下文（多轮澄清时传递）"
-    )
+    clarification_context: ClarificationContext | None = Field(default=None, description="澄清上下文（多轮澄清时传递）")
 
 
 # ============================================================================
 # Response with Fine-Grained Cost Tracking
 # ============================================================================
+
 
 class LLMCallDetail(BaseModel):
     """单次LLM调用详情"""
@@ -134,52 +128,31 @@ class LLMCallDetail(BaseModel):
 class ClarificationResponse(BaseModel):
     """澄清响应"""
 
-    action: Literal["CONTINUE", "NEED_CLARIFICATION"] = Field(
-        ...,
-        description="下一步动作"
-    )
+    action: Literal["CONTINUE", "NEED_CLARIFICATION"] = Field(..., description="下一步动作")
 
     # 如果需要澄清
-    question: Optional[str] = Field(None, description="澄清问题")
-    options: Optional[list[str]] = Field(None, description="选项列表")
-    field_name: Optional[str] = Field(None, description="字段名")
+    question: str | None = Field(None, description="澄清问题")
+    options: list[str] | None = Field(None, description="选项列表")
+    field_name: str | None = Field(None, description="字段名")
 
     # 元数据
     intent: str = Field(..., description="识别的意图")
     confidence: float = Field(..., description="置信度")
 
     # 细粒度成本追踪
-    llm_calls: list[LLMCallDetail] = Field(
-        default_factory=list,
-        description="本次请求的LLM调用详情"
-    )
+    llm_calls: list[LLMCallDetail] = Field(default_factory=list, description="本次请求的LLM调用详情")
 
-    total_cost_this_request: float = Field(
-        default=0.0,
-        description="本次请求总成本（美元）"
-    )
+    total_cost_this_request: float = Field(default=0.0, description="本次请求总成本（美元）")
 
     # Session累计成本
-    session_total_cost: float = Field(
-        default=0.0,
-        description="本session累计成本（美元）"
-    )
+    session_total_cost: float = Field(default=0.0, description="本session累计成本（美元）")
 
-    session_budget_remaining: Optional[float] = Field(
-        None,
-        description="本session剩余预算（美元），None表示无预算限制"
-    )
+    session_budget_remaining: float | None = Field(None, description="本session剩余预算（美元），None表示无预算限制")
 
     # 降级信息
-    downgraded: bool = Field(
-        default=False,
-        description="是否因预算不足而降级到规则模式"
-    )
+    downgraded: bool = Field(default=False, description="是否因预算不足而降级到规则模式")
 
-    downgrade_reason: Optional[str] = Field(
-        None,
-        description="降级原因"
-    )
+    downgrade_reason: str | None = Field(None, description="降级原因")
 
 
 # ============================================================================
@@ -222,6 +195,7 @@ class ClarificationResponse(BaseModel):
 # Cost Calculation (细粒度成本计算)
 # ============================================================================
 
+
 class CostCalculator:
     """LLM调用成本计算器"""
 
@@ -233,12 +207,7 @@ class CostCalculator:
     }
 
     @classmethod
-    def calculate(
-        cls,
-        model: str,
-        input_tokens: int,
-        output_tokens: int
-    ) -> float:
+    def calculate(cls, model: str, input_tokens: int, output_tokens: int) -> float:
         """计算单次调用成本"""
         pricing = cls.PRICING.get(model, cls.PRICING["gpt-4o-mini"])
         input_cost = (input_tokens / 1000) * pricing["input"]
@@ -249,9 +218,9 @@ class CostCalculator:
     def estimate_for_operation(cls, operation: str, model: str = "gpt-4o-mini") -> float:
         """估算操作成本（用于预算判断）"""
         estimates = {
-            "intent": (200, 50),      # 意图识别：简单prompt
-            "extract": (800, 200),    # 信息提取：较长上下文
-            "generate": (500, 150),   # 问题生成：中等复杂度
+            "intent": (200, 50),  # 意图识别：简单prompt
+            "extract": (800, 200),  # 信息提取：较长上下文
+            "generate": (500, 150),  # 问题生成：中等复杂度
         }
         input_tokens, output_tokens = estimates.get(operation, (500, 100))
         return cls.calculate(model, input_tokens, output_tokens)
@@ -261,18 +230,19 @@ class CostCalculator:
 # Budget Control (预算控制)
 # ============================================================================
 
+
 class BudgetController:
     """预算控制器"""
 
     # 后端强制限制
-    MAX_SESSION_BUDGET = 1.0      # 单session最多$1
-    MAX_MONTHLY_BUDGET = 50.0     # 单用户每月最多$50
+    MAX_SESSION_BUDGET = 1.0  # 单session最多$1
+    MAX_MONTHLY_BUDGET = 50.0  # 单用户每月最多$50
 
     def __init__(self, session_prefs: SessionClarificationPreferences):
         self.session_prefs = session_prefs
         self.session_spent = 0.0
 
-    def can_afford(self, operation: str, model: str = "gpt-4o-mini") -> tuple[bool, Optional[str]]:
+    def can_afford(self, operation: str, model: str = "gpt-4o-mini") -> tuple[bool, str | None]:
         """检查是否有预算执行操作"""
 
         # 无预算限制

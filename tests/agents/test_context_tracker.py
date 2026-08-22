@@ -23,7 +23,7 @@ from app.services.sessions.context_tracker import (
     _detect_reference_pronouns,
     _get_top_entities,
 )
-from app.agents.quality_models import ConversationContext, ConversationTurn, ContextHints
+from app.agents.shared.quality_models import ConversationContext, ConversationTurn, ContextHints
 
 
 # ============================================================================

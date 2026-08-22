@@ -388,5 +388,3 @@ def should_use_parallel(pdf_paths: list[Path], threshold: int = 3) -> bool:
         True if parallel processing should be used
     """
     return len(pdf_paths) >= threshold
-
-

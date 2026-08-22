@@ -49,19 +49,19 @@ export function applyProviderDefaults(provider: Provider, catalog?: ProviderCata
   };
 }
 
-export function parseApiResponse(response: any): ApiConfig {
+export function parseApiResponse(response: Record<string, unknown>): ApiConfig {
   return {
     provider: (response.provider || "local") as Provider,
     apiKey: "",
-    apiKeyMasked: response.api_key_masked || "",
-    baseUrl: response.base_url || "",
-    model: response.model || "",
+    apiKeyMasked: String(response.api_key_masked || ""),
+    baseUrl: String(response.base_url || ""),
+    model: String(response.model || ""),
     temperature: normalizeModelTemperature(Number(response.temperature), 0.7),
     maxTokens: Number(response.max_tokens ?? 2048),
     globalOverrideEnabled: !!response.global_override_enabled,
-    globalProvider: response.global_provider || "",
-    globalModel: response.global_model || "",
-    effectiveProvider: response.effective_provider || "",
-    effectiveModel: response.effective_model || "",
+    globalProvider: String(response.global_provider || ""),
+    globalModel: String(response.global_model || ""),
+    effectiveProvider: String(response.effective_provider || ""),
+    effectiveModel: String(response.effective_model || ""),
   };
 }

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from datetime import UTC, datetime
+from enum import StrEnum
 from typing import Any, Literal
 from uuid import uuid4
 
@@ -13,6 +14,13 @@ Intent = Literal["general_qa", "knowledge_retrieval", "web_search", "tool_call",
 Capability = Literal["rag", "web", "tool"]
 ToolStatus = Literal["succeeded", "failed", "approval_required", "skipped"]
 ApprovalStatus = Literal["not_required", "approved", "pending", "rejected"]
+
+
+class RouterAction(StrEnum):
+    """Router decision action for clarification flow."""
+
+    CONTINUE = "CONTINUE"
+    NEED_CLARIFICATION = "NEED_CLARIFICATION"
 
 
 class ImmutableContract(BaseModel):
@@ -83,22 +91,27 @@ class TaskPlan(ImmutableContract):
         }
         if unknown_dependencies:
             raise ValueError("all task dependencies must be present in the plan")
-        dependencies = {task.task_id: task.depends_on for task in self.tasks}
-        visiting: set[str] = set()
-        visited: set[str] = set()
 
-        def has_cycle(task_id: str) -> bool:
-            if task_id in visiting:
-                return True
-            if task_id in visited:
-                return False
-            visiting.add(task_id)
-            cycle_found = any(has_cycle(dependency) for dependency in dependencies[task_id])
-            visiting.remove(task_id)
-            visited.add(task_id)
-            return cycle_found
+        # Use Kahn's algorithm for cycle detection: O(V+E) instead of O(V²)
+        # Build in-degree map: count incoming edges (dependencies pointing TO each task)
+        in_degree = {task.task_id: len(task.depends_on) for task in self.tasks}
 
-        if any(has_cycle(task_id) for task_id in dependencies):
+        # Start with nodes that have no dependencies (in-degree = 0)
+        queue = [task_id for task_id, degree in in_degree.items() if degree == 0]
+        processed = 0
+
+        while queue:
+            current = queue.pop(0)
+            processed += 1
+            # For each task that depends on the current task, reduce its in-degree
+            for task in self.tasks:
+                if current in task.depends_on:
+                    in_degree[task.task_id] -= 1
+                    if in_degree[task.task_id] == 0:
+                        queue.append(task.task_id)
+
+        # If we didn't process all nodes, there's a cycle
+        if processed != len(self.tasks):
             raise ValueError("task dependencies must be acyclic")
         return self
 
@@ -183,10 +196,13 @@ class FinalAnswer(ImmutableContract):
     execution_summary: str = ""
     grounding: Mapping[str, Any] = Field(default_factory=dict)
     safety: Mapping[str, Any] = Field(default_factory=dict)
-    validation: ValidationStatus = Field(default_factory=lambda: ValidationStatus(
-        state="degraded", approved=False, method="not_run", issues=("validation not run",)
-    ))
+    validation: ValidationStatus = Field(
+        default_factory=lambda: ValidationStatus(
+            state="degraded", approved=False, method="not_run", issues=("validation not run",)
+        )
+    )
     quality_report: OrchestratedQualityReport | None = None
+    quality_card: Any = None  # AnswerQualityCard from user_experience module
     execution_metadata: Mapping[str, Any] = Field(default_factory=dict)
 
     @property
@@ -216,3 +232,81 @@ class OrchestratedQualityReport(ImmutableContract):
     score: float = Field(default=0.0, ge=0, le=1)
     level: str = "unknown"
     details: Mapping[str, Any] = Field(default_factory=dict)
+
+
+# Clarification-related contracts (mutable, for state management)
+
+
+class ClarificationQuestion(BaseModel):
+    """A clarification question to ask the user."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    question: str = Field(..., description="The question to ask")
+    options: list[str] = Field(default_factory=list, description="Predefined options (2-5)")
+    allow_custom_input: bool = Field(default=True, description="Whether custom input is allowed")
+    field_name: str = Field(..., description="Field name being clarified (e.g. 'scenario')")
+
+
+class ClarificationContext(BaseModel):
+    """Multi-round clarification context stored in session."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    collected_info: dict[str, str] = Field(default_factory=dict, description="Collected information")
+    asked_questions: list[str] = Field(default_factory=list, description="Asked field names")
+    clarification_round: int = Field(default=0, description="Current round number")
+    max_rounds: int = Field(default=10, description="Maximum rounds (dynamically set)")
+    intent: str = Field(default="", description="Identified intent type")
+
+
+class EnhancedRouteDecision(ImmutableContract):
+    """Enhanced route decision with clarification support.
+
+    Wraps a RouteDecision and adds clarification-specific fields.
+    Use base_decision to access the underlying RouteDecision fields.
+    """
+
+    # Core routing decision
+    base_decision: RouteDecision
+
+    # Clarification fields
+    action: RouterAction = RouterAction.CONTINUE
+    missing_information: tuple[str, ...] = Field(default_factory=tuple)
+    clarification: ClarificationQuestion | None = None
+    context: ClarificationContext = Field(default_factory=ClarificationContext)
+
+    @property
+    def intent(self) -> Intent:
+        """Delegate to base decision."""
+        return self.base_decision.intent
+
+    @property
+    def route(self) -> str | None:
+        """Delegate to base decision."""
+        return self.base_decision.route
+
+    @property
+    def confidence(self) -> float:
+        """Delegate to base decision."""
+        return self.base_decision.confidence
+
+    @property
+    def requires_plan(self) -> bool:
+        """Delegate to base decision."""
+        return self.base_decision.requires_plan
+
+    @property
+    def allowed_capabilities(self) -> frozenset[Capability]:
+        """Delegate to base decision."""
+        return self.base_decision.allowed_capabilities
+
+    @property
+    def reason(self) -> str:
+        """Delegate to base decision."""
+        return self.base_decision.reason
+
+    @property
+    def effective_route(self) -> str:
+        """Delegate to base decision."""
+        return self.base_decision.effective_route

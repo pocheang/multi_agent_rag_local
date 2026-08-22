@@ -14,10 +14,7 @@ _BRACKETED_MARKER_RE = re.compile(r"\[([^\]\r\n]+)\](?!\()")
 def citation_labels_from_contexts(*contexts: str) -> frozenset[str]:
     """Return labels from leading ``[label] content`` evidence records."""
     return frozenset(
-        label.strip()
-        for context in contexts
-        for label in _EVIDENCE_RECORD_RE.findall(context or "")
-        if label.strip()
+        label.strip() for context in contexts for label in _EVIDENCE_RECORD_RE.findall(context or "") if label.strip()
     )
 
 

@@ -4,6 +4,7 @@ import secrets
 import sqlite3
 import threading
 import uuid
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
@@ -12,7 +13,7 @@ from app.services.auth.audit_logger import AuditLogger
 from app.services.auth.encryption import decrypt_api_settings_payload, encrypt_api_settings_payload
 from app.services.auth.password_utils import generate_salt, hash_password
 from app.services.auth.session_manager import SessionManager
-from app.services.auth.user_manager import UserManager
+from app.services.auth.user_manager import DEFAULT_CHAT_CREDITS, UserManager
 from app.services.auth.utils import iso, now
 from app.services.auth.validation import (
     normalize_classification_value,
@@ -33,6 +34,31 @@ class PasswordChangeError(ValueError):
 
 class GoogleUserCreationError(RuntimeError):
     """A Google identity could not be provisioned after it was confirmed absent."""
+
+
+class ChatCreditReservation:
+    """One reserved chat credit that is refunded unless explicitly committed."""
+
+    def __init__(self, *, charged: bool, remaining: int, refund: Callable[[], int | None]):
+        self.charged = charged
+        self.remaining = remaining
+        self._refund = refund
+        self._settled = not charged
+
+    def commit(self) -> None:
+        self._settled = True
+
+    def close(self) -> None:
+        if self._settled:
+            return
+        self._refund()
+        self._settled = True
+
+    def __enter__(self) -> "ChatCreditReservation":
+        return self
+
+    def __exit__(self, exc_type, exc, traceback) -> None:
+        self.close()
 
 
 class AuthDBService:
@@ -76,22 +102,28 @@ class AuthDBService:
 
     def _connect(self) -> sqlite3.Connection:
         settings = get_settings()
-        # Safely parse timeout with proper error handling
+        # 安全修复：严格验证和类型转换，防止SQL注入
         try:
             timeout_s = float(getattr(settings, "sqlite_busy_timeout_seconds", 10) or 10)
-            timeout_s = max(1.0, timeout_s)
-            # Validate range to prevent SQL issues
-            if not (0 < timeout_s < 3600):
-                timeout_s = 10.0
+            # 钳位到安全范围 [1.0, 3600.0]
+            timeout_s = max(1.0, min(timeout_s, 3600.0))
         except (ValueError, TypeError):
-            # Invalid config value, use safe default
+            # 无效配置值，使用安全默认值
             timeout_s = 10.0
 
         timeout_ms = int(timeout_s * 1000)
+
         conn = sqlite3.connect(self.db_path, timeout=timeout_s, check_same_thread=False)
         conn.row_factory = sqlite3.Row
+
+        # 安全修复：严格验证后才拼接PRAGMA语句
+        # SQLite的PRAGMA不支持参数化查询，因此必须在严格验证后使用f-string
+        # timeout_ms已经被验证为安全的整数，范围 [1000, 3600000]
+        assert isinstance(timeout_ms, int) and 1000 <= timeout_ms <= 3600000, "timeout_ms validation failed"
         conn.execute(f"PRAGMA busy_timeout = {timeout_ms}")
+
         conn.execute("PRAGMA journal_mode=WAL")
+        conn.execute("PRAGMA foreign_keys = ON")
         return conn
 
     def _init_schema(self) -> None:
@@ -113,17 +145,22 @@ class AuthDBService:
                   department TEXT,
                   user_type TEXT,
                   data_scope TEXT,
+                  credit_balance INTEGER NOT NULL DEFAULT 10 CHECK(credit_balance >= 0),
                   created_at TEXT NOT NULL
                 )
                 """
             )
             self._ensure_users_columns(conn)
+
+            # 性能优化：添加用户名索引（已使用 COLLATE NOCASE）
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_users_username ON users(username COLLATE NOCASE)")
+
             conn.execute(
                 """
                 CREATE TABLE IF NOT EXISTS oauth_identities (
                   provider TEXT NOT NULL,
                   email TEXT NOT NULL COLLATE NOCASE,
-                  user_id TEXT NOT NULL,
+                  user_id TEXT NOT NULL REFERENCES users(user_id) ON DELETE CASCADE,
                   created_at TEXT NOT NULL,
                   PRIMARY KEY (provider, email)
                 )
@@ -134,7 +171,7 @@ class AuthDBService:
                 """
                 CREATE TABLE IF NOT EXISTS auth_sessions (
                   token TEXT PRIMARY KEY,
-                  user_id TEXT NOT NULL,
+                  user_id TEXT NOT NULL REFERENCES users(user_id) ON DELETE CASCADE,
                   username TEXT NOT NULL,
                   issued_at TEXT NOT NULL,
                   last_seen_at TEXT NOT NULL,
@@ -169,6 +206,26 @@ class AuthDBService:
             self._ensure_audit_columns(conn)
             conn.execute("CREATE INDEX IF NOT EXISTS idx_audit_logs_actor ON audit_logs(actor_user_id)")
             conn.execute("CREATE INDEX IF NOT EXISTS idx_audit_logs_created ON audit_logs(created_at)")
+
+            # 安全修复：添加触发器防止审计日志被修改或删除
+            conn.execute(
+                """
+                CREATE TRIGGER IF NOT EXISTS protect_audit_logs_update
+                BEFORE UPDATE ON audit_logs
+                BEGIN
+                    SELECT RAISE(ABORT, 'Audit logs are immutable and cannot be modified');
+                END
+                """
+            )
+            conn.execute(
+                """
+                CREATE TRIGGER IF NOT EXISTS protect_audit_logs_delete
+                BEFORE DELETE ON audit_logs
+                BEGIN
+                    SELECT RAISE(ABORT, 'Audit logs cannot be deleted');
+                END
+                """
+            )
             conn.execute(
                 """
                 CREATE TABLE IF NOT EXISTS system_settings (
@@ -206,6 +263,11 @@ class AuthDBService:
             conn.execute("ALTER TABLE users ADD COLUMN settings TEXT")
         if "display_name" not in existing:
             conn.execute("ALTER TABLE users ADD COLUMN display_name TEXT")
+        if "credit_balance" not in existing:
+            conn.execute(
+                f"ALTER TABLE users ADD COLUMN credit_balance INTEGER NOT NULL DEFAULT {DEFAULT_CHAT_CREDITS} "
+                "CHECK(credit_balance >= 0)"
+            )
 
     def _ensure_audit_columns(self, conn: sqlite3.Connection) -> None:
         rows = conn.execute("PRAGMA table_info(audit_logs)").fetchall()
@@ -266,19 +328,25 @@ class AuthDBService:
 
     @staticmethod
     def _validate_creation_password(password: str) -> str:
-        """Keep the UserManager creation-password compatibility contract."""
-        try:
-            return validate_password(password)
-        except ValueError:
-            value = password or ""
-            if (
-                8 <= len(value) <= 128
-                and any(ch.islower() for ch in value)
-                and any(ch.isupper() for ch in value)
-                and any(ch.isdigit() for ch in value)
-            ):
-                return value
-            raise
+        """
+        验证用户创建时的密码强度
+
+        安全修复：移除降级验证逻辑，统一使用标准密码策略
+        - 最小长度：12个字符（不再是8个）
+        - 必须包含：小写字母、大写字母、数字、特殊字符
+        - OAuth用户也必须遵守相同的密码策略
+
+        Args:
+            password: 待验证的密码
+
+        Returns:
+            验证通过的密码
+
+        Raises:
+            ValueError: 密码不符合安全策略
+        """
+        # 安全修复：统一使用标准验证，不再有降级路径
+        return validate_password(password)
 
     def _create_user_record(
         self,
@@ -352,6 +420,7 @@ class AuthDBService:
             "username": username,
             "role": role,
             "status": "active",
+            "credit_balance": DEFAULT_CHAT_CREDITS,
             "created_by_user_id": (created_by_user_id or "").strip() or None,
             "created_by_username": (created_by_username or "").strip() or None,
             "admin_ticket_id": (admin_ticket_id or "").strip() or None,
@@ -373,6 +442,7 @@ class AuthDBService:
             username=user["username"],
             role=user["role"],
             status=user["status"],
+            credit_balance=int(user.get("credit_balance", DEFAULT_CHAT_CREDITS)),
         )
 
     def logout(self, token: str) -> None:
@@ -391,6 +461,7 @@ class AuthDBService:
         current_token: str,
         role: str,
         status: str,
+        credit_balance: int = DEFAULT_CHAT_CREDITS,
     ) -> dict[str, Any] | None:
         try:
             # Preserve the existing verification and session invalidation sequence.
@@ -418,6 +489,7 @@ class AuthDBService:
                 username,
                 role,
                 status,
+                credit_balance,
             )
         except Exception:
             # A changed password remains valid even when session rotation cannot complete.
@@ -428,7 +500,7 @@ class AuthDBService:
         with self._connect() as conn:
             row = conn.execute(
                 """
-                SELECT u.user_id, u.username, u.role, u.status, u.display_name
+                SELECT u.user_id, u.username, u.role, u.status, u.display_name, u.credit_balance
                 FROM oauth_identities i
                 JOIN users u ON u.user_id = i.user_id
                 WHERE i.provider = 'google' AND i.email = ?
@@ -440,7 +512,7 @@ class AuthDBService:
 
             # Preserve access to accounts created before OAuth identities were stored.
             row = conn.execute(
-                "SELECT user_id, username, role, status, display_name FROM users WHERE lower(username)=lower(?)",
+                "SELECT user_id, username, role, status, display_name, credit_balance FROM users WHERE lower(username)=lower(?)",
                 (normalized_email,),
             ).fetchone()
             if row:
@@ -481,7 +553,7 @@ class AuthDBService:
             conn.execute("BEGIN IMMEDIATE")
             row = conn.execute(
                 """
-                SELECT u.user_id, u.username, u.role, u.status, u.display_name
+                SELECT u.user_id, u.username, u.role, u.status, u.display_name, u.credit_balance
                 FROM oauth_identities i
                 JOIN users u ON u.user_id = i.user_id
                 WHERE i.provider = 'google' AND i.email = ?
@@ -493,7 +565,7 @@ class AuthDBService:
 
             # Link legacy Google accounts without reinterpreting email as a local username.
             row = conn.execute(
-                "SELECT user_id, username, role, status, display_name FROM users WHERE lower(username)=lower(?)",
+                "SELECT user_id, username, role, status, display_name, credit_balance FROM users WHERE lower(username)=lower(?)",
                 (normalized_email,),
             ).fetchone()
             if row:
@@ -526,6 +598,7 @@ class AuthDBService:
             username=str(user["username"]),
             role=str(user["role"]),
             status=str(user["status"]),
+            credit_balance=int(user.get("credit_balance", DEFAULT_CHAT_CREDITS)),
         )
 
     def get_user_by_token(self, token: str, include_disabled: bool = False) -> dict[str, Any] | None:
@@ -563,6 +636,23 @@ class AuthDBService:
         data_scope: str | None = None,
     ) -> dict[str, Any] | None:
         return self.user_manager.update_user_classification(user_id, business_unit, department, user_type, data_scope)
+
+    def reserve_chat_credit(self, user_id: str) -> dict[str, Any]:
+        return self.user_manager.reserve_chat_credit(user_id)
+
+    def chat_credit_reservation(self, user_id: str) -> ChatCreditReservation:
+        reserved = self.reserve_chat_credit(user_id)
+        return ChatCreditReservation(
+            charged=bool(reserved["charged"]),
+            remaining=int(reserved["remaining"]),
+            refund=lambda: self.refund_chat_credit(user_id),
+        )
+
+    def refund_chat_credit(self, user_id: str) -> int | None:
+        return self.user_manager.refund_chat_credit(user_id)
+
+    def add_user_credits(self, user_id: str, amount: int) -> dict[str, Any] | None:
+        return self.user_manager.add_user_credits(user_id, amount)
 
     def add_audit_log(
         self,

@@ -112,27 +112,17 @@ class CalibrationData:
     def __post_init__(self):
         """Initialize all buckets if not provided."""
         if not self.buckets:
-            self.buckets = {
-                f"{low}-{high}": CalibrationBucket(low=low, high=high)
-                for low, high in CONFIDENCE_BUCKETS
-            }
+            self.buckets = {f"{low}-{high}": CalibrationBucket(low=low, high=high) for low, high in CONFIDENCE_BUCKETS}
 
     def to_dict(self) -> dict:
         """Convert to dictionary for serialization."""
-        return {
-            "version": self.version,
-            "buckets": {
-                name: bucket.to_dict()
-                for name, bucket in self.buckets.items()
-            }
-        }
+        return {"version": self.version, "buckets": {name: bucket.to_dict() for name, bucket in self.buckets.items()}}
 
     @classmethod
     def from_dict(cls, data: dict) -> "CalibrationData":
         """Create from dictionary."""
         buckets = {
-            name: CalibrationBucket.from_dict(bucket_data)
-            for name, bucket_data in data.get("buckets", {}).items()
+            name: CalibrationBucket.from_dict(bucket_data) for name, bucket_data in data.get("buckets", {}).items()
         }
 
         # Ensure all expected buckets exist with proper boundaries
@@ -147,10 +137,7 @@ class CalibrationData:
                         buckets[bucket_name].low = low
                         buckets[bucket_name].high = high
 
-        return cls(
-            buckets=buckets,
-            version=data.get("version", "1.0")
-        )
+        return cls(buckets=buckets, version=data.get("version", "1.0"))
 
 
 def load_calibration_data(config_path: Path | None = None) -> CalibrationData:
@@ -168,7 +155,7 @@ def load_calibration_data(config_path: Path | None = None) -> CalibrationData:
 
     try:
         if config_path.exists():
-            with open(config_path, "r") as f:
+            with open(config_path) as f:
                 data_dict = json.load(f)
                 return CalibrationData.from_dict(data_dict)
     except (json.JSONDecodeError, OSError) as e:
@@ -198,11 +185,7 @@ def save_calibration_data(data: CalibrationData, config_path: Path | None = None
         logger.error(f"Failed to save calibration data to {config_path}: {e}")
 
 
-def update_calibration_data(
-    data: CalibrationData,
-    raw_confidence: float,
-    was_correct: bool
-) -> None:
+def update_calibration_data(data: CalibrationData, raw_confidence: float, was_correct: bool) -> None:
     """
     Update calibration data with feedback from a routing decision.
 

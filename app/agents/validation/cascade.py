@@ -114,12 +114,9 @@ class ValidationCascade:
 
         all_issues = [issue for result in results for issue in result.issues]
         non_citation_risk = any(
-            result.level != CascadeLevel.CITATION_CHECK and result.confidence_score < 0.7
-            for result in results
+            result.level != CascadeLevel.CITATION_CHECK and result.confidence_score < 0.7 for result in results
         )
-        should_run_deep = self.enable_level4 and bool(all_issues) and (
-            quality < 0.6 or non_citation_risk
-        )
+        should_run_deep = self.enable_level4 and bool(all_issues) and (quality < 0.6 or non_citation_risk)
         if should_run_deep:
             results.append(await self.deep_validator.validate(request))
 
@@ -194,9 +191,7 @@ class ValidationCascade:
         source_docs: Sequence[Mapping[str, Any]],
     ) -> CascadeResult:
         """Compatibility adapter for focused deep-stage tests."""
-        return await self.deep_validator.validate(
-            _request(query=query, answer=answer, source_docs=source_docs)
-        )
+        return await self.deep_validator.validate(_request(query=query, answer=answer, source_docs=source_docs))
 
     def _get_nli_model(self) -> Any | None:
         """Compatibility adapter for the former cascade-local model loader."""
@@ -249,10 +244,7 @@ def _weighted_confidence(results: list[CascadeResult]) -> float:
         return 0.5
     weights = (0.2, 0.3, 0.3, 0.2)
     used_weights = weights[: len(results)]
-    weighted = sum(
-        result.confidence_score * weight
-        for result, weight in zip(results, used_weights, strict=True)
-    )
+    weighted = sum(result.confidence_score * weight for result, weight in zip(results, used_weights, strict=True))
     return weighted / sum(used_weights)
 
 

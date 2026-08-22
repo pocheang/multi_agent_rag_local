@@ -1,0 +1,31 @@
+{
+  "repair_date": "2026-08-21",
+  "scope": "existing functionality only",
+  "tests_run": false,
+  "status": "completed",
+  "fixed": [
+    "standard request Chinese inventory policy encoding",
+    "Chinese context intent, follow-up and pronoun handling",
+    "robust graph entity extraction import and regex",
+    "misleading forgot-password entry",
+    "placeholder enhanced-query statistics response",
+    "application database foreign keys and cascade rules",
+    "pytest application-database deletion hazard",
+    "Chroma singular collection foreign-key reference",
+    "unusable active custom model configuration"
+  ],
+  "database_reset": {
+    "backup": ".codex-backups/database-reset-2026-08-21",
+    "app_db": {"integrity": "ok", "foreign_key_violations": 0, "users": 0, "sessions": 0, "audit_logs": 0},
+    "querymind_db": {"integrity": "ok", "foreign_key_violations": 0, "session_metadata": 0},
+    "chroma_db": {"integrity": "ok", "foreign_key_violations": 0, "embeddings": 0}
+  },
+  "verification": {
+    "python_compileall": "passed",
+    "ruff_target_rules": "passed",
+    "isolated_function_probes": "passed",
+    "local_vector_store": "passed",
+    "frontend_production_build": "passed",
+    "vite_modules_transformed": 1258
+  }
+}

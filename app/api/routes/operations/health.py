@@ -8,18 +8,30 @@ from typing import Any
 from urllib.parse import urlparse
 
 import httpx
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 from fastapi.responses import JSONResponse, RedirectResponse, Response
 
-from app.api.dependencies import query_guard, runtime_metrics, settings, shadow_queue
+from app.__version__ import __version__
+from app.api import dependencies as api_dependencies
+from app.api.dependencies import runtime_metrics
+from app.api.deps.auth import require_admin
 from app.api.transport.middleware import get_request_metrics
-from app.services.observability.log_buffer import list_captured_logs
 from app.services.models.config_store import get_global_model_settings, public_global_model_settings
+from app.services.observability.log_buffer import list_captured_logs
 
 router = APIRouter()
 
 
+def _public_readiness_detail(detail: dict[str, Any]) -> dict[str, Any]:
+    """Keep probe output useful without exposing internal topology or paths."""
+    public = {key: detail[key] for key in ("ok", "required", "latency_ms", "status", "dimension") if key in detail}
+    if detail.get("error"):
+        public["error"] = "dependency check failed"
+    return public
+
+
 def _check_ollama_ready() -> dict[str, Any]:
+    settings = api_dependencies.get_query_runtime().settings
     start = time.perf_counter()
     url = (settings.ollama_base_url or "http://localhost:11434").rstrip("/") + "/api/tags"
     try:
@@ -48,6 +60,7 @@ def _check_ollama_ready() -> dict[str, Any]:
 
 
 def _check_neo4j_ready() -> dict[str, Any]:
+    settings = api_dependencies.get_query_runtime().settings
     start = time.perf_counter()
     try:
         parsed = urlparse(settings.neo4j_uri or "")
@@ -63,6 +76,7 @@ def _check_neo4j_ready() -> dict[str, Any]:
 
 
 def _check_chroma_ready() -> dict[str, Any]:
+    settings = api_dependencies.get_query_runtime().settings
     start = time.perf_counter()
     try:
         settings.chroma_path.mkdir(parents=True, exist_ok=True)
@@ -84,6 +98,7 @@ def _check_chroma_ready() -> dict[str, Any]:
 
 def _check_redis_ready() -> dict[str, Any]:
     """Check Redis connection (if Redis cache backend is enabled)."""
+    settings = api_dependencies.get_query_runtime().settings
     start = time.perf_counter()
     cache_backend = str(getattr(settings, "retrieval_cache_backend", "auto") or "auto").lower()
 
@@ -95,6 +110,7 @@ def _check_redis_ready() -> dict[str, Any]:
 
     try:
         import redis
+
         parsed = urlparse(settings.redis_url or "redis://localhost:6379/0")
         host = parsed.hostname or "localhost"
         port = int(parsed.port or 6379)
@@ -136,6 +152,7 @@ def _check_postgres_ready() -> dict[str, Any]:
 
 def _check_openai_api_ready() -> dict[str, Any]:
     """Check OpenAI API availability (if configured as backend)."""
+    settings = api_dependencies.get_query_runtime().settings
     start = time.perf_counter()
     backend = str(settings.model_backend or "").lower()
     required = backend == "openai"
@@ -164,6 +181,7 @@ def _check_openai_api_ready() -> dict[str, Any]:
 
 def _check_anthropic_api_ready() -> dict[str, Any]:
     """Check Anthropic API availability (if configured as backend)."""
+    settings = api_dependencies.get_query_runtime().settings
     start = time.perf_counter()
     backend = str(settings.model_backend or "").lower()
     required = backend == "anthropic"
@@ -213,6 +231,7 @@ def _check_embedding_model_ready() -> dict[str, Any]:
 
 
 def _runtime_diagnostics_summary() -> dict[str, Any]:
+    settings = api_dependencies.get_query_runtime().settings
     conda_prefix = str(os.environ.get("CONDA_PREFIX", "") or "").strip()
     conda_env = str(os.environ.get("CONDA_DEFAULT_ENV", "") or "").strip()
     recent_errors = list_captured_logs(limit=20, level="ERROR")
@@ -266,16 +285,17 @@ def health():
     return {
         "status": "ok",
         "service": "querymind-api",
-        "version": "0.6.1",
+        "version": __version__,
     }
 
 
 @router.get("/metrics")
 def metrics():
-    guard = query_guard.stats()
+    query_runtime = api_dependencies.get_query_runtime()
+    guard = query_runtime.query_guard.stats()
     runtime_metrics.set_gauge("query_guard_inflight", float(guard.get("inflight", 0) or 0))
     runtime_metrics.set_gauge("query_guard_waiting", float(guard.get("waiting", 0) or 0))
-    qstats = shadow_queue.stats()
+    qstats = query_runtime.shadow_queue.stats()
     runtime_metrics.set_gauge("shadow_queue_size", float(qstats.get("queue_size", 0) or 0))
     runtime_metrics.set_gauge("shadow_queue_workers", float(qstats.get("workers", 0) or 0))
     return Response(content=runtime_metrics.render_prometheus(), media_type="text/plain; version=0.0.4")
@@ -313,20 +333,21 @@ def ready():
         status_text = "unhealthy"
         code = 503
 
+    query_runtime = api_dependencies.get_query_runtime()
     payload = {
         "status": status_text,
         "blocking_failures": blocking_failures,
-        "services": checks,
+        "services": {name: _public_readiness_detail(detail) for name, detail in checks.items()},
         "query_runtime": {
-            "guard": query_guard.stats(),
-            "shadow_queue": shadow_queue.stats(),
+            "guard": query_runtime.query_guard.stats(),
+            "shadow_queue": query_runtime.shadow_queue.stats(),
         },
         "timestamp": time.time(),
     }
     return JSONResponse(content=payload, status_code=code)
 
 
-@router.get("/circuit-breakers")
+@router.get("/circuit-breakers", dependencies=[Depends(require_admin)])
 def circuit_breaker_status():
     """
     Get status of all circuit breakers in the system.
@@ -355,5 +376,3 @@ def circuit_breaker_status():
         "open_circuits": sum(1 for c in circuits.values() if c["state"] == "open"),
         "circuits": circuits,
     }
-
-

@@ -87,5 +87,3 @@ class BackgroundTaskQueue:
                 logger.exception(f"background task failed: {e}")
             finally:
                 self._queue.task_done()
-
-

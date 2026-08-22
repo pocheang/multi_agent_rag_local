@@ -146,4 +146,3 @@ def build_vision_summary(vision_info: dict) -> str:
     if err:
         return f"[image_scene] status={status}; model={model}\n{err}"
     return f"[image_scene] status={status}; model={model}"
-

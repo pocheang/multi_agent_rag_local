@@ -18,7 +18,7 @@ const FALLBACK_DEFAULTS: Record<
   Pick<AdminModelSettingsView, "base_url" | "chat_model" | "reasoning_model" | "embedding_model">
 > = {
   local: { base_url: "", chat_model: "local-evidence", reasoning_model: "local-evidence", embedding_model: "local-hash-384" },
-  ollama: { base_url: "http://localhost:11434", chat_model: "qwen3:14b", reasoning_model: "deepseek-r1:32b", embedding_model: "nomic-embed-text" },
+  ollama: { base_url: import.meta.env.VITE_OLLAMA_BASE_URL || "http://localhost:11434", chat_model: "qwen3:14b", reasoning_model: "deepseek-r1:32b", embedding_model: "nomic-embed-text" },
   openai: { base_url: "https://api.openai.com/v1", chat_model: "gpt-5.5", reasoning_model: "gpt-5.5", embedding_model: "text-embedding-3-small" },
   deepseek: { base_url: "https://api.deepseek.com/v1", chat_model: "deepseek-v4-flash", reasoning_model: "deepseek-v4-pro", embedding_model: "" },
   anthropic: { base_url: "https://api.anthropic.com", chat_model: "claude-sonnet-5", reasoning_model: "claude-fable-5", embedding_model: "" },

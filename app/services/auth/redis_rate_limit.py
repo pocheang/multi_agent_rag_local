@@ -5,15 +5,13 @@ Provides distributed rate limiting using Redis with fallback to in-memory storag
 """
 
 import time
-from typing import Optional, Tuple
 
 try:
     import redis
+
     REDIS_AVAILABLE = True
 except ImportError:
     REDIS_AVAILABLE = False
-
-from app.api.middleware.csrf import RATE_LIMIT_CONFIG, get_client_ip
 
 
 class RedisRateLimiter:
@@ -26,7 +24,7 @@ class RedisRateLimiter:
     - Automatic key expiration
     """
 
-    def __init__(self, redis_url: Optional[str] = None):
+    def __init__(self, redis_url: str | None = None):
         """Initialize rate limiter."""
         self.redis_client = None
         self.use_redis = False
@@ -46,12 +44,7 @@ class RedisRateLimiter:
         if not self.use_redis:
             print("INFO: RedisRateLimiter: Using in-memory storage (not recommended for production)")
 
-    def check_rate_limit(
-        self,
-        key: str,
-        max_requests: int,
-        window_seconds: int
-    ) -> Tuple[bool, Optional[int]]:
+    def check_rate_limit(self, key: str, max_requests: int, window_seconds: int) -> tuple[bool, int | None]:
         """
         Check if rate limit is exceeded.
 
@@ -63,12 +56,7 @@ class RedisRateLimiter:
         else:
             return self._check_memory(key, max_requests, window_seconds)
 
-    def _check_redis(
-        self,
-        key: str,
-        max_requests: int,
-        window_seconds: int
-    ) -> Tuple[bool, Optional[int]]:
+    def _check_redis(self, key: str, max_requests: int, window_seconds: int) -> tuple[bool, int | None]:
         """Redis-based sliding window rate limiting."""
         try:
             current_time = time.time()
@@ -107,29 +95,18 @@ class RedisRateLimiter:
             self.use_redis = False
             return self._check_memory(key, max_requests, window_seconds)
 
-    def _check_memory(
-        self,
-        key: str,
-        max_requests: int,
-        window_seconds: int
-    ) -> Tuple[bool, Optional[int]]:
+    def _check_memory(self, key: str, max_requests: int, window_seconds: int) -> tuple[bool, int | None]:
         """In-memory fallback rate limiting."""
         current_time = time.time()
 
         # Clean up old entries periodically
         if len(self._memory_store) > 10000:
             cutoff = current_time - 3600
-            self._memory_store = {
-                k: v for k, v in self._memory_store.items()
-                if v["window_start"] > cutoff
-            }
+            self._memory_store = {k: v for k, v in self._memory_store.items() if v["window_start"] > cutoff}
 
         # Get or create entry
         if key not in self._memory_store:
-            self._memory_store[key] = {
-                "count": 1,
-                "window_start": current_time
-            }
+            self._memory_store[key] = {"count": 1, "window_start": current_time}
             return True, None
 
         entry = self._memory_store[key]
@@ -137,10 +114,7 @@ class RedisRateLimiter:
         # Check if window has expired
         if current_time - entry["window_start"] > window_seconds:
             # Reset window
-            self._memory_store[key] = {
-                "count": 1,
-                "window_start": current_time
-            }
+            self._memory_store[key] = {"count": 1, "window_start": current_time}
             return True, None
 
         # Within window, check limit
@@ -164,10 +138,10 @@ class RedisRateLimiter:
 
 
 # Singleton instance
-_rate_limiter: Optional[RedisRateLimiter] = None
+_rate_limiter: RedisRateLimiter | None = None
 
 
-def get_rate_limiter(redis_url: Optional[str] = None) -> RedisRateLimiter:
+def get_rate_limiter(redis_url: str | None = None) -> RedisRateLimiter:
     """Get or create rate limiter instance."""
     global _rate_limiter
     if _rate_limiter is None:

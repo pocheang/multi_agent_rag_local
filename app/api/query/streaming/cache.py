@@ -7,7 +7,7 @@ from typing import Any
 from fastapi import Request
 from fastapi.responses import StreamingResponse
 
-from app.api.dependencies import _sse_response, _trace_id, query_result_cache, runtime_metrics
+from app.api.dependencies import QueryRuntime, _sse_response, _trace_id, runtime_metrics
 from app.api.query.response import ensure_trackable_execution_result
 from app.api.transport.errors import conflict
 from app.graph.streaming import encode_sse
@@ -23,22 +23,20 @@ def cached_stream_response(
     user: dict[str, Any],
     session_id: str | None,
     original_question: str,
+    query_runtime: QueryRuntime,
 ) -> StreamingResponse | None:
     """Return a replay/result-cache stream when one is available."""
+    query_result_cache = query_runtime.query_result_cache
     if replay_enabled and not is_fast_smalltalk:
         replay = query_result_cache.get_stream_events(stream_cache_key)
         replay_events = list(replay.get("events", []) or [])
         replay_done = bool(replay.get("done", False))
-        if replay_events:
+        if replay_events and replay_done:
 
             async def event_gen_replay():
                 for event in replay_events:
                     if isinstance(event, dict):
                         yield encode_sse(event)
-                if not replay_done:
-                    yield encode_sse(
-                        {"type": "status", "message": "replay_partial", "trace_id": _trace_id(request)}
-                    )
 
             return _sse_response(event_gen_replay(), append_terminal_event=True)
 
@@ -71,9 +69,20 @@ def cached_stream_response(
     return _sse_response(event_gen_cached(), append_terminal_event=True)
 
 
-def claim_stream(*, stream_cache_key: str, request: Request, user: dict[str, Any], session_id: str | None) -> None:
+def claim_stream(
+    *,
+    stream_cache_key: str,
+    request: Request,
+    user: dict[str, Any],
+    session_id: str | None,
+    query_runtime: QueryRuntime,
+) -> None:
     """Claim one stream cache key or reject a duplicate in-flight request."""
+    query_result_cache = query_runtime.query_result_cache
     if query_result_cache.mark_inflight(stream_cache_key):
+        replay = query_result_cache.get_stream_events(stream_cache_key)
+        if replay.get("events") and not replay.get("done", False):
+            query_result_cache.clear_stream_events(stream_cache_key)
         return
     runtime_metrics.inc("query_stream_duplicate_total")
     emit_alert(
@@ -84,4 +93,3 @@ def claim_stream(*, stream_cache_key: str, request: Request, user: dict[str, Any
 
 
 __all__ = ["cached_stream_response", "claim_stream"]
-

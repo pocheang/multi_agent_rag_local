@@ -37,7 +37,9 @@ def serialize_execution_event(event: ExecutionEvent) -> str:
 def _trace_event(step: AgentStep) -> ExecutionEvent:
     """Map legacy tracker detail to a non-sensitive, immutable trace event."""
     stage = next((value for prefix, value in _STAGE_BY_AGENT if step.agent_name.lower().startswith(prefix)), "rag")
-    status = "failed" if step.status in {"failed", "error"} else "completed" if step.status == "completed" else "skipped"
+    status = (
+        "failed" if step.status in {"failed", "error"} else "completed" if step.status == "completed" else "skipped"
+    )
     return ExecutionEvent(
         stage=stage,
         status=status,
@@ -101,5 +103,3 @@ async def stream_execution_events(
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "Connection": "keep-alive", "X-Accel-Buffering": "no"},
     )
-
-

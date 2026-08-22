@@ -1,4 +1,4 @@
-import type { AdminUserSummary, AdminModelSettingsView, RetrievalProfileState } from "@/types/api";
+import type { AdminUserSummary, AdminModelSettingsView, RetrievalProfileState, AuditLogEntry, SystemLogEntry, OpsOverview, BenchmarkTrendItem } from "@/types/api";
 
 export interface AdminActionsParams {
   users: AdminUserSummary[];
@@ -37,11 +37,11 @@ export interface AdminActionsParams {
   isAdmin: boolean;
   onLogout: () => Promise<void>;
   setUsers: (users: AdminUserSummary[] | ((prev: AdminUserSummary[]) => AdminUserSummary[])) => void;
-  setLogs: (logs: any[]) => void;
-  setSystemLogs: (logs: any[]) => void;
-  setOps: (ops: any) => void;
+  setLogs: (logs: AuditLogEntry[]) => void;
+  setSystemLogs: (logs: SystemLogEntry[]) => void;
+  setOps: (ops: OpsOverview | ((prev: OpsOverview | null) => OpsOverview | null) | null) => void;
   setProfileState: (state: RetrievalProfileState | null) => void;
-  setBenchmarkTrends: (trends: any[]) => void;
+  setBenchmarkTrends: (trends: BenchmarkTrendItem[] | ((prev: BenchmarkTrendItem[]) => BenchmarkTrendItem[])) => void;
   setModelSettings: (settings: AdminModelSettingsView | null | ((prev: AdminModelSettingsView | null) => AdminModelSettingsView | null)) => void;
   setError: (error: string) => void;
   setStatusText: (text: string) => void;

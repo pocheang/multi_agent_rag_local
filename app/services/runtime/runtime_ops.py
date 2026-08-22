@@ -7,13 +7,14 @@ import statistics
 import threading
 import time
 from collections import Counter
+from collections.abc import Callable, Mapping
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, Callable, Mapping, Protocol
+from typing import Any, Protocol
 from urllib.parse import urlparse
 
-from app.domain.text import normalize_string
 from app.core.config import get_settings
+from app.domain.text import normalize_string
 from app.services.retrieval.profiles import normalize_retrieval_profile
 
 _LOCK = threading.Lock()
@@ -634,8 +635,7 @@ def compare_retrieval_profiles(
                 float(row.get("latency_ms", 0.0)) - float(base.get("latency_ms", 0.0)), 2
             ),
             "grounding_delta_vs_advanced": round(
-                float(row.get("grounding_support_ratio", 0.0))
-                - float(base.get("grounding_support_ratio", 0.0)),
+                float(row.get("grounding_support_ratio", 0.0)) - float(base.get("grounding_support_ratio", 0.0)),
                 4,
             ),
         }

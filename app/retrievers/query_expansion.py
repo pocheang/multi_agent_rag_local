@@ -9,7 +9,6 @@ Enhances query understanding by:
 
 import logging
 import re
-from typing import List
 
 logger = logging.getLogger(__name__)
 
@@ -66,18 +65,23 @@ SYNONYM_DICT = {
 
 # Regex patterns for entity extraction
 # Matches uppercase acronyms (2-6 chars) and technical terms
-ACRONYM_PATTERN = re.compile(r'\b[A-Z]{2,6}\b')
-TECHNICAL_TERM_PATTERN = re.compile(r'\b(?:[a-z]+[A-Z][a-z]*)+\b')  # camelCase
-COMPOUND_TERM_PATTERN = re.compile(r'\b(?:machine learning|deep learning|neural network|'
-                                   r'natural language|computer vision|data science|'
-                                   r'artificial intelligence)\b', re.IGNORECASE)
+ACRONYM_PATTERN = re.compile(r"\b[A-Z]{2,6}\b")
+TECHNICAL_TERM_PATTERN = re.compile(r"\b(?:[a-z]+[A-Z][a-z]*)+\b")  # camelCase
+COMPOUND_TERM_PATTERN = re.compile(
+    r"\b(?:machine learning|deep learning|neural network|"
+    r"natural language|computer vision|data science|"
+    r"artificial intelligence)\b",
+    re.IGNORECASE,
+)
 
 # Chinese technical terms
-CHINESE_TECH_PATTERN = re.compile(r'(?:机器学习|深度学习|人工智能|神经网络|'
-                                 r'自然语言处理|计算机视觉|数据科学)')
+CHINESE_TECH_PATTERN = re.compile(
+    r"(?:机器学习|深度学习|人工智能|神经网络|"
+    r"自然语言处理|计算机视觉|数据科学)"
+)
 
 
-def extract_entities(query: str) -> List[str]:
+def extract_entities(query: str) -> list[str]:
     """
     Extract entities and technical terms from query.
 
@@ -121,7 +125,7 @@ def extract_entities(query: str) -> List[str]:
     return unique_entities
 
 
-def get_synonyms(term: str) -> List[str]:
+def get_synonyms(term: str) -> list[str]:
     """
     Get synonyms for a given term from the synonym dictionary.
 
@@ -196,7 +200,7 @@ def expand_query(query: str, max_expansion_ratio: float = 3.0) -> str:
     # Check expansion ratio to prevent explosion
     if len(expanded) > len(query_str) * max_expansion_ratio:
         # Too much expansion, limit to first few synonyms
-        limited_expansions = expansions[:min(3, len(expansions))]
+        limited_expansions = expansions[: min(3, len(expansions))]
         expanded = f"{query_str} {' '.join(limited_expansions)}"
         logger.debug(f"Limited expansion from {len(expansions)} to {len(limited_expansions)} synonyms")
 

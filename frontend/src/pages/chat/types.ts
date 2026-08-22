@@ -4,6 +4,7 @@ import type { AuthUser, Citation, SessionMessage } from "@/types/api";
 export type Props = {
   user: AuthUser | null;
   onLogout: () => Promise<void>;
+  onUserRefresh: () => Promise<void>;
   themeLabel: string;
   onThemeToggle: () => void;
 };

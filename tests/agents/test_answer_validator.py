@@ -14,7 +14,7 @@ from app.agents.validation.nli import (
     check_hallucination as _check_hallucination,
     extract_factual_spans as _extract_factual_spans,
 )
-from app.agents.quality_models import AnswerValidationResult
+from app.agents.shared.quality_models import AnswerValidationResult
 
 
 # ============================================================================

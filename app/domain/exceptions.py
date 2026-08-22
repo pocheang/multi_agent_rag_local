@@ -351,4 +351,3 @@ def wrap_external_exception(
             ) from e
     """
     return custom_exc_class(message=message, details=details)
-

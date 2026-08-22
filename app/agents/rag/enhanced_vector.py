@@ -87,9 +87,7 @@ class EnhancedVectorRAGAgent:
                         src = citation["source"]
                         chunk = citation["content"]
                         retrieval_sources = citation["metadata"].get("retrieval_sources", [])
-                        context_blocks.append(
-                            f"[SOURCE: {src}]\n[RETRIEVAL: {','.join(retrieval_sources)}]\n{chunk}"
-                        )
+                        context_blocks.append(f"[SOURCE: {src}]\n[RETRIEVAL: {','.join(retrieval_sources)}]\n{chunk}")
                     result["filtered_context"] = "\n\n".join(context_blocks)
 
                 logger.info(
@@ -98,7 +96,7 @@ class EnhancedVectorRAGAgent:
                 )
 
             except Exception as e:
-                logger.error(f"Error during Self-RAG evaluation: {e}")
+                logger.error(f"Error during Self-RAG evaluation: {e}", exc_info=True)
 
         return result
 
@@ -114,7 +112,7 @@ class EnhancedVectorRAGAgent:
             quality = await self.self_rag_evaluator.evaluate_answer_quality(question, answer, documents)
             return quality.model_dump()
         except Exception as e:
-            logger.error(f"Error evaluating answer quality: {e}")
+            logger.error(f"Error evaluating answer quality: {e}", exc_info=True)
             return None
 
     def _citations_to_documents(self, citations: list[dict[str, Any]]) -> list[dict[str, Any]]:

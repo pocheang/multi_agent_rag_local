@@ -158,7 +158,3 @@ def validate_and_check_approval_token(
         raise HTTPException(status_code=403, detail="unauthorized")
 
     return token_ok, token_mode
-
-
-
-

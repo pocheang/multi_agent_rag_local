@@ -217,5 +217,3 @@ def ocr_image_bytes_with_structure(
         content = f"{summary}\n{people_summary}\n{vision_summary}\n[image_ocr_error]\n{error_reason}"
 
     return [Document(page_content=content, metadata=metadata)]
-
-

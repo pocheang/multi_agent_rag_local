@@ -202,5 +202,3 @@ def integrate_with_paddleocr(ocr_result, image_width: int, image_height: int) ->
     # 结构化
     structurer = LayoutBasedStructurer(image_width, image_height)
     return structurer.structure_ocr_boxes(boxes)
-
-

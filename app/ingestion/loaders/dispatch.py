@@ -9,8 +9,14 @@ from app.core.config import get_settings
 from app.ingestion.loaders.image_loader import load_image_file as _load_image_file
 from app.ingestion.loaders.pdf_loader import (
     load_pdf_enhanced as _load_pdf_enhanced,
+)
+from app.ingestion.loaders.pdf_loader import (
     load_pdf_image_ocr as _load_pdf_image_ocr,
+)
+from app.ingestion.loaders.pdf_loader import (
     load_pdf_text as _load_pdf_text,
+)
+from app.ingestion.loaders.pdf_loader import (
     load_pdf_with_docling as _load_pdf_with_docling,
 )
 from app.ingestion.loaders.text_loader import load_text_file as _load_text_file

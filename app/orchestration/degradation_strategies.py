@@ -23,6 +23,7 @@ logger = logging.getLogger(__name__)
 @dataclass
 class CircuitBreakerConfig:
     """Configuration for circuit breaker thresholds."""
+
     failure_threshold: int = 5
     timeout_seconds: float = 60.0
     success_threshold: int = 2
@@ -66,6 +67,7 @@ _circuit_breaker_configs: dict[str, CircuitBreakerConfig] = _load_circuit_breake
 
 class CircuitBreakerState(Enum):
     """Circuit breaker states following the standard pattern."""
+
     CLOSED = "CLOSED"  # Normal operation, requests allowed
     OPEN = "OPEN"  # Failures exceeded threshold, requests blocked
     HALF_OPEN = "HALF_OPEN"  # Testing if service recovered
@@ -84,6 +86,7 @@ class DegradationStrategy:
         return_partial: Whether to return partial results with warning
         skip_validation: Whether to skip quality validation on fallback
     """
+
     component: str
     fallback_route: str | None = None
     fallback_alternatives: list = field(default_factory=list)
@@ -241,10 +244,7 @@ class CircuitBreaker:
         self.total_success_count = 0
         self.total_failure_count = 0
 
-        logger.info(
-            f"CircuitBreaker initialized: {name} "
-            f"(threshold={failure_threshold}, timeout={timeout_seconds}s)"
-        )
+        logger.info(f"CircuitBreaker initialized: {name} (threshold={failure_threshold}, timeout={timeout_seconds}s)")
 
     def allow_request(self) -> bool:
         """
@@ -288,9 +288,7 @@ class CircuitBreaker:
             self.success_count += 1
             # Reset failure count on success
             if self.failure_count > 0:
-                logger.debug(
-                    f"CircuitBreaker '{self.name}' reset failure count after success"
-                )
+                logger.debug(f"CircuitBreaker '{self.name}' reset failure count after success")
                 self.failure_count = 0
         else:
             # OPEN state - just track but don't transition
@@ -305,17 +303,13 @@ class CircuitBreaker:
         if self.state == CircuitBreakerState.CLOSED:
             if self.failure_count >= self.failure_threshold:
                 self._transition_to(CircuitBreakerState.OPEN)
-                logger.warning(
-                    f"CircuitBreaker '{self.name}' OPENED after {self.failure_count} failures"
-                )
+                logger.warning(f"CircuitBreaker '{self.name}' OPENED after {self.failure_count} failures")
 
         elif self.state == CircuitBreakerState.HALF_OPEN:
             # Failure in HALF_OPEN -> back to OPEN
             self._transition_to(CircuitBreakerState.OPEN)
             self.success_count = 0
-            logger.warning(
-                f"CircuitBreaker '{self.name}' reopened after failure in HALF_OPEN"
-            )
+            logger.warning(f"CircuitBreaker '{self.name}' reopened after failure in HALF_OPEN")
 
     def _transition_to(self, new_state: CircuitBreakerState) -> None:
         """Transition to new state."""
@@ -323,9 +317,7 @@ class CircuitBreaker:
         self.state = new_state
         self.last_state_change = time.time()
 
-        logger.info(
-            f"CircuitBreaker '{self.name}' transitioned: {old_state.value} -> {new_state.value}"
-        )
+        logger.info(f"CircuitBreaker '{self.name}' transitioned: {old_state.value} -> {new_state.value}")
 
     def is_open(self) -> bool:
         """Check if circuit breaker is open (blocking requests)."""
@@ -343,9 +335,7 @@ class CircuitBreaker:
             Dictionary with state, counts, and success rate
         """
         total_requests = self.total_success_count + self.total_failure_count
-        success_rate = (
-            self.total_success_count / total_requests if total_requests > 0 else 0.0
-        )
+        success_rate = self.total_success_count / total_requests if total_requests > 0 else 0.0
 
         return {
             "name": self.name,

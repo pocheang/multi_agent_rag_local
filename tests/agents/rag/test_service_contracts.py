@@ -2,7 +2,8 @@
 
 import pytest
 
-from app.agents.rag.service import RAGAgentService, _bundle_from_legacy_payload
+from app.agents.rag.evidence_builder import bundle_from_legacy_payload
+from app.agents.rag.service import RAGAgentService
 from app.domain.contracts import EvidenceBundle, EvidenceItem, PlannedTask, RouteDecision, TaskBudget, TaskPlan
 from app.orchestration.request import OrchestrationRequest
 
@@ -86,7 +87,7 @@ async def test_rag_service_limits_each_planned_task_to_its_retrieval_budget() ->
 
 def test_legacy_evidence_normalization_keeps_nested_pages_and_graph_context() -> None:
     """Discarding nested citation provenance or graph context loses real retrieval evidence."""
-    vector = _bundle_from_legacy_payload(
+    vector = bundle_from_legacy_payload(
         {
             "citations": [
                 {
@@ -103,7 +104,7 @@ def test_legacy_evidence_normalization_keeps_nested_pages_and_graph_context() ->
         },
         "vector",
     )
-    graph = _bundle_from_legacy_payload(
+    graph = bundle_from_legacy_payload(
         {"context": "Transformer USES Attention", "entities": ["Transformer"], "graph_signal_score": 0.8},
         "graph",
         fallback_document_id="graph:transformer",

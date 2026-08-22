@@ -109,29 +109,29 @@ class LocalEvidenceChatModel:
 
     def _route_json(self, question: str) -> str:
         q = str(question or "").lower()
-        route = "hybrid" if any(x in q for x in ["å…³ç³»", "ä¾èµ–", "graph", "relation", "è·¯å¾„"]) else "vector"
+        route = "hybrid" if any(x in q for x in ["关系", "依赖", "graph", "relation", "路径"]) else "vector"
         skill = "answer_with_citations"
-        if any(x in q for x in ["pdf", "æ–‡æ¡£", "æ–‡ä»¶", "image", "å›¾ç‰‡"]):
+        if any(x in q for x in ["pdf", "文档", "文件", "image", "图片"]):
             skill = "pdf_text_reader"
-        if any(x in q for x in ["å®‰å…¨", "æ¼æ´ž", "æ”»å‡»", "é˜²æŠ¤", "security", "risk"]):
+        if any(x in q for x in ["安全", "漏洞", "攻击", "防护", "security", "risk"]):
             skill = "cyber_defense_hardening"
         return f'{{"route":"{route}","reason":"local_rule_router","skill":"{skill}"}}'
 
     def _extract_section(self, text: str, label: str) -> str:
-        pattern = rf"{re.escape(label)}:\n(.*?)(?:\n\n[A-Za-z\u4e00-\u9fff]+ä¸Šä¸‹æ–‡:|\n\nè”ç½‘è¡¥å……ä¸Šä¸‹æ–‡:|\Z)"
+        pattern = rf"{re.escape(label)}:\n(.*?)(?:\n\n[A-Za-z\u4e00-\u9fff]+上下文:|\n\n联网补充上下文:|\Z)"
         match = re.search(pattern, text, flags=re.DOTALL)
         return (match.group(1).strip() if match else "").strip()
 
     def _answer(self, payload: str) -> str:
-        question = self._extract_section(payload, "ç”¨æˆ·é—®é¢˜") or payload.splitlines()[0:1][0] if payload else ""
-        vector_context = self._extract_section(payload, "å‘é‡æ£€ç´¢ä¸Šä¸‹æ–‡")
-        graph_context = self._extract_section(payload, "å›¾è°±ä¸Šä¸‹æ–‡")
-        web_context = self._extract_section(payload, "è”ç½‘è¡¥å……ä¸Šä¸‹æ–‡")
-        evidence = [x for x in [vector_context, graph_context, web_context] if x and x != "æ— "]
+        question = self._extract_section(payload, "用户问题") or payload.splitlines()[0:1][0] if payload else ""
+        vector_context = self._extract_section(payload, "向量检索上下文")
+        graph_context = self._extract_section(payload, "图谱上下文")
+        web_context = self._extract_section(payload, "联网补充上下文")
+        evidence = [x for x in [vector_context, graph_context, web_context] if x and x != "无"]
         if not evidence:
             return (
-                "å½“å‰æœ¬åœ°çŸ¥è¯†åº“æ²¡æœ‰æ£€ç´¢åˆ°è¶³å¤Ÿè¯æ®ã€‚ä½ å¯ä»¥å…ˆä¸Šä¼  PDFã€å›¾ç‰‡ã€Markdown æˆ– TXT æ–‡æ¡£ï¼Œ"
-                "ç³»ç»Ÿä¼šå†™å…¥ Chroma å‘é‡åº“ã€BM25 è¯­æ–™å’Œ Neo4j å›¾è°±åŽå†å›žç­”ã€‚"
+                "当前本地知识库没有检索到足够证据。你可以先上传 PDF、图片、Markdown 或 TXT 文档，"
+                "系统会写入 Chroma 向量库、BM25 语料和 Neo4j 图谱后再回答。"
             )
         snippets: list[str] = []
         for block in evidence:
@@ -141,7 +141,7 @@ class LocalEvidenceChatModel:
             if len(snippets) >= 4:
                 break
         lines = [
-            f"åŸºäºŽå½“å‰æœ¬åœ°æ£€ç´¢ç»“æžœï¼Œæˆ‘å¯¹â€œ{question}â€çš„å›žç­”å¦‚ä¸‹ï¼š",
+            f"基于当前本地检索结果，我对“{question}”的回答如下：",
             "",
         ]
         for i, item in enumerate(snippets, 1):
@@ -149,7 +149,7 @@ class LocalEvidenceChatModel:
         lines.extend(
             [
                 "",
-                "è¯´æ˜Žï¼šå½“å‰ä½¿ç”¨ local ç¦»çº¿åŽç«¯ï¼Œä¼šä¼˜å…ˆåšè¯æ®æ‘˜å½•å’ŒåŸºç¡€å½’çº³ï¼›é…ç½® Ollama/OpenAI åŽå¯èŽ·å¾—æ›´å¼ºçš„ç”Ÿæˆä¸ŽæŽ¨ç†èƒ½åŠ›ã€‚",
+                "说明：当前使用 local 离线后端，会优先做证据摘录和基础归纳；配置 Ollama/OpenAI 后可获得更强的生成与推理能力。",
             ]
         )
         return "\n".join(lines)
@@ -158,9 +158,9 @@ class LocalEvidenceChatModel:
         system_text, human_text = self._message_text(messages)
         if "route planner" in system_text.lower() or "output json only" in system_text.lower():
             return SimpleNamespace(content=self._route_json(human_text))
-        if "çŸ¥è¯†å›¾è°±æŠ½å–å™¨" in system_text:
+        if "知识图谱抽取器" in system_text:
             return SimpleNamespace(content="[]")
-        if "ç­”æ¡ˆè´¨æ£€" in system_text:
+        if "答案质检" in system_text:
             return SimpleNamespace(
                 content='{"is_correct":true,"issues":[],"improved_answer":"","analysis":"local_review_skipped"}'
             )

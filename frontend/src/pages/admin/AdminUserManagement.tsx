@@ -32,6 +32,7 @@ type Props = {
   onSaveClass: () => void;
   onUpdateRole: (target: AdminUserSummary, role: string) => Promise<void>;
   onUpdateStatus: (target: AdminUserSummary, status: string) => Promise<void>;
+  onAddCredits: (target: AdminUserSummary) => Promise<void>;
   onOpenClassEditor: (user: AdminUserSummary) => void;
   onResetPassword: (target: AdminUserSummary) => Promise<void>;
   onResetApprovalToken: (target: AdminUserSummary) => Promise<void>;
@@ -65,6 +66,7 @@ export function AdminUserManagement({
   onSaveClass,
   onUpdateRole,
   onUpdateStatus,
+  onAddCredits,
   onOpenClassEditor,
   onResetPassword,
   onResetApprovalToken,
@@ -184,6 +186,7 @@ export function AdminUserManagement({
               statusOptions={statusOptions}
               onUpdateRole={onUpdateRole}
               onUpdateStatus={onUpdateStatus}
+              onAddCredits={onAddCredits}
               onOpenClassEditor={onOpenClassEditor}
               onResetPassword={onResetPassword}
               onResetApprovalToken={onResetApprovalToken}

@@ -50,11 +50,7 @@ def validate_cypher_query(query: str) -> ValidationResult:
         ValidationResult with validation status and error details
     """
     if not query or not query.strip():
-        return ValidationResult(
-            is_valid=False,
-            error="Query is empty",
-            error_type="empty_query"
-        )
+        return ValidationResult(is_valid=False, error="Query is empty", error_type="empty_query")
 
     query_upper = query.upper()
 
@@ -62,35 +58,21 @@ def validate_cypher_query(query: str) -> ValidationResult:
     for operation in UNSAFE_OPERATIONS:
         if re.search(rf"\b{operation}\b", query_upper):
             return ValidationResult(
-                is_valid=False,
-                error=f"Unsafe operation detected: {operation}",
-                error_type="unsafe_operation"
+                is_valid=False, error=f"Unsafe operation detected: {operation}", error_type="unsafe_operation"
             )
 
     # Check for required clauses
     if not REQUIRED_MATCH.search(query):
-        return ValidationResult(
-            is_valid=False,
-            error="Query must contain MATCH clause",
-            error_type="missing_match"
-        )
+        return ValidationResult(is_valid=False, error="Query must contain MATCH clause", error_type="missing_match")
 
     if not REQUIRED_RETURN.search(query):
-        return ValidationResult(
-            is_valid=False,
-            error="Query must contain RETURN clause",
-            error_type="missing_return"
-        )
+        return ValidationResult(is_valid=False, error="Query must contain RETURN clause", error_type="missing_return")
 
     # Basic syntax validation - check for balanced braces and parentheses
     try:
         _check_balanced_brackets(query)
     except ValueError as e:
-        return ValidationResult(
-            is_valid=False,
-            error=str(e),
-            error_type="syntax_error"
-        )
+        return ValidationResult(is_valid=False, error=str(e), error_type="syntax_error")
 
     return ValidationResult(is_valid=True)
 
@@ -140,7 +122,7 @@ def get_query_templates() -> list[CypherQueryTemplate]:
             LIMIT $limit
             """,
             params=["keywords", "limit"],
-            description="Search for entities by keywords"
+            description="Search for entities by keywords",
         ),
         CypherQueryTemplate(
             name="entity_neighbors",
@@ -150,7 +132,7 @@ def get_query_templates() -> list[CypherQueryTemplate]:
             LIMIT $limit
             """,
             params=["entity", "limit"],
-            description="Get neighbors of a specific entity"
+            description="Get neighbors of a specific entity",
         ),
         CypherQueryTemplate(
             name="entity_paths_2hop",
@@ -161,7 +143,7 @@ def get_query_templates() -> list[CypherQueryTemplate]:
             LIMIT $limit
             """,
             params=["entity", "limit"],
-            description="Get 2-hop paths from a specific entity"
+            description="Get 2-hop paths from a specific entity",
         ),
         CypherQueryTemplate(
             name="entity_search_with_sources",
@@ -175,7 +157,7 @@ def get_query_templates() -> list[CypherQueryTemplate]:
             LIMIT $limit
             """,
             params=["keywords", "allowed_sources", "limit"],
-            description="Search for entities with source filtering"
+            description="Search for entities with source filtering",
         ),
         CypherQueryTemplate(
             name="entity_neighbors_with_sources",
@@ -186,7 +168,7 @@ def get_query_templates() -> list[CypherQueryTemplate]:
             LIMIT $limit
             """,
             params=["entity", "allowed_sources", "limit"],
-            description="Get neighbors with source filtering"
+            description="Get neighbors with source filtering",
         ),
         CypherQueryTemplate(
             name="entity_paths_2hop_with_sources",
@@ -199,7 +181,7 @@ def get_query_templates() -> list[CypherQueryTemplate]:
             LIMIT $limit
             """,
             params=["entity", "allowed_sources", "limit"],
-            description="Get 2-hop paths with source filtering"
+            description="Get 2-hop paths with source filtering",
         ),
     ]
 
@@ -231,4 +213,3 @@ def get_simpler_query(query_type: str, allowed_sources: list[str] | None = None)
         return template.query if template else None
 
     return None
-

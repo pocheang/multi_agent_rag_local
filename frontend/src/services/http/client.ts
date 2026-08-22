@@ -1,3 +1,5 @@
+import { requiresCsrfProtection, addCsrfHeader } from "@/lib/csrf";
+
 type Json = Record<string, unknown> | Array<unknown>;
 
 export type RequestOptions = {
@@ -36,7 +38,7 @@ function resolveApiBase() {
     parsed.hostname = pageHost;
     return parsed.toString().replace(/\/+$/, "");
   } catch {
-    return cleaned;
+    return cleaned.startsWith("/") ? cleaned : `/${cleaned}`;
   }
 }
 
@@ -54,14 +56,35 @@ const TOKEN_KEY = "auth_token";
 
 export function getToken() {
   if (typeof localStorage === "undefined") return "";
-  const legacy = localStorage.getItem(TOKEN_KEY) || "";
-  if (legacy) localStorage.removeItem(TOKEN_KEY);
-  return "";
+  return localStorage.getItem(TOKEN_KEY) || "";
+}
+
+export function setToken(token: string) {
+  if (typeof localStorage === "undefined") return;
+  if (token) {
+    localStorage.setItem(TOKEN_KEY, token);
+  } else {
+    localStorage.removeItem(TOKEN_KEY);
+  }
 }
 
 export function toUrl(path: string) {
   const normalizedPath = path.startsWith("/") ? path : `/${path}`;
-  if (API_BASE) return `${API_BASE}${normalizedPath}`;
+  if (API_BASE) {
+    let basePath = API_BASE.startsWith("/") ? API_BASE : "";
+    let absoluteOrigin = "";
+    try {
+      const parsed = new URL(API_BASE);
+      basePath = parsed.pathname.replace(/\/+$/, "");
+      absoluteOrigin = parsed.origin;
+    } catch {
+      // Relative API prefixes are handled directly.
+    }
+    if (basePath && (normalizedPath === basePath || normalizedPath.startsWith(`${basePath}/`))) {
+      return absoluteOrigin ? `${absoluteOrigin}${normalizedPath}` : normalizedPath;
+    }
+    return `${API_BASE}${normalizedPath}`;
+  }
   if (APP_BASE_PREFIX && (normalizedPath === APP_BASE_PREFIX || normalizedPath.startsWith(`${APP_BASE_PREFIX}/`))) {
     return normalizedPath;
   }
@@ -137,7 +160,18 @@ function createRequestSignal(signal: AbortSignal | null | undefined, timeoutMs: 
 async function fetchWithTimeout(path: string, init: RequestInit, options: RequestOptions): Promise<Response> {
   const composed = createRequestSignal(init.signal, options.timeoutMs ?? 30_000);
   try {
-    return await fetch(toUrl(path), { ...init, signal: composed.signal, credentials: "include" });
+    const headers = new Headers(init.headers || {});
+    const token = getToken();
+    if (token) {
+      headers.set("Authorization", `Bearer ${token}`);
+    }
+
+    // Add CSRF protection for state-changing requests
+    if (requiresCsrfProtection(init.method || 'GET')) {
+      addCsrfHeader(headers);
+    }
+
+    return await fetch(toUrl(path), { ...init, headers, signal: composed.signal, credentials: "include" });
   } catch (error) {
     if (composed.wasTimedOut()) throw new ApiError(408, "Request timed out");
     throw error;

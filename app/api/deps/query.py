@@ -71,15 +71,31 @@ def _query_cache_key(
     agent_class_hint: str | None,
     request_id: str | None,
     mode: str = "query",
+    conversation: Any = None,
     index_fingerprint_fn,
     model_fingerprint_fn,
 ) -> str:
     """Build a cache key for query results."""
     index_fingerprint = index_fingerprint_fn(user)
     model_fingerprint = model_fingerprint_fn(user)
+    conversation_rows: list[dict[str, str]] = []
+    for item in conversation or ():
+        if isinstance(item, dict):
+            role = item.get("role", "")
+            content = item.get("content", "")
+        else:
+            role = getattr(item, "role", "")
+            content = getattr(item, "content", "")
+        conversation_rows.append({"role": str(role or ""), "content": str(content or "")})
+    context_fingerprint = hashlib.sha256(
+        json.dumps(conversation_rows, ensure_ascii=False, sort_keys=True).encode("utf-8")
+    ).hexdigest()
+    fingerprint_payload = {"index": index_fingerprint, "model": model_fingerprint}
+    if not request_id:
+        fingerprint_payload["conversation"] = context_fingerprint
     cache_fingerprint = hashlib.sha256(
         json.dumps(
-            {"index": index_fingerprint, "model": model_fingerprint},
+            fingerprint_payload,
             ensure_ascii=False,
             sort_keys=True,
         ).encode("utf-8")
@@ -94,7 +110,7 @@ def _query_cache_key(
         agent_class_hint=str(agent_class_hint or ""),
         mode=mode,
         request_id=str(request_id or ""),
-        include_request_id=False,
+        include_request_id=bool(request_id),
         index_fingerprint=cache_fingerprint,
     )
 

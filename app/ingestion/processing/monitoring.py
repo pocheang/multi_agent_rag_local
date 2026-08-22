@@ -114,5 +114,3 @@ class PDFProcessingMetrics:
             "estimated_cost_usd": estimated_cost_usd,
             "error_rate": error_rate,
         }
-
-

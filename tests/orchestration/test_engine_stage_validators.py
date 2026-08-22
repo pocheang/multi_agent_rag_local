@@ -61,7 +61,7 @@ async def test_engine_rejects_invalid_output_at_each_remaining_stage(invalid_sta
     ) -> FinalAnswer:
         if invalid_stage == "synthesize":
             return object()  # type: ignore[return-value]
-        return FinalAnswer(text="Answer", route=route_decision)
+        return FinalAnswer(answer="Answer", route=route_decision)
 
     engine = OrchestrationEngine(
         services=OrchestrationServices(

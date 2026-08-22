@@ -6,7 +6,6 @@ Centralized entity extraction to avoid code duplication across agents.
 
 import logging
 import re
-from typing import List, Set
 
 logger = logging.getLogger(__name__)
 
@@ -16,7 +15,7 @@ def extract_entities(
     max_entities: int = 10,
     min_entity_length: int = 2,
     max_entity_length: int = 50,
-) -> List[str]:
+) -> list[str]:
     """
     Extract named entities from text using pattern matching.
 
@@ -35,34 +34,34 @@ def extract_entities(
     if not text or not text.strip():
         return []
 
-    entities: Set[str] = set()
+    entities: set[str] = set()
 
     # 1. Extract Chinese entities (2+ consecutive Chinese characters)
-    chinese_pattern = r'[一-鿿]{2,}'
+    chinese_pattern = r"[一-鿿]{2,}"
     chinese_matches = re.findall(chinese_pattern, text)
     for match in chinese_matches:
         if min_entity_length <= len(match) <= max_entity_length:
             # Filter out common stop words
-            if match not in {'这个', '那个', '什么', '怎么', '如何', '可以', '应该'}:
+            if match not in {"这个", "那个", "什么", "怎么", "如何", "可以", "应该"}:
                 entities.add(match)
 
     # 2. Extract English entities (capitalized words)
-    english_pattern = r'\b[A-Z][a-z]+(?:\s+[A-Z][a-z]+)*\b'
+    english_pattern = r"\b[A-Z][a-z]+(?:\s+[A-Z][a-z]+)*\b"
     english_matches = re.findall(english_pattern, text)
     for match in english_matches:
         if min_entity_length <= len(match) <= max_entity_length:
             # Filter out common words
-            if match not in {'The', 'This', 'That', 'What', 'How', 'Can', 'Should'}:
+            if match not in {"The", "This", "That", "What", "How", "Can", "Should"}:
                 entities.add(match)
 
     # 3. Extract acronyms (2-6 uppercase letters)
-    acronym_pattern = r'\b[A-Z]{2,6}\b'
+    acronym_pattern = r"\b[A-Z]{2,6}\b"
     acronym_matches = re.findall(acronym_pattern, text)
     for match in acronym_matches:
         entities.add(match)
 
     # 4. Extract numbers with context (e.g., "2024年", "95%")
-    number_context_pattern = r'\d+(?:\.\d+)?[年月日%]'
+    number_context_pattern = r"\d+(?:\.\d+)?[年月日%]"
     number_matches = re.findall(number_context_pattern, text)
     for match in number_matches:
         entities.add(match)
@@ -81,7 +80,7 @@ def extract_entities(
 def extract_entities_with_frequency(
     text: str,
     max_entities: int = 10,
-) -> List[tuple[str, int]]:
+) -> list[tuple[str, int]]:
     """
     Extract entities with their frequency counts.
 
@@ -99,15 +98,16 @@ def extract_entities_with_frequency(
     all_entities = []
 
     # Chinese entities
-    chinese_matches = re.findall(r'[一-鿿]{2,}', text)
-    all_entities.extend([m for m in chinese_matches if m not in {'这个', '那个', '什么'}])
+    chinese_matches = re.findall(r"[一-鿿]{2,}", text)
+    all_entities.extend([m for m in chinese_matches if m not in {"这个", "那个", "什么"}])
 
     # English entities
-    english_matches = re.findall(r'\b[A-Z][a-z]+(?:\s+[A-Z][a-z]+)*\b', text)
-    all_entities.extend([m for m in english_matches if m not in {'The', 'This', 'That'}])
+    english_matches = re.findall(r"\b[A-Z][a-z]+(?:\s+[A-Z][a-z]+)*\b", text)
+    all_entities.extend([m for m in english_matches if m not in {"The", "This", "That"}])
 
     # Count frequencies
     from collections import Counter
+
     entity_counts = Counter(all_entities)
 
     # Return top N by frequency
@@ -117,7 +117,7 @@ def extract_entities_with_frequency(
     return result
 
 
-def merge_entity_lists(*entity_lists: List[str]) -> List[str]:
+def merge_entity_lists(*entity_lists: list[str]) -> list[str]:
     """
     Merge multiple entity lists, removing duplicates and sorting by length.
 

@@ -32,7 +32,7 @@ def _route() -> RouteDecision:
         (TaskPlan(tasks=(PlannedTask(task_id="retrieve", prompt="Retrieve"),)), "tasks"),
         (EvidenceBundle(items=(EvidenceItem(content="Fact", source="guide", document_id="guide"),)), "items"),
         (ToolResult(tool_id="querymind_rag_search_evidence", status="succeeded"), "status"),
-        (FinalAnswer(text="Fact", route=_route()), "text"),
+        (FinalAnswer(answer="Fact", route=_route()), "text"),
         (ExecutionEvent(stage="route", status="completed"), "stage"),
     ],
 )

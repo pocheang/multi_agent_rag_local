@@ -1,4 +1,4 @@
-﻿"""
+"""
 Adaptive Caching Strategy for QueryMind System
 
 This module implements intelligent cache TTL calculation based on:

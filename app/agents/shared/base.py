@@ -3,23 +3,26 @@
 import logging
 import time
 from abc import ABC, abstractmethod
-from typing import Any, Dict, Optional
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
 
 class AgentError(Exception):
     """Base exception for all agent errors."""
+
     pass
 
 
 class AgentTimeoutError(AgentError):
     """Raised when agent execution times out."""
+
     pass
 
 
 class AgentValidationError(AgentError):
     """Raised when agent input/output validation fails."""
+
     pass
 
 
@@ -37,7 +40,7 @@ class BaseAgent(ABC):
     Subclasses must implement the `execute` method.
     """
 
-    def __init__(self, config: Optional[Dict[str, Any]] = None):
+    def __init__(self, config: dict[str, Any] | None = None):
         """
         Initialize base agent.
 
@@ -55,7 +58,7 @@ class BaseAgent(ABC):
         self.log_level = self.config.get("log_level", "INFO")
 
     @abstractmethod
-    def execute(self, query: str, **kwargs) -> Dict[str, Any]:
+    def execute(self, query: str, **kwargs) -> dict[str, Any]:
         """
         Execute the agent logic.
 
@@ -73,7 +76,7 @@ class BaseAgent(ABC):
         """
         pass
 
-    def run(self, query: str, **kwargs) -> Dict[str, Any]:
+    def run(self, query: str, **kwargs) -> dict[str, Any]:
         """
         Run the agent with error handling and timing.
 
@@ -105,9 +108,7 @@ class BaseAgent(ABC):
             return self._format_error_result(error, execution_time_ms)
 
         except Exception as error:
-            self.logger.exception(
-                f"Unexpected error in {self.__class__.__name__}: {error}"
-            )
+            self.logger.exception(f"Unexpected error in {self.__class__.__name__}: {error}")
             execution_time_ms = (time.time() - start_time) * 1000
             return self._format_error_result(
                 AgentError(f"Unexpected error: {str(error)}"),
@@ -131,7 +132,7 @@ class BaseAgent(ABC):
         if len(query) > 10000:
             raise AgentValidationError("Query too long (max 10000 characters)")
 
-    def _validate_output(self, result: Dict[str, Any]):
+    def _validate_output(self, result: dict[str, Any]):
         """
         Validate agent output.
 
@@ -142,15 +143,13 @@ class BaseAgent(ABC):
             AgentValidationError: If validation fails
         """
         if not isinstance(result, dict):
-            raise AgentValidationError(
-                f"Result must be a dictionary, got {type(result)}"
-            )
+            raise AgentValidationError(f"Result must be a dictionary, got {type(result)}")
 
     def _format_success_result(
         self,
-        result: Dict[str, Any],
+        result: dict[str, Any],
         execution_time_ms: float,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Format successful execution result.
 
@@ -173,7 +172,7 @@ class BaseAgent(ABC):
         self,
         error: Exception,
         execution_time_ms: float,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Format error result.
 
@@ -198,9 +197,9 @@ class BaseAgent(ABC):
     def _handle_error(
         self,
         error: Exception,
-        fallback_func: Optional[callable] = None,
+        fallback_func: callable | None = None,
         **fallback_kwargs,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Handle errors with optional fallback.
 

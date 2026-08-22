@@ -9,7 +9,6 @@ Task 13: Citation-first generation templates
 
 from typing import Literal
 
-
 __all__ = [
     "QUERY_TYPE_CONCEPT",
     "QUERY_TYPE_COMPARISON",
@@ -141,6 +140,7 @@ Example structure:
 # Template Selection
 # ============================================================================
 
+
 def get_answer_template(query_type: QueryType) -> str:
     """
     Get answer template for specific query type.
@@ -175,32 +175,71 @@ def infer_query_type(question: str) -> QueryType:
 
     # Comparison indicators
     comparison_keywords = [
-        "比较", "对比", "区别", "差异", "vs", "versus", "compare", "difference between",
-        "相比", "versus", "和...的区别"
+        "比较",
+        "对比",
+        "区别",
+        "差异",
+        "vs",
+        "versus",
+        "compare",
+        "difference between",
+        "相比",
+        "versus",
+        "和...的区别",
     ]
     if any(kw in question_lower for kw in comparison_keywords):
         return QUERY_TYPE_COMPARISON
 
     # Relationship indicators
     relationship_keywords = [
-        "关系", "关联", "联系", "影响", "作用", "relationship", "connection",
-        "how does", "affect", "influence", "relate to", "与...的关系"
+        "关系",
+        "关联",
+        "联系",
+        "影响",
+        "作用",
+        "relationship",
+        "connection",
+        "how does",
+        "affect",
+        "influence",
+        "relate to",
+        "与...的关系",
     ]
     if any(kw in question_lower for kw in relationship_keywords):
         return QUERY_TYPE_RELATIONSHIP
 
     # Procedural indicators
     procedural_keywords = [
-        "如何", "怎么", "怎样", "步骤", "方法", "过程", "流程",
-        "how to", "how do", "steps", "procedure", "process", "方式"
+        "如何",
+        "怎么",
+        "怎样",
+        "步骤",
+        "方法",
+        "过程",
+        "流程",
+        "how to",
+        "how do",
+        "steps",
+        "procedure",
+        "process",
+        "方式",
     ]
     if any(kw in question_lower for kw in procedural_keywords):
         return QUERY_TYPE_PROCEDURAL
 
     # Concept indicators (what is, define, explain)
     concept_keywords = [
-        "什么是", "定义", "解释", "介绍", "含义",
-        "what is", "what are", "define", "explain", "meaning of", "是什么"
+        "什么是",
+        "定义",
+        "解释",
+        "介绍",
+        "含义",
+        "what is",
+        "what are",
+        "define",
+        "explain",
+        "meaning of",
+        "是什么",
     ]
     if any(kw in question_lower for kw in concept_keywords):
         return QUERY_TYPE_CONCEPT

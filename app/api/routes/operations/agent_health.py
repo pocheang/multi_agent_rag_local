@@ -9,22 +9,23 @@ GET /api/v1/agents/status - Get agent execution statistics
 import logging
 from typing import Any
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 
-from app.services.observability.agent_execution_tracker import AgentExecutionTracker
+from app.api.deps.auth import require_admin
 from app.services.legacy_agent_health import (
     available_agent_health_checks,
     get_agent_config_values,
     validate_agent,
     validate_all_agents,
 )
+from app.services.observability.agent_execution_tracker import AgentExecutionTracker
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/v1/agents", tags=["agent-health"])
 
 
-@router.get("/health")
+@router.get("/health", dependencies=[Depends(require_admin)])
 async def check_all_agents_health() -> dict[str, Any]:
     """
     Check health status of all agents.
@@ -59,12 +60,12 @@ async def check_all_agents_health() -> dict[str, Any]:
     try:
         results = validate_all_agents()
         return results
-    except Exception as e:
+    except Exception:
         logger.exception("Failed to check agents health")
-        raise HTTPException(status_code=500, detail=f"Health check failed: {str(e)}")
+        raise HTTPException(status_code=500, detail="Agent health check failed")
 
 
-@router.get("/{agent_name}/health")
+@router.get("/{agent_name}/health", dependencies=[Depends(require_admin)])
 async def check_agent_health(agent_name: str) -> dict[str, Any]:
     """
     Check health status of a specific agent.
@@ -92,12 +93,12 @@ async def check_agent_health(agent_name: str) -> dict[str, Any]:
     try:
         result = validate_agent(agent_name)
         return result
-    except Exception as e:
-        logger.exception(f"Failed to check {agent_name} health")
-        raise HTTPException(status_code=500, detail=f"Health check failed for {agent_name}: {str(e)}")
+    except Exception:
+        logger.exception("Failed to check %s health", agent_name)
+        raise HTTPException(status_code=500, detail="Agent health check failed")
 
 
-@router.get("/status")
+@router.get("/status", dependencies=[Depends(require_admin)])
 async def get_agent_execution_status() -> dict[str, Any]:
     """
     Get agent execution statistics (legacy endpoint).
@@ -132,12 +133,12 @@ async def get_agent_execution_status() -> dict[str, Any]:
             "status": "ok",
             "statistics": stats,
         }
-    except Exception as e:
+    except Exception:
         logger.exception("Failed to get agent execution status")
-        raise HTTPException(status_code=500, detail=f"Failed to get execution status: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to get execution status")
 
 
-@router.get("/trace/{execution_id}")
+@router.get("/trace/{execution_id}", dependencies=[Depends(require_admin)])
 async def get_execution_trace(execution_id: str) -> dict[str, Any]:
     """
     Get detailed execution trace for a specific query.
@@ -181,12 +182,12 @@ async def get_execution_trace(execution_id: str) -> dict[str, Any]:
         return trace.model_dump()
     except HTTPException:
         raise
-    except Exception as e:
-        logger.exception(f"Failed to get execution trace for {execution_id}")
-        raise HTTPException(status_code=500, detail=f"Failed to get execution trace: {str(e)}")
+    except Exception:
+        logger.exception("Failed to get execution trace for %s", execution_id)
+        raise HTTPException(status_code=500, detail="Failed to get execution trace")
 
 
-@router.get("/config")
+@router.get("/config", dependencies=[Depends(require_admin)])
 async def get_agent_config() -> dict[str, Any]:
     """
     Get current agent configuration.
@@ -233,8 +234,6 @@ async def get_agent_config() -> dict[str, Any]:
                 "consistency_guard_enabled": getattr(settings, "consistency_guard_enabled", True),
             },
         }
-    except Exception as e:
+    except Exception:
         logger.exception("Failed to get agent config")
-        raise HTTPException(status_code=500, detail=f"Failed to get agent config: {str(e)}")
-
-
+        raise HTTPException(status_code=500, detail="Failed to get agent config")

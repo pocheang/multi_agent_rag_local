@@ -1,4 +1,4 @@
-﻿"""Public document management routes for the QueryMind API."""
+"""Public document management routes for the QueryMind API."""
 
 from pathlib import Path
 from typing import Annotated, Any
@@ -11,12 +11,17 @@ from app.api.dependencies import (
     upload_limiter,
 )
 from app.api.deps.auth import _require_permission, _require_user
-from app.api.utils.auth_helpers import _client_ip
 from app.api.deps.documents import (
     _guess_agent_class_for_upload,
     _is_probably_valid_upload_signature,
     _is_source_manageable_for_user,
     _list_visible_documents_for_user,
+)
+from app.api.schemas import (
+    FileIndexActionResponse,
+    IndexedFileSummary,
+    IndexHealthResponse,
+    UploadResponse,
 )
 from app.api.transport.errors import (
     bad_request,
@@ -27,13 +32,8 @@ from app.api.transport.errors import (
     payload_too_large,
     rate_limited,
 )
+from app.api.utils.auth_helpers import _client_ip
 from app.api.utils.string_utils import normalize_string
-from app.api.schemas import (
-    FileIndexActionResponse,
-    IndexedFileSummary,
-    IndexHealthResponse,
-    UploadResponse,
-)
 from app.ingestion.loaders import IMAGE_EXTENSIONS
 from app.services.documents.dedup import (
     UploadInvalidFileError,
@@ -42,15 +42,15 @@ from app.services.documents.dedup import (
     UploadWriteError,
     store_uploaded_files,
 )
-from app.services.documents.registry import get_document_by_source, merge_visible_document_status
 from app.services.documents.index_health import build_index_health_report
 from app.services.documents.index_manager import (
     delete_document_index,
     prepare_uploaded_document_indexes,
     rebuild_document_index,
 )
-from app.services.runtime.ingest_queue import register_and_enqueue_uploads
+from app.services.documents.registry import get_document_by_source, merge_visible_document_status
 from app.services.parser_profiles import choose_parser_profile
+from app.services.runtime.ingest_queue import register_and_enqueue_uploads
 
 router = APIRouter(tags=["documents"])
 
@@ -224,7 +224,7 @@ async def upload_files(
 ):
     _require_permission(user, "upload:create", request, "document")
     limiter_key = f"upload:{user['user_id']}:{_client_ip(request)}"
-    if not upload_limiter.allow(limiter_key):
+    if not upload_limiter.try_acquire(limiter_key):
         _audit(request, action="upload.create", resource_type="document", result="rate_limited", user=user)
         raise rate_limited("Upload rate limit exceeded. Maximum 20 uploads per hour.")
 
@@ -250,7 +250,27 @@ async def upload_files(
             parser_profile_for_upload=choose_parser_profile,
         )
     except UploadPayloadTooLargeError as exc:
-        raise payload_too_large(str(exc))
+        # 构建友好的错误消息
+        error_details = {
+            "error": "upload_too_large",
+            "message": str(exc),
+        }
+
+        # 添加具体的大小信息
+        if exc.file_size and exc.max_file_size:
+            error_details["file_size_mb"] = round(exc.file_size / (1024 * 1024), 2)
+            error_details["max_file_size_mb"] = round(exc.max_file_size / (1024 * 1024), 2)
+            error_details["suggestion"] = f"单个文件不能超过 {error_details['max_file_size_mb']}MB"
+
+        if exc.total_size and exc.max_total_size:
+            error_details["total_size_mb"] = round(exc.total_size / (1024 * 1024), 2)
+            error_details["max_total_size_mb"] = round(exc.max_total_size / (1024 * 1024), 2)
+            error_details["suggestion"] = f"本次上传总大小 {error_details['total_size_mb']}MB 超过限制 {error_details['max_total_size_mb']}MB，请分批上传"
+
+        if exc.filename:
+            error_details["filename"] = exc.filename
+
+        raise HTTPException(status_code=413, detail=error_details)
     except UploadInvalidFileError as exc:
         raise bad_request(str(exc))
     except UploadWriteError as exc:
@@ -331,6 +351,3 @@ async def upload_files(
         chunks_indexed=0,
         triplets_written=0,
     )
-
-
-

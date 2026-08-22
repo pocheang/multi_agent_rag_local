@@ -23,6 +23,7 @@ class PromptStore:
     def _connect(self) -> sqlite3.Connection:
         conn = sqlite3.connect(self.db_path)
         conn.row_factory = sqlite3.Row
+        conn.execute("PRAGMA foreign_keys = ON")
         return conn
 
     def _init_schema(self) -> None:
@@ -31,7 +32,7 @@ class PromptStore:
                 """
                 CREATE TABLE IF NOT EXISTS prompt_templates (
                   prompt_id TEXT PRIMARY KEY,
-                  user_id TEXT NOT NULL,
+                  user_id TEXT NOT NULL REFERENCES users(user_id) ON DELETE CASCADE,
                   title TEXT NOT NULL,
                   content TEXT NOT NULL,
                   agent_class TEXT NOT NULL DEFAULT 'general',
@@ -49,8 +50,8 @@ class PromptStore:
                 """
                 CREATE TABLE IF NOT EXISTS prompt_template_versions (
                   version_id TEXT PRIMARY KEY,
-                  prompt_id TEXT NOT NULL,
-                  user_id TEXT NOT NULL,
+                  prompt_id TEXT NOT NULL REFERENCES prompt_templates(prompt_id) ON DELETE CASCADE,
+                  user_id TEXT NOT NULL REFERENCES users(user_id) ON DELETE CASCADE,
                   title TEXT NOT NULL,
                   content TEXT NOT NULL,
                   agent_class TEXT NOT NULL DEFAULT 'general',
@@ -253,5 +254,18 @@ class PromptStore:
 
     def delete_prompt(self, user_id: str, prompt_id: str) -> bool:
         with self._connect() as conn:
-            result = conn.execute("DELETE FROM prompt_templates WHERE prompt_id=? AND user_id=?", (prompt_id, user_id))
-            return result.rowcount > 0
+            exists = conn.execute(
+                "SELECT 1 FROM prompt_templates WHERE prompt_id=? AND user_id=?",
+                (prompt_id, user_id),
+            ).fetchone()
+            if exists is None:
+                return False
+            conn.execute(
+                "DELETE FROM prompt_template_versions WHERE prompt_id=? AND user_id=?",
+                (prompt_id, user_id),
+            )
+            conn.execute(
+                "DELETE FROM prompt_templates WHERE prompt_id=? AND user_id=?",
+                (prompt_id, user_id),
+            )
+            return True

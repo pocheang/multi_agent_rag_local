@@ -57,6 +57,7 @@ RATE_LIMITS = {
     "role_update": "10/hour",  # Max 10 role updates per hour
     # Status update - lenient
     "status_update": "20/hour",  # Max 20 status updates per hour
+    "credit_add": "30/hour",  # Max 30 credit top-ups per hour
     # List queries - lenient
     "list_users": "100/minute",  # Max 100 user list queries per minute
     # Audit log queries - lenient
@@ -79,7 +80,3 @@ def get_rate_limit(operation: str) -> str:
 
 # Export global limiter instance for convenience
 rate_limiter = get_limiter()
-
-
-
-

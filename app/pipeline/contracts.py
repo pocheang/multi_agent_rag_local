@@ -84,7 +84,7 @@ class PipelineRequest(_ImmutableContract):
         return self.user
 
 
-def to_orchestration_request(request: PipelineRequest) -> "OrchestrationRequest":
+def to_orchestration_request(request: PipelineRequest) -> OrchestrationRequest:
     """Translate the public request contract before entering orchestration.
 
     This is deliberately owned by the pipeline boundary: orchestration receives

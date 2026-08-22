@@ -12,24 +12,26 @@ Target: <200ms execution time with async/await and optional LLM scoring.
 """
 
 import asyncio
-import time
+import logging
 import re
-from typing import List, Dict, Optional
-from collections import Counter
+import time
 
-from app.agents.shared.quality_models import RetrievalQualityResult, RetrievalQualityMetrics
 from app.agents.shared.config import (
-    RETRIEVAL_WEIGHT_COVERAGE,
-    RETRIEVAL_WEIGHT_RELEVANCE,
-    RETRIEVAL_WEIGHT_DIVERSITY,
-    RETRIEVAL_WEIGHT_COMPLETENESS,
+    RETRIEVAL_QUALITY_TIMEOUT_MS,
     RETRIEVAL_SAMPLE_TOP_K,
-    RETRIEVAL_QUALITY_TIMEOUT_MS
+    RETRIEVAL_WEIGHT_COMPLETENESS,
+    RETRIEVAL_WEIGHT_COVERAGE,
+    RETRIEVAL_WEIGHT_DIVERSITY,
+    RETRIEVAL_WEIGHT_RELEVANCE,
 )
+from app.agents.shared.quality_models import RetrievalQualityMetrics, RetrievalQualityResult
+
+logger = logging.getLogger(__name__)
 
 # Optional: Import LLM relevance scoring (Task 11)
 try:
     from app.agents.rag.relevance import batch_score_relevance
+
     LLM_SCORING_AVAILABLE = True
 except ImportError:
     LLM_SCORING_AVAILABLE = False
@@ -37,10 +39,10 @@ except ImportError:
 
 def _is_chinese(text: str) -> bool:
     """Check if text contains Chinese characters"""
-    return bool(re.search(r'[一-鿿]', text))
+    return bool(re.search(r"[一-鿿]", text))
 
 
-def _tokenize_query(query: str) -> List[str]:
+def _tokenize_query(query: str) -> list[str]:
     """
     Tokenize query into keywords.
     Uses simple segmentation for Chinese, word splitting for English.
@@ -50,25 +52,25 @@ def _tokenize_query(query: str) -> List[str]:
         # Extract 2-3 character sequences as potential words
         keywords = []
         # Add individual meaningful characters (length > 1)
-        text = re.sub(r'[^一-鿿a-zA-Z0-9]', '', query)
+        text = re.sub(r"[^一-鿿a-zA-Z0-9]", "", query)
         keywords.extend(list(text))
 
         # Add 2-char and 3-char combinations
         for i in range(len(text) - 1):
-            keywords.append(text[i:i+2])
+            keywords.append(text[i : i + 2])
         for i in range(len(text) - 2):
-            keywords.append(text[i:i+3])
+            keywords.append(text[i : i + 3])
 
         return list(set(keywords))  # Remove duplicates
     else:
         # For English, simple word splitting
-        words = re.findall(r'\b\w+\b', query.lower())
+        words = re.findall(r"\b\w+\b", query.lower())
         # Filter out stop words and short words
-        stop_words = {'a', 'an', 'the', 'is', 'are', 'was', 'were', 'in', 'on', 'at', 'to', 'for', 'of', 'and', 'or'}
+        stop_words = {"a", "an", "the", "is", "are", "was", "were", "in", "on", "at", "to", "for", "of", "and", "or"}
         return [w for w in words if w not in stop_words and len(w) > 2]
 
 
-async def _calculate_coverage_score(query: str, chunks: List[Dict]) -> float:
+async def _calculate_coverage_score(query: str, chunks: list[dict]) -> float:
     """
     Calculate how well chunks cover query keywords.
 
@@ -82,7 +84,7 @@ async def _calculate_coverage_score(query: str, chunks: List[Dict]) -> float:
         return 0.5  # Neutral score if no keywords extracted
 
     # Combine all chunk content
-    all_content = ' '.join(chunk.get('content', '') for chunk in chunks)
+    all_content = " ".join(chunk.get("content", "") for chunk in chunks)
     all_content_lower = all_content.lower()
 
     # Count how many keywords are covered
@@ -92,7 +94,7 @@ async def _calculate_coverage_score(query: str, chunks: List[Dict]) -> float:
     return min(1.0, coverage_ratio)
 
 
-async def _calculate_relevance_score(chunks: List[Dict], metadata: Dict) -> float:
+async def _calculate_relevance_score(chunks: list[dict], metadata: dict) -> float:
     """
     Calculate average relevance from scores.
 
@@ -103,20 +105,20 @@ async def _calculate_relevance_score(chunks: List[Dict], metadata: Dict) -> floa
         return 0.0
 
     # Extract scores from chunks
-    scores = [chunk.get('score', 0.5) for chunk in chunks]
+    scores = [chunk.get("score", 0.5) for chunk in chunks]
 
     if not scores:
         return 0.5  # Neutral if no scores available
 
     # Calculate average of top-K
-    top_k = metadata.get('top_k', RETRIEVAL_SAMPLE_TOP_K)
+    top_k = metadata.get("top_k", RETRIEVAL_SAMPLE_TOP_K)
     top_scores = sorted(scores, reverse=True)[:top_k]
 
     avg_score = sum(top_scores) / len(top_scores)
     return min(1.0, max(0.0, avg_score))
 
 
-async def _calculate_diversity_score(chunks: List[Dict]) -> float:
+async def _calculate_diversity_score(chunks: list[dict]) -> float:
     """
     Calculate source diversity.
 
@@ -127,7 +129,7 @@ async def _calculate_diversity_score(chunks: List[Dict]) -> float:
         return 0.0
 
     # Extract sources
-    sources = [chunk.get('source', 'unknown') for chunk in chunks]
+    sources = [chunk.get("source", "unknown") for chunk in chunks]
 
     # Count unique sources
     unique_sources = len(set(sources))
@@ -148,7 +150,7 @@ async def _calculate_diversity_score(chunks: List[Dict]) -> float:
         return diversity_ratio * 0.7
 
 
-async def _calculate_completeness_score(chunks: List[Dict]) -> float:
+async def _calculate_completeness_score(chunks: list[dict]) -> float:
     """
     Check if chunks have complete context.
 
@@ -159,7 +161,7 @@ async def _calculate_completeness_score(chunks: List[Dict]) -> float:
         return 0.0
 
     # Calculate average chunk length
-    lengths = [len(chunk.get('content', '')) for chunk in chunks]
+    lengths = [len(chunk.get("content", "")) for chunk in chunks]
     avg_length = sum(lengths) / len(lengths)
 
     # Scoring based on length thresholds
@@ -177,10 +179,9 @@ async def _calculate_completeness_score(chunks: List[Dict]) -> float:
         length_score = avg_length / 50 * 0.3
 
     # Check for truncation indicators
-    truncation_indicators = ['...', '…', '[truncated]', '[...]']
+    truncation_indicators = ["...", "…", "[truncated]", "[...]"]
     truncated_count = sum(
-        1 for chunk in chunks
-        if any(indicator in chunk.get('content', '') for indicator in truncation_indicators)
+        1 for chunk in chunks if any(indicator in chunk.get("content", "") for indicator in truncation_indicators)
     )
 
     truncation_penalty = (truncated_count / len(chunks)) * 0.2
@@ -189,7 +190,7 @@ async def _calculate_completeness_score(chunks: List[Dict]) -> float:
     return min(1.0, final_score)
 
 
-async def _calculate_llm_relevance_score(query: str, chunks: List[Dict], metadata: Dict) -> float:
+async def _calculate_llm_relevance_score(query: str, chunks: list[dict], metadata: dict) -> float:
     """
     Calculate LLM-based relevance score for top-K chunks.
 
@@ -206,29 +207,28 @@ async def _calculate_llm_relevance_score(query: str, chunks: List[Dict], metadat
         return 0.0
 
     # Score only top-K chunks for performance
-    top_k = min(metadata.get('top_k', RETRIEVAL_SAMPLE_TOP_K), 5)
+    top_k = min(metadata.get("top_k", RETRIEVAL_SAMPLE_TOP_K), 5)
     top_chunks = chunks[:top_k]
 
     try:
         # Use batch LLM scoring with timeout
         result = await asyncio.wait_for(
             batch_score_relevance(query, top_chunks),
-            timeout=10.0  # 10s timeout for LLM scoring
+            timeout=10.0,  # 10s timeout for LLM scoring
         )
         return result.average_score
-    except asyncio.TimeoutError:
+    except TimeoutError:
         # Fallback to basic scoring on timeout
+        logger.warning("LLM relevance scoring timed out, using basic scoring")
         return await _calculate_relevance_score(chunks, metadata)
-    except Exception:
+    except Exception as e:
         # Fallback to basic scoring on any error
+        logger.error(f"LLM relevance scoring failed: {e}", exc_info=True)
         return await _calculate_relevance_score(chunks, metadata)
 
 
 async def evaluate_retrieval_quality(
-    query: str,
-    chunks: List[Dict],
-    metadata: Dict,
-    use_llm_scoring: bool = False
+    query: str, chunks: list[dict], metadata: dict, use_llm_scoring: bool = False
 ) -> RetrievalQualityResult:
     """
     Evaluate retrieval quality with 4 metrics (async, non-blocking).
@@ -252,14 +252,11 @@ async def evaluate_retrieval_quality(
         return RetrievalQualityResult(
             overall_quality=0.0,
             metrics=RetrievalQualityMetrics(
-                coverage_score=0.0,
-                relevance_score=0.0,
-                diversity_score=0.0,
-                completeness_score=0.0
+                coverage_score=0.0, relevance_score=0.0, diversity_score=0.0, completeness_score=0.0
             ),
             execution_time_ms=int((time.time() - start_time) * 1000),
             issues=["no_chunks_retrieved"],
-            suggestions=["Check retrieval configuration or query"]
+            suggestions=["Check retrieval configuration or query"],
         )
 
     try:
@@ -274,20 +271,19 @@ async def evaluate_retrieval_quality(
             _calculate_coverage_score(query, chunks),
             relevance_task,
             _calculate_diversity_score(chunks),
-            _calculate_completeness_score(chunks)
+            _calculate_completeness_score(chunks),
         ]
 
         coverage, relevance, diversity, completeness = await asyncio.wait_for(
-            asyncio.gather(*tasks),
-            timeout=RETRIEVAL_QUALITY_TIMEOUT_MS / 1000.0
+            asyncio.gather(*tasks), timeout=RETRIEVAL_QUALITY_TIMEOUT_MS / 1000.0
         )
 
         # Calculate overall quality (weighted)
         overall = (
-            coverage * RETRIEVAL_WEIGHT_COVERAGE +
-            relevance * RETRIEVAL_WEIGHT_RELEVANCE +
-            diversity * RETRIEVAL_WEIGHT_DIVERSITY +
-            completeness * RETRIEVAL_WEIGHT_COMPLETENESS
+            coverage * RETRIEVAL_WEIGHT_COVERAGE
+            + relevance * RETRIEVAL_WEIGHT_RELEVANCE
+            + diversity * RETRIEVAL_WEIGHT_DIVERSITY
+            + completeness * RETRIEVAL_WEIGHT_COMPLETENESS
         )
 
         # Identify issues and suggestions
@@ -318,39 +314,34 @@ async def evaluate_retrieval_quality(
                 coverage_score=round(coverage, 3),
                 relevance_score=round(relevance, 3),
                 diversity_score=round(diversity, 3),
-                completeness_score=round(completeness, 3)
+                completeness_score=round(completeness, 3),
             ),
             execution_time_ms=execution_time,
             issues=issues,
-            suggestions=suggestions
+            suggestions=suggestions,
         )
 
-    except asyncio.TimeoutError:
+    except TimeoutError:
         # Graceful degradation on timeout
         return RetrievalQualityResult(
             overall_quality=0.5,
             metrics=RetrievalQualityMetrics(
-                coverage_score=0.5,
-                relevance_score=0.5,
-                diversity_score=0.5,
-                completeness_score=0.5
+                coverage_score=0.5, relevance_score=0.5, diversity_score=0.5, completeness_score=0.5
             ),
             execution_time_ms=RETRIEVAL_QUALITY_TIMEOUT_MS,
             issues=["evaluation_timeout"],
-            suggestions=["Reduce chunk count or simplify metrics"]
+            suggestions=["Reduce chunk count or simplify metrics"],
         )
     except Exception as e:
         # Graceful error handling
+        logger.error(f"Retrieval quality evaluation failed: {e}", exc_info=True)
         execution_time = int((time.time() - start_time) * 1000)
         return RetrievalQualityResult(
             overall_quality=0.5,
             metrics=RetrievalQualityMetrics(
-                coverage_score=0.5,
-                relevance_score=0.5,
-                diversity_score=0.5,
-                completeness_score=0.5
+                coverage_score=0.5, relevance_score=0.5, diversity_score=0.5, completeness_score=0.5
             ),
             execution_time_ms=execution_time,
             issues=[f"evaluation_error: {str(e)}"],
-            suggestions=["Check input data format"]
+            suggestions=["Check input data format"],
         )

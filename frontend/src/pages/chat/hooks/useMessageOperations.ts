@@ -44,7 +44,6 @@ export function useMessageOperations(params: UseMessageOperationsParams) {
 
   const removeMessage = async (msg: SessionMessage) => {
     if (!currentSessionId || !msg.message_id) return;
-    if (!window.confirm("Delete this message?")) return;
     try {
       const detail = await appApi.messageDelete(currentSessionId, msg.message_id);
       setMessages(detail.messages || []);

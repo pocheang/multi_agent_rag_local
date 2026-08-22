@@ -1,6 +1,6 @@
 """Compatibility alias for the canonical public sessions routes."""
 
-from importlib import import_module
 import sys
+from importlib import import_module
 
 sys.modules[__name__] = import_module("app.api.routes.public.sessions")

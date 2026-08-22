@@ -18,10 +18,8 @@ from app.core.config import get_settings
 from app.domain.text import normalize_string
 from app.orchestration.request import ConversationTurn, OrchestrationRequest, RequestScope
 from app.services.agent_classifier import classify_agent_class
-from app.services.sessions.history import HistoryStore
 from app.services.documents.index_manager import list_indexed_files
 from app.services.input_normalizer import enhance_user_question_for_completion
-from app.services.sessions.memory_store import MemoryStore, build_memory_context
 from app.services.pdf_agent_guard import (
     apply_pdf_focus_to_question,
     build_choose_pdf_hint,
@@ -29,9 +27,11 @@ from app.services.pdf_agent_guard import (
     choose_pdf_targets,
 )
 from app.services.query_intent import is_casual_chat_query
-from app.services.runtime.rag_runtime_scope import is_under_path
 from app.services.retrieval.profiles import normalize_retrieval_profile, profile_force_local_only, profile_to_strategy
+from app.services.runtime.rag_runtime_scope import is_under_path
 from app.services.runtime.runtime_ops import resolve_profile_for_request
+from app.services.sessions.history import HistoryStore
+from app.services.sessions.memory_store import MemoryStore, build_memory_context
 
 _SETTINGS = get_settings()
 _ALLOWED_AGENT_CLASSES = {"general", "cybersecurity", "artificial_intelligence", "pdf_text", "policy"}
@@ -185,7 +185,15 @@ def _pdf_preparation(
     for row in _visible_documents(user):
         filename = str(row.get("filename", "") or "").strip()
         if Path(filename).suffix.lower() not in {
-            ".pdf", ".png", ".jpg", ".jpeg", ".gif", ".bmp", ".tif", ".tiff", ".webp",
+            ".pdf",
+            ".png",
+            ".jpg",
+            ".jpeg",
+            ".gif",
+            ".bmp",
+            ".tif",
+            ".tiff",
+            ".webp",
         }:
             continue
         if filename and filename not in pdf_names:
@@ -195,27 +203,52 @@ def _pdf_preparation(
         except (TypeError, ValueError):
             chunks_by_name.setdefault(filename, 0)
     if not pdf_names:
-        return None, None, EarlyStandardResponse(
-            answer=build_upload_pdf_hint(), route="pdf_text", reason="pdf_agent_no_pdf",
-            skill="pdf_text_reader", agent_class="pdf_text",
+        return (
+            None,
+            None,
+            EarlyStandardResponse(
+                answer=build_upload_pdf_hint(),
+                route="pdf_text",
+                reason="pdf_agent_no_pdf",
+                skill="pdf_text_reader",
+                agent_class="pdf_text",
+            ),
         )
     selected = choose_pdf_targets(question, pdf_names)
     if len(pdf_names) > 1 and not selected:
-        return None, None, EarlyStandardResponse(
-            answer=build_choose_pdf_hint(pdf_names), route="pdf_text", reason="pdf_agent_need_selection",
-            skill="pdf_text_reader", agent_class="pdf_text",
+        return (
+            None,
+            None,
+            EarlyStandardResponse(
+                answer=build_choose_pdf_hint(pdf_names),
+                route="pdf_text",
+                reason="pdf_agent_need_selection",
+                skill="pdf_text_reader",
+                agent_class="pdf_text",
+            ),
         )
     if selected:
         selected_with_chunks = [name for name in selected if chunks_by_name.get(name, 0) > 0]
         if not selected_with_chunks:
-            return None, None, EarlyStandardResponse(
-                answer=(
-                    "The selected document exists, but its index is empty (chunks=0), so I cannot read detailed content yet.\n"
-                    "Please click Reindex for this file, then ask again."
+            return (
+                None,
+                None,
+                EarlyStandardResponse(
+                    answer=(
+                        "The selected document exists, but its index is empty (chunks=0), so I cannot read detailed content yet.\n"
+                        "Please click Reindex for this file, then ask again."
+                    ),
+                    route="pdf_text",
+                    reason="pdf_agent_chunks_zero",
+                    skill="pdf_text_reader",
+                    agent_class="pdf_text",
                 ),
-                route="pdf_text", reason="pdf_agent_chunks_zero", skill="pdf_text_reader", agent_class="pdf_text",
             )
-        return apply_pdf_focus_to_question(question, selected_with_chunks), _allowed_sources(user, selected_with_chunks), None
+        return (
+            apply_pdf_focus_to_question(question, selected_with_chunks),
+            _allowed_sources(user, selected_with_chunks),
+            None,
+        )
     return question, None, None
 
 
@@ -251,26 +284,48 @@ def prepare_standard_request(request: OrchestrationRequest) -> PreparedStandardR
     original_question = request.question
     agent_class = _effective_agent_class(original_question, request.source_scope.agent_class_hint)
     if (
-        "æ–‡ä»¶" in original_question or "æ–‡æ¡£" in original_question or "pdf" in original_question.lower()
-        or "èµ„æ–™" in original_question or "ä¸Šä¼ " in original_question
+        "文件" in original_question
+        or "文档" in original_question
+        or "pdf" in original_question.lower()
+        or "资料" in original_question
+        or "上传" in original_question
     ):
-        inventory_terms = ("å‡ ä¸ª", "å¤šå°‘", "æ•°é‡", "æœ‰å“ªäº›", "åˆ—è¡¨", "æ¸…å•", "åˆ—å‡º", "å¤šå°‘ä¸ª")
+        inventory_terms = ("几个", "多少", "数量", "有哪些", "列表", "清单", "列出", "多少个")
         if any(term in original_question.lower() for term in inventory_terms):
             names = [str(row.get("filename", "") or "").strip() for row in _visible_documents(user)]
             names = [name for index, name in enumerate(names) if name and name not in names[:index]]
             answer = (
-                "ä½ å½“å‰å¯è®¿é—®çš„æ–‡ä»¶æ•°é‡ä¸º 0ã€‚"
-                if not names else f"ä½ å½“å‰å¯è®¿é—®çš„æ–‡ä»¶å…± {len(names)} ä¸ªï¼š{'ã€'.join(names[:20])}{f'ï¼ˆå…¶ä½™ {len(names) - 20} ä¸ªå·²çœç•¥ï¼‰' if len(names) > 20 else ''}ã€‚"
+                "你当前可访问的文件数量为 0。"
+                if not names
+                else f"你当前可访问的文件共 {len(names)} 个：{'、'.join(names[:20])}{f'（其余 {len(names) - 20} 个已省略）' if len(names) > 20 else ''}。"
             )
-            return PreparedStandardRequest(request, original_question, original_question, [], "advanced", {}, False, False,
-                EarlyStandardResponse(answer, "policy", "user_file_inventory_only", "policy_guard", "policy"))
+            return PreparedStandardRequest(
+                request,
+                original_question,
+                original_question,
+                [],
+                "advanced",
+                {},
+                False,
+                False,
+                EarlyStandardResponse(answer, "policy", "user_file_inventory_only", "policy_guard", "policy"),
+            )
     question = original_question
     selected_sources: list[str] | None = None
     if agent_class == "pdf_text":
         question, selected_sources, early = _pdf_preparation(question, user)
         if early is not None:
-            return PreparedStandardRequest(request, original_question, original_question, [], "advanced", {}, False,
-                bool(request.use_reasoning), early)
+            return PreparedStandardRequest(
+                request,
+                original_question,
+                original_question,
+                [],
+                "advanced",
+                {},
+                False,
+                bool(request.use_reasoning),
+                early,
+            )
         question = question or original_question
     smalltalk = is_casual_chat_query(question)
     effective_question = question if smalltalk else enhance_user_question_for_completion(question)
@@ -278,22 +333,39 @@ def prepare_standard_request(request: OrchestrationRequest) -> PreparedStandardR
     use_web = bool(request.use_web_fallback and not profile_force_local_only(strategy))
     use_reasoning = bool(request.use_reasoning)
     if smalltalk:
-        use_web, use_reasoning, strategy, strategy_meta = False, False, "baseline", {"reason": "smalltalk_fast_path", "bucket": "smalltalk"}
+        use_web, use_reasoning, strategy, strategy_meta = (
+            False,
+            False,
+            "baseline",
+            {"reason": "smalltalk_fast_path", "bucket": "smalltalk"},
+        )
     allowed_sources = selected_sources if selected_sources is not None else _allowed_sources(user)
     resolved_hint = str(request.source_scope.agent_class_hint or "").strip().lower()
     resolved_hint = resolved_hint if resolved_hint in _ALLOWED_AGENT_CLASSES else None
-    execution_strategy = profile_to_strategy(strategy) if (request.retrieval_strategy is not None or strategy != "advanced") else None
+    execution_strategy = (
+        profile_to_strategy(strategy) if (request.retrieval_strategy is not None or strategy != "advanced") else None
+    )
     memory_context = "" if smalltalk else _memory_context(user, request.session_id, effective_question)
-    resolved = request.model_copy(update={
-        "question": effective_question,
-        "conversation": (ConversationTurn(role="system", content=memory_context),) if memory_context else tuple(),
-        "source_scope": RequestScope(allowed_sources=frozenset(allowed_sources), agent_class_hint=resolved_hint),
-        "retrieval_strategy": execution_strategy,
-        "use_web_fallback": use_web,
-        "use_reasoning": use_reasoning,
-    })
-    return PreparedStandardRequest(resolved, original_question, effective_question, allowed_sources, strategy, strategy_meta,
-        smalltalk, use_reasoning)
+    resolved = request.model_copy(
+        update={
+            "question": effective_question,
+            "conversation": (ConversationTurn(role="system", content=memory_context),) if memory_context else tuple(),
+            "source_scope": RequestScope(allowed_sources=frozenset(allowed_sources), agent_class_hint=resolved_hint),
+            "retrieval_strategy": execution_strategy,
+            "use_web_fallback": use_web,
+            "use_reasoning": use_reasoning,
+        }
+    )
+    return PreparedStandardRequest(
+        resolved,
+        original_question,
+        effective_question,
+        allowed_sources,
+        strategy,
+        strategy_meta,
+        smalltalk,
+        use_reasoning,
+    )
 
 
 def bind_standard_runtime_context(
@@ -325,6 +397,9 @@ def bind_standard_runtime_context(
 
 
 __all__ = [
-    "EarlyStandardResponse", "PreparedStandardRequest", "StandardExecutionContext",
-    "bind_standard_runtime_context", "prepare_standard_request",
+    "EarlyStandardResponse",
+    "PreparedStandardRequest",
+    "StandardExecutionContext",
+    "bind_standard_runtime_context",
+    "prepare_standard_request",
 ]

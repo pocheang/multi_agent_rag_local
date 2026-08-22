@@ -98,7 +98,9 @@ def check_and_enhance_prompt(title: str, content: str, use_reasoning: bool = Fal
             if data:
                 t = _sanitize_output(normalize_user_question(str(data.get("title", t))))
                 enhanced = _sanitize_output(normalize_user_question(str(data.get("content", enhanced))))
-                llm_issues = [_sanitize_output(str(item)) for item in (data.get("issues", []) or []) if str(item).strip()]
+                llm_issues = [
+                    _sanitize_output(str(item)) for item in (data.get("issues", []) or []) if str(item).strip()
+                ]
                 llm_suggestions = [
                     _sanitize_output(str(item)) for item in (data.get("suggestions", []) or []) if str(item).strip()
                 ]

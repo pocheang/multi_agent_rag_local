@@ -5,6 +5,7 @@ from typing import Any
 
 from fastapi import Depends, Request
 
+from app.api import dependencies as api_dependencies
 from app.api.dependencies import (
     _audit,
     _history_store_for_user,
@@ -14,9 +15,8 @@ from app.api.dependencies import (
     _require_existing_session_for_query,
     _require_permission,
     _require_user,
+    _reserve_chat_credit,
     _trace_id,
-    query_result_cache,
-    quota_guard,
     runtime_metrics,
 )
 from app.api.query.execution import execute_standard_query, prepare_standard_query
@@ -34,13 +34,16 @@ from app.services.security.quota import QuotaExceededError
 logger = logging.getLogger(__name__)
 
 
-def overload_mode_enabled() -> bool:
+def overload_mode_enabled(runtime: api_dependencies.QueryRuntime | None = None) -> bool:
     """Small helper for routes that need to degrade gracefully under load."""
-    return _is_overload_mode()
+    return _is_overload_mode(runtime)
 
 
-def query(req: QueryRequest, request: Request, user: dict[str, Any] = Depends(_require_user)):
+def _query_impl(req: QueryRequest, request: Request, user: dict[str, Any]):
     _require_permission(user, "query:run", request, "query")
+    query_runtime = api_dependencies.get_query_runtime()
+    query_result_cache = query_runtime.query_result_cache
+    quota_guard = query_runtime.quota_guard
     req.session_id = _require_existing_session_for_query(user, req.session_id)
     try:
         quota_guard.enforce_query_quota(user)
@@ -144,6 +147,7 @@ def query(req: QueryRequest, request: Request, user: dict[str, Any] = Depends(_r
         agent_class_hint=prepared_request.request.source_scope.agent_class_hint,
         request_id=req.request_id,
         mode="query",
+        conversation=prepared_request.request.conversation,
     )
     cached_response = (
         None
@@ -169,6 +173,7 @@ def query(req: QueryRequest, request: Request, user: dict[str, Any] = Depends(_r
             return cached
     if not query_result_cache.mark_inflight(cache_key):
         runtime_metrics.inc("query_duplicate_total")
+        # 尝试获取热缓存（可能原始请求已完成）
         hot_cached = (
             None
             if is_fast_smalltalk
@@ -179,15 +184,35 @@ def query(req: QueryRequest, request: Request, user: dict[str, Any] = Depends(_r
                 hot_cached_payload = ensure_trackable_execution_result(
                     hot_cached, question=original_question, user=user
                 )
+                logger.info(f"Duplicate request served from hot cache: {cache_key[:16]}...")
                 return parse_query_response(hot_cached_payload)
             except (ValueError, TypeError) as e:
                 logger.warning(f"Invalid hot cached query response: {e}")
                 runtime_metrics.inc("query_cache_invalid_total")
+
+        # 原始请求仍在处理中，返回202 Accepted而非409冲突
+        logger.info(f"Duplicate request detected, returning 202 Accepted: {cache_key[:16]}...")
         emit_alert(
             "query_duplicate_inflight",
-            {"trace_id": _trace_id(request), "session_id": str(req.session_id or "")},
+            {"trace_id": _trace_id(request), "session_id": str(req.session_id or ""), "severity": "info"},
         )
-        raise conflict("duplicate request in progress")
+
+        # 返回处理中状态（前端可轮询或等待）
+        from app.api.schemas.http import QueryResponse
+        response = QueryResponse(
+            answer="查询正在处理中，请稍候...",
+            route="processing",
+            status="processing",
+            request_id=req.request_id or cache_key[:32],
+            detected_language=req.force_language or "zh",
+            debug={
+                "message": "您的查询正在处理中，这可能是因为重复提交。请稍候片刻后刷新页面查看结果。",
+                "suggestion": "请避免重复点击提交按钮",
+                "cache_key": cache_key[:16] + "...",
+                "estimated_wait_seconds": 10,
+            }
+        )
+        return response
 
     result, consistency_info = execute_standard_query(
         request=request,
@@ -195,8 +220,10 @@ def query(req: QueryRequest, request: Request, user: dict[str, Any] = Depends(_r
         session_id=req.session_id,
         plan=plan,
         cache_key=cache_key,
-        overload_mode_enabled=overload_mode_enabled,
+        overload_mode_enabled=lambda: overload_mode_enabled(query_runtime),
+        query_runtime=query_runtime,
     )
+    result = ensure_trackable_execution_result(result, question=original_question, user=user)
 
     prepared = prepare_query_response(
         result=result,
@@ -238,3 +265,10 @@ def query(req: QueryRequest, request: Request, user: dict[str, Any] = Depends(_r
     )
     runtime_metrics.inc("query_success_total")
     return prepared.response
+
+
+def query(req: QueryRequest, request: Request, user: dict[str, Any] = Depends(_require_user)):
+    with _reserve_chat_credit(request, user, "query") as credit:
+        response = _query_impl(req, request, user)
+        credit.commit()
+        return response

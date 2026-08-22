@@ -75,4 +75,3 @@ def versioned_stream_response(response: StreamingResponse) -> StreamingResponse:
 
 
 __all__ = ["serialize_compatibility_event", "versioned_stream_response"]
-

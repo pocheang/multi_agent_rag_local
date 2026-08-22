@@ -134,4 +134,3 @@ def reset_logger_levels() -> dict[str, Any]:
         "reset_count": reset_count,
         "message": f"Reset {reset_count} loggers to default levels",
     }
-

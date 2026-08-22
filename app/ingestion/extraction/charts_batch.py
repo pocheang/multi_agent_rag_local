@@ -4,7 +4,7 @@ import asyncio
 import logging
 from concurrent.futures import ThreadPoolExecutor
 
-from .chart_extractor import extract_chart_data_with_vision
+from .charts import extract_chart_data_with_vision
 
 logger = logging.getLogger(__name__)
 
@@ -143,5 +143,3 @@ async def extract_charts_batch_simple(images: list[bytes], model: str, api_key: 
     """
     async with BatchChartExtractor(batch_size=batch_size) as extractor:
         return await extractor.extract_charts_batch(images, model, api_key)
-
-

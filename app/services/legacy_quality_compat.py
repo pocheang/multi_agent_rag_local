@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-from typing import Any, Type
+from typing import Any
 
 
-def get_quality_report_model() -> Type[Any]:
+def get_quality_report_model() -> type[Any]:
     """Return the legacy Pydantic quality-report model for response schemas."""
     from app.agents.shared.quality_models import QualityReport
 

@@ -10,12 +10,11 @@ Web Activity Alert System
 - 告警历史记录
 """
 
-import logging
-from datetime import datetime, timedelta
-from typing import List, Dict, Optional
-from enum import Enum
-from dataclasses import dataclass
 import json
+import logging
+from dataclasses import dataclass
+from datetime import datetime, timedelta
+from enum import Enum
 from pathlib import Path
 
 logger = logging.getLogger("app.agents.web_activity_alerts")
@@ -23,6 +22,7 @@ logger = logging.getLogger("app.agents.web_activity_alerts")
 
 class AlertLevel(Enum):
     """告警级别"""
+
     INFO = "info"
     WARNING = "warning"
     ERROR = "error"
@@ -31,6 +31,7 @@ class AlertLevel(Enum):
 
 class AlertChannel(Enum):
     """告警渠道"""
+
     LOG = "log"
     EMAIL = "email"
     WEBHOOK = "webhook"
@@ -40,6 +41,7 @@ class AlertChannel(Enum):
 @dataclass
 class AlertRule:
     """告警规则"""
+
     name: str
     description: str
     metric: str
@@ -52,13 +54,14 @@ class AlertRule:
 @dataclass
 class Alert:
     """告警记录"""
+
     timestamp: datetime
     rule_name: str
     level: AlertLevel
     message: str
     metric_value: float
     threshold: float
-    metadata: Dict = None
+    metadata: dict = None
 
 
 class WebActivityAlertSystem:
@@ -81,9 +84,9 @@ class WebActivityAlertSystem:
             config_path: 配置文件路径
         """
         self.config_path = Path(config_path)
-        self.rules: List[AlertRule] = []
-        self.alert_history: List[Alert] = []
-        self.alert_channels: List[AlertChannel] = [AlertChannel.LOG]
+        self.rules: list[AlertRule] = []
+        self.alert_history: list[Alert] = []
+        self.alert_channels: list[AlertChannel] = [AlertChannel.LOG]
 
         # 默认规则
         self._init_default_rules()
@@ -102,7 +105,7 @@ class WebActivityAlertSystem:
                 metric="success_rate",
                 operator="<",
                 threshold=80.0,
-                level=AlertLevel.WARNING
+                level=AlertLevel.WARNING,
             ),
             AlertRule(
                 name="critical_success_rate",
@@ -110,7 +113,7 @@ class WebActivityAlertSystem:
                 metric="success_rate",
                 operator="<",
                 threshold=50.0,
-                level=AlertLevel.CRITICAL
+                level=AlertLevel.CRITICAL,
             ),
             AlertRule(
                 name="high_response_time",
@@ -118,7 +121,7 @@ class WebActivityAlertSystem:
                 metric="avg_search_time",
                 operator=">",
                 threshold=5.0,
-                level=AlertLevel.WARNING
+                level=AlertLevel.WARNING,
             ),
             AlertRule(
                 name="high_filter_rate",
@@ -126,7 +129,7 @@ class WebActivityAlertSystem:
                 metric="filter_rate",
                 operator=">",
                 threshold=80.0,
-                level=AlertLevel.WARNING
+                level=AlertLevel.WARNING,
             ),
             AlertRule(
                 name="many_sanitized_queries",
@@ -134,7 +137,7 @@ class WebActivityAlertSystem:
                 metric="sanitized_queries",
                 operator=">",
                 threshold=10,
-                level=AlertLevel.WARNING
+                level=AlertLevel.WARNING,
             ),
             AlertRule(
                 name="no_activity",
@@ -142,7 +145,7 @@ class WebActivityAlertSystem:
                 metric="total_searches",
                 operator="==",
                 threshold=0,
-                level=AlertLevel.INFO
+                level=AlertLevel.INFO,
             ),
         ]
 
@@ -150,26 +153,24 @@ class WebActivityAlertSystem:
         """从配置文件加载规则"""
         if self.config_path.exists():
             try:
-                with open(self.config_path, 'r', encoding='utf-8') as f:
+                with open(self.config_path, encoding="utf-8") as f:
                     config = json.load(f)
 
                 # 加载告警渠道
-                if 'channels' in config:
-                    self.alert_channels = [
-                        AlertChannel(ch) for ch in config['channels']
-                    ]
+                if "channels" in config:
+                    self.alert_channels = [AlertChannel(ch) for ch in config["channels"]]
 
                 # 加载自定义规则
-                if 'rules' in config:
-                    for rule_data in config['rules']:
+                if "rules" in config:
+                    for rule_data in config["rules"]:
                         rule = AlertRule(
-                            name=rule_data['name'],
-                            description=rule_data['description'],
-                            metric=rule_data['metric'],
-                            operator=rule_data['operator'],
-                            threshold=float(rule_data['threshold']),
-                            level=AlertLevel(rule_data['level']),
-                            enabled=rule_data.get('enabled', True)
+                            name=rule_data["name"],
+                            description=rule_data["description"],
+                            metric=rule_data["metric"],
+                            operator=rule_data["operator"],
+                            threshold=float(rule_data["threshold"]),
+                            level=AlertLevel(rule_data["level"]),
+                            enabled=rule_data.get("enabled", True),
                         )
                         # 更新或添加规则
                         existing = next((r for r in self.rules if r.name == rule.name), None)
@@ -181,7 +182,7 @@ class WebActivityAlertSystem:
             except Exception as e:
                 logger.error(f"Failed to load alert config: {e}")
 
-    def check_metrics(self, metrics: Dict) -> List[Alert]:
+    def check_metrics(self, metrics: dict) -> list[Alert]:
         """
         检查指标并生成告警
 
@@ -212,7 +213,7 @@ class WebActivityAlertSystem:
                     message=f"{rule.description}: {rule.metric}={metric_value} {rule.operator} {rule.threshold}",
                     metric_value=metric_value,
                     threshold=rule.threshold,
-                    metadata=metrics
+                    metadata=metrics,
                 )
                 alerts.append(alert)
                 self.alert_history.append(alert)
@@ -225,12 +226,12 @@ class WebActivityAlertSystem:
     def _evaluate_rule(self, rule: AlertRule, value: float) -> bool:
         """评估规则是否触发"""
         operators = {
-            '>': lambda v, t: v > t,
-            '<': lambda v, t: v < t,
-            '>=': lambda v, t: v >= t,
-            '<=': lambda v, t: v <= t,
-            '==': lambda v, t: v == t,
-            '!=': lambda v, t: v != t,
+            ">": lambda v, t: v > t,
+            "<": lambda v, t: v < t,
+            ">=": lambda v, t: v >= t,
+            "<=": lambda v, t: v <= t,
+            "==": lambda v, t: v == t,
+            "!=": lambda v, t: v != t,
         }
 
         op_func = operators.get(rule.operator)
@@ -284,7 +285,7 @@ class WebActivityAlertSystem:
         # 使用Slack Webhook
         logger.debug(f"Slack alert: {alert.message}")
 
-    def get_recent_alerts(self, hours: int = 24, level: Optional[AlertLevel] = None) -> List[Alert]:
+    def get_recent_alerts(self, hours: int = 24, level: AlertLevel | None = None) -> list[Alert]:
         """
         获取最近的告警
 
@@ -297,17 +298,14 @@ class WebActivityAlertSystem:
         """
         cutoff = datetime.now() - timedelta(hours=hours)
 
-        alerts = [
-            alert for alert in self.alert_history
-            if alert.timestamp >= cutoff
-        ]
+        alerts = [alert for alert in self.alert_history if alert.timestamp >= cutoff]
 
         if level:
             alerts = [a for a in alerts if a.level == level]
 
         return sorted(alerts, key=lambda a: a.timestamp, reverse=True)
 
-    def get_alert_summary(self, hours: int = 24) -> Dict:
+    def get_alert_summary(self, hours: int = 24) -> dict:
         """
         获取告警摘要
 
@@ -349,7 +347,7 @@ def get_alert_system() -> WebActivityAlertSystem:
     return _global_alert_system
 
 
-def check_and_alert(metrics: Dict) -> List[Alert]:
+def check_and_alert(metrics: dict) -> list[Alert]:
     """
     便捷函数：检查指标并发送告警
 

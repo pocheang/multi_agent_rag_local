@@ -70,5 +70,3 @@ def read_corpus_records(path: Path | None = None) -> list[dict[str, Any]]:
                 continue
             rows.append(json.loads(line))
     return rows
-
-

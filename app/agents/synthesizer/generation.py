@@ -79,12 +79,12 @@ def _parse_source_docs_from_contexts(
 
     # Pattern: [doc_id:page] content
     # Extract citation blocks
-    citation_pattern = r'\[([^\]]+)\]\s*([^\[]+)'
+    citation_pattern = r"\[([^\]]+)\]\s*([^\[]+)"
     matches = re.findall(citation_pattern, all_context)
 
     for citation, content in matches:
         # Parse citation: doc1:p3 -> doc_id=doc1, page=p3
-        cit_match = re.match(r'(\w+):(\w+)', citation)
+        cit_match = re.match(r"(\w+):(\w+)", citation)
         if not cit_match:
             continue
 
@@ -93,11 +93,13 @@ def _parse_source_docs_from_contexts(
         content_text = content.strip()
 
         if content_text:
-            source_docs.append({
-                "doc_id": doc_id,
-                "page": page,
-                "content": content_text,
-            })
+            source_docs.append(
+                {
+                    "doc_id": doc_id,
+                    "page": page,
+                    "content": content_text,
+                }
+            )
 
     return source_docs
 
@@ -138,11 +140,7 @@ def _build_prompt_with_language(
         query_type = infer_query_type(question)
         answer_template = get_answer_template(query_type)
         cot_prompt = get_cot_reasoning_prompt()
-        template_section = (
-            f"\n答案模板指导（Query Type: {query_type}）：\n"
-            f"{answer_template}\n\n"
-            f"{cot_prompt}\n"
-        )
+        template_section = f"\n答案模板指导（Query Type: {query_type}）：\n{answer_template}\n\n{cot_prompt}\n"
 
     return (
         f"{language_hint}"
@@ -245,11 +243,7 @@ def _review_once(
     try:
         with bulkhead("llm"):
             model = _build_review_model(use_reasoning=use_reasoning)
-            review_prompt = (
-                _evidence_review_prompt(allowed_labels)
-                if allowed_labels
-                else NO_EVIDENCE_REVIEW_PROMPT
-            )
+            review_prompt = _evidence_review_prompt(allowed_labels) if allowed_labels else NO_EVIDENCE_REVIEW_PROMPT
             result = model.invoke([("system", review_prompt), ("human", payload)])
         data = _extract_json(result.content if hasattr(result, "content") else str(result))
     except Exception as e:
@@ -390,11 +384,7 @@ def synthesize_answer(
         web_context=web_context,
         include_evidence_guidance=bool(allowed_labels),
     )
-    system_prompt = (
-        _evidence_generation_prompt(allowed_labels)
-        if allowed_labels
-        else NO_EVIDENCE_ANSWER_PROMPT
-    )
+    system_prompt = _evidence_generation_prompt(allowed_labels) if allowed_labels else NO_EVIDENCE_ANSWER_PROMPT
 
     try:
         with bulkhead("llm"):
@@ -442,13 +432,9 @@ def synthesize_answer(
                 try:
                     asyncio.get_running_loop()
                 except RuntimeError:
-                    verification_result = asyncio.run(
-                        verify_generated_answer(final_answer, source_docs)
-                    )
+                    verification_result = asyncio.run(verify_generated_answer(final_answer, source_docs))
                 else:
-                    logger.info(
-                        "Skipping synchronous fact verification inside an active event loop"
-                    )
+                    logger.info("Skipping synchronous fact verification inside an active event loop")
 
                 if verification_result is not None:
                     logger.info(

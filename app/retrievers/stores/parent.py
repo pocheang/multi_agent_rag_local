@@ -45,5 +45,3 @@ def get_parent_text_map(parent_ids: list[str]) -> dict[str, str]:
             if len(out) == len(wanted):
                 break
     return out
-
-

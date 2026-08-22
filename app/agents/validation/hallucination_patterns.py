@@ -11,19 +11,20 @@ Designed to complement NLI validation at cascade Level 1.
 """
 
 import re
-from typing import List, Set
+
 from pydantic import BaseModel
 
 
 class HallucinationPattern(BaseModel):
     """Detected hallucination pattern"""
+
     pattern_type: str
     severity: str  # "critical", "high", "medium", "low"
     content: str
     suggestion: str
 
 
-def _extract_dates(text: str) -> Set[str]:
+def _extract_dates(text: str) -> set[str]:
     """
     Extract dates from text (English and Chinese).
 
@@ -40,24 +41,24 @@ def _extract_dates(text: str) -> Set[str]:
     dates = set()
 
     # 4-digit years (most common)
-    dates.update(re.findall(r'\b((?:19|20)\d{2})\b', text))
+    dates.update(re.findall(r"\b((?:19|20)\d{2})\b", text))
 
     # Chinese date patterns
-    dates.update(re.findall(r'\d{4}年(?:\d{1,2}月)?(?:\d{1,2}日)?', text))
+    dates.update(re.findall(r"\d{4}年(?:\d{1,2}月)?(?:\d{1,2}日)?", text))
 
     # ISO dates: YYYY-MM-DD
-    dates.update(re.findall(r'\d{4}-\d{2}-\d{2}', text))
+    dates.update(re.findall(r"\d{4}-\d{2}-\d{2}", text))
 
     # US dates: MM/DD/YYYY or M/D/YY
-    dates.update(re.findall(r'\d{1,2}/\d{1,2}/\d{2,4}', text))
+    dates.update(re.findall(r"\d{1,2}/\d{1,2}/\d{2,4}", text))
 
     # Quarter dates: Q1 2020, Q4 2021
-    dates.update(re.findall(r'Q[1-4]\s*\d{4}', text, re.IGNORECASE))
+    dates.update(re.findall(r"Q[1-4]\s*\d{4}", text, re.IGNORECASE))
 
     return dates
 
 
-def _extract_numbers(text: str) -> List[float]:
+def _extract_numbers(text: str) -> list[float]:
     """
     Extract numeric values from text.
 
@@ -74,17 +75,17 @@ def _extract_numbers(text: str) -> List[float]:
     numbers = []
 
     # Match numbers with optional units and currency
-    pattern = r'\$?\d+(?:,\d{3})*(?:\.\d+)?(?:\s*(?:million|billion|thousand|[MBK]|%))?'
+    pattern = r"\$?\d+(?:,\d{3})*(?:\.\d+)?(?:\s*(?:million|billion|thousand|[MBK]|%))?"
     matches = re.findall(pattern, text, re.IGNORECASE)
 
     for match in matches:
         # Clean the match
-        cleaned = re.sub(r'[,$\s]', '', match)
+        cleaned = re.sub(r"[,$\s]", "", match)
 
         # Handle percentages separately (keep as-is)
-        if '%' in match:
+        if "%" in match:
             try:
-                value = float(cleaned.replace('%', ''))
+                value = float(cleaned.replace("%", ""))
                 numbers.append(value)
             except ValueError:
                 pass
@@ -92,15 +93,15 @@ def _extract_numbers(text: str) -> List[float]:
 
         # Handle unit multipliers
         multiplier = 1
-        if 'billion' in match.lower() or 'B' in match:
+        if "billion" in match.lower() or "B" in match:
             multiplier = 1e9
-        elif 'million' in match.lower() or 'M' in match:
+        elif "million" in match.lower() or "M" in match:
             multiplier = 1e6
-        elif 'thousand' in match.lower() or 'K' in match:
+        elif "thousand" in match.lower() or "K" in match:
             multiplier = 1e3
 
         # Remove letters and convert
-        cleaned = re.sub(r'[a-zA-Z%]', '', cleaned)
+        cleaned = re.sub(r"[a-zA-Z%]", "", cleaned)
         try:
             value = float(cleaned) * multiplier
             numbers.append(value)
@@ -110,7 +111,7 @@ def _extract_numbers(text: str) -> List[float]:
     return numbers
 
 
-def _extract_entities(text: str) -> Set[str]:
+def _extract_entities(text: str) -> set[str]:
     """
     Extract named entities (proper nouns) from text.
 
@@ -124,11 +125,11 @@ def _extract_entities(text: str) -> Set[str]:
     entities = set()
 
     # English: Capitalized words (single or multi-word)
-    entities.update(re.findall(r'\b[A-Z][a-z]+(?:\s+[A-Z][a-z]+)*\b', text))
+    entities.update(re.findall(r"\b[A-Z][a-z]+(?:\s+[A-Z][a-z]+)*\b", text))
 
     # Chinese: 2-4 character sequences (typical name/entity length)
     # Limit to avoid extracting full phrases
-    entities.update(re.findall(r'[一-鿿]{2,4}', text))
+    entities.update(re.findall(r"[一-鿿]{2,4}", text))
 
     return entities
 
@@ -154,7 +155,7 @@ def _numbers_match(num1: float, num2: float, tolerance: float = 0.15) -> bool:
     return relative_diff <= tolerance
 
 
-def detect_date_hallucinations(answer: str, source_text: str) -> List[HallucinationPattern]:
+def detect_date_hallucinations(answer: str, source_text: str) -> list[HallucinationPattern]:
     """
     Detect date mismatches between answer and source.
 
@@ -180,17 +181,19 @@ def detect_date_hallucinations(answer: str, source_text: str) -> List[Hallucinat
     mismatched_dates = answer_dates - source_dates
 
     if mismatched_dates:
-        issues.append(HallucinationPattern(
-            pattern_type="date_mismatch",
-            severity="high",
-            content=f"Date(s) not in source: {', '.join(sorted(mismatched_dates))}",
-            suggestion="Verify dates against source documents"
-        ))
+        issues.append(
+            HallucinationPattern(
+                pattern_type="date_mismatch",
+                severity="high",
+                content=f"Date(s) not in source: {', '.join(sorted(mismatched_dates))}",
+                suggestion="Verify dates against source documents",
+            )
+        )
 
     return issues
 
 
-def detect_number_hallucinations(answer: str, source_text: str) -> List[HallucinationPattern]:
+def detect_number_hallucinations(answer: str, source_text: str) -> list[HallucinationPattern]:
     """
     Detect number mismatches between answer and source.
 
@@ -216,33 +219,32 @@ def detect_number_hallucinations(answer: str, source_text: str) -> List[Hallucin
 
     # Check each answer number against source numbers
     for ans_num in answer_numbers:
-        has_match = any(
-            _numbers_match(ans_num, src_num)
-            for src_num in source_numbers
-        )
+        has_match = any(_numbers_match(ans_num, src_num) for src_num in source_numbers)
 
         if not has_match:
             # Format number for display
             if ans_num >= 1e9:
-                display = f"${ans_num/1e9:.1f}B"
+                display = f"${ans_num / 1e9:.1f}B"
             elif ans_num >= 1e6:
-                display = f"${ans_num/1e6:.1f}M"
+                display = f"${ans_num / 1e6:.1f}M"
             elif ans_num >= 1e3:
-                display = f"${ans_num/1e3:.1f}K"
+                display = f"${ans_num / 1e3:.1f}K"
             else:
                 display = f"{ans_num}"
 
-            issues.append(HallucinationPattern(
-                pattern_type="number_mismatch",
-                severity="high",
-                content=f"Number {display} not found in sources (within 15% tolerance)",
-                suggestion="Verify numeric claims against source"
-            ))
+            issues.append(
+                HallucinationPattern(
+                    pattern_type="number_mismatch",
+                    severity="high",
+                    content=f"Number {display} not found in sources (within 15% tolerance)",
+                    suggestion="Verify numeric claims against source",
+                )
+            )
 
     return issues
 
 
-def detect_entity_hallucinations(answer: str, source_text: str) -> List[HallucinationPattern]:
+def detect_entity_hallucinations(answer: str, source_text: str) -> list[HallucinationPattern]:
     """
     Detect entity mismatches between answer and source.
 
@@ -268,15 +270,46 @@ def detect_entity_hallucinations(answer: str, source_text: str) -> List[Hallucin
 
     # Common words to ignore (not real entities)
     common_words = {
-        'The', 'A', 'An', 'In', 'On', 'At', 'To', 'For', 'Of', 'With',
-        'CEO', 'CFO', 'CTO', 'COO', 'President', 'Director', 'Manager',
-        'Company', 'Corporation', 'Inc', 'Ltd', 'LLC'
+        "The",
+        "A",
+        "An",
+        "In",
+        "On",
+        "At",
+        "To",
+        "For",
+        "Of",
+        "With",
+        "CEO",
+        "CFO",
+        "CTO",
+        "COO",
+        "President",
+        "Director",
+        "Manager",
+        "Company",
+        "Corporation",
+        "Inc",
+        "Ltd",
+        "LLC",
     }
 
     # Chinese common titles/roles to ignore
     chinese_common = {
-        '首席执行', '执行官', '担任', '公司', '成立', '实现', '年成',
-        '月日', '年月', '融资', '美元', '收入', '达到', '增长'
+        "首席执行",
+        "执行官",
+        "担任",
+        "公司",
+        "成立",
+        "实现",
+        "年成",
+        "月日",
+        "年月",
+        "融资",
+        "美元",
+        "收入",
+        "达到",
+        "增长",
     }
 
     # Find entities in answer not in source (exact match)
@@ -291,7 +324,7 @@ def detect_entity_hallucinations(answer: str, source_text: str) -> List[Hallucin
     for entity in mismatched:
         found_in_source = False
 
-        if re.match(r'[一-鿿]+', entity):
+        if re.match(r"[一-鿿]+", entity):
             # Chinese entity: check if it appears as substring in source
             # OR if any source entity is a substring of it
             if entity in source_text:
@@ -305,7 +338,7 @@ def detect_entity_hallucinations(answer: str, source_text: str) -> List[Hallucin
                         break
         else:
             # English entity: check if all words appear in source
-            if ' ' in entity:
+            if " " in entity:
                 # Multi-word: check if all words appear in source
                 words = entity.split()
                 if not all(word in source_text for word in words):
@@ -328,29 +361,31 @@ def detect_entity_hallucinations(answer: str, source_text: str) -> List[Hallucin
     # For Chinese, focus on 2-char entities (typical person names like 李明, 王伟)
     likely_names = set()
     for e in truly_missing:
-        if ' ' in e:
+        if " " in e:
             # Multi-word English names
             likely_names.add(e)
-        elif re.match(r'[一-鿿]{2}$', e):
+        elif re.match(r"[一-鿿]{2}$", e):
             # Chinese 2-char entities - typical person names
             likely_names.add(e)
-        elif re.match(r'[一-鿿]{3,4}$', e):
+        elif re.match(r"[一-鿿]{3,4}$", e):
             # Chinese 3-4 char entities - check if NOT a common phrase
             if e not in chinese_common:
                 likely_names.add(e)
 
     if likely_names:
-        issues.append(HallucinationPattern(
-            pattern_type="entity_mismatch",
-            severity="medium",
-            content=f"Entities not in source: {', '.join(sorted(likely_names))}",
-            suggestion="Verify entity names against source"
-        ))
+        issues.append(
+            HallucinationPattern(
+                pattern_type="entity_mismatch",
+                severity="medium",
+                content=f"Entities not in source: {', '.join(sorted(likely_names))}",
+                suggestion="Verify entity names against source",
+            )
+        )
 
     return issues
 
 
-def detect_negation_hallucinations(answer: str, source_text: str) -> List[HallucinationPattern]:
+def detect_negation_hallucinations(answer: str, source_text: str) -> list[HallucinationPattern]:
     """
     Detect negation conflicts between answer and source.
 
@@ -372,33 +407,38 @@ def detect_negation_hallucinations(answer: str, source_text: str) -> List[Halluc
 
     # Negation patterns (English and Chinese)
     negation_patterns = [
-        r'\bnot\b', r'\bno\b', r'\bnever\b', r'\bnone\b',
-        r'\bneither\b', r'\bnor\b', r'\bn\'t\b', r'\bfailed\s+to\b',
-        r'没有', r'不是', r'未', r'无', r'非', r'不'
+        r"\bnot\b",
+        r"\bno\b",
+        r"\bnever\b",
+        r"\bnone\b",
+        r"\bneither\b",
+        r"\bnor\b",
+        r"\bn\'t\b",
+        r"\bfailed\s+to\b",
+        r"没有",
+        r"不是",
+        r"未",
+        r"无",
+        r"非",
+        r"不",
     ]
 
     # Check for negation in answer
-    answer_has_negation = any(
-        re.search(pattern, answer, re.IGNORECASE)
-        for pattern in negation_patterns
-    )
+    answer_has_negation = any(re.search(pattern, answer, re.IGNORECASE) for pattern in negation_patterns)
 
     # Check for negation in source
-    source_has_negation = any(
-        re.search(pattern, source_text, re.IGNORECASE)
-        for pattern in negation_patterns
-    )
+    source_has_negation = any(re.search(pattern, source_text, re.IGNORECASE) for pattern in negation_patterns)
 
     # Flag if negation mismatch
     if answer_has_negation != source_has_negation:
         # Extract key content words (non-stop words)
         # English: 3+ chars to catch more words
-        answer_words = set(re.findall(r'\b\w{3,}\b', answer.lower()))
-        source_words = set(re.findall(r'\b\w{3,}\b', source_text.lower()))
+        answer_words = set(re.findall(r"\b\w{3,}\b", answer.lower()))
+        source_words = set(re.findall(r"\b\w{3,}\b", source_text.lower()))
 
         # Chinese words: 2-4 character sequences (covers more content)
-        answer_chinese = set(re.findall(r'[一-鿿]{2,4}', answer))
-        source_chinese = set(re.findall(r'[一-鿿]{2,4}', source_text))
+        answer_chinese = set(re.findall(r"[一-鿿]{2,4}", answer))
+        source_chinese = set(re.findall(r"[一-鿿]{2,4}", source_text))
 
         answer_words.update(answer_chinese)
         source_words.update(source_chinese)
@@ -426,17 +466,19 @@ def detect_negation_hallucinations(answer: str, source_text: str) -> List[Halluc
         has_word_overlap = len(shared_words) >= 2 or (len(shared_words) >= 1 and stem_matches >= 1)
 
         if has_chinese_overlap or has_word_overlap or stem_matches >= 2:
-            issues.append(HallucinationPattern(
-                pattern_type="negation_conflict",
-                severity="high",
-                content="Answer negation conflicts with source",
-                suggestion="Verify answer doesn't contradict source"
-            ))
+            issues.append(
+                HallucinationPattern(
+                    pattern_type="negation_conflict",
+                    severity="high",
+                    content="Answer negation conflicts with source",
+                    suggestion="Verify answer doesn't contradict source",
+                )
+            )
 
     return issues
 
 
-def detect_all_patterns(answer: str, source_text: str) -> List[HallucinationPattern]:
+def detect_all_patterns(answer: str, source_text: str) -> list[HallucinationPattern]:
     """
     Run all hallucination pattern detectors.
 

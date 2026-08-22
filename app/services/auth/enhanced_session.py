@@ -11,12 +11,13 @@ Provides secure session management with:
 import json
 import secrets
 import time
-from datetime import datetime, timedelta
+from datetime import datetime
 from pathlib import Path
-from typing import Dict, Optional, Any
+from typing import Any
 
 try:
     import redis
+
     REDIS_AVAILABLE = True
 except ImportError:
     REDIS_AVAILABLE = False
@@ -27,7 +28,7 @@ class SessionStore:
     Session storage backend with Redis support and file fallback.
     """
 
-    def __init__(self, redis_url: Optional[str] = None, fallback_path: Optional[Path] = None):
+    def __init__(self, redis_url: str | None = None, fallback_path: Path | None = None):
         """Initialize session store with Redis or file backend."""
         self.redis_client = None
         self.fallback_path = fallback_path or Path("./data/security/sessions.json")
@@ -48,15 +49,11 @@ class SessionStore:
             self.fallback_path.parent.mkdir(parents=True, exist_ok=True)
             print(f"✓ SessionStore: Using file storage at {self.fallback_path}")
 
-    def set(self, key: str, value: Dict[str, Any], ttl_seconds: int = 86400):
+    def set(self, key: str, value: dict[str, Any], ttl_seconds: int = 86400):
         """Store session data with TTL."""
         if self.use_redis and self.redis_client:
             try:
-                self.redis_client.setex(
-                    f"session:{key}",
-                    ttl_seconds,
-                    json.dumps(value)
-                )
+                self.redis_client.setex(f"session:{key}", ttl_seconds, json.dumps(value))
                 return True
             except Exception as e:
                 print(f"⚠ Redis set failed: {e}, falling back to file")
@@ -64,14 +61,11 @@ class SessionStore:
 
         # File fallback
         sessions = self._load_file_sessions()
-        sessions[key] = {
-            "data": value,
-            "expires_at": time.time() + ttl_seconds
-        }
+        sessions[key] = {"data": value, "expires_at": time.time() + ttl_seconds}
         self._save_file_sessions(sessions)
         return True
 
-    def get(self, key: str) -> Optional[Dict[str, Any]]:
+    def get(self, key: str) -> dict[str, Any] | None:
         """Retrieve session data."""
         if self.use_redis and self.redis_client:
             try:
@@ -122,20 +116,20 @@ class SessionStore:
             self._save_file_sessions(sessions)
             print(f"✓ Cleaned up {len(expired)} expired sessions")
 
-    def _load_file_sessions(self) -> Dict[str, Dict]:
+    def _load_file_sessions(self) -> dict[str, dict]:
         """Load sessions from file."""
         if not self.fallback_path.exists():
             return {}
         try:
-            with open(self.fallback_path, 'r') as f:
+            with open(self.fallback_path) as f:
                 return json.load(f)
         except Exception:
             return {}
 
-    def _save_file_sessions(self, sessions: Dict[str, Dict]):
+    def _save_file_sessions(self, sessions: dict[str, dict]):
         """Save sessions to file."""
         try:
-            with open(self.fallback_path, 'w') as f:
+            with open(self.fallback_path, "w") as f:
                 json.dump(sessions, f, indent=2)
         except Exception as e:
             print(f"⚠ Failed to save sessions: {e}")
@@ -154,20 +148,16 @@ class EnhancedSessionManager:
 
     def __init__(
         self,
-        redis_url: Optional[str] = None,
-        fallback_path: Optional[Path] = None,
-        session_ttl: int = 86400  # 24 hours
+        redis_url: str | None = None,
+        fallback_path: Path | None = None,
+        session_ttl: int = 86400,  # 24 hours
     ):
         """Initialize enhanced session manager."""
         self.store = SessionStore(redis_url, fallback_path)
         self.session_ttl = session_ttl
 
     def create_session(
-        self,
-        user_id: str,
-        username: str,
-        role: str,
-        additional_data: Optional[Dict[str, Any]] = None
+        self, user_id: str, username: str, role: str, additional_data: dict[str, Any] | None = None
     ) -> tuple[str, str]:
         """
         Create a new session with CSRF token.
@@ -185,13 +175,13 @@ class EnhancedSessionManager:
             "csrf_token": csrf_token,
             "created_at": datetime.utcnow().isoformat(),
             "last_activity": datetime.utcnow().isoformat(),
-            **(additional_data or {})
+            **(additional_data or {}),
         }
 
         self.store.set(session_id, session_data, self.session_ttl)
         return session_id, csrf_token
 
-    def get_session(self, session_id: str) -> Optional[Dict[str, Any]]:
+    def get_session(self, session_id: str) -> dict[str, Any] | None:
         """Get session data."""
         return self.store.get(session_id)
 
@@ -233,18 +223,12 @@ class EnhancedSessionManager:
 
 
 # Singleton instance
-_session_manager: Optional[EnhancedSessionManager] = None
+_session_manager: EnhancedSessionManager | None = None
 
 
-def get_session_manager(
-    redis_url: Optional[str] = None,
-    session_ttl: int = 86400
-) -> EnhancedSessionManager:
+def get_session_manager(redis_url: str | None = None, session_ttl: int = 86400) -> EnhancedSessionManager:
     """Get or create session manager instance."""
     global _session_manager
     if _session_manager is None:
-        _session_manager = EnhancedSessionManager(
-            redis_url=redis_url,
-            session_ttl=session_ttl
-        )
+        _session_manager = EnhancedSessionManager(redis_url=redis_url, session_ttl=session_ttl)
     return _session_manager

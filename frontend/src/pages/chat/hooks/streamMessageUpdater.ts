@@ -1,3 +1,4 @@
+import { flushSync } from "react-dom";
 import type { SessionMessage } from "@/types/api";
 import type { StreamMetadata } from "./streamEventHandlers";
 
@@ -8,13 +9,16 @@ export interface StreamMessageUpdaterOptions {
 export function createStreamMessageUpdater({ setMessages }: StreamMessageUpdaterOptions) {
   return {
     patchStreamMessage: (content: string, meta: StreamMetadata) => {
-      setMessages((prev) =>
-        prev.map((m) =>
-          m.message_id === "local-assistant-stream"
-            ? { ...m, content, metadata: { ...meta, thoughts: meta.thoughts?.slice(-8) } }
-            : m
-        )
-      );
+      // Use flushSync to ensure immediate rendering of each chunk
+      flushSync(() => {
+        setMessages((prev) =>
+          prev.map((m) =>
+            m.message_id === "local-assistant-stream"
+              ? { ...m, content, metadata: { ...meta, thoughts: meta.thoughts?.slice(-8) } }
+              : m
+          )
+        );
+      });
     },
 
     replaceWithStoppedMessage: (content: string) => {

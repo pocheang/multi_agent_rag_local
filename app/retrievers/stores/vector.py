@@ -1,6 +1,8 @@
 import logging
+import sqlite3
 import threading
 from functools import lru_cache
+from pathlib import Path
 
 from langchain_chroma import Chroma
 from langchain_core.documents import Document
@@ -13,6 +15,55 @@ logger = logging.getLogger(__name__)
 _VECTOR_OP_LOCK = threading.RLock()
 
 
+def _repair_chroma_segments_foreign_key(persist_directory: str) -> None:
+    """Repair Chroma's historical singular collection-table reference."""
+    db_path = Path(persist_directory) / "chroma.sqlite3"
+    if not db_path.is_file():
+        return
+
+    conn = sqlite3.connect(db_path, timeout=10.0)
+    try:
+        row = conn.execute("SELECT sql FROM sqlite_master WHERE type='table' AND name='segments'").fetchone()
+        schema = str(row[0] or "") if row else ""
+        normalized_schema = " ".join(schema.lower().split())
+        if "references collection(" not in normalized_schema:
+            return
+
+        conn.execute("PRAGMA foreign_keys = OFF")
+        try:
+            conn.execute("BEGIN IMMEDIATE")
+            conn.execute(
+                """
+                CREATE TABLE segments_querymind_fixed (
+                    id TEXT PRIMARY KEY,
+                    type TEXT NOT NULL,
+                    scope TEXT NOT NULL,
+                    collection TEXT NOT NULL REFERENCES collections(id)
+                )
+                """
+            )
+            conn.execute(
+                """
+                INSERT INTO segments_querymind_fixed(id, type, scope, collection)
+                SELECT id, type, scope, collection FROM segments
+                """
+            )
+            conn.execute("DROP TABLE segments")
+            conn.execute("ALTER TABLE segments_querymind_fixed RENAME TO segments")
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
+        finally:
+            conn.execute("PRAGMA foreign_keys = ON")
+
+        violations = conn.execute("PRAGMA foreign_key_check").fetchall()
+        if violations:
+            raise RuntimeError(f"Chroma foreign-key repair left {len(violations)} violation(s)")
+    finally:
+        conn.close()
+
+
 @lru_cache(maxsize=4)
 def _get_vector_store_cached(
     collection_name: str,
@@ -21,11 +72,13 @@ def _get_vector_store_cached(
     embedding_model: str,
     embedding_base_url: str,
 ) -> Chroma:
-    return Chroma(
+    store = Chroma(
         collection_name=collection_name,
         embedding_function=get_embedding_model(),
         persist_directory=persist_directory,
     )
+    _repair_chroma_segments_foreign_key(persist_directory)
+    return store
 
 
 def get_vector_store() -> Chroma:
@@ -147,5 +200,3 @@ def reset_vector_store_from_records(records: list[dict]):
 
 def clear_vector_store_cache() -> None:
     _get_vector_store_cached.cache_clear()
-
-

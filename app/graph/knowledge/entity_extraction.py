@@ -7,7 +7,7 @@ Implements:
 - Stage 1: Rule-based NER for common patterns
 - Stage 2: LLM-based extraction for complex cases
 - Cross-validation between methods
-- Fuzzy matching for entity linking (Levenshtein distance â‰¤ 2)
+- Fuzzy matching for entity linking (Levenshtein distance <= 2)
 """
 
 import logging
@@ -24,9 +24,9 @@ _ENTITY_ALIASES = {
     "a.i.": "artificial intelligence",
     "llm": "large language model",
     "llms": "large language model",
-    "å¤§æ¨¡åž‹": "large language model",
-    "ç½‘ç»œå®‰å…¨": "cybersecurity",
-    "èµ„å®‰": "cybersecurity",
+    "大模型": "large language model",
+    "网络安全": "cybersecurity",
+    "资安": "cybersecurity",
 }
 
 # Patterns for rule-based extraction
@@ -37,7 +37,7 @@ ACRONYM_PATTERN = re.compile(r"\b[A-Z]\.?[A-Z]\.?[A-Z]?\.?[A-Z]?\.?[A-Z]?s?\b")
 CAPITALIZED_PATTERN = re.compile(r"\b[A-Z][a-z]+(?:\s+[A-Z][a-z]+)*\b")
 
 # 3. Chinese technical terms: 2+ consecutive Chinese characters
-CHINESE_TERM_PATTERN = re.compile(r"[ä¸€-é¿¿]{2,}")
+CHINESE_TERM_PATTERN = re.compile(r"[\u4e00-\u9fff]{2,}")
 
 # 4. Technical terms with numbers/hyphens: GPT-4, Python3, etc.
 TECHNICAL_TERM_PATTERN = re.compile(r"\b[A-Z][a-zA-Z0-9]*[-]?[0-9]*[a-zA-Z0-9]*\b")
@@ -373,7 +373,7 @@ def cross_validate_entities(
             }
 
     # Process rule-based entities
-    rule_texts = [e["text"] for e in rule_entities]
+    [e["text"] for e in rule_entities]
     llm_texts = [e["text"] for e in llm_entities]
 
     for entity in rule_entities:
@@ -439,7 +439,7 @@ def normalize_for_graph(entity_text: str) -> str:
         return _ENTITY_ALIASES[text_no_dots]
 
     # Try removing trailing 's' for plural matching
-    if text_no_dots.endswith('s') and len(text_no_dots) > 2:
+    if text_no_dots.endswith("s") and len(text_no_dots) > 2:
         text_singular = text_no_dots[:-1]
         if text_singular in _ENTITY_ALIASES:
             return _ENTITY_ALIASES[text_singular]
@@ -502,4 +502,3 @@ def extract_entities(
     final_entities.sort(key=lambda x: x["confidence"], reverse=True)
 
     return final_entities[:max_entities]
-

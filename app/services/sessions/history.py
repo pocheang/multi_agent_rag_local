@@ -9,8 +9,8 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
-from app.domain.text import normalize_string
 from app.core.config import get_settings
+from app.domain.text import normalize_string
 
 logger = logging.getLogger(__name__)
 
@@ -473,9 +473,24 @@ class HistoryStore:
 
     def _connect(self) -> sqlite3.Connection:
         settings = get_settings()
-        timeout_s = max(1.0, float(getattr(settings, "sqlite_busy_timeout_seconds", 10) or 10))
+        # 安全修复：严格验证超时参数，防止SQL注入
+        try:
+            timeout_s = float(getattr(settings, "sqlite_busy_timeout_seconds", 10) or 10)
+            # 钳位到安全范围 [1.0, 3600.0]
+            timeout_s = max(1.0, min(timeout_s, 3600.0))
+        except (ValueError, TypeError):
+            timeout_s = 10.0
+
+        timeout_ms = int(timeout_s * 1000)
+
         conn = sqlite3.connect(self._db_path, timeout=timeout_s)
-        conn.execute(f"PRAGMA busy_timeout = {int(timeout_s * 1000)}")
+
+        # 安全修复：严格验证后才拼接PRAGMA语句
+        # SQLite的PRAGMA不支持参数化查询，因此必须在严格验证后使用f-string
+        # timeout_ms已经被验证为安全的整数，范围 [1000, 3600000]
+        assert isinstance(timeout_ms, int) and 1000 <= timeout_ms <= 3600000, "timeout_ms validation failed"
+        conn.execute(f"PRAGMA busy_timeout = {timeout_ms}")
+
         conn.execute("PRAGMA journal_mode=WAL")
         return conn
 
@@ -619,4 +634,3 @@ class HistoryStore:
                 }
 
             return ctx
-

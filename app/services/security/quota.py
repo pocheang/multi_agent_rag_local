@@ -49,7 +49,3 @@ class QuotaGuard:
         with self._lock:
             if not self._web_limiter.try_acquire(key):
                 raise QuotaExceededError("web quota exceeded")
-
-
-
-

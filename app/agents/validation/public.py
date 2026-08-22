@@ -141,9 +141,7 @@ def _to_public_result(cascade: ValidationCascadeResult) -> AnswerValidationResul
         action = "regenerate"
 
     issues = [_to_answer_issue(issue) for issue in cascade.all_issues]
-    if cascade.citation_completeness < 0.5 and not any(
-        issue.type == "missing_citation" for issue in issues
-    ):
+    if cascade.citation_completeness < 0.5 and not any(issue.type == "missing_citation" for issue in issues):
         issues.append(
             AnswerIssue(
                 type="missing_citation",

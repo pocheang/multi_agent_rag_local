@@ -6,15 +6,16 @@ import re
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 
-from app.agents.shared.quality_config import (
+from app.agents.shared.quality_models import ContextHints, ConversationContext, ConversationTurn
+from app.core.shared_config import (
     CONTEXT_MAX_HISTORY_TURNS,
     CONTEXT_SUMMARY_FREQUENCY,
     CONTEXT_SUMMARY_MIN_TURNS,
     CONTEXT_TTL_SECONDS,
 )
-from app.agents.shared.quality_models import ContextHints, ConversationContext, ConversationTurn
 
 logger = logging.getLogger(__name__)
+
 
 @dataclass(frozen=True)
 class ContextKey:
@@ -154,16 +155,16 @@ def resolve_query_with_context(query: str, hints: ContextHints) -> str:
     resolved = query
     sorted_refs = sorted(hints.resolve_references.items(), key=lambda item: item[1], reverse=True)
     for entity, _ in sorted_refs:
-        if "å®ƒ" in resolved:
-            resolved = resolved.replace("å®ƒ", entity, 1)
-        elif "ä»–" in resolved:
-            resolved = resolved.replace("ä»–", entity, 1)
-        elif "å¥¹" in resolved:
-            resolved = resolved.replace("å¥¹", entity, 1)
-        elif "è¿™ä¸ª" in resolved:
-            resolved = resolved.replace("è¿™ä¸ª", entity, 1)
-        elif "é‚£ä¸ª" in resolved:
-            resolved = resolved.replace("é‚£ä¸ª", entity, 1)
+        if "它" in resolved:
+            resolved = resolved.replace("它", entity, 1)
+        elif "他" in resolved:
+            resolved = resolved.replace("他", entity, 1)
+        elif "她" in resolved:
+            resolved = resolved.replace("她", entity, 1)
+        elif "这个" in resolved:
+            resolved = resolved.replace("这个", entity, 1)
+        elif "那个" in resolved:
+            resolved = resolved.replace("那个", entity, 1)
         elif re.search(r"\bit\b", resolved, flags=re.IGNORECASE):
             resolved = re.sub(r"\bit\b", entity, resolved, count=1, flags=re.IGNORECASE)
         elif re.search(r"\bthis\b", resolved, flags=re.IGNORECASE):
@@ -176,11 +177,7 @@ def resolve_query_with_context(query: str, hints: ContextHints) -> str:
 def cleanup_expired_contexts() -> int:
     """Remove contexts whose last update time exceeds the configured TTL."""
     expiry_threshold = datetime.utcnow() - timedelta(seconds=CONTEXT_TTL_SECONDS)
-    expired_sessions = [
-        key
-        for key, context in _context_store.items()
-        if context.last_update_time < expiry_threshold
-    ]
+    expired_sessions = [key for key, context in _context_store.items() if context.last_update_time < expiry_threshold]
     for key in expired_sessions:
         del _context_store[key]
     if expired_sessions:
@@ -206,18 +203,50 @@ def _detect_intent(query: str) -> str | None:
     """Detect high-level user intent for conversation tracking."""
     query_text = str(query or "").strip()
     query_lower = query_text.lower()
-    comparison_keywords = ["compare", "difference", "versus", "vs", "å¯¹æ¯”", "åŒºåˆ«", "å·®å¼‚", "æ¯”è¾ƒ"]
+    comparison_keywords = ["compare", "difference", "versus", "vs", "对比", "区别", "差异", "比较"]
     navigation_keywords = [
-        "show", "find", "search", "list", "browse", "example", "examples", "document", "documents",
-        "æœç´¢", "æŸ¥æ‰¾", "æŸ¥çœ‹", "åˆ—å‡º", "ç¤ºä¾‹", "èµ„æ–™",
+        "show",
+        "find",
+        "search",
+        "list",
+        "browse",
+        "example",
+        "examples",
+        "document",
+        "documents",
+        "搜索",
+        "查找",
+        "查看",
+        "列出",
+        "示例",
+        "资料",
     ]
     clarification_keywords = [
-        "explain more", "more details", "details", "elaborate", "clarify", "tell me more",
-        "è¯¦ç»†", "è§£é‡Š", "è¡¥å……", "æ›´å¤š",
+        "explain more",
+        "more details",
+        "details",
+        "elaborate",
+        "clarify",
+        "tell me more",
+        "详细",
+        "解释",
+        "补充",
+        "更多",
     ]
     question_keywords = [
-        "what", "why", "how", "when", "where", "which", "what is",
-        "ä»€ä¹ˆ", "ä¸ºä»€ä¹ˆ", "å¦‚ä½•", "æ€Žä¹ˆ", "å“ªä¸ª", "æ˜¯ä»€ä¹ˆ",
+        "what",
+        "why",
+        "how",
+        "when",
+        "where",
+        "which",
+        "what is",
+        "什么",
+        "为什么",
+        "如何",
+        "怎么",
+        "哪个",
+        "是什么",
     ]
     if any(keyword in query_lower for keyword in comparison_keywords):
         return "comparison"
@@ -225,7 +254,7 @@ def _detect_intent(query: str) -> str | None:
         return "navigation"
     if any(keyword in query_lower for keyword in clarification_keywords):
         return "clarification"
-    if query_text.endswith(("?", "ï¼Ÿ")) or any(keyword in query_lower for keyword in question_keywords):
+    if query_text.endswith(("?", "？")) or any(keyword in query_lower for keyword in question_keywords):
         return "question"
     return "general_query"
 
@@ -239,8 +268,18 @@ def _is_followup_query(query: str, context: ConversationContext) -> bool:
     if len(query_text) < 30:
         return True
     followup_indicators = [
-        "also", "more", "further", "additionally", "what about", "tell me more",
-        "è¿˜æœ‰", "å¦å¤–", "ç»§ç»­", "è¿›ä¸€æ­¥", "æ›´å¤š", "è¯¦ç»†",
+        "also",
+        "more",
+        "further",
+        "additionally",
+        "what about",
+        "tell me more",
+        "还有",
+        "另外",
+        "继续",
+        "进一步",
+        "更多",
+        "详细",
     ]
     if any(indicator in query_lower for indicator in followup_indicators):
         return True
@@ -253,12 +292,11 @@ def _detect_reference_pronouns(query: str, context: ConversationContext) -> dict
     """Return entity references when a query has a supported pronoun."""
     query_text = str(query or "")
     query_lower = query_text.lower()
-    chinese_pronouns = ["å®ƒ", "ä»–", "å¥¹", "è¿™ä¸ª", "é‚£ä¸ª"]
+    chinese_pronouns = ["它", "他", "她", "这个", "那个"]
     english_pronoun_patterns = [r"\bit\b", r"\bthis\b", r"\bthat\b", r"\bthese\b", r"\bthose\b"]
     has_chinese_pronoun = any(pronoun in query_text for pronoun in chinese_pronouns)
     has_english_pronoun = any(
-        re.search(pattern, query_lower, flags=re.IGNORECASE)
-        for pattern in english_pronoun_patterns
+        re.search(pattern, query_lower, flags=re.IGNORECASE) for pattern in english_pronoun_patterns
     )
     if (has_chinese_pronoun or has_english_pronoun) and context.entity_mentions:
         return context.entity_mentions

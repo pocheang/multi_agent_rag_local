@@ -4,7 +4,7 @@ Tests for quality assurance data models.
 
 import pytest
 from datetime import datetime
-from app.agents.quality_models import (
+from app.agents.shared.quality_models import (
     RouteValidationResult,
     RetrievalQualityResult,
     RetrievalQualityMetrics,

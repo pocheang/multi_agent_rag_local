@@ -1,0 +1,92 @@
+/**
+ * Skeleton Styles
+ *
+ * @version 1.0.0
+ * @created 2026-08-16
+ */
+
+.skeleton {
+  background: linear-gradient(
+    90deg,
+    var(--color-gray-100, rgba(255, 255, 255, 0.08)) 0%,
+    var(--color-gray-200, rgba(255, 255, 255, 0.12)) 50%,
+    var(--color-gray-100, rgba(255, 255, 255, 0.08)) 100%
+  );
+  overflow: hidden;
+  position: relative;
+}
+
+/* 波浪动画效果 */
+.skeleton--wave {
+  background-size: 200% 100%;
+  background-position: 200% 0;
+}
+
+/* 文本变体默认样式 */
+.skeleton--text {
+  margin-bottom: var(--spacing-xs, 8px);
+  transform-origin: 0 55%;
+  transform: scale(1, 0.8);
+}
+
+.skeleton--text:last-child {
+  margin-bottom: 0;
+}
+
+/* 无障碍：隐藏但可被屏幕阅读器读取 */
+.skeleton__sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border-width: 0;
+}
+
+/* 文本组 */
+.skeleton-text-group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs, 8px);
+}
+
+/* 卡片变体 */
+.skeleton-card {
+  border-radius: var(--radius-md, 8px);
+  overflow: hidden;
+  background: var(--color-bg-secondary, #121A2D);
+}
+
+.skeleton-card__content {
+  padding: var(--spacing-md, 16px);
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs, 8px);
+}
+
+/* 无障碍支持 */
+@media (prefers-reduced-motion: reduce) {
+  .skeleton {
+    animation: none;
+  }
+
+  .skeleton--pulse,
+  .skeleton--wave {
+    opacity: 0.5;
+  }
+}
+
+/* 暗色模式下的对比度优化 */
+@media (prefers-contrast: high) {
+  .skeleton {
+    background: linear-gradient(
+      90deg,
+      rgba(255, 255, 255, 0.15) 0%,
+      rgba(255, 255, 255, 0.25) 50%,
+      rgba(255, 255, 255, 0.15) 100%
+    );
+  }
+}

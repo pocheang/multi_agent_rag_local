@@ -92,5 +92,3 @@ def execution_route_from_result(result: dict[str, Any]) -> str:
     if bool(web_result.get("used", False)) or str(web_result.get("context", "") or "").strip():
         used.append("web")
     return "+".join(used) if used else route
-
-

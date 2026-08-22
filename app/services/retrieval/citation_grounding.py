@@ -1,7 +1,7 @@
 import re
 
 _TOKEN_RE = re.compile(r"[A-Za-z0-9_]+|[\u4e00-\u9fff]")
-_CJK_PUNCTUATION_CLASS = "\u3002\uFF01\uFF1F"
+_CJK_PUNCTUATION_CLASS = "\u3002\uff01\uff1f"
 _ABBREVIATIONS = {
     "dr.",
     "mr.",

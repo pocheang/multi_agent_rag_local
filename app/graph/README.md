@@ -144,6 +144,7 @@ from app.orchestration.engine import OrchestrationEngine
 # app/graph/knowledge/custom_queries.py
 from app.graph.knowledge.client import Neo4jClient
 
+
 def get_related_entities(entity_id: str):
     client = Neo4jClient()
     # 实现查询逻辑

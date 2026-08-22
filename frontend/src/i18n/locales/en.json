@@ -24,7 +24,8 @@
     "loginSuccess": "Login successful",
     "loginFailed": "Login failed",
     "registerSuccess": "Registration successful",
-    "registerFailed": "Registration failed"
+    "registerFailed": "Registration failed",
+    "invalidRedirect": "Invalid redirect URL"
   },
   "query": {
     "title": "Query Interface",
@@ -265,6 +266,9 @@
       "ticket": "Ticket",
       "token": "Token",
       "operation": "Operation",
+      "credits": "Credits",
+      "addCredits": "Add credits",
+      "unlimited": "Unlimited",
       "active": "Active",
       "tokenSet": "Set",
       "tokenUnset": "Not set",
@@ -595,6 +599,8 @@
       "userId": "User ID",
       "role": "Role",
       "status": "Account status",
+      "credits": "Credits remaining",
+      "unlimitedCredits": "Unlimited",
       "saving": "Saving...",
       "saved": "Profile saved",
       "saveFailed": "Save failed",
@@ -755,6 +761,8 @@
       "deleteMessage": "Delete this message",
       "delete": "Delete",
       "deleteConfirm": "Delete this message? This action cannot be undone.",
+      "deleteUserConfirm": "Are you sure you want to delete your message? This action cannot be undone.",
+      "deleteAssistantConfirm": "Are you sure you want to delete the assistant's reply? This action cannot be undone.",
       "execution": "Execution process",
       "toggleExecution": "Expand or collapse execution process",
       "processing": "Processing",
@@ -828,6 +836,30 @@
       "sidebarDescription": "Multi-agent knowledge base and retrieval workspace",
       "collapse": "Collapse",
       "sessions": "Sessions",
+      "searchSessions": "Search sessions",
+      "newSession": "New session",
+      "noSessions": "No sessions yet",
+      "noSessionMatches": "No sessions match your search",
+      "untitled": "Untitled",
+      "untitledSession": "Untitled session",
+      "recent": "Recent",
+      "sessionOptions": "Session options for {{title}}",
+      "delete": "Delete",
+      "deleteSessionConfirm": "Are you sure you want to delete \\\"{{title}}\\\"? This action cannot be undone.",
+      "sessionDeleted": "Session deleted successfully",
+      "sessionCreated": "New session created",
+      "emptyChatNotice": "Current chat is empty. Continue here instead of creating new chat.",
+      "renameSession": "Rename session",
+      "pinSession": "Pin session",
+      "unpinSession": "Unpin session",
+      "deleteSession": "Delete session",
+      "sessionRenamed": "Session renamed successfully",
+      "sessionPinned": "Session pinned",
+      "sessionUnpinned": "Session unpinned",
+      "renameSessionTitle": "Rename Session",
+      "renameSessionPlaceholder": "Enter new session name...",
+      "deleteSessionTitle": "Delete Session",
+      "deleteSessionMessage": "Are you sure you want to delete \"{{title}}\"? This action cannot be undone.",
       "profile": "Profile",
       "password": "Password",
       "admin": "Admin",
@@ -894,6 +926,13 @@
       "stopAria": "Stop current processing",
       "clear": "Clear",
       "clearAria": "Clear input",
+      "showSections": "Show Input Area",
+      "hideSections": "Hide Input Area",
+      "showTopbar": "Show Topbar",
+      "hideTopbar": "Hide Topbar",
+      "showInputArea": "Show Input Area",
+      "hideInputArea": "Hide Input Area",
+      "moreOptions": "More Options",
       "recent": "Recent",
       "untitled": "Untitled",
       "renameSession": "Rename session",
@@ -1000,6 +1039,195 @@
         "Responsive Design: Mobile adaptation"
       ]
     },
+    "clarificationError": "Failed to submit clarification. Please try again.",
+    "skipClarificationError": "Failed to skip clarification. Please try again.",
+    "clarificationAuthError": "Authentication required for advanced features. Please login.",
     "apiEndpoints": "# Authentication\nPOST /auth/register\nPOST /auth/login\nPOST /auth/logout\nGET  /auth/me\nPUT  /auth/profile\nPOST /auth/change-password\nGET  /auth/google/login\n\n# Query profiles\nPOST /query\nPOST /query/stream\nPOST /api/v1/enhanced/query\nPOST /api/advanced-rag/query\n\n# Sessions\nGET, POST /sessions\nGET, DELETE /sessions/{session_id}\nGET, POST /sessions/{session_id}/strategy-lock\nGET /sessions/{session_id}/memories/long\nDELETE /sessions/{session_id}/memories/long/{memory_id}\nPATCH, DELETE /sessions/{session_id}/messages/{message_id}\n\n# Documents and prompts\nGET /documents\nPOST /upload\nPOST /documents/{filename}/reindex\nDELETE /documents/{filename}\nGET, POST /prompts\nPOST /prompts/check\nPATCH, DELETE /prompts/{prompt_id}\n\n# Admin operations and settings\nGET /admin/ops/runtime\nGET /admin/ops/overview\nGET, POST /admin/ops/retrieval-profile\nPOST /admin/ops/canary\nPOST /admin/ops/benchmark/run\nGET /admin/model-settings\nPOST /admin/model-settings\nGET, POST /user/api-settings\n\n# Evaluation and tracking\nGET /api/evaluation/queries\nPOST /api/evaluation/run\nGET /api/evaluation/results/{run_id}\nPOST /api/evaluation/compare\nGET /api/evaluation/systems\nGET /agent-tracking/trace/{execution_id}\nGET /agent-tracking/stream/{execution_id}\nGET /agent-tracking/history\n\n# Health\nGET /health\nGET /ready\nGET /metrics"
+  },
+  "toast": {
+    "close": "Close notification",
+    "demo": {
+      "title": "Toast Notification System Demo",
+      "subtitle": "Click buttons to test different types of toast notifications",
+      "info": {
+        "title": "Info Notification",
+        "desc": "For general information",
+        "button": "Show Info",
+        "message": "This is an information message"
+      },
+      "success": {
+        "title": "Success Notification",
+        "desc": "For operation success feedback",
+        "button": "Show Success",
+        "message": "Operation successful!"
+      },
+      "warning": {
+        "title": "Warning Notification",
+        "desc": "For warning messages",
+        "button": "Show Warning",
+        "message": "Please note: This is a warning message"
+      },
+      "error": {
+        "title": "Error Notification",
+        "desc": "For error messages",
+        "button": "Show Error",
+        "message": "Operation failed, please try again"
+      },
+      "longText": {
+        "title": "Long Text Test",
+        "desc": "Test long message display",
+        "button": "Show Long Text",
+        "message": "This is a very long message to test the Toast component's layout and line wrapping when displaying long text. The message content should wrap correctly and maintain good readability."
+      },
+      "customDuration": {
+        "title": "Custom Duration",
+        "desc": "Auto-close after 10 seconds",
+        "button": "10s Duration",
+        "message": "This message will close in 10 seconds"
+      },
+      "stacking": {
+        "title": "Stacking Test",
+        "desc": "Quickly show multiple toasts",
+        "button": "Show Stacking",
+        "message1": "First message",
+        "message2": "Second message",
+        "message3": "Third message",
+        "message4": "Fourth message"
+      },
+      "shortDuration": {
+        "title": "Short Duration Test",
+        "desc": "Quick close after 1 second",
+        "button": "1s Duration",
+        "message": "Quick disappear!"
+      },
+      "tips": {
+        "title": "💡 Usage Tips",
+        "items": [
+          "Toasts automatically appear in the top right corner",
+          "Hover over a toast to pause auto-close",
+          "Click toast or close button to manually dismiss",
+          "Multiple toasts stack automatically",
+          "Supports dark/light theme auto-adaptation",
+          "On mobile, adapts to full width display"
+        ]
+      }
+    }
+  },
+  "clarification": {
+    "title": "Need More Information",
+    "round": "Round {{current}}/{{max}}",
+    "customInput": "Other (specify)",
+    "customInputPlaceholder": "Please enter...",
+    "skip": "Skip Remaining Questions",
+    "submit": "Submit",
+    "submitting": "Submitting...",
+    "collectedInfo": "Information Collected"
+  },
+  "queryOptimization": {
+    "title": "💡 Query Optimization Suggestions",
+    "suggestClarify": "Suggest clarifying:",
+    "examples": "Optimized examples:",
+    "qualityScore": "Quality Score"
+  },
+  "contextResolution": {
+    "title": "🔗 Context Resolution",
+    "originalQuery": "Original Query",
+    "resolvedTo": "Resolved to",
+    "entitiesResolved": "Entities Resolved",
+    "topicSwitch": "Topic Switch Detected",
+    "needsClarification": "Needs further clarification",
+    "confidence": {
+      "high": "High Confidence",
+      "medium": "Medium Confidence",
+      "low": "Low Confidence"
+    }
+  },
+  "common": {
+    "save": "Save",
+    "cancel": "Cancel",
+    "search": "Search",
+    "searching": "Searching",
+    "showFilters": "Show Filters",
+    "hideFilters": "Hide Filters",
+    "clearFilters": "Clear Filters",
+    "sortBy": "Sort by",
+    "ascending": "Ascending",
+    "descending": "Descending",
+    "previous": "Previous",
+    "next": "Next",
+    "pageOf": "Page {{current}} of {{total}}",
+    "updated": "Updated"
+  },
+  "sessionManagement": {
+    "editMetadata": "Edit Session Metadata",
+    "tags": "Tags",
+    "tagsPlaceholder": "Type to add tags...",
+    "removeTag": "Remove tag",
+    "category": "Category",
+    "selectCategory": "Select category...",
+    "categories": {
+      "research": "Research",
+      "development": "Development",
+      "debugging": "Debugging",
+      "learning": "Learning",
+      "other": "Other"
+    },
+    "description": "Description",
+    "descriptionPlaceholder": "Describe this session...",
+    "autoTags": "Auto-extracted Tags",
+    "noAutoTags": "No automatic tags yet. Click \"Extract Tags\" to analyze messages.",
+    "extractTags": "Extract Tags",
+    "loadingMetadata": "Loading metadata",
+    "savedSuccessfully": "Metadata saved successfully",
+    "errorLoadingMetadata": "Failed to load metadata",
+    "errorSavingMetadata": "Failed to save metadata",
+    "errorExtractingTags": "Failed to extract tags",
+    "noMessagesToExtract": "No messages available to extract tags from",
+    "searchSessions": "Search Sessions",
+    "searchPlaceholder": "Search by text, tags, or description...",
+    "filterByTags": "Filter by Tags",
+    "selectTags": "Select tags to filter...",
+    "filterByCategory": "Filter by Category",
+    "allCategories": "All Categories",
+    "minQueries": "Min Queries",
+    "maxQueries": "Max Queries",
+    "resultsCount": "{{count}} sessions found",
+    "score": "Score",
+    "queries": "Queries",
+    "sortUpdated": "Last Updated",
+    "sortCreated": "Created Date",
+    "sortQueries": "Query Count",
+    "noResults": "No sessions found",
+    "tryDifferentSearch": "Try adjusting your search criteria or filters",
+    "exportSession": "Export Session",
+    "exportFormat": "Export Format",
+    "includeContext": "Include context tracking data",
+    "export": "Export",
+    "importSession": "Import Session",
+    "dragDropFile": "Drag and drop a file here",
+    "orClickToSelect": "or click to select",
+    "conflictStrategy": "If Session Exists",
+    "strategies": {
+      "skip": "Skip (keep existing)",
+      "overwrite": "Overwrite (replace existing)",
+      "rename": "Rename (append timestamp)"
+    },
+    "strategiesHelp": {
+      "skip": "Keep the existing session and don't import",
+      "overwrite": "Replace the existing session with imported data",
+      "rename": "Import as a new session with a timestamped ID"
+    },
+    "import": "Import",
+    "noSessionToExport": "No session selected for export",
+    "noFileSelected": "Please select a file to import",
+    "invalidFileType": "Invalid file type. Only JSON and ZIP files are supported.",
+    "exportFailed": "Export failed. Please try again.",
+    "importFailed": "Import failed. Please try again.",
+    "importSuccessful": "Session imported successfully",
+    "sessionId": "Session ID",
+    "conflictResolution": "Conflict Resolution",
+    "messagesImported": "Messages Imported",
+    "metadataImported": "Metadata Imported",
+    "contextImported": "Context Imported"
   }
 }

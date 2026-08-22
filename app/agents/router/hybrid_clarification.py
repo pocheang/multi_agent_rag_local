@@ -9,7 +9,6 @@ Hybrid Clarification System - 混合澄清系统
 
 import json
 import logging
-from typing import Any
 
 from app.core.models import get_chat_model
 from app.domain.contracts import ClarificationQuestion
@@ -37,9 +36,7 @@ class HybridClarificationService:
             "specific_query",
         }
 
-        logger.info(
-            f"HybridClarificationService initialized (LLM fallback: {enable_llm_fallback})"
-        )
+        logger.info(f"HybridClarificationService initialized (LLM fallback: {enable_llm_fallback})")
 
     async def identify_intent(
         self,
@@ -68,10 +65,7 @@ class HybridClarificationService:
         # 策略2: LLM增强（fallback或强制）
         if self.enable_llm_fallback and (use_llm or confidence < 0.8):
             llm_intent, llm_confidence = await self._llm_based_intent(question, known_info)
-            logger.info(
-                f"LLM-based intent: {llm_intent} (confidence: {llm_confidence:.2f}, "
-                f"rule was: {intent})"
-            )
+            logger.info(f"LLM-based intent: {llm_intent} (confidence: {llm_confidence:.2f}, rule was: {intent})")
             return llm_intent, llm_confidence
 
         # Fallback: 返回规则结果
@@ -82,15 +76,10 @@ class HybridClarificationService:
         question_lower = question.lower()
 
         # RAG design - 要求设计词 + RAG上下文
-        has_design = any(
-            kw in question for kw in ["设计", "搭建", "构建", "实现"]
-        ) or any(
-            kw in question_lower
-            for kw in ["如何做", "怎么做", "how to build", "how to design"]
+        has_design = any(kw in question for kw in ["设计", "搭建", "构建", "实现"]) or any(
+            kw in question_lower for kw in ["如何做", "怎么做", "how to build", "how to design"]
         )
-        has_rag = any(
-            kw in question_lower for kw in ["rag", "检索增强", "知识库系统", "retrieval"]
-        )
+        has_rag = any(kw in question_lower for kw in ["rag", "检索增强", "知识库系统", "retrieval"])
 
         if has_design and has_rag:
             return "rag_design", 0.9
@@ -110,9 +99,7 @@ class HybridClarificationService:
         # General query (低置信度)
         return "general_query", 0.5
 
-    async def _llm_based_intent(
-        self, question: str, known_info: dict[str, str]
-    ) -> tuple[str, float]:
+    async def _llm_based_intent(self, question: str, known_info: dict[str, str]) -> tuple[str, float]:
         """LLM判断意图（智能分类）"""
         if not self.llm_model:
             return "general_query", 0.5
@@ -156,7 +143,7 @@ class HybridClarificationService:
                 return intent, confidence
 
         except Exception as e:
-            logger.warning(f"LLM intent classification failed: {e}")
+            logger.warning(f"LLM intent classification failed: {e}", exc_info=True)
 
         return "general_query", 0.5
 
@@ -195,17 +182,12 @@ class HybridClarificationService:
             llm_extracted = await self._llm_extract_info(question, context, fields)
             # 合并结果（规则优先）
             merged = {**llm_extracted, **rule_extracted}
-            logger.info(
-                f"Hybrid extraction: rule={list(rule_extracted.keys())}, "
-                f"llm={list(llm_extracted.keys())}"
-            )
+            logger.info(f"Hybrid extraction: rule={list(rule_extracted.keys())}, llm={list(llm_extracted.keys())}")
             return merged
 
         return rule_extracted
 
-    async def _llm_extract_info(
-        self, question: str, context: str, fields: list[str]
-    ) -> dict[str, str]:
+    async def _llm_extract_info(self, question: str, context: str, fields: list[str]) -> dict[str, str]:
         """LLM提取信息（智能NER）"""
         if not self.llm_model:
             return {}
@@ -215,7 +197,7 @@ class HybridClarificationService:
 当前问题: {question}
 对话历史: {context[:500]}...
 
-需要提取的字段: {', '.join(fields)}
+需要提取的字段: {", ".join(fields)}
 
 字段说明:
 - scenario: 使用场景（企业知识库/客服问答/代码知识库/数据分析）
@@ -245,7 +227,7 @@ class HybridClarificationService:
                 return filtered
 
         except Exception as e:
-            logger.warning(f"LLM info extraction failed: {e}")
+            logger.warning(f"LLM info extraction failed: {e}", exc_info=True)
 
         return {}
 
@@ -287,9 +269,7 @@ class HybridClarificationService:
         # 策略2: LLM动态生成（fallback）
         if self.enable_llm_fallback and (use_llm or intent not in self.supported_intents):
             next_field = missing_fields[0]
-            llm_question = await self._llm_generate_question(
-                intent, next_field, known_info
-            )
+            llm_question = await self._llm_generate_question(intent, next_field, known_info)
             if llm_question:
                 logger.info(f"LLM-generated question for field: {next_field}")
                 return llm_question
@@ -338,7 +318,7 @@ class HybridClarificationService:
                 )
 
         except Exception as e:
-            logger.warning(f"LLM question generation failed: {e}")
+            logger.warning(f"LLM question generation failed: {e}", exc_info=True)
 
         return None
 

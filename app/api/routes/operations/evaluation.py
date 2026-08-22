@@ -2,6 +2,7 @@
 
 import json
 import logging
+import re
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -17,9 +18,20 @@ from app.evaluation import (
     TestQuery,
     load_test_queries,
 )
-from app.evaluation.baselines.api_retriever import SUPPORTED_SYSTEMS, SimpleRetriever, create_api_retriever
+from app.evaluation.baselines.api_retriever import SUPPORTED_SYSTEMS, create_api_retriever
 
 logger = logging.getLogger(__name__)
+
+_EVALUATION_ROOT = Path("data/evaluation").resolve()
+_RUN_ID_PATTERN = re.compile(r"^[A-Za-z0-9_-]{1,128}$")
+
+
+def _resolve_query_file(query_file: str) -> str:
+    candidate = Path(str(query_file or "")).resolve()
+    if candidate.suffix.lower() != ".json" or not candidate.is_relative_to(_EVALUATION_ROOT):
+        raise bad_request("query_file must be a JSON file under data/evaluation")
+    return str(candidate)
+
 
 router = APIRouter(prefix="/api/evaluation", tags=["evaluation"])
 
@@ -78,7 +90,7 @@ def get_retriever(system_name: str):
 
 
 @router.get("/queries", response_model=list[TestQuery])
-async def list_queries(
+def list_queries(
     request: Request,
     user: dict[str, Any] = Depends(_require_user),
     query_file: str = "data/evaluation/demo_queries.json",
@@ -98,7 +110,7 @@ async def list_queries(
     """
     _require_permission(user, "admin:ops_manage", request, "admin")
     try:
-        queries = load_test_queries(query_file)
+        queries = load_test_queries(_resolve_query_file(query_file))
 
         if category:
             queries = [q for q in queries if q.category == category]
@@ -109,15 +121,15 @@ async def list_queries(
         return queries
     except FileNotFoundError as e:
         raise not_found(str(e))
-    except Exception as e:
-        logger.error(f"Error loading queries: {e}")
-        raise internal_error(str(e))
+    except HTTPException:
+        raise
+    except Exception:
+        logger.exception("Error loading evaluation queries")
+        raise internal_error("Unable to load evaluation queries")
 
 
 @router.post("/run", response_model=RunEvaluationResponse)
-async def run_evaluation(
-    request_data: RunEvaluationRequest, request: Request, user: dict[str, Any] = Depends(_require_user)
-):
+def run_evaluation(request_data: RunEvaluationRequest, request: Request, user: dict[str, Any] = Depends(_require_user)):
     """
     Run evaluation on a specified system - Admin only.
 
@@ -132,7 +144,7 @@ async def run_evaluation(
     _require_permission(user, "admin:ops_manage", request, "admin")
     try:
         # Load test queries
-        all_queries = load_test_queries(request_data.query_file)
+        all_queries = load_test_queries(_resolve_query_file(request_data.query_file))
 
         # Filter queries if specific IDs provided
         if request_data.queries:
@@ -170,13 +182,13 @@ async def run_evaluation(
         raise not_found(str(e))
     except HTTPException:
         raise
-    except Exception as e:
-        logger.error(f"Error running evaluation: {e}")
-        raise internal_error(str(e))
+    except Exception:
+        logger.exception("Error running evaluation")
+        raise internal_error("Unable to run evaluation")
 
 
 @router.get("/results/{run_id}")
-async def get_results(run_id: str, request: Request, user: dict[str, Any] = Depends(_require_user)):
+def get_results(run_id: str, request: Request, user: dict[str, Any] = Depends(_require_user)):
     """
     Get evaluation results by run ID - Admin only.
 
@@ -187,7 +199,9 @@ async def get_results(run_id: str, request: Request, user: dict[str, Any] = Depe
         Evaluation results
     """
     _require_permission(user, "admin:ops_manage", request, "admin")
-    results_path = Path(f"data/evaluation/results/{run_id}.json")
+    if not _RUN_ID_PATTERN.fullmatch(str(run_id or "")):
+        raise bad_request("invalid run_id")
+    results_path = _EVALUATION_ROOT / "results" / f"{run_id}.json"
 
     if not results_path.exists():
         raise not_found(f"Results not found for run_id: {run_id}")
@@ -197,7 +211,7 @@ async def get_results(run_id: str, request: Request, user: dict[str, Any] = Depe
 
 
 @router.post("/compare", response_model=list[SystemComparisonResponse])
-async def compare_systems(
+def compare_systems(
     request_data: CompareSystemsRequest, request: Request, user: dict[str, Any] = Depends(_require_user)
 ):
     """
@@ -214,7 +228,7 @@ async def compare_systems(
     _require_permission(user, "admin:ops_manage", request, "admin")
     try:
         # Load test queries
-        queries = load_test_queries(request_data.query_file)
+        queries = load_test_queries(_resolve_query_file(request_data.query_file))
 
         # Get retrievers for each system
         retrievers = {}
@@ -236,13 +250,13 @@ async def compare_systems(
 
     except HTTPException:
         raise
-    except Exception as e:
-        logger.error(f"Error comparing systems: {e}")
-        raise internal_error(str(e))
+    except Exception:
+        logger.exception("Error comparing evaluation systems")
+        raise internal_error("Unable to compare evaluation systems")
 
 
 @router.get("/systems")
-async def list_systems(request: Request, user: dict[str, Any] = Depends(_require_user)):
+def list_systems(request: Request, user: dict[str, Any] = Depends(_require_user)):
     """
     List available retrieval systems for evaluation - Admin only.
 
@@ -258,8 +272,6 @@ async def list_systems(request: Request, user: dict[str, Any] = Depends(_require
 
 
 @router.get("/health")
-async def health_check():
+def health_check():
     """Health check endpoint."""
     return {"status": "healthy", "service": "evaluation", "timestamp": datetime.now().isoformat()}
-
-

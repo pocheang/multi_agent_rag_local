@@ -51,6 +51,7 @@ interface UseMessageActionsParams {
   setIsSending: (sending: boolean) => void;
   setQuestion: (question: string) => void;
   onExecutionId?: (executionId: string | null) => void;
+  onCreditsChanged?: () => Promise<void>;
 }
 
 interface UseMessageActionsReturn {
@@ -61,6 +62,7 @@ interface UseMessageActionsReturn {
   ask: (params: {
     question: string;
     isSending: boolean;
+    sessionId?: string;
     useWeb: boolean;
     useReasoning: boolean;
     agentClassHint: AgentClassHint;
@@ -77,6 +79,7 @@ export function useMessageActions({
   setIsSending,
   setQuestion,
   onExecutionId,
+  onCreditsChanged,
 }: UseMessageActionsParams): UseMessageActionsReturn {
   const streamAbortRef = useRef<AbortController | null>(null);
   const streamStoppedRef = useRef(false);
@@ -97,6 +100,7 @@ export function useMessageActions({
     if (!currentSessionId) return;
     if (msg.role === "user") setRunStatus("Re-running");
     await actions.editMessage(msg, useWeb, useReasoning);
+    if (msg.role === "user") await onCreditsChanged?.();
     setRunStatus("");
   };
 
@@ -123,6 +127,7 @@ export function useMessageActions({
   const ask = async ({
     question,
     isSending,
+    sessionId,
     useWeb,
     useReasoning,
     agentClassHint,
@@ -131,6 +136,7 @@ export function useMessageActions({
   }: {
     question: string;
     isSending: boolean;
+    sessionId?: string;
     useWeb: boolean;
     useReasoning: boolean;
     agentClassHint: AgentClassHint;
@@ -151,7 +157,7 @@ export function useMessageActions({
     setIsSending(true);
     setQuestion("");
     setRunStatus("Processing");
-    const sid = await ensureSessionForAsk(runAbort.signal);
+    const sid = sessionId || await ensureSessionForAsk(runAbort.signal);
     if (!sid || !isRunActive()) {
       const wasActive = isRunActive();
       if (wasActive) {
@@ -201,6 +207,7 @@ export function useMessageActions({
               }
             : message
         )));
+        await onCreditsChanged?.();
       } catch (e) {
         if (!isRunActive()) return;
         if (isAbortError(e, streamStoppedRef.current)) {
@@ -250,6 +257,7 @@ export function useMessageActions({
         executionSteps: [...(EMPTY_METADATA.execution_steps || [])],
         elapsedMs,
       };
+      let completed = false;
 
       await consumeChatStream(res, {
         signal: runAbort.signal,
@@ -332,6 +340,7 @@ export function useMessageActions({
             case "done":
               ctx = eventHandlers.handleDoneEvent(event, ctx, retrievalStrategy);
               messageUpdater.patchStreamMessage(ctx.answer, ctx.meta);
+              completed = true;
               break;
             case "stream_end":
               break;
@@ -340,6 +349,7 @@ export function useMessageActions({
       });
 
       if (!isRunActive()) return;
+      if (completed) await onCreditsChanged?.();
       const detail = await appApi.sessionDetail(sid, runAbort.signal);
       if (!isRunActive()) return;
       messageUpdater.updateFinalMessage(detail.messages || [], ctx.meta);

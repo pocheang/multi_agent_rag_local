@@ -19,4 +19,3 @@ __all__ = [
     "parse_psm_modes",
     "run_ocr_with_candidates",
 ]
-

@@ -39,10 +39,10 @@ Example - Default behavior:
     stage = FactVerificationStage()  # Uses FactVerificationConfig() defaults
 """
 
-import re
 import logging
-from typing import List, Dict, Optional, Tuple
-from dataclasses import dataclass, field
+import re
+from dataclasses import dataclass
+
 from pydantic import BaseModel, Field
 
 logger = logging.getLogger(__name__)
@@ -56,6 +56,7 @@ class FactVerificationConfig:
     All thresholds are externalized for tuning and experimentation.
     Default values match the original hardcoded behavior.
     """
+
     # Citation support thresholds
     min_support_confidence: float = 0.6
     """Minimum confidence score for a claim to be considered supported"""
@@ -121,8 +122,9 @@ class FactVerificationConfig:
 
 class FactClaim(BaseModel):
     """A factual claim extracted from an answer"""
+
     text: str
-    citations: List[str] = Field(default_factory=list)
+    citations: list[str] = Field(default_factory=list)
     claim_type: str = "general"  # general, date, number, negation, entity
     start_pos: int = 0
     end_pos: int = 0
@@ -130,6 +132,7 @@ class FactClaim(BaseModel):
 
 class VerificationResult(BaseModel):
     """Result of verifying a single claim"""
+
     claim: FactClaim
     is_verified: bool
     confidence: float = Field(ge=0.0, le=1.0)
@@ -139,40 +142,41 @@ class VerificationResult(BaseModel):
 
 class AnswerVerificationResult(BaseModel):
     """Result of verifying an entire answer"""
+
     overall_verified: bool
     groundedness_score: float = Field(ge=0.0, le=1.0)
-    verified_claims: List[FactClaim] = Field(default_factory=list)
-    unverified_claims: List[str] = Field(default_factory=list)
-    issues: List[str] = Field(default_factory=list)
+    verified_claims: list[FactClaim] = Field(default_factory=list)
+    unverified_claims: list[str] = Field(default_factory=list)
+    issues: list[str] = Field(default_factory=list)
     execution_time_ms: int = 0
 
 
-def _extract_numbers(text: str) -> List[float]:
+def _extract_numbers(text: str) -> list[float]:
     """Extract numeric values from text (reuses logic from hallucination_patterns)"""
     numbers = []
-    pattern = r'\$?\d+(?:,\d{3})*(?:\.\d+)?(?:\s*(?:million|billion|thousand|[MBK]|%))?'
+    pattern = r"\$?\d+(?:,\d{3})*(?:\.\d+)?(?:\s*(?:million|billion|thousand|[MBK]|%))?"
     matches = re.findall(pattern, text, re.IGNORECASE)
 
     for match in matches:
-        cleaned = re.sub(r'[,$\s]', '', match)
+        cleaned = re.sub(r"[,$\s]", "", match)
 
-        if '%' in match:
+        if "%" in match:
             try:
-                value = float(cleaned.replace('%', ''))
+                value = float(cleaned.replace("%", ""))
                 numbers.append(value)
             except ValueError:
                 pass
             continue
 
         multiplier = 1
-        if 'billion' in match.lower() or 'B' in match:
+        if "billion" in match.lower() or "B" in match:
             multiplier = 1e9
-        elif 'million' in match.lower() or 'M' in match:
+        elif "million" in match.lower() or "M" in match:
             multiplier = 1e6
-        elif 'thousand' in match.lower() or 'K' in match:
+        elif "thousand" in match.lower() or "K" in match:
             multiplier = 1e3
 
-        cleaned = re.sub(r'[a-zA-Z%]', '', cleaned)
+        cleaned = re.sub(r"[a-zA-Z%]", "", cleaned)
         try:
             value = float(cleaned) * multiplier
             numbers.append(value)
@@ -182,14 +186,14 @@ def _extract_numbers(text: str) -> List[float]:
     return numbers
 
 
-def _extract_dates(text: str) -> List[str]:
+def _extract_dates(text: str) -> list[str]:
     """Extract dates from text (English and Chinese)"""
     dates = []
-    dates.extend(re.findall(r'\b((?:19|20)\d{2})\b', text))
-    dates.extend(re.findall(r'\d{4}年(?:\d{1,2}月)?(?:\d{1,2}日)?', text))
-    dates.extend(re.findall(r'\d{4}-\d{2}-\d{2}', text))
-    dates.extend(re.findall(r'\d{1,2}/\d{1,2}/\d{2,4}', text))
-    dates.extend(re.findall(r'Q[1-4]\s*\d{4}', text, re.IGNORECASE))
+    dates.extend(re.findall(r"\b((?:19|20)\d{2})\b", text))
+    dates.extend(re.findall(r"\d{4}年(?:\d{1,2}月)?(?:\d{1,2}日)?", text))
+    dates.extend(re.findall(r"\d{4}-\d{2}-\d{2}", text))
+    dates.extend(re.findall(r"\d{1,2}/\d{1,2}/\d{2,4}", text))
+    dates.extend(re.findall(r"Q[1-4]\s*\d{4}", text, re.IGNORECASE))
     return dates
 
 
@@ -206,14 +210,25 @@ def _numbers_match(num1: float, num2: float, tolerance: float) -> bool:
 def _has_negation(text: str) -> bool:
     """Check if text contains negation"""
     negation_patterns = [
-        r'\bnot\b', r'\bno\b', r'\bnever\b', r'\bnone\b',
-        r'\bneither\b', r'\bnor\b', r'\bn\'t\b', r'\bfailed\s+to\b',
-        r'没有', r'不是', r'未', r'无', r'非', r'不'
+        r"\bnot\b",
+        r"\bno\b",
+        r"\bnever\b",
+        r"\bnone\b",
+        r"\bneither\b",
+        r"\bnor\b",
+        r"\bn\'t\b",
+        r"\bfailed\s+to\b",
+        r"没有",
+        r"不是",
+        r"未",
+        r"无",
+        r"非",
+        r"不",
     ]
     return any(re.search(pattern, text, re.IGNORECASE) for pattern in negation_patterns)
 
 
-def extract_claims(answer: str, config: Optional[FactVerificationConfig] = None) -> List[FactClaim]:
+def extract_claims(answer: str, config: FactVerificationConfig | None = None) -> list[FactClaim]:
     """
     Extract factual claims from generated answer.
 
@@ -241,7 +256,7 @@ def extract_claims(answer: str, config: Optional[FactVerificationConfig] = None)
 
     # Split into sentences (handle both English and Chinese)
     # Use period, question mark, exclamation mark, Chinese period/question/exclamation
-    sentences = re.split(r'[.!?。！？]\s*', answer)
+    sentences = re.split(r"[.!?。！？]\s*", answer)
     sentences = [s.strip() for s in sentences if s.strip()]
 
     position = 0
@@ -251,18 +266,18 @@ def extract_claims(answer: str, config: Optional[FactVerificationConfig] = None)
             continue
 
         # Extract citations from this sentence
-        citation_pattern = r'\[([^\]]+)\]'
+        citation_pattern = r"\[([^\]]+)\]"
         citations = re.findall(citation_pattern, sentence)
 
         # Filter to only keep doc_id:page format
         valid_citations = []
         for cit in citations:
-            if re.match(r'doc\w*:\w+', cit):
+            if re.match(r"doc\w*:\w+", cit):
                 valid_citations.append(cit)
 
         # Remove citation markers from claim text
-        clean_sentence = re.sub(r'\s*\[[^\]]+\]\s*', ' ', sentence).strip()
-        clean_sentence = re.sub(r'\s+', ' ', clean_sentence)  # Normalize whitespace
+        clean_sentence = re.sub(r"\s*\[[^\]]+\]\s*", " ", sentence).strip()
+        clean_sentence = re.sub(r"\s+", " ", clean_sentence)  # Normalize whitespace
 
         if len(clean_sentence) < config.min_clean_claim_length:  # Skip if too short after removing citations
             position += len(sentence) + 1
@@ -287,7 +302,7 @@ def extract_claims(answer: str, config: Optional[FactVerificationConfig] = None)
             citations=valid_citations,
             claim_type=claim_type,
             start_pos=position,
-            end_pos=position + len(sentence)
+            end_pos=position + len(sentence),
         )
         claims.append(claim)
 
@@ -297,11 +312,8 @@ def extract_claims(answer: str, config: Optional[FactVerificationConfig] = None)
 
 
 def check_citation_support(
-    claim_text: str,
-    citations: List[str],
-    source_docs: List[Dict],
-    config: Optional[FactVerificationConfig] = None
-) -> Tuple[bool, float]:
+    claim_text: str, citations: list[str], source_docs: list[dict], config: FactVerificationConfig | None = None
+) -> tuple[bool, float]:
     """
     Check if claim is supported by cited sources.
 
@@ -329,7 +341,7 @@ def check_citation_support(
     cited_contents = []
     for citation in citations:
         # Parse citation: doc1:p3 -> doc_id=doc1, page=p3
-        match = re.match(r'(\w+):(\w+)', citation)
+        match = re.match(r"(\w+):(\w+)", citation)
         if not match:
             continue
 
@@ -372,18 +384,17 @@ def check_citation_support(
     # Check numbers match
     numbers_match = True
     if claim_numbers:
-        numbers_match = all(
-            any(_numbers_match(cn, sn, config.number_tolerance) for sn in source_numbers)
-            for cn in claim_numbers
-        ) if source_numbers else False
+        numbers_match = (
+            all(any(_numbers_match(cn, sn, config.number_tolerance) for sn in source_numbers) for cn in claim_numbers)
+            if source_numbers
+            else False
+        )
 
     # Check dates match
     dates_match = True
     if claim_dates:
         # For date matching, check for exact matches (not substring)
-        dates_match = any(
-            cd == sd for cd in claim_dates for sd in source_dates
-        ) if source_dates else False
+        dates_match = any(cd == sd for cd in claim_dates for sd in source_dates) if source_dates else False
 
     # Check negation consistency
     claim_has_negation = _has_negation(claim_text)
@@ -391,12 +402,12 @@ def check_citation_support(
 
     # Extract content words for semantic overlap (include Chinese)
     # Remove common stop words and focus on meaningful content
-    claim_words = set(re.findall(r'\b[a-z]{4,}\b', claim_lower))  # English 4+ chars
-    claim_chinese = set(re.findall(r'[一-鿿]{2,}', claim_text))
+    claim_words = set(re.findall(r"\b[a-z]{4,}\b", claim_lower))  # English 4+ chars
+    claim_chinese = set(re.findall(r"[一-鿿]{2,}", claim_text))
     claim_words.update(claim_chinese)
 
-    source_words = set(re.findall(r'\b[a-z]{4,}\b', source_text))  # English 4+ chars
-    source_chinese = set(re.findall(r'[一-鿿]{2,}', " ".join(cited_contents)))
+    source_words = set(re.findall(r"\b[a-z]{4,}\b", source_text))  # English 4+ chars
+    source_chinese = set(re.findall(r"[一-鿿]{2,}", " ".join(cited_contents)))
     source_words.update(source_chinese)
 
     # Word overlap ratio
@@ -437,9 +448,7 @@ def check_citation_support(
 
 
 async def verify_claim_against_source(
-    claim: FactClaim,
-    source_docs: List[Dict],
-    config: Optional[FactVerificationConfig] = None
+    claim: FactClaim, source_docs: list[dict], config: FactVerificationConfig | None = None
 ) -> VerificationResult:
     """
     Verify a single claim against source documents.
@@ -462,12 +471,7 @@ async def verify_claim_against_source(
         config = FactVerificationConfig()
 
     # Check citation support
-    is_supported, confidence = check_citation_support(
-        claim.text,
-        claim.citations,
-        source_docs,
-        config
-    )
+    is_supported, confidence = check_citation_support(claim.text, claim.citations, source_docs, config)
 
     if not is_supported:
         issue_type = "unsupported_claim"
@@ -495,7 +499,9 @@ async def verify_claim_against_source(
                 )
                 if not has_match:
                     issue_type = "number_mismatch"
-                    suggestion = f"Number in claim does not match source (>{config.number_tolerance*100:.0f}% difference)"
+                    suggestion = (
+                        f"Number in claim does not match source (>{config.number_tolerance * 100:.0f}% difference)"
+                    )
         elif claim.claim_type == "negation":
             source_text = " ".join([doc.get("content", "") for doc in source_docs[:5]])
             claim_has_neg = _has_negation(claim.text)
@@ -505,20 +511,10 @@ async def verify_claim_against_source(
                 suggestion = "Claim negation conflicts with source"
 
         return VerificationResult(
-            claim=claim,
-            is_verified=False,
-            confidence=confidence,
-            issue_type=issue_type,
-            suggestion=suggestion
+            claim=claim, is_verified=False, confidence=confidence, issue_type=issue_type, suggestion=suggestion
         )
 
-    return VerificationResult(
-        claim=claim,
-        is_verified=True,
-        confidence=confidence,
-        issue_type="",
-        suggestion=""
-    )
+    return VerificationResult(claim=claim, is_verified=True, confidence=confidence, issue_type="", suggestion="")
 
 
 class FactVerificationStage:
@@ -531,7 +527,7 @@ class FactVerificationStage:
     4. Flag unverified claims for removal/hedging
     """
 
-    def __init__(self, config: Optional[FactVerificationConfig] = None):
+    def __init__(self, config: FactVerificationConfig | None = None):
         """
         Initialize fact verifier with configuration.
 
@@ -543,10 +539,7 @@ class FactVerificationStage:
         self.config = config
 
     async def verify(
-        self,
-        answer: str,
-        source_docs: List[Dict],
-        citations: Optional[List[Dict]] = None
+        self, answer: str, source_docs: list[dict], citations: list[dict] | None = None
     ) -> AnswerVerificationResult:
         """
         Verify entire answer for factual accuracy and groundedness.
@@ -560,6 +553,7 @@ class FactVerificationStage:
             AnswerVerificationResult with verification details
         """
         import time
+
         start_time = time.time()
 
         if not answer or not answer.strip():
@@ -569,7 +563,7 @@ class FactVerificationStage:
                 verified_claims=[],
                 unverified_claims=[],
                 issues=[],
-                execution_time_ms=0
+                execution_time_ms=0,
             )
 
         # Extract claims
@@ -583,7 +577,7 @@ class FactVerificationStage:
                 verified_claims=[],
                 unverified_claims=[],
                 issues=[],
-                execution_time_ms=int((time.time() - start_time) * 1000)
+                execution_time_ms=int((time.time() - start_time) * 1000),
             )
 
         # Verify each claim
@@ -616,14 +610,10 @@ class FactVerificationStage:
             verified_claims=verified_claims,
             unverified_claims=unverified_claims,
             issues=issues,
-            execution_time_ms=elapsed
+            execution_time_ms=elapsed,
         )
 
-    async def suggest_corrections(
-        self,
-        answer: str,
-        verification_result: AnswerVerificationResult
-    ) -> str:
+    async def suggest_corrections(self, answer: str, verification_result: AnswerVerificationResult) -> str:
         """
         Suggest corrections to improve groundedness.
 
@@ -663,14 +653,14 @@ class FactVerifier:
     validation engine.
     """
 
-    def __init__(self, config: Optional[FactVerificationConfig] = None):
+    def __init__(self, config: FactVerificationConfig | None = None):
         self._stage = FactVerificationStage(config)
 
     async def verify_answer(
         self,
         answer: str,
-        source_docs: List[Dict],
-        citations: Optional[List[Dict]] = None,
+        source_docs: list[dict],
+        citations: list[dict] | None = None,
     ) -> AnswerVerificationResult:
         """Delegate the historical answer-level call to the canonical stage."""
         return await self._stage.verify(answer, source_docs, citations)

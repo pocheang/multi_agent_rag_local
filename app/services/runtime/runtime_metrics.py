@@ -210,5 +210,3 @@ def _metric_name(name: str) -> str:
     if out[0].isdigit():
         out = f"m_{out}"
     return out
-
-

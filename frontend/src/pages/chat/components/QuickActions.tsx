@@ -1,4 +1,5 @@
 import { useTranslation } from "react-i18next";
+import { AnimatedButtonLite as AnimatedButton } from "@/components/animations/AnimatedButtonLite";
 
 type Props = {
   quickPrompts: string[];
@@ -22,19 +23,35 @@ export function QuickActions({
   return (
     <div className="quick-actions">
       {quickPrompts.map((prompt) => (
-        <button key={prompt} type="button" className="quick-action-btn" onClick={() => onPromptPick(prompt)}>
+        <AnimatedButton
+          key={prompt}
+          onClick={() => onPromptPick(prompt)}
+          variant="ghost"
+          size="small"
+          className="quick-action-btn"
+        >
           {prompt}
-        </button>
+        </AnimatedButton>
       ))}
       {isSending && (
-        <button type="button" className="quick-action-btn danger" onClick={onStop} aria-label={t("components.chat.stopAria")}>
+        <AnimatedButton
+          onClick={onStop}
+          variant="danger"
+          size="small"
+          className="quick-action-btn"
+        >
           {t("components.chat.stop")}
-        </button>
+        </AnimatedButton>
       )}
       {question && !isSending && (
-        <button type="button" className="quick-action-btn" onClick={onClearQuestion} aria-label={t("components.chat.clearAria")}>
+        <AnimatedButton
+          onClick={onClearQuestion}
+          variant="secondary"
+          size="small"
+          className="quick-action-btn"
+        >
           {t("components.chat.clear")}
-        </button>
+        </AnimatedButton>
       )}
     </div>
   );

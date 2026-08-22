@@ -40,5 +40,6 @@ async def test_rag_service_keeps_available_evidence_and_reports_failed_retriever
 
     assert evidence.items[0].document_id == "entity-1"
     assert [(event.stage, event.status, event.message) for event in events] == [
-        ("rag", "skipped", "vector: TimeoutError")
+        ("rag", "skipped", "vector: TimeoutError: vector retriever exceeded timeout (30.0s)"),
+        ("rag", "completed", "DEGRADED: Partial retrieval success: 2/3 attempts, 1 evidence items. Failed: vector"),
     ]

@@ -17,6 +17,7 @@ __all__ = ["run_web_research"]
 # Import metrics tracking (optional - won't fail if not available)
 try:
     from app.agents.rag.web_utils import get_metrics, validate_url
+
     METRICS_AVAILABLE = True
 except ImportError:
     METRICS_AVAILABLE = False
@@ -25,6 +26,7 @@ except ImportError:
 # Import activity logger (optional)
 try:
     from app.services.web_activity.logger import get_activity_logger
+
     ACTIVITY_LOGGER_AVAILABLE = True
 except ImportError:
     ACTIVITY_LOGGER_AVAILABLE = False
@@ -48,13 +50,13 @@ def _sanitize_query(question: str) -> str:
 
     # Define sensitive patterns
     patterns = [
-        (r'\b\d{3}-\d{2}-\d{4}\b', '[REDACTED_SSN]'),  # SSN
-        (r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b', '[REDACTED_EMAIL]'),  # Email
-        (r'\b\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\b', '[REDACTED_IP]'),  # IP address
-        (r'password\s*[=:]\s*\S+', 'password=[REDACTED]'),  # Password
-        (r'token\s*[=:]\s*\S+', 'token=[REDACTED]'),  # Token
-        (r'api[_-]?key\s*[=:]\s*\S+', 'api_key=[REDACTED]'),  # API key
-        (r'\b\d{13,19}\b', '[REDACTED_CARD]'),  # Credit card numbers (13-19 digits)
+        (r"\b\d{3}-\d{2}-\d{4}\b", "[REDACTED_SSN]"),  # SSN
+        (r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b", "[REDACTED_EMAIL]"),  # Email
+        (r"\b\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\b", "[REDACTED_IP]"),  # IP address
+        (r"password\s*[=:]\s*\S+", "password=[REDACTED]"),  # Password
+        (r"token\s*[=:]\s*\S+", "token=[REDACTED]"),  # Token
+        (r"api[_-]?key\s*[=:]\s*\S+", "api_key=[REDACTED]"),  # API key
+        (r"\b\d{13,19}\b", "[REDACTED_CARD]"),  # Credit card numbers (13-19 digits)
     ]
 
     for pattern, replacement in patterns:
@@ -62,7 +64,7 @@ def _sanitize_query(question: str) -> str:
 
     # Log if sanitization occurred
     if sanitized != question:
-        logger.warning(f"Query sanitized: removed sensitive information before web search")
+        logger.warning("Query sanitized: removed sensitive information before web search")
 
     return sanitized
 
@@ -82,7 +84,7 @@ def _cached_search(question_hash: str, max_results: int) -> tuple:
 
 def _get_cache_key(question: str) -> str:
     """Generate cache key from question."""
-    return md5(question.encode('utf-8')).hexdigest()
+    return md5(question.encode("utf-8")).hexdigest()
 
 
 def _parse_allowlist(raw: str) -> list[str]:
@@ -185,7 +187,7 @@ def run_web_research(
     question = _sanitize_query(question)
     if question != original_question:
         metrics["sanitized"] = True
-        logger.info(f"Query sanitized before web search")
+        logger.info("Query sanitized before web search")
 
     settings = get_settings()
     allowlist = _parse_allowlist(getattr(settings, "web_domain_allowlist", ""))

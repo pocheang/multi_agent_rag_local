@@ -1,2 +1,1 @@
 """Canonical ingestion chunking capabilities."""
-

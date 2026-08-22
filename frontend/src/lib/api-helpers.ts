@@ -11,6 +11,7 @@ export function buildRequest<T>(
   path: string,
   body?: Record<string, unknown>,
   params?: Record<string, string | number | boolean | undefined>,
+  timeoutMs?: number,
 ): Promise<T> {
   let fullPath = path;
   if (params) {
@@ -24,7 +25,7 @@ export function buildRequest<T>(
     options.body = JSON.stringify(body);
   }
 
-  return authRequest<T>(fullPath, options);
+  return authRequest<T>(fullPath, options, timeoutMs ? { timeoutMs } : {});
 }
 
 export function buildPatchRequest<T>(
@@ -37,8 +38,9 @@ export function buildPatchRequest<T>(
 export function buildPostRequest<T>(
   path: string,
   body: Record<string, unknown>,
+  timeoutMs?: number,
 ): Promise<T> {
-  return buildRequest<T>("POST", path, body);
+  return buildRequest<T>("POST", path, body, undefined, timeoutMs);
 }
 
 export function buildGetRequest<T>(

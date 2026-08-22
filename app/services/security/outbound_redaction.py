@@ -6,8 +6,8 @@ from dataclasses import dataclass, field
 from functools import lru_cache
 from typing import Any
 
-from app.domain.text import normalize_string
 from app.core.config import get_settings
+from app.domain.text import normalize_string
 
 logger = logging.getLogger(__name__)
 
@@ -189,7 +189,3 @@ def redact_messages_for_provider(messages: Any, *, provider: str):
     if isinstance(messages, list):
         return [_redact_message_item(item, state, parent_key="content") for item in messages]
     return messages
-
-
-
-

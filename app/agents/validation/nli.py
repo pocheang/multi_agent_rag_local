@@ -57,9 +57,7 @@ class NLIValidator:
     ) -> float:
         """Return the historical factual-span score."""
         spans = self.extract_factual_spans(answer)
-        source_text = " ".join(
-            str(doc.get("content", doc.get("text", "")) or "") for doc in source_docs[:5]
-        )
+        source_text = " ".join(str(doc.get("content", doc.get("text", "")) or "") for doc in source_docs[:5])
         if not spans or not source_text:
             return 0.5
         model = self.get_model()
@@ -127,10 +125,11 @@ class NLIValidator:
         unsupported = 0
         for sentence in sentences:
             sentence_numbers = extract_numbers(sentence)
-            numbers_supported = all(
-                any(numbers_match(number, source) for source in source_numbers)
-                for number in sentence_numbers
-            ) if sentence_numbers else True
+            numbers_supported = (
+                all(any(numbers_match(number, source) for source in source_numbers) for number in sentence_numbers)
+                if sentence_numbers
+                else True
+            )
             sentence_dates = extract_dates(sentence)
             dates_supported = all(date in source_dates for date in sentence_dates) if sentence_dates else True
             words = set(re.findall(r"\w+", sentence.lower()))

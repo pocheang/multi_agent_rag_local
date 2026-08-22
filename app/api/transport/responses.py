@@ -30,5 +30,3 @@ def _sse_response(generator: Any, *, append_terminal_event: bool = False) -> Str
             "X-Accel-Buffering": "no",
         },
     )
-
-

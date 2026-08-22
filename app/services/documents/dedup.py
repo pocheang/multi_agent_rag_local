@@ -2,9 +2,10 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 from uuid import uuid4
 
 try:
@@ -21,6 +22,23 @@ class UploadStorageError(Exception):
 
 class UploadPayloadTooLargeError(UploadStorageError):
     """Raised when a file or request exceeds its configured byte limit."""
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        file_size: int | None = None,
+        total_size: int | None = None,
+        max_file_size: int | None = None,
+        max_total_size: int | None = None,
+        filename: str | None = None,
+    ):
+        super().__init__(message)
+        self.file_size = file_size
+        self.total_size = total_size
+        self.max_file_size = max_file_size
+        self.max_total_size = max_total_size
+        self.filename = filename
 
 
 class UploadInvalidFileError(UploadStorageError):
@@ -149,9 +167,18 @@ async def store_uploaded_files(
                 file_uploaded_bytes += len(chunk)
                 total_uploaded_bytes += len(chunk)
                 if file_uploaded_bytes > max_file_bytes:
-                    raise UploadPayloadTooLargeError(f"file too large: {target.name}")
+                    raise UploadPayloadTooLargeError(
+                        f"文件 '{safe_filename}' 过大",
+                        file_size=file_uploaded_bytes,
+                        max_file_size=max_file_bytes,
+                        filename=safe_filename,
+                    )
                 if total_uploaded_bytes > max_total_bytes:
-                    raise UploadPayloadTooLargeError("total upload size exceeded")
+                    raise UploadPayloadTooLargeError(
+                        "上传总大小超过限制",
+                        total_size=total_uploaded_bytes,
+                        max_total_size=max_total_bytes,
+                    )
                 file_chunks.append(chunk)
                 file_digest.update(chunk)
         finally:
@@ -166,10 +193,7 @@ async def store_uploaded_files(
         duplicate = find_duplicate_for_user(sha256, owner_user_id)
         if duplicate is not None:
             duplicate_source = Path(str(duplicate.get("source", "") or ""))
-            if (
-                not duplicate_source.is_file()
-                or compute_sha256(duplicate_source) != sha256
-            ):
+            if not duplicate_source.is_file() or compute_sha256(duplicate_source) != sha256:
                 duplicate = None
         if duplicate is not None:
             duplicate_files.append(safe_filename)

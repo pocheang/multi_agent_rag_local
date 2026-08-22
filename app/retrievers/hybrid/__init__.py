@@ -4,8 +4,8 @@ from app.retrievers.hybrid.candidate_collection import collect_candidates, safe_
 from app.retrievers.hybrid.fusion import hybrid_weights, rrf_score
 from app.retrievers.hybrid.parent_expansion import expand_to_parent_context
 from app.retrievers.hybrid.rank_features import rank_feature_score
-from app.retrievers.hybrid.strategy import strategy_flags
 from app.retrievers.hybrid.retriever import hybrid_search, hybrid_search_with_diagnostics
+from app.retrievers.hybrid.strategy import strategy_flags
 
 __all__ = [
     "adaptive_retrieval_params",
@@ -14,6 +14,8 @@ __all__ = [
     "clear_retrieval_cache",
     "collect_candidates",
     "expand_to_parent_context",
+    "hybrid_search",
+    "hybrid_search_with_diagnostics",
     "hybrid_weights",
     "rank_feature_score",
     "rrf_score",

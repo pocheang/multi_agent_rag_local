@@ -18,16 +18,20 @@ from app.orchestration.finalization import FinalizationService
 class CoreCapabilities:
     """Injectable canonical capabilities used by production and focused tests."""
 
-    typed_router: Any = field(default_factory=RouterAgentService)
-    typed_planner: Any = field(default_factory=PlannerAgentService)
-    typed_rag: Any = field(default_factory=RAGAgentService)
-    typed_tools: Any = field(default_factory=ToolAgentService)
-    typed_synthesizer: Any = field(default_factory=SynthesizerAgentService)
-    typed_finalizer: Any = field(default_factory=FinalizationService)
-    context: Any = None
+    typed_router: RouterAgentService = field(default_factory=RouterAgentService)
+    typed_planner: PlannerAgentService = field(default_factory=PlannerAgentService)
+    typed_rag: RAGAgentService = field(default_factory=RAGAgentService)
+    typed_tools: ToolAgentService = field(default_factory=ToolAgentService)
+    typed_synthesizer: SynthesizerAgentService = field(default_factory=SynthesizerAgentService)
+    typed_finalizer: FinalizationService = field(default_factory=FinalizationService)
+    context: Any = None  # Legacy context object, type varies by implementation
 
     def orchestration_services(self) -> OrchestrationServices:
-        reporter_binder = getattr(self.typed_rag, "set_degradation_reporter", None)
+        """Assemble orchestration services from typed capabilities.
+
+        The event_reporter_binder allows the orchestration engine to push
+        degradation events back to RAGAgentService during retrieval failures.
+        """
         return OrchestrationServices(
             router=self.typed_router.route,
             planner=self.typed_planner.plan,
@@ -36,7 +40,7 @@ class CoreCapabilities:
             synthesizer=self.typed_synthesizer.synthesize,
             finalizer=self.typed_finalizer.finalize,
             context=self.context,
-            event_reporter_binder=reporter_binder if callable(reporter_binder) else None,
+            event_reporter_binder=self.typed_rag.set_degradation_reporter,
         )
 
 

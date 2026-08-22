@@ -176,5 +176,3 @@ def resolve_demonstratives(text: str) -> str:
         resolved = re.sub(pattern, replacement, resolved, flags=re.IGNORECASE)
 
     return resolved
-
-

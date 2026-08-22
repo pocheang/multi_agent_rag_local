@@ -10,7 +10,6 @@ import logging
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import Optional
 
 from app.agents.router.routing import LegacyRouteDecision
 
@@ -27,6 +26,7 @@ REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
 @dataclass
 class RouteOutcome:
     """Single route outcome record"""
+
     query: str
     route: str
     skill: str
@@ -48,7 +48,7 @@ class RouteOutcome:
             "was_successful": self.was_successful,
             "execution_time_ms": self.execution_time_ms,
             "timestamp": self.timestamp.isoformat(),
-            "reason": self.reason
+            "reason": self.reason,
         }
 
     @classmethod
@@ -63,13 +63,14 @@ class RouteOutcome:
             was_successful=data["was_successful"],
             execution_time_ms=data["execution_time_ms"],
             timestamp=datetime.fromisoformat(data["timestamp"]),
-            reason=data.get("reason", "")
+            reason=data.get("reason", ""),
         )
 
 
 @dataclass
 class AccuracyStats:
     """Accuracy statistics for a subset of routes"""
+
     total_routes: int
     successful_routes: int
 
@@ -92,7 +93,7 @@ class RouteAccuracyTracker:
     - Persists data to JSON file
     """
 
-    def __init__(self, storage_file: Optional[Path] = None):
+    def __init__(self, storage_file: Path | None = None):
         """
         Initialize tracker.
 
@@ -107,11 +108,7 @@ class RouteAccuracyTracker:
         self.record_count = 0
 
     def record_outcome(
-        self,
-        query: str,
-        route_decision: LegacyRouteDecision,
-        was_successful: bool,
-        execution_time_ms: int
+        self, query: str, route_decision: LegacyRouteDecision, was_successful: bool, execution_time_ms: int
     ):
         """
         Record a routing outcome.
@@ -131,7 +128,7 @@ class RouteAccuracyTracker:
             was_successful=was_successful,
             execution_time_ms=execution_time_ms,
             timestamp=datetime.now(),
-            reason=route_decision.reason
+            reason=route_decision.reason,
         )
 
         self.outcomes.append(outcome)
@@ -143,12 +140,12 @@ class RouteAccuracyTracker:
 
     def get_accuracy_stats(
         self,
-        route: Optional[str] = None,
-        skill: Optional[str] = None,
-        agent_class: Optional[str] = None,
-        confidence_min: Optional[float] = None,
-        confidence_max: Optional[float] = None,
-        query_pattern: Optional[str] = None
+        route: str | None = None,
+        skill: str | None = None,
+        agent_class: str | None = None,
+        confidence_min: float | None = None,
+        confidence_max: float | None = None,
+        query_pattern: str | None = None,
     ) -> AccuracyStats:
         """
         Get accuracy statistics filtered by criteria.
@@ -208,9 +205,7 @@ class RouteAccuracyTracker:
         confidence_max = min(1.0, route_decision.confidence + confidence_bucket_size / 2)
 
         stats = self.get_accuracy_stats(
-            route=route_decision.route,
-            confidence_min=confidence_min,
-            confidence_max=confidence_max
+            route=route_decision.route, confidence_min=confidence_min, confidence_max=confidence_max
         )
 
         # Need minimum samples for recalibration
@@ -220,8 +215,7 @@ class RouteAccuracyTracker:
         # Blend original confidence with historical accuracy
         historical_accuracy = stats.accuracy_rate
         recalibrated = (
-            RECALIBRATION_WEIGHT * historical_accuracy +
-            (1 - RECALIBRATION_WEIGHT) * route_decision.confidence
+            RECALIBRATION_WEIGHT * historical_accuracy + (1 - RECALIBRATION_WEIGHT) * route_decision.confidence
         )
 
         # Clamp to valid range
@@ -232,12 +226,9 @@ class RouteAccuracyTracker:
         # Ensure directory exists
         self.storage_file.parent.mkdir(parents=True, exist_ok=True)
 
-        data = {
-            "outcomes": [o.to_dict() for o in self.outcomes],
-            "last_updated": datetime.now().isoformat()
-        }
+        data = {"outcomes": [o.to_dict() for o in self.outcomes], "last_updated": datetime.now().isoformat()}
 
-        with open(self.storage_file, 'w', encoding='utf-8') as f:
+        with open(self.storage_file, "w", encoding="utf-8") as f:
             json.dump(data, f, indent=2, ensure_ascii=False)
 
         logger.info(f"Saved {len(self.outcomes)} outcomes to {self.storage_file}")
@@ -249,12 +240,12 @@ class RouteAccuracyTracker:
             return
 
         try:
-            with open(self.storage_file, 'r', encoding='utf-8') as f:
+            with open(self.storage_file, encoding="utf-8") as f:
                 data = json.load(f)
 
             self.outcomes = [RouteOutcome.from_dict(o) for o in data.get("outcomes", [])]
             logger.info(f"Loaded {len(self.outcomes)} outcomes from {self.storage_file}")
 
         except Exception as e:
-            logger.error(f"Failed to load tracking data: {e}")
+            logger.error(f"Failed to load tracking data: {e}", exc_info=True)
             self.outcomes = []

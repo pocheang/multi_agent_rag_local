@@ -23,3 +23,6 @@
 /* Composite shared components */
 @import "./components/cards.css";
 @import "./components/tables.css";
+@import "./components/confirm-dialog.css";
+@import "./components/clarification-prompt.css";
+@import "./components/thinking-indicator.css";

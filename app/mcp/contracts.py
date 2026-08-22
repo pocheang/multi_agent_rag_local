@@ -89,6 +89,8 @@ class ConnectorDefinition(ImmutableContract):
         if not normalized:
             raise ValueError("allowed_hosts must contain at least one hostname")
         return normalized
+
+
 class RestRequest(ImmutableContract):
     """One outbound REST request with redirect following explicitly disabled."""
 
@@ -102,6 +104,7 @@ class RestResponse(ImmutableContract):
 
     final_url: HttpUrl
     body: str = ""
+
 
 class MCPAgentDescriptor(ImmutableContract):
     """A stable description of one read-only QueryMind RAG capability."""
@@ -154,6 +157,7 @@ class MCPRagResponse(ImmutableContract):
     citations: tuple[MCPCitation, ...] = Field(default_factory=tuple)
     quality_report: dict[str, JsonValue] = Field(default_factory=dict)
     degradation_events: tuple[MCPDegradationEvent, ...] = Field(default_factory=tuple)
+
 
 class AuditRecord(ImmutableContract):
     """Secret-free record of one governed tool decision or execution."""

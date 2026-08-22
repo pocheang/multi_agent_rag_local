@@ -22,6 +22,7 @@ type Props = {
   sessionLoading: boolean;
   currentSessionId: string | null;
   busySessionId: string | null;
+  isCreatingSession: boolean;
   agentClassHint: AgentClassHint;
   agentModes: AgentMode[];
   agentDistribution: Array<{ agent: string; count: number }>;
@@ -50,6 +51,8 @@ type Props = {
   onCreateSession: () => Promise<void>;
   onLoadSession: (sessionId: string) => Promise<void>;
   onDeleteSession: (sessionId: string) => Promise<void>;
+  onRenameSession?: (sessionId: string, newTitle: string) => Promise<void>;
+  onPinSession?: (sessionId: string, pinned: boolean) => Promise<void>;
   onSwitchAgentMode: (mode: AgentClassHint) => void;
   onPdfTargetFileChange: (filename: string) => void;
   onDraftQuestion: () => void;
@@ -78,6 +81,7 @@ export function ChatSidebar({
   sessionLoading,
   currentSessionId,
   busySessionId,
+  isCreatingSession,
   agentClassHint,
   agentModes,
   agentDistribution,
@@ -106,6 +110,8 @@ export function ChatSidebar({
   onCreateSession,
   onLoadSession,
   onDeleteSession,
+  onRenameSession,
+  onPinSession,
   onSwitchAgentMode,
   onPdfTargetFileChange,
   onDraftQuestion,
@@ -190,11 +196,14 @@ export function ChatSidebar({
             sessionLoading={sessionLoading}
             currentSessionId={currentSessionId}
             busySessionId={busySessionId}
+            isCreatingSession={isCreatingSession}
             searchRequestKey={sessionSearchRequest}
             user={user}
             onCreateSession={onCreateSession}
             onLoadSession={onLoadSession}
             onDeleteSession={onDeleteSession}
+            onRenameSession={onRenameSession}
+            onPinSession={onPinSession}
           />
         </div>
 

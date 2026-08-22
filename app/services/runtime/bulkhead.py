@@ -59,5 +59,3 @@ def bulkhead(name: str) -> Iterator[None]:
 def reset_bulkheads() -> None:
     with _LOCK:
         _SEMAPHORES.clear()
-
-

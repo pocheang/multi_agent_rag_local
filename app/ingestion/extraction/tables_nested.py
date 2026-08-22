@@ -201,5 +201,3 @@ def split_wide_table(text: str, max_columns: int = 6) -> list[str]:
         tables.append("\n".join(sub_table_lines))
 
     return tables
-
-

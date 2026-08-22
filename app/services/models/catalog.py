@@ -60,10 +60,25 @@ _MODEL_CATALOG: dict[str, dict[str, Any]] = {
         "api_style": "openai",
         "note": "DeepSeek V4 switches thinking mode through request options. Embeddings stay on the existing pipeline.",
         "models": [
-            {"id": "deepseek-v4-flash", "label": "DeepSeek V4 Flash", "roles": ["chat", "reasoning"], "recommended": True},
+            {
+                "id": "deepseek-v4-flash",
+                "label": "DeepSeek V4 Flash",
+                "roles": ["chat", "reasoning"],
+                "recommended": True,
+            },
             {"id": "deepseek-v4-pro", "label": "DeepSeek V4 Pro", "roles": ["chat", "reasoning"]},
-            {"id": "deepseek-chat", "label": "DeepSeek Chat (deprecated)", "roles": ["chat"], "deprecated_after": "2026-07-24T15:59:00Z"},
-            {"id": "deepseek-reasoner", "label": "DeepSeek Reasoner (deprecated)", "roles": ["reasoning"], "deprecated_after": "2026-07-24T15:59:00Z"},
+            {
+                "id": "deepseek-chat",
+                "label": "DeepSeek Chat (deprecated)",
+                "roles": ["chat"],
+                "deprecated_after": "2026-07-24T15:59:00Z",
+            },
+            {
+                "id": "deepseek-reasoner",
+                "label": "DeepSeek Reasoner (deprecated)",
+                "roles": ["reasoning"],
+                "deprecated_after": "2026-07-24T15:59:00Z",
+            },
         ],
     },
     "anthropic": {
@@ -121,5 +136,3 @@ def provider_defaults(provider: str) -> dict[str, str]:
 
 def provider_supports_embeddings(provider: str) -> bool:
     return bool(provider_metadata(provider)["supports_embeddings"])
-
-

@@ -13,8 +13,8 @@ from typing import Any
 import httpx
 
 from app.core.config import get_settings
-from app.services.observability.log_buffer import list_captured_logs
 from app.services.models.config_store import get_global_model_settings, public_global_model_settings
+from app.services.observability.log_buffer import list_captured_logs
 
 settings = get_settings()
 
@@ -275,5 +275,3 @@ def handle_service_exception(
 
     logger.error(f"Unexpected error in {action}: {e}", exc_info=True)
     raise internal_error("operation failed")
-
-

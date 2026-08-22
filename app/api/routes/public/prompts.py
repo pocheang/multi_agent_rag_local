@@ -12,7 +12,6 @@ from app.api.dependencies import (
     _resolve_effective_agent_class,
     prompt_store,
 )
-from app.api.transport.errors import not_found
 from app.api.schemas import (
     PromptCheckRequest,
     PromptCheckResponse,
@@ -20,6 +19,7 @@ from app.api.schemas import (
     PromptTemplateCreateRequest,
     PromptTemplateUpdateRequest,
 )
+from app.api.transport.errors import not_found
 from app.services.security.prompt_checker import check_and_enhance_prompt
 
 router = APIRouter(prefix="/prompts", tags=["prompts"])

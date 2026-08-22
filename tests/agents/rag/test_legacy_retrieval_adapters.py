@@ -4,7 +4,8 @@ from unittest.mock import patch
 
 import pytest
 
-from app.agents.rag.service import RetrieverSoftFailure, _bundle_from_legacy_payload, _graph_retrieve
+from app.agents.rag.service import RetrieverSoftFailure, _graph_retrieve
+from app.agents.rag.evidence_builder import bundle_from_legacy_payload
 from app.domain.contracts import RouteDecision
 from app.orchestration.request import OrchestrationRequest
 
@@ -35,4 +36,4 @@ async def test_graph_adapter_preserves_context_when_legacy_graph_has_no_citation
 def test_legacy_error_payload_is_a_retriever_failure_not_empty_evidence() -> None:
     """Ignoring an explicit legacy error would hide a degradation event from callers."""
     with pytest.raises(RetrieverSoftFailure, match="upstream unavailable"):
-        _bundle_from_legacy_payload({"error": "upstream unavailable"}, "web")
+        bundle_from_legacy_payload({"error": "upstream unavailable"}, "web")

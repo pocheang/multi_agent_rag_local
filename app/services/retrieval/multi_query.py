@@ -116,7 +116,7 @@ def merge_and_deduplicate_results(results: list[dict], top_k: int) -> list[dict]
 
     # 合并同一文档的多个结果
     merged = []
-    for doc_id, doc_results in doc_groups.items():
+    for _doc_id, doc_results in doc_groups.items():
         # 选择分数最高的结果作为基础
         best_result = max(doc_results, key=lambda x: x.get("score", 0))
 

@@ -154,4 +154,3 @@ class LanguageAnalytics:
         with self._events_lock:
             self._events.clear()
         logger.info("Language analytics cleared")
-

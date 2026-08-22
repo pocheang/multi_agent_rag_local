@@ -12,6 +12,7 @@ export interface ChatState {
   currentSessionId: string | null;
   messages: SessionMessage[];
   busySessionId: string | null;
+  isCreatingSession: boolean;
 
   // Chat State
   question: string;
@@ -56,6 +57,7 @@ export interface ChatState {
   setCurrentSessionId: (id: string | null | ((prev: string | null) => string | null)) => void;
   setMessages: (messages: SessionMessage[] | ((prev: SessionMessage[]) => SessionMessage[])) => void;
   setBusySessionId: (id: string | null | ((prev: string | null) => string | null)) => void;
+  setIsCreatingSession: (creating: boolean | ((prev: boolean) => boolean)) => void;
 
   setQuestion: (question: string | ((prev: string) => string)) => void;
   setIsSending: (isSending: boolean | ((prev: boolean) => boolean)) => void;
@@ -102,6 +104,7 @@ export const useChatStore = create<ChatState>((set) => ({
   currentSessionId: null,
   messages: [],
   busySessionId: null,
+  isCreatingSession: false,
 
   // Chat State
   question: "",
@@ -146,6 +149,7 @@ export const useChatStore = create<ChatState>((set) => ({
   setCurrentSessionId: (val) => set((s) => ({ currentSessionId: updateValue(val, s.currentSessionId) })),
   setMessages: (val) => set((s) => ({ messages: updateValue(val, s.messages) })),
   setBusySessionId: (val) => set((s) => ({ busySessionId: updateValue(val, s.busySessionId) })),
+  setIsCreatingSession: (val) => set((s) => ({ isCreatingSession: updateValue(val, s.isCreatingSession) })),
 
   setQuestion: (val) => set((s) => ({ question: updateValue(val, s.question) })),
   setIsSending: (val) => set((s) => ({ isSending: updateValue(val, s.isSending) })),

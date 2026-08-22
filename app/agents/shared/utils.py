@@ -4,14 +4,15 @@ import hashlib
 import json
 import logging
 import re
-from typing import Any, Callable, Dict, List, Optional
+from collections.abc import Callable
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
 
 class ContextFormatter:
     @staticmethod
-    def format_vector_context(results: List[Dict[str, Any]], max_preview: int = 200) -> str:
+    def format_vector_context(results: list[dict[str, Any]], max_preview: int = 200) -> str:
         if not results:
             return ""
         blocks = []
@@ -28,9 +29,9 @@ class ContextFormatter:
 
     @staticmethod
     def format_graph_context(
-        entities: List[Dict[str, Any]],
-        neighbors: List[Dict[str, Any]] = None,
-        paths: List[Dict[str, Any]] = None,
+        entities: list[dict[str, Any]],
+        neighbors: list[dict[str, Any]] = None,
+        paths: list[dict[str, Any]] = None,
     ) -> str:
         lines = []
         for entity in entities or []:
@@ -40,7 +41,9 @@ class ContextFormatter:
             lines.append(f"Entity: {name}")
             for relation in entity.get("relations", []):
                 if relation.get("other"):
-                    lines.append(f"  - {relation.get('relation')} ({relation.get('weight', 0):.2f}) -> {relation.get('other')}")
+                    lines.append(
+                        f"  - {relation.get('relation')} ({relation.get('weight', 0):.2f}) -> {relation.get('other')}"
+                    )
         for neighbor in neighbors or []:
             if neighbor.get("entity") and neighbor.get("relation") and neighbor.get("other"):
                 lines.append(
@@ -70,19 +73,19 @@ class ContextFormatter:
 
 class ResultValidator:
     @staticmethod
-    def validate_vector_result(result: Dict[str, Any]) -> bool:
+    def validate_vector_result(result: dict[str, Any]) -> bool:
         return all(key in result for key in ["context", "citations", "retrieved_count"])
 
     @staticmethod
-    def validate_graph_result(result: Dict[str, Any]) -> bool:
+    def validate_graph_result(result: dict[str, Any]) -> bool:
         return all(key in result for key in ["context", "entities"])
 
     @staticmethod
-    def validate_router_result(result: Dict[str, Any]) -> bool:
+    def validate_router_result(result: dict[str, Any]) -> bool:
         return all(key in result for key in ["route", "reason", "skill", "agent_class", "confidence"])
 
     @staticmethod
-    def validate_result_structure(result: Any, required_keys: List[str]) -> bool:
+    def validate_result_structure(result: Any, required_keys: list[str]) -> bool:
         return isinstance(result, dict) and all(key in result for key in required_keys)
 
 
@@ -92,20 +95,22 @@ class CacheKeyGenerator:
         return hashlib.sha256(json.dumps({"query": query, **kwargs}, sort_keys=True).encode()).hexdigest()
 
     @staticmethod
-    def generate_router_key(query: str, use_reasoning: bool, agent_class_hint: Optional[str]) -> str:
-        return CacheKeyGenerator.generate_key(query=query, use_reasoning=use_reasoning, agent_class_hint=agent_class_hint)
+    def generate_router_key(query: str, use_reasoning: bool, agent_class_hint: str | None) -> str:
+        return CacheKeyGenerator.generate_key(
+            query=query, use_reasoning=use_reasoning, agent_class_hint=agent_class_hint
+        )
 
     @staticmethod
-    def generate_vector_key(
-        query: str, retrieval_strategy: Optional[str], allowed_sources: Optional[List[str]]
-    ) -> str:
+    def generate_vector_key(query: str, retrieval_strategy: str | None, allowed_sources: list[str] | None) -> str:
         sources_key = ",".join(sorted(allowed_sources)) if allowed_sources else "all"
-        return CacheKeyGenerator.generate_key(query=query, strategy=retrieval_strategy or "default", sources=sources_key)
+        return CacheKeyGenerator.generate_key(
+            query=query, strategy=retrieval_strategy or "default", sources=sources_key
+        )
 
 
 class TextProcessor:
     @staticmethod
-    def extract_json(text: str) -> Dict[str, Any]:
+    def extract_json(text: str) -> dict[str, Any]:
         text = str(text or "").strip()
         for pattern, group_index in (
             (r"```(?:json)?\s*(\{.*?\})\s*```", 1),
@@ -128,7 +133,7 @@ class TextProcessor:
     @staticmethod
     def truncate_text(text: str, max_length: int, suffix: str = "...") -> str:
         text = str(text or "")
-        return text if len(text) <= max_length else text[:max_length - len(suffix)] + suffix
+        return text if len(text) <= max_length else text[: max_length - len(suffix)] + suffix
 
 
 class ErrorMessageFormatter:
@@ -147,7 +152,7 @@ class ErrorMessageFormatter:
 
 class ListUtils:
     @staticmethod
-    def deduplicate(items: List[Any], key_func: Callable | None = None) -> List[Any]:
+    def deduplicate(items: list[Any], key_func: Callable | None = None) -> list[Any]:
         seen, result = set(), []
         for item in items:
             key = key_func(item) if key_func else item
@@ -157,18 +162,18 @@ class ListUtils:
         return result
 
     @staticmethod
-    def flatten(nested_list: List[List[Any]]) -> List[Any]:
+    def flatten(nested_list: list[list[Any]]) -> list[Any]:
         return [item for sublist in nested_list for item in sublist]
 
     @staticmethod
-    def chunk_list(items: List[Any], chunk_size: int) -> List[List[Any]]:
-        return [items[index:index + chunk_size] for index in range(0, len(items), chunk_size)]
+    def chunk_list(items: list[Any], chunk_size: int) -> list[list[Any]]:
+        return [items[index : index + chunk_size] for index in range(0, len(items), chunk_size)]
 
 
 class DictUtils:
     @staticmethod
-    def merge_dicts(*dicts: Dict[str, Any], deep: bool = False) -> Dict[str, Any]:
-        result: Dict[str, Any] = {}
+    def merge_dicts(*dicts: dict[str, Any], deep: bool = False) -> dict[str, Any]:
+        result: dict[str, Any] = {}
         for dictionary in dicts:
             for key, value in (dictionary or {}).items():
                 if deep and key in result and isinstance(result[key], dict) and isinstance(value, dict):
@@ -178,11 +183,11 @@ class DictUtils:
         return result
 
     @staticmethod
-    def filter_none_values(d: Dict[str, Any]) -> Dict[str, Any]:
+    def filter_none_values(d: dict[str, Any]) -> dict[str, Any]:
         return {key: value for key, value in d.items() if value is not None}
 
     @staticmethod
-    def safe_get(d: Dict[str, Any], path: str, default: Any = None) -> Any:
+    def safe_get(d: dict[str, Any], path: str, default: Any = None) -> Any:
         value = d
         for key in path.split("."):
             if not isinstance(value, dict) or key not in value:
@@ -192,6 +197,11 @@ class DictUtils:
 
 
 __all__ = [
-    "ContextFormatter", "ResultValidator", "CacheKeyGenerator", "TextProcessor",
-    "ErrorMessageFormatter", "ListUtils", "DictUtils",
+    "ContextFormatter",
+    "ResultValidator",
+    "CacheKeyGenerator",
+    "TextProcessor",
+    "ErrorMessageFormatter",
+    "ListUtils",
+    "DictUtils",
 ]

@@ -136,9 +136,7 @@ def ingest_paths(
                         )
                 except Exception as e:
                     extraction_errors += 1
-                    logger.warning(
-                        f"Failed to extract triplets from chunk {chunk_idx} (source: {source}): {e}"
-                    )
+                    logger.warning(f"Failed to extract triplets from chunk {chunk_idx} (source: {source}): {e}")
 
             # Batch insert all triplets at once
             if triplets_to_insert:

@@ -630,5 +630,3 @@ def track_agent_execution(agent_name: str) -> Callable:
 def get_tracker() -> AgentExecutionTracker:
     """Get the singleton instance of AgentExecutionTracker."""
     return AgentExecutionTracker.get_instance()
-
-

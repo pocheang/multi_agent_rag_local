@@ -24,7 +24,8 @@
     "loginSuccess": "登录成功",
     "loginFailed": "登录失败",
     "registerSuccess": "注册成功",
-    "registerFailed": "注册失败"
+    "registerFailed": "注册失败",
+    "invalidRedirect": "无效的重定向地址"
   },
   "query": {
     "title": "查询界面",
@@ -265,6 +266,9 @@
       "ticket": "工单",
       "token": "令牌",
       "operation": "操作",
+      "credits": "剩余额度",
+      "addCredits": "增加额度",
+      "unlimited": "不限",
       "active": "活跃",
       "tokenSet": "已设置",
       "tokenUnset": "未设置",
@@ -595,6 +599,8 @@
       "userId": "用户 ID",
       "role": "角色",
       "status": "账户状态",
+      "credits": "剩余额度",
+      "unlimitedCredits": "不限",
       "saving": "保存中...",
       "saved": "个人资料已保存",
       "saveFailed": "保存失败",
@@ -755,6 +761,8 @@
       "deleteMessage": "删除此消息",
       "delete": "删除",
       "deleteConfirm": "确定删除这条消息吗？此操作无法撤销。",
+      "deleteUserConfirm": "确定要删除您的消息吗？此操作无法撤销。",
+      "deleteAssistantConfirm": "确定要删除助手的回复吗？此操作无法撤销。",
       "execution": "执行过程",
       "toggleExecution": "展开或收起执行过程",
       "processing": "处理中",
@@ -828,6 +836,30 @@
       "sidebarDescription": "多智能体知识库与检索工作台",
       "collapse": "收起",
       "sessions": "会话",
+      "searchSessions": "搜索会话",
+      "newSession": "新建会话",
+      "noSessions": "暂无会话",
+      "noSessionMatches": "没有匹配的会话",
+      "untitled": "无标题",
+      "untitledSession": "无标题会话",
+      "recent": "最近",
+      "sessionOptions": "{{title}} 的会话选项",
+      "delete": "删除",
+      "deleteSessionConfirm": "确定要删除\"{{title}}\"吗？此操作无法撤销。",
+      "sessionDeleted": "会话已删除",
+      "sessionCreated": "已创建新会话",
+      "emptyChatNotice": "当前聊天为空，将继续在此聊天而不创建新会话。",
+      "renameSession": "重命名会话",
+      "pinSession": "置顶会话",
+      "unpinSession": "取消置顶",
+      "deleteSession": "删除会话",
+      "sessionRenamed": "会话已重命名",
+      "sessionPinned": "会话已置顶",
+      "sessionUnpinned": "已取消置顶",
+      "renameSessionTitle": "重命名会话",
+      "renameSessionPlaceholder": "输入新的会话名称...",
+      "deleteSessionTitle": "删除会话",
+      "deleteSessionMessage": "确定要删除 \"{{title}}\" 吗？此操作无法撤销。",
       "profile": "资料",
       "password": "密码",
       "admin": "管理",
@@ -894,6 +926,13 @@
       "stopAria": "停止当前处理",
       "clear": "清空",
       "clearAria": "清空输入框",
+      "showSections": "显示输入区域",
+      "hideSections": "隐藏输入区域",
+      "showTopbar": "显示顶部栏",
+      "hideTopbar": "隐藏顶部栏",
+      "showInputArea": "显示输入区域",
+      "hideInputArea": "隐藏输入区域",
+      "moreOptions": "更多选项",
       "recent": "最近",
       "untitled": "Untitled",
       "renameSession": "重命名会话",
@@ -1000,6 +1039,195 @@
         "响应式设计：移动端适配"
       ]
     },
+    "clarificationError": "提交澄清失败，请重试。",
+    "skipClarificationError": "跳过澄清失败，请重试。",
+    "clarificationAuthError": "需要登录才能使用高级功能。",
     "apiEndpoints": "# 认证\nPOST /auth/register\nPOST /auth/login\nPOST /auth/logout\nGET  /auth/me\nPUT  /auth/profile\nPOST /auth/change-password\nGET  /auth/google/login\n\n# 查询 Profile\nPOST /query\nPOST /query/stream\nPOST /api/v1/enhanced/query\nPOST /api/advanced-rag/query\n\n# 会话\nGET, POST /sessions\nGET, DELETE /sessions/{session_id}\nGET, POST /sessions/{session_id}/strategy-lock\nGET /sessions/{session_id}/memories/long\nDELETE /sessions/{session_id}/memories/long/{memory_id}\nPATCH, DELETE /sessions/{session_id}/messages/{message_id}\n\n# 文档与 Prompt\nGET /documents\nPOST /upload\nPOST /documents/{filename}/reindex\nDELETE /documents/{filename}\nGET, POST /prompts\nPOST /prompts/check\nPATCH, DELETE /prompts/{prompt_id}\n\n# 管理运维与设置\nGET /admin/ops/runtime\nGET /admin/ops/overview\nGET, POST /admin/ops/retrieval-profile\nPOST /admin/ops/canary\nPOST /admin/ops/benchmark/run\nGET /admin/model-settings\nPOST /admin/model-settings\nGET, POST /user/api-settings\n\n# 评估与追踪\nGET /api/evaluation/queries\nPOST /api/evaluation/run\nGET /api/evaluation/results/{run_id}\nPOST /api/evaluation/compare\nGET /api/evaluation/systems\nGET /agent-tracking/trace/{execution_id}\nGET /agent-tracking/stream/{execution_id}\nGET /agent-tracking/history\n\n# 健康检查\nGET /health\nGET /ready\nGET /metrics"
+  },
+  "toast": {
+    "close": "关闭通知",
+    "demo": {
+      "title": "Toast通知系统演示",
+      "subtitle": "点击按钮测试不同类型的Toast通知",
+      "info": {
+        "title": "Info 信息提示",
+        "desc": "用于一般信息通知",
+        "button": "显示Info",
+        "message": "这是一条信息提示"
+      },
+      "success": {
+        "title": "Success 成功提示",
+        "desc": "用于操作成功反馈",
+        "button": "显示Success",
+        "message": "操作成功！"
+      },
+      "warning": {
+        "title": "Warning 警告提示",
+        "desc": "用于警告信息",
+        "button": "显示Warning",
+        "message": "请注意：这是一条警告信息"
+      },
+      "error": {
+        "title": "Error 错误提示",
+        "desc": "用于错误信息",
+        "button": "显示Error",
+        "message": "操作失败，请重试"
+      },
+      "longText": {
+        "title": "长文本测试",
+        "desc": "测试长消息的显示",
+        "button": "显示长文本",
+        "message": "这是一条非常长的消息，用于测试Toast组件在显示长文本时的布局和换行效果。消息内容应该能够正确换行并保持良好的可读性。"
+      },
+      "customDuration": {
+        "title": "自定义时长",
+        "desc": "10秒后自动关闭",
+        "button": "10秒持续",
+        "message": "这条消息将在10秒后关闭"
+      },
+      "stacking": {
+        "title": "堆叠测试",
+        "desc": "快速显示多条Toast",
+        "button": "显示堆叠",
+        "message1": "第一条消息",
+        "message2": "第二条消息",
+        "message3": "第三条消息",
+        "message4": "第四条消息"
+      },
+      "shortDuration": {
+        "title": "短时长测试",
+        "desc": "1秒后快速关闭",
+        "button": "1秒持续",
+        "message": "快速消失！"
+      },
+      "tips": {
+        "title": "💡 使用提示",
+        "items": [
+          "Toast会自动在右上角显示",
+          "Hover到Toast上会暂停自动关闭",
+          "点击Toast或关闭按钮可以手动关闭",
+          "多个Toast会自动堆叠显示",
+          "支持深色/浅色主题自动适配",
+          "在手机上会自适应为全宽显示"
+        ]
+      }
+    }
+  },
+  "clarification": {
+    "title": "需要更多信息",
+    "round": "第 {{current}}/{{max}} 轮",
+    "customInput": "其他（请说明）",
+    "customInputPlaceholder": "请输入...",
+    "skip": "跳过剩余问题",
+    "submit": "提交",
+    "submitting": "提交中...",
+    "collectedInfo": "已收集信息"
+  },
+  "queryOptimization": {
+    "title": "💡 查询优化建议",
+    "suggestClarify": "建议明确：",
+    "examples": "优化示例：",
+    "qualityScore": "质量评分"
+  },
+  "contextResolution": {
+    "title": "🔗 上下文解析",
+    "originalQuery": "原始查询",
+    "resolvedTo": "解析为",
+    "entitiesResolved": "已解析实体",
+    "topicSwitch": "话题切换",
+    "needsClarification": "需要进一步明确",
+    "confidence": {
+      "high": "高置信度",
+      "medium": "中等置信度",
+      "low": "低置信度"
+    }
+  },
+  "common": {
+    "save": "保存",
+    "cancel": "取消",
+    "search": "搜索",
+    "searching": "搜索中",
+    "showFilters": "显示筛选",
+    "hideFilters": "隐藏筛选",
+    "clearFilters": "清除筛选",
+    "sortBy": "排序方式",
+    "ascending": "升序",
+    "descending": "降序",
+    "previous": "上一页",
+    "next": "下一页",
+    "pageOf": "第 {{current}} 页，共 {{total}} 页",
+    "updated": "更新时间"
+  },
+  "sessionManagement": {
+    "editMetadata": "编辑会话元数据",
+    "tags": "标签",
+    "tagsPlaceholder": "输入添加标签...",
+    "removeTag": "移除标签",
+    "category": "分类",
+    "selectCategory": "选择分类...",
+    "categories": {
+      "research": "研究",
+      "development": "开发",
+      "debugging": "调试",
+      "learning": "学习",
+      "other": "其他"
+    },
+    "description": "描述",
+    "descriptionPlaceholder": "描述此会话...",
+    "autoTags": "自动提取标签",
+    "noAutoTags": "暂无自动标签。点击提取标签分析消息。",
+    "extractTags": "提取标签",
+    "loadingMetadata": "加载元数据中",
+    "savedSuccessfully": "元数据保存成功",
+    "errorLoadingMetadata": "加载元数据失败",
+    "errorSavingMetadata": "保存元数据失败",
+    "errorExtractingTags": "提取标签失败",
+    "noMessagesToExtract": "没有可用于提取标签的消息",
+    "searchSessions": "搜索会话",
+    "searchPlaceholder": "按文本、标签或描述搜索...",
+    "filterByTags": "按标签筛选",
+    "selectTags": "选择筛选标签...",
+    "filterByCategory": "按分类筛选",
+    "allCategories": "所有分类",
+    "minQueries": "最少查询数",
+    "maxQueries": "最多查询数",
+    "resultsCount": "找到 {{count}} 个会话",
+    "score": "相关度",
+    "queries": "查询数",
+    "sortUpdated": "最近更新",
+    "sortCreated": "创建时间",
+    "sortQueries": "查询次数",
+    "noResults": "未找到会话",
+    "tryDifferentSearch": "尝试调整搜索条件或筛选器",
+    "exportSession": "导出会话",
+    "exportFormat": "导出格式",
+    "includeContext": "包含上下文跟踪数据",
+    "export": "导出",
+    "importSession": "导入会话",
+    "dragDropFile": "拖放文件到此处",
+    "orClickToSelect": "或点击选择文件",
+    "conflictStrategy": "会话已存在时",
+    "strategies": {
+      "skip": "跳过（保留现有）",
+      "overwrite": "覆盖（替换现有）",
+      "rename": "重命名（追加时间戳）"
+    },
+    "strategiesHelp": {
+      "skip": "保留现有会话，不导入",
+      "overwrite": "用导入的数据替换现有会话",
+      "rename": "作为新会话导入，ID附加时间戳"
+    },
+    "import": "导入",
+    "noSessionToExport": "未选择要导出的会话",
+    "noFileSelected": "请选择要导入的文件",
+    "invalidFileType": "文件类型无效。仅支持 JSON 和 ZIP 文件。",
+    "exportFailed": "导出失败，请重试。",
+    "importFailed": "导入失败，请重试。",
+    "importSuccessful": "会话导入成功",
+    "sessionId": "会话ID",
+    "conflictResolution": "冲突解决",
+    "messagesImported": "导入消息数",
+    "metadataImported": "元数据已导入",
+    "contextImported": "上下文已导入"
   }
 }

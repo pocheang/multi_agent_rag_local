@@ -9,9 +9,7 @@ Additional helper functions for web research agent:
 """
 
 import logging
-import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from typing import Optional
 
 logger = logging.getLogger(__name__)
 
@@ -30,17 +28,17 @@ def validate_url(url: str) -> bool:
         return False
 
     # Basic validation
-    if not url.startswith(('http://', 'https://')):
+    if not url.startswith(("http://", "https://")):
         return False
 
     # Check for suspicious patterns
     suspicious_patterns = [
-        'javascript:',
-        'data:',
-        'file://',
-        'localhost',
-        '127.0.0.1',
-        '0.0.0.0',
+        "javascript:",
+        "data:",
+        "file://",
+        "localhost",
+        "127.0.0.1",
+        "0.0.0.0",
     ]
 
     url_lower = url.lower()
@@ -52,11 +50,7 @@ def validate_url(url: str) -> bool:
     return True
 
 
-def run_parallel_web_research(
-    questions: list[str],
-    max_workers: int = 3,
-    timeout_per_query: int = 30
-) -> list[dict]:
+def run_parallel_web_research(questions: list[str], max_workers: int = 3, timeout_per_query: int = 30) -> list[dict]:
     """
     Execute multiple web searches in parallel.
 
@@ -79,10 +73,7 @@ def run_parallel_web_research(
     results = []
 
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
-        future_to_question = {
-            executor.submit(run_web_research, q): q
-            for q in questions
-        }
+        future_to_question = {executor.submit(run_web_research, q): q for q in questions}
 
         for future in as_completed(future_to_question, timeout=timeout_per_query * len(questions)):
             question = future_to_question[future]
@@ -92,12 +83,14 @@ def run_parallel_web_research(
                 logger.info(f"Parallel search completed for: {question[:50]}...")
             except Exception as e:
                 logger.error(f"Parallel search failed for {question}: {e}")
-                results.append({
-                    "context": "",
-                    "citations": [],
-                    "used": False,
-                    "error": f"parallel_search_error:{type(e).__name__}"
-                })
+                results.append(
+                    {
+                        "context": "",
+                        "citations": [],
+                        "used": False,
+                        "error": f"parallel_search_error:{type(e).__name__}",
+                    }
+                )
 
     return results
 
@@ -119,10 +112,28 @@ def is_time_sensitive_query(question: str) -> bool:
         False
     """
     time_keywords = [
-        'latest', 'recent', 'current', 'today', 'now', 'this week',
-        'this month', 'this year', '2026', 'new', 'breaking',
-        'update', 'recently', 'just released', 'announcement',
-        '最新', '今天', '当前', '最近', '本月', '本周', '今年',
+        "latest",
+        "recent",
+        "current",
+        "today",
+        "now",
+        "this week",
+        "this month",
+        "this year",
+        "2026",
+        "new",
+        "breaking",
+        "update",
+        "recently",
+        "just released",
+        "announcement",
+        "最新",
+        "今天",
+        "当前",
+        "最近",
+        "本月",
+        "本周",
+        "今年",
     ]
 
     question_lower = question.lower()

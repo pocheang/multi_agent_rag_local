@@ -40,8 +40,10 @@ async def test_core_capabilities_publish_rag_retriever_degradation_events() -> N
 
     assert [(event.stage, event.status, event.message) for event in publisher.events] == [
         ("route", "completed", ""),
-        ("rag", "skipped", "vector: TimeoutError"),
+        ("rag", "skipped", "vector: TimeoutError: vector retriever exceeded timeout (30.0s)"),
+        ("rag", "completed", "DEGRADED: Partial retrieval success: 1/2 attempts, 1 evidence items. Failed: vector"),
         ("rag", "completed", ""),
         ("synthesize", "completed", ""),
+        ("finalize", "completed", ""),
         ("complete", "completed", ""),
     ]

@@ -46,11 +46,16 @@ class ToolRegistry:
         """Evaluate all policy gates before the connector executor can run."""
         registered = self._tools.get(call.tool_id)
         if registered is None:
-            return await self._finish(call, actor, ToolResult(tool_id=call.tool_id, status="failed", summary="unknown tool"))
+            return await self._finish(
+                call, actor, ToolResult(tool_id=call.tool_id, status="failed", summary="unknown tool")
+            )
         definition, executor = registered
         if not self._authorization.allows(definition, actor):
             return await self._finish(
-                call, actor, ToolResult(tool_id=call.tool_id, status="failed", summary="scope denied"), definition=definition
+                call,
+                actor,
+                ToolResult(tool_id=call.tool_id, status="failed", summary="scope denied"),
+                definition=definition,
             )
         approval = self._approvals.consume(call, actor) if definition.operation in _APPROVAL_OPERATIONS else None
         if definition.operation in _APPROVAL_OPERATIONS and approval is None:

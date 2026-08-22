@@ -29,19 +29,16 @@ logger = logging.getLogger(__name__)
 
 # Import hybrid service if available
 try:
-    from app.agents.router.hybrid_clarification import get_hybrid_clarification_service
     from app.agents.router.config import (
-        USE_HYBRID_CLARIFICATION,
-        LLM_FALLBACK_THRESHOLD,
-        LLM_ENHANCED_EXTRACTION,
         LLM_DYNAMIC_QUESTIONS,
+        LLM_ENHANCED_EXTRACTION,
+        LLM_FALLBACK_THRESHOLD,
+        USE_HYBRID_CLARIFICATION,
     )
+    from app.agents.router.hybrid_clarification import get_hybrid_clarification_service
 
     HYBRID_MODE_AVAILABLE = True
-    logger.info(
-        f"Hybrid mode available: {USE_HYBRID_CLARIFICATION} "
-        f"(threshold: {LLM_FALLBACK_THRESHOLD})"
-    )
+    logger.info(f"Hybrid mode available: {USE_HYBRID_CLARIFICATION} (threshold: {LLM_FALLBACK_THRESHOLD})")
 except ImportError:
     HYBRID_MODE_AVAILABLE = False
     USE_HYBRID_CLARIFICATION = False
@@ -50,13 +47,13 @@ except ImportError:
 
 # Intent complexity configuration (determines max clarification rounds)
 INTENT_COMPLEXITY = {
-    "simple_query": 2,           # Simple queries: max 2 rounds
-    "document_lookup": 3,        # Document lookup: max 3 rounds
-    "document_comparison": 5,    # Document comparison: max 5 rounds
-    "rag_design": 7,             # RAG design: max 7 rounds (complex)
-    "system_architecture": 8,    # System architecture: max 8 rounds
-    "complex_analysis": 10,      # Complex analysis: max 10 rounds
-    "default": 5,                # Default: 5 rounds
+    "simple_query": 2,  # Simple queries: max 2 rounds
+    "document_lookup": 3,  # Document lookup: max 3 rounds
+    "document_comparison": 5,  # Document comparison: max 5 rounds
+    "rag_design": 7,  # RAG design: max 7 rounds (complex)
+    "system_architecture": 8,  # System architecture: max 8 rounds
+    "complex_analysis": 10,  # Complex analysis: max 10 rounds
+    "default": 5,  # Default: 5 rounds
 }
 
 # Intent required information configuration
@@ -193,12 +190,10 @@ class EnhancedRouterService:
         # Extract known information from history (hybrid mode if enabled)
         if self.hybrid_service and LLM_ENHANCED_EXTRACTION:
             # Hybrid extraction: rule + LLM enhancement
-            config = INTENT_REQUIRED_INFO.get(intent, {})
-            required_fields = config.get("fields", [])
             extracted_info = await self.hybrid_service.extract_info_from_context(
                 request.question,
                 memory_context,
-                required_fields,
+                [],
                 use_llm=True,
             )
         else:
@@ -219,16 +214,13 @@ class EnhancedRouterService:
         logger.info(f"[EnhancedRouter] Extracted info: {extracted_info}")
         logger.info(f"[EnhancedRouter] All known info: {all_known_info}")
         logger.info(
-            f"[EnhancedRouter] Round: {clarification_context.clarification_round}/"
-            f"{clarification_context.max_rounds}"
+            f"[EnhancedRouter] Round: {clarification_context.clarification_round}/{clarification_context.max_rounds}"
         )
 
         # Identify intent (hybrid mode if available)
         if self.hybrid_service:
             # Hybrid mode: rule + LLM fallback
-            intent, confidence = await self.hybrid_service.identify_intent(
-                request.question, all_known_info
-            )
+            intent, confidence = await self.hybrid_service.identify_intent(request.question, all_known_info)
             logger.info(f"[EnhancedRouter] Hybrid intent: {intent} (confidence: {confidence:.2f})")
         else:
             # Rule-based mode
@@ -388,6 +380,12 @@ class EnhancedRouterService:
         elif re.search(r"(代码|编程|技术文档|code|programming|technical\s*doc)", text_lower):
             extracted["scenario"] = "代码知识库"
 
+        if "scenario" not in extracted:
+            if re.search(r"(data|analysis|analytics|report)", text_lower):
+                extracted["scenario"] = "数据分析"
+            elif re.search(r"(enterprise|company|organization|internal|corporate)", text_lower):
+                extracted["scenario"] = "企业知识库"
+
         # Data source identification (Chinese + English)
         if re.search(r"\bpdf\b|\.pdf|文档|document", text_lower):
             extracted["data_source"] = "PDF文档"
@@ -449,30 +447,29 @@ class EnhancedRouterService:
 
         # RAG design intent (requires BOTH conditions to avoid false positives)
         # Design words: 设计, 搭建, 构建, 实现, 如何做, 怎么做
-        has_design = any(
-            keyword in question for keyword in ["设计", "搭建", "构建", "实现"]
-        ) or any(
+        has_design = any(keyword in question for keyword in ["设计", "搭建", "构建", "实现"]) or any(
             keyword in question_lower
             for keyword in ["如何做", "怎么做", "how to build", "how to design", "how to implement"]
         )
 
         # RAG context: must explicitly mention RAG or knowledge base in context
         has_rag = any(
-            keyword in question_lower
-            for keyword in ["rag", "检索增强", "知识库系统", "knowledge base system"]
+            keyword in question_lower for keyword in ["rag", "检索增强", "知识库系统", "knowledge base system"]
         )
 
         if has_design and has_rag:
             return "rag_design"
 
         # Document comparison intent
-        if any(keyword in question for keyword in ["比较", "对比", "差异", "对照"]) or \
-           any(keyword in question_lower for keyword in ["compare", "difference", "versus", " vs "]):
+        if any(keyword in question for keyword in ["比较", "对比", "差异", "对照"]) or any(
+            keyword in question_lower for keyword in ["compare", "difference", "versus", " vs "]
+        ):
             return "document_comparison"
 
         # Specific query intent (has specific question words)
-        if any(keyword in question for keyword in ["是什么", "有哪些", "什么时候", "多少", "哪里", "谁"]) or \
-           any(keyword in question_lower for keyword in ["what is", "when", "where", "who", "how many", "which"]):
+        if any(keyword in question for keyword in ["是什么", "有哪些", "什么时候", "多少", "哪里", "谁"]) or any(
+            keyword in question_lower for keyword in ["what is", "when", "where", "who", "how many", "which"]
+        ):
             return "specific_query"
 
         # Default to general query
@@ -521,16 +518,17 @@ class EnhancedRouterService:
 
         # For other intents (specific_query), check information density
         # Has multiple specific indicators
-        info_indicators = sum([
-            bool(re.search(r"\d{4}[-/年]\d{1,2}[-/月]\d{1,2}日?", question)),  # Date
-            bool(re.search(r"\d+\.?\d*\s*[元块美金$¥€]", question)),  # Price/money
-            bool(re.search(r"\d+\.?\d*\s*(GB|MB|KB|TB|克|斤|kg|g|米|m|cm)", question)),  # Measurements
-            len(re.findall(r"[A-Z][a-z]+|[一-龥]{2,}", question)) >= 3,  # Multiple entities (names/nouns)
-            bool(re.search(r"(在|位于|from|in|at)\s*[一-龥A-Z][一-龥a-zA-Z\s]{2,}", question)),  # Location
-        ])
+        info_indicators = sum(
+            [
+                bool(re.search(r"\d{4}[-/年]\d{1,2}[-/月]\d{1,2}日?", question)),  # Date
+                bool(re.search(r"\d+\.?\d*\s*[元块美金$¥€]", question)),  # Price/money
+                bool(re.search(r"\d+\.?\d*\s*(GB|MB|KB|TB|克|斤|kg|g|米|m|cm)", question)),  # Measurements
+                len(re.findall(r"[A-Z][a-z]+|[一-龥]{2,}", question)) >= 3,  # Multiple entities (names/nouns)
+                bool(re.search(r"(在|位于|from|in|at)\s*[一-龥A-Z][一-龥a-zA-Z\s]{2,}", question)),  # Location
+            ]
+        )
 
         return info_indicators >= 2  # Has at least 2 specific indicators
-
 
     def _check_missing_info(self, intent: str, known_info: dict[str, str]) -> list[str]:
         """Check for missing information.
@@ -582,12 +580,7 @@ class EnhancedRouterService:
     ) -> EnhancedRouteDecision:
         """Convert base RouteDecision to EnhancedRouteDecision."""
         return EnhancedRouteDecision(
-            intent=base_decision.intent,
-            route=base_decision.route,
-            confidence=base_decision.confidence,
-            requires_plan=base_decision.requires_plan,
-            allowed_capabilities=base_decision.allowed_capabilities,
-            reason=base_decision.reason,
+            base_decision=base_decision,
             action=action,
             missing_information=tuple(missing_information or []),
             clarification=clarification,

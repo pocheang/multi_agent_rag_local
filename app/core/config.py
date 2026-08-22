@@ -1,9 +1,12 @@
+import logging
 import os
 from functools import lru_cache
 from pathlib import Path
 
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+logger = logging.getLogger(__name__)
 
 
 def resolve_runtime_env_file() -> str | None:
@@ -95,6 +98,61 @@ class Settings(BaseSettings):
     circuit_breaker_cooldown_seconds: int = Field(default=60, alias="CIRCUIT_BREAKER_COOLDOWN_SECONDS")
     retrieval_cache_backend: str = Field(default="auto", alias="RETRIEVAL_CACHE_BACKEND")  # auto|memory|redis|off
     redis_url: str = Field(default="redis://localhost:6379/0", alias="REDIS_URL")
+
+    # Session metadata storage backend
+    session_metadata_backend: str = Field(default="database", alias="SESSION_METADATA_BACKEND")  # memory|database
+
+    # Query Analysis & Clarification
+    # Query Analysis & Clarification
+    query_analysis_min_confidence: float = Field(default=0.7, alias="QUERY_ANALYSIS_MIN_CONFIDENCE")
+    query_complexity_simple_threshold: int = Field(default=10, alias="QUERY_COMPLEXITY_SIMPLE_THRESHOLD")
+    query_complexity_complex_threshold: int = Field(default=30, alias="QUERY_COMPLEXITY_COMPLEX_THRESHOLD")
+    clarification_max_rounds: int = Field(default=10, alias="CLARIFICATION_MAX_ROUNDS")
+    clarification_min_confidence: float = Field(default=0.85, alias="CLARIFICATION_MIN_CONFIDENCE")
+
+    # Multi-modal Processing
+    enable_image_processing: bool = Field(default=True, alias="ENABLE_IMAGE_PROCESSING")
+    enable_table_extraction: bool = Field(default=True, alias="ENABLE_TABLE_EXTRACTION")
+    enable_ocr: bool = Field(default=True, alias="ENABLE_OCR")
+    vision_model: str = Field(default="gpt-4-vision-preview", alias="VISION_MODEL")
+    max_image_tokens: int = Field(default=1000, alias="MAX_IMAGE_TOKENS")
+    ocr_engine: str = Field(default="tesseract", alias="OCR_ENGINE")  # tesseract|paddleocr
+    ocr_languages: str = Field(default="eng+chi_sim", alias="OCR_LANGUAGES")
+    multimodal_fusion_method: str = Field(default="rrf", alias="MULTIMODAL_FUSION_METHOD")  # rrf|weighted
+    image_weight: float = Field(default=0.3, alias="IMAGE_WEIGHT")
+    table_weight: float = Field(default=0.3, alias="TABLE_WEIGHT")
+    text_weight: float = Field(default=0.4, alias="TEXT_WEIGHT")
+
+    # Performance Optimization - Caching
+    cache_l2_enabled: bool = Field(default=False, alias="CACHE_L2_ENABLED")
+    cache_l1_size: int = Field(default=256, alias="CACHE_L1_SIZE")
+    cache_l1_ttl: int = Field(default=300, alias="CACHE_L1_TTL")  # 5 minutes
+    cache_l2_ttl: int = Field(default=3600, alias="CACHE_L2_TTL")  # 1 hour
+    semantic_cache_enabled: bool = Field(default=True, alias="SEMANTIC_CACHE_ENABLED")
+    semantic_cache_threshold: float = Field(default=0.95, alias="SEMANTIC_CACHE_THRESHOLD")
+
+    # Performance Optimization - Database
+    db_pool_size: int = Field(default=20, alias="DB_POOL_SIZE")
+    db_max_overflow: int = Field(default=10, alias="DB_MAX_OVERFLOW")
+    db_pool_timeout: int = Field(default=30, alias="DB_POOL_TIMEOUT")
+    db_pool_recycle: int = Field(default=3600, alias="DB_POOL_RECYCLE")
+
+    # Performance Optimization - Retrieval
+    retrieval_batch_size: int = Field(default=10, alias="RETRIEVAL_BATCH_SIZE")
+    retrieval_max_concurrent: int = Field(default=5, alias="RETRIEVAL_MAX_CONCURRENT")
+
+    # Advanced Reasoning - Tool Runner
+    tool_runner_max_iterations: int = Field(default=5, alias="TOOL_RUNNER_MAX_ITERATIONS")
+    tavily_api_key: str | None = Field(default=None, alias="TAVILY_API_KEY")
+
+    database_url: str = Field(default="sqlite:///./data/querymind.db", alias="DATABASE_URL")
+    sqlite_busy_timeout_seconds: float = Field(
+        default=10.0,
+        ge=1.0,
+        le=3600.0,
+        alias="SQLITE_BUSY_TIMEOUT_SECONDS",
+    )
+
     otel_tracing_enabled: bool = Field(default=True, alias="OTEL_TRACING_ENABLED")
     slo_p95_latency_ms_threshold: int = Field(default=3000, alias="SLO_P95_LATENCY_MS_THRESHOLD")
     slo_error_rate_percent_threshold: float = Field(default=5.0, alias="SLO_ERROR_RATE_PERCENT_THRESHOLD")
@@ -259,6 +317,8 @@ class Settings(BaseSettings):
     cors_allow_methods: str = Field(default="*", alias="CORS_ALLOW_METHODS")
     cors_allow_headers: str = Field(default="*", alias="CORS_ALLOW_HEADERS")
     cors_allow_credentials: bool = Field(default=True, alias="CORS_ALLOW_CREDENTIALS")
+    csrf_enabled: bool = Field(default=True, alias="CSRF_ENABLED")
+    rate_limit_enabled: bool = Field(default=True, alias="RATE_LIMIT_ENABLED")
 
     @property
     def chroma_path(self) -> Path:
@@ -326,6 +386,35 @@ class Settings(BaseSettings):
         return [x.strip() for x in raw.split(",") if x.strip()]
 
 
+def resolve_response_signing_secret(settings: Settings) -> tuple[str | None, str | None]:
+    """Resolve the active response-signing key from one explicit settings snapshot."""
+    active_kid = str(settings.response_signing_active_kid or "v1").strip() or "v1"
+    mapping: dict[str, str] = {}
+    for pair in str(settings.response_signing_keys or "").split(";"):
+        if ":" not in pair:
+            continue
+        kid, secret = pair.split(":", 1)
+        if kid.strip() and secret.strip():
+            mapping[kid.strip()] = secret.strip()
+    if active_kid in mapping:
+        return active_kid, mapping[active_kid]
+    legacy_secret = str(settings.response_signing_secret or "").strip()
+    return (active_kid, legacy_secret) if legacy_secret else (None, None)
+
+
+def validate_security_settings(settings: Settings) -> None:
+    """Fail closed for missing production signing keys and warn elsewhere."""
+    if not settings.response_signing_enabled:
+        return
+    kid, secret = resolve_response_signing_secret(settings)
+    if kid and secret:
+        return
+    message = "response signing is enabled but no active signing key is configured"
+    if str(settings.app_env or "").strip().lower() in {"production", "prod"}:
+        raise RuntimeError(message)
+    logger.warning("%s; responses and audit events will be unsigned", message)
+
+
 @lru_cache(maxsize=1)
 def get_settings() -> Settings:
     settings = Settings()
@@ -344,5 +433,7 @@ def get_settings() -> Settings:
 
 
 def reload_settings() -> Settings:
+    candidate = Settings()
+    validate_security_settings(candidate)
     get_settings.cache_clear()
     return get_settings()

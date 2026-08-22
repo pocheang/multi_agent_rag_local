@@ -81,7 +81,11 @@ def _default_reasoning_model(provider: str) -> str:
     if provider == "ollama":
         return str(settings.ollama_reasoning_model or provider_defaults(provider)["reasoning_model"])
     if provider == "openai":
-        return str(settings.openai_reasoning_model or settings.openai_chat_model or provider_defaults(provider)["reasoning_model"])
+        return str(
+            settings.openai_reasoning_model
+            or settings.openai_chat_model
+            or provider_defaults(provider)["reasoning_model"]
+        )
     if provider == "anthropic":
         return str(
             settings.anthropic_reasoning_model

@@ -9,6 +9,7 @@ from uuid import uuid4
 from fastapi import Depends, Form, Request
 from fastapi.responses import StreamingResponse
 
+from app.api import dependencies as api_dependencies
 from app.api.dependencies import (
     _audit,
     _history_store_for_user,
@@ -16,11 +17,10 @@ from app.api.dependencies import (
     _require_existing_session_for_query,
     _require_permission,
     _require_user,
+    _reserve_chat_credit,
     _sse_response,
     _trace_id,
     _user_api_settings_for_runtime,
-    query_result_cache,
-    quota_guard,
     runtime_metrics,
 )
 from app.api.deps.runtime import get_app_services
@@ -54,9 +54,11 @@ def _early_stream_response(*, answer: str, status: str, result: dict[str, Any]) 
     return _sse_response(events(), append_terminal_event=True)
 
 
-async def stream_query(
+async def _stream_query_impl(
     question: Annotated[str, Form(...)],
     request: Request,
+    user: dict[str, Any],
+    credit_reservation: Any,
     use_web_fallback: Annotated[bool, Form()] = False,
     use_reasoning: Annotated[bool, Form()] = False,
     session_id: Annotated[str | None, Form()] = None,
@@ -64,10 +66,12 @@ async def stream_query(
     agent_class_hint: Annotated[str | None, Form()] = None,
     retrieval_strategy: Annotated[str | None, Form()] = None,
     force_language: Annotated[str, Form()] = "",
-    user: dict[str, Any] = Depends(_require_user),
 ) -> StreamingResponse:
     """Validate transport concerns and delegate all query policy/execution."""
     _require_permission(user, "query:run", request, "query")
+    query_runtime = api_dependencies.get_query_runtime()
+    query_result_cache = query_runtime.query_result_cache
+    quota_guard = query_runtime.quota_guard
     session_id = _require_existing_session_for_query(user, session_id)
     try:
         quota_guard.enforce_query_quota(user)
@@ -109,9 +113,7 @@ async def stream_query(
         request_id=request_id,
     )
     prepared = (
-        pipeline.prepare_standard_request(pipeline_request)
-        if hasattr(pipeline, "prepare_standard_request")
-        else None
+        pipeline.prepare_standard_request(pipeline_request) if hasattr(pipeline, "prepare_standard_request") else None
     )
     original_question = prepared.original_question if prepared is not None else normalized_question
     effective_question = prepared.effective_question if prepared is not None else normalized_question
@@ -150,6 +152,7 @@ async def stream_query(
             "pdf_agent_need_selection": "pdf_selection_required",
             "pdf_agent_chunks_zero": "pdf_reindex_required",
         }.get(early.reason, "pdf_routing")
+        credit_reservation.commit()
         return versioned_stream_response(
             _early_stream_response(
                 answer=str(result.get("answer", early.answer)),
@@ -179,6 +182,7 @@ async def stream_query(
         agent_class_hint=(prepared.request if prepared is not None else pipeline_request).source_scope.agent_class_hint,
         request_id=request_id,
         mode="stream",
+        conversation=(prepared.request if prepared is not None else pipeline_request).conversation,
     )
     replay_enabled = feature_enabled(
         "stream_replay",
@@ -194,10 +198,18 @@ async def stream_query(
         user=user,
         session_id=session_id,
         original_question=original_question,
+        query_runtime=query_runtime,
     )
     if cached_response is not None:
+        credit_reservation.commit()
         return versioned_stream_response(cached_response)
-    claim_stream(stream_cache_key=stream_cache_key, request=request, user=user, session_id=session_id)
+    claim_stream(
+        stream_cache_key=stream_cache_key,
+        request=request,
+        user=user,
+        session_id=session_id,
+        query_runtime=query_runtime,
+    )
     if session_id:
         history_store.append_message(session_id, "user", original_question)
     try:
@@ -235,25 +247,59 @@ async def stream_query(
         pipeline_request=pipeline_request,
         preparation=prepared,
         source_scope_audit=lambda outcome, detail: _audit(
-                request,
-                action="query.source_scope",
-                resource_type="query",
-                result=outcome,
-                user=user,
-                detail=detail,
-            ),
+            request,
+            action="query.source_scope",
+            resource_type="query",
+            result=outcome,
+            user=user,
+            detail=detail,
+        ),
         result_signer=lambda result: maybe_sign_response(
-                {
-                    "answer": result.get("answer", ""),
-                    "route": result.get("route", ""),
-                    "trace_id": result.get("trace_id", ""),
-                },
-                user=user,
-                session_id=str(session_id or ""),
-                question=effective_question,
-            ),
+            {
+                "answer": result.get("answer", ""),
+                "route": result.get("route", ""),
+                "trace_id": result.get("trace_id", ""),
+            },
+            user=user,
+            session_id=str(session_id or ""),
+            question=effective_question,
+        ),
+        query_runtime=query_runtime,
+        credit_reservation=credit_reservation,
     )
     return versioned_stream_response(_sse_response(stream_execution_events(context), append_terminal_event=True))
+
+
+async def stream_query(
+    question: Annotated[str, Form(...)],
+    request: Request,
+    use_web_fallback: Annotated[bool, Form()] = False,
+    use_reasoning: Annotated[bool, Form()] = False,
+    session_id: Annotated[str | None, Form()] = None,
+    request_id: Annotated[str | None, Form()] = None,
+    agent_class_hint: Annotated[str | None, Form()] = None,
+    retrieval_strategy: Annotated[str | None, Form()] = None,
+    force_language: Annotated[str, Form()] = "",
+    user: dict[str, Any] = Depends(_require_user),
+) -> StreamingResponse:
+    credit_reservation = _reserve_chat_credit(request, user, "query_stream")
+    try:
+        return await _stream_query_impl(
+            question=question,
+            request=request,
+            use_web_fallback=use_web_fallback,
+            use_reasoning=use_reasoning,
+            session_id=session_id,
+            request_id=request_id,
+            agent_class_hint=agent_class_hint,
+            retrieval_strategy=retrieval_strategy,
+            force_language=force_language,
+            user=user,
+            credit_reservation=credit_reservation,
+        )
+    except BaseException:
+        credit_reservation.close()
+        raise
 
 
 __all__ = ["serialize_compatibility_event", "stream_query"]

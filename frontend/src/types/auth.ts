@@ -6,6 +6,7 @@ export type UserIdentity = {
   display_name?: string | null;
   role: string;
   status: string;
+  credit_balance: number;
 };
 
 export function toKnownUserRole(role: unknown): KnownUserRole {

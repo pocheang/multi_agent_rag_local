@@ -125,5 +125,3 @@ def load_pdf_streaming(path: Path, chunk_pages: int = 10, mode: str = "docling_e
         logger.error(f"Docling import failed: {e}")
     except Exception as e:
         logger.error(f"Streaming PDF processing failed for {path.name}: {e}", exc_info=True)
-
-

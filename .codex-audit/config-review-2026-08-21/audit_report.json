@@ -1,0 +1,27 @@
+{
+  "audit_date": "2026-08-21",
+  "scope": [
+    "model runtime and catalog",
+    "frontend runtime and build configuration",
+    "environment rendering",
+    "Docker and Compose configuration"
+  ],
+  "发现问题": [
+    {"id": "CFG-01", "status": "fixed", "summary": "前端 API 前缀重复拼接"},
+    {"id": "CFG-02", "status": "fixed", "summary": "会话管理绕过统一认证与 CSRF 客户端"},
+    {"id": "CFG-03", "status": "fixed", "summary": "local 模型中文规则和输出乱码"},
+    {"id": "CFG-04", "status": "fixed", "summary": "Ollama 前后端默认模型漂移"},
+    {"id": "CFG-05", "status": "fixed", "summary": "Docker 前端构建文件被忽略"},
+    {"id": "CFG-06", "status": "fixed", "summary": "部署环境与 profile 模板缺失"},
+    {"id": "CFG-07", "status": "fixed", "summary": "管理员令牌哈希和响应签名密钥未生成"},
+    {"id": "CFG-08", "status": "fixed", "summary": "Compose PostgreSQL 未接入后端连接配置"},
+    {"id": "CFG-09", "status": "not_changed", "summary": "scripts/audit_project.py 不存在，不影响运行"}
+  ],
+  "可新增功能": [],
+  "实施计划": {
+    "status": "completed",
+    "tests_excluded_by_user_request": true,
+    "real_runtime_state_modified": false
+  },
+  "执行摘要": "配置主链路问题已修复；不新增功能，不运行测试套件，不修改真实运行数据。"
+}

@@ -265,6 +265,7 @@ export function AdminPage({ user, onLogout, themeLabel, onThemeToggle }: Props) 
               onSaveClass={() => void actions.saveClass()}
               onUpdateRole={actions.updateRole}
               onUpdateStatus={actions.updateStatus}
+              onAddCredits={actions.addUserCredits}
               onOpenClassEditor={openClassEditor}
               onResetPassword={actions.resetUserPassword}
               onResetApprovalToken={actions.resetAdminApprovalToken}

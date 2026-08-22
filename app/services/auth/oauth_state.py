@@ -24,15 +24,78 @@ class OAuthStateStore:
         self._memory_lock = threading.RLock()
 
     def create(self, data: dict[str, Any], ttl_seconds: int = 300) -> str:
+        """
+        Create a new OAuth state token.
+
+        安全改进：添加碰撞检测，虽然概率极低但更安全
+
+        Args:
+            data: State payload
+            ttl_seconds: TTL in seconds
+
+        Returns:
+            State token
+        """
+        # 生成状态令牌，带碰撞检测
+        max_attempts = 3
+        for attempt in range(max_attempts):
+            state = secrets.token_urlsafe(32)
+
+            # 检查是否已存在（极低概率，但增加安全性）
+            if not self._exists(state):
+                self.store(state, data, ttl_seconds=ttl_seconds)
+                return state
+
+            # 碰撞检测到，记录日志并重试
+            logger.warning(f"OAuth state collision detected (attempt {attempt + 1}/{max_attempts})")
+
+        # 极端情况：多次碰撞后仍然存储（理论上不会发生）
         state = secrets.token_urlsafe(32)
         self.store(state, data, ttl_seconds=ttl_seconds)
         return state
 
-    def store(self, state: str, data: dict[str, Any], ttl_seconds: int = 300) -> None:
+    def _exists(self, state: str) -> bool:
+        """
+        Check if a state token already exists.
+
+        Args:
+            state: State token to check
+
+        Returns:
+            True if exists, False otherwise
+        """
         redis_client = self._redis_client()
         if redis_client:
             try:
-                redis_client.setex(f"oauth_state:{state}", ttl_seconds, json.dumps(data))
+                # 使用命名空间前缀
+                return redis_client.exists(f"oauth:state:{state}") > 0
+            except Exception:
+                pass
+
+        # Fallback to memory
+        with self._memory_lock:
+            if state in self._memory:
+                expires_at, _ = self._memory[state]
+                # 检查是否过期
+                if time.monotonic() < expires_at:
+                    return True
+                else:
+                    # 清理过期条目
+                    self._memory.pop(state, None)
+                    return False
+        return False
+
+    def store(self, state: str, data: dict[str, Any], ttl_seconds: int = 300) -> None:
+        """
+        Store OAuth state with namespace prefix.
+
+        安全改进：使用 'oauth:state:' 命名空间前缀隔离
+        """
+        redis_client = self._redis_client()
+        if redis_client:
+            try:
+                # 安全改进：使用命名空间前缀
+                redis_client.setex(f"oauth:state:{state}", ttl_seconds, json.dumps(data))
                 return
             except Exception as exc:
                 logger.warning("Failed to store OAuth state in Redis: %s", exc)
@@ -56,10 +119,16 @@ class OAuthStateStore:
         return None, str(stored_ip)
 
     def get(self, state: str) -> dict[str, Any] | None:
+        """
+        Get OAuth state data.
+
+        安全改进：使用统一的命名空间前缀
+        """
         redis_client = self._redis_client()
         if redis_client:
             try:
-                value = redis_client.get(f"oauth_state:{state}")
+                # 安全改进：使用 oauth:state: 命名空间
+                value = redis_client.get(f"oauth:state:{state}")
                 if value:
                     return json.loads(value)
             except Exception as exc:
@@ -67,22 +136,33 @@ class OAuthStateStore:
         return self._get_memory(state)
 
     def delete(self, state: str) -> None:
+        """
+        Delete OAuth state data.
+
+        安全改进：使用统一的命名空间前缀
+        """
         redis_client = self._redis_client()
         if redis_client:
             try:
-                redis_client.delete(f"oauth_state:{state}")
+                # 安全改进：使用 oauth:state: 命名空间
+                redis_client.delete(f"oauth:state:{state}")
             except Exception:
                 pass
         with self._memory_lock:
             self._memory.pop(state, None)
 
     def _consume(self, state: str) -> dict[str, Any] | None:
-        """Atomically retrieve and delete state from the active backing store."""
+        """
+        Atomically retrieve and delete state from the active backing store.
+
+        安全改进：使用统一的命名空间前缀
+        """
         with self._memory_lock:
             redis_client = self._redis_client()
             if redis_client:
                 try:
-                    value = self._redis_getdel(redis_client, f"oauth_state:{state}")
+                    # 安全改进：使用 oauth:state: 命名空间
+                    value = self._redis_getdel(redis_client, f"oauth:state:{state}")
                     if value:
                         # Clear a possible fallback entry before returning so a
                         # stale local copy cannot be replayed later.
@@ -155,9 +235,7 @@ class OAuthStateStore:
 
     def _prune_memory_locked(self) -> None:
         now_monotonic = time.monotonic()
-        expired_states = [
-            state for state, (expires_at, _) in self._memory.items() if expires_at <= now_monotonic
-        ]
+        expired_states = [state for state, (expires_at, _) in self._memory.items() if expires_at <= now_monotonic]
         for expired_state in expired_states:
             self._memory.pop(expired_state, None)
 

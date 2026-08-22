@@ -4,8 +4,8 @@ import ipaddress
 import socket
 from urllib.parse import urlparse
 
-from app.domain.text import normalize_string
 from app.core.config import get_settings
+from app.domain.text import normalize_string
 
 IPAddress = ipaddress.IPv4Address | ipaddress.IPv6Address
 
@@ -38,6 +38,19 @@ def _parse_ip_literal(host: str) -> IPAddress | None:
         return ipaddress.ip_address(text)
     except ValueError:
         return None
+
+
+def _url_origin(url: str) -> tuple[str, str, int] | None:
+    parsed = urlparse(str(url or "").strip())
+    scheme = str(parsed.scheme or "").lower()
+    host = normalize_string(parsed.hostname, lowercase=True)
+    if scheme not in {"http", "https"} or not host:
+        return None
+    try:
+        port = int(parsed.port or (443 if scheme == "https" else 80))
+    except ValueError:
+        return None
+    return scheme, host, port
 
 
 def _is_blocked_ip(addr: IPAddress) -> bool:
@@ -120,8 +133,9 @@ def validate_api_base_url_for_provider(base_url: str, *, provider: str) -> str:
 
     allow_private = bool(getattr(settings, "api_base_url_allow_private", False))
     if provider_lc == "ollama":
-        # Local Ollama deployment is an explicit in-host use case.
-        allow_private = True
+        configured_origin = _url_origin(str(getattr(settings, "ollama_base_url", "") or ""))
+        if configured_origin is not None and _url_origin(normalized) == configured_origin:
+            return normalized
     if allow_private:
         return normalized
 
@@ -135,13 +149,9 @@ def validate_api_base_url_for_provider(base_url: str, *, provider: str) -> str:
     port = int(parsed.port or (443 if scheme == "https" else 80))
     dns_check = bool(getattr(settings, "api_base_url_dns_check", True))
     resolved_ips = _resolve_host_ips(host, port, enabled=dns_check)
-    if resolved_ips and all(_is_blocked_ip(x) for x in resolved_ips):
+    if any(_is_blocked_ip(x) for x in resolved_ips):
         raise OutboundURLValidationError(
-            "base_url DNS resolution includes only blocked private/loopback/link-local addresses"
+            "base_url DNS resolution includes a blocked private/loopback/link-local address"
         )
 
     return normalized
-
-
-
-

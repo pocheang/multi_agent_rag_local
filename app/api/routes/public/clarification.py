@@ -12,6 +12,7 @@ from app.api.dependencies import (
     _history_store_for_user,
     _require_permission,
     _require_user,
+    _require_valid_session_id,
 )
 from app.domain.contracts import ClarificationContext
 from app.orchestration.request import OrchestrationRequest, RequestScope
@@ -62,12 +63,16 @@ async def check_clarification(
     Raises:
         HTTPException: If session not found
     """
+    _require_permission(user, "query:run", request, "query")
+    req.session_id = _require_valid_session_id(req.session_id)
+
     # Get history store for authenticated user
     history_store = _history_store_for_user(user)
 
     # Get or create session
     session = history_store.get_session(req.session_id)
     if session is None:
+        _require_permission(user, "session:create", request, "session")
         session = history_store.create_session(session_id=req.session_id)
 
     # If user provided an answer, update clarification context
@@ -175,7 +180,8 @@ async def reset_clarification(
     Raises:
         HTTPException: If session not found or permission denied
     """
-    _require_permission(user, "query:execute", request, "query")
+    _require_permission(user, "query:run", request, "query")
+    session_id = _require_valid_session_id(session_id)
 
     history_store = _history_store_for_user(user)
     result = history_store.reset_clarification_context(session_id)
@@ -205,7 +211,8 @@ async def get_clarification_context(
     Raises:
         HTTPException: If session not found or permission denied
     """
-    _require_permission(user, "query:execute", request, "query")
+    _require_permission(user, "query:run", request, "query")
+    session_id = _require_valid_session_id(session_id)
 
     history_store = _history_store_for_user(user)
     context = history_store.get_clarification_context(session_id)

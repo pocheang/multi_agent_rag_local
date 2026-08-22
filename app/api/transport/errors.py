@@ -33,6 +33,11 @@ def conflict(detail: str) -> HTTPException:
     return HTTPException(status_code=409, detail=detail)
 
 
+def accepted(detail: str = "Request accepted for processing", headers: dict[str, str] | None = None) -> HTTPException:
+    """Return a 202 Accepted response (for async operations)."""
+    return HTTPException(status_code=202, detail=detail, headers=headers or {})
+
+
 def rate_limited(detail: str = "Too many requests, retry later") -> HTTPException:
     """Return a 429 Rate Limited error."""
     return HTTPException(status_code=429, detail=detail)
@@ -46,5 +51,3 @@ def not_implemented(detail: str = "Not implemented") -> HTTPException:
 def payload_too_large(detail: str = "Payload too large") -> HTTPException:
     """Return a 413 Payload Too Large error."""
     return HTTPException(status_code=413, detail=detail)
-
-

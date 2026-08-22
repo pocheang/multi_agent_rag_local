@@ -144,7 +144,11 @@ class RuleValidator:
                 )
             )
         issue_types = {issue.issue_type for issue in issues}
-        if extract_numbers(request.answer) and not extract_numbers(source_text) and "number_mismatch" not in issue_types:
+        if (
+            extract_numbers(request.answer)
+            and not extract_numbers(source_text)
+            and "number_mismatch" not in issue_types
+        ):
             issues.append(
                 RuleBasisIssue(
                     issue_type="number_mismatch",

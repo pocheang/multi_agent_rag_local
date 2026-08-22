@@ -16,8 +16,8 @@ import logging
 from pathlib import Path
 from typing import Any
 
-from app.agents.shared.config import CHUNK_PREVIEW_LENGTH, DENSE_SCORE_THRESHOLD, get_vector_rag_config
 from app.agents.shared.base import BaseAgent
+from app.agents.shared.config import CHUNK_PREVIEW_LENGTH, DENSE_SCORE_THRESHOLD, get_vector_rag_config
 from app.core.config import get_settings
 from app.retrievers.hybrid_retriever import hybrid_search_with_diagnostics
 from app.retrievers.parameter_tuning import apply_dynamic_parameters
@@ -43,7 +43,9 @@ class UnifiedVectorRAGAgent(BaseAgent):
     - Standardized error handling and result format
     """
 
-    def __init__(self, config: dict[str, Any] | None = None, llm_client=None, dependencies: dict[str, Any] | None = None):
+    def __init__(
+        self, config: dict[str, Any] | None = None, llm_client=None, dependencies: dict[str, Any] | None = None
+    ):
         """
         Initialize unified vector RAG agent.
 
@@ -69,6 +71,7 @@ class UnifiedVectorRAGAgent(BaseAgent):
         if self.get_config_value("enable_evaluation", False) and llm_client:
             try:
                 from app.services.self_rag_evaluator import SelfRAGEvaluator
+
                 self.self_rag_evaluator = SelfRAGEvaluator(llm_client)
                 logger.info("Self-RAG evaluation enabled")
             except ImportError:
@@ -81,7 +84,7 @@ class UnifiedVectorRAGAgent(BaseAgent):
         retrieval_strategy: str | None = None,
         agent_class: str | None = None,
         enable_evaluation: bool | None = None,
-        **kwargs
+        **kwargs,
     ) -> dict[str, Any]:
         """
         Execute vector RAG retrieval.
@@ -111,16 +114,11 @@ class UnifiedVectorRAGAgent(BaseAgent):
         search_query = self._apply_query_expansion(query)
 
         # Step 3: Apply agent class filtering
-        filtered_sources = self._apply_agent_filtering(
-            allowed_sources, agent_class
-        )
+        filtered_sources = self._apply_agent_filtering(allowed_sources, agent_class)
 
         # Step 4: Execute retrieval
         results, diagnostics = self._execute_retrieval(
-            search_query,
-            filtered_sources,
-            retrieval_strategy,
-            dynamic_params
+            search_query, filtered_sources, retrieval_strategy, dynamic_params
         )
 
         # Step 5: Process results
@@ -144,34 +142,21 @@ class UnifiedVectorRAGAgent(BaseAgent):
             search_query=search_query,
             strategy=retrieval_strategy,
             evaluation=evaluation_result,
-            dynamic_params=dynamic_params
+            dynamic_params=dynamic_params,
         )
 
     def _apply_dynamic_tuning(self, query: str) -> dict[str, Any]:
         """Apply dynamic parameter tuning based on query complexity."""
         if not self.vector_config.dynamic_parameters:
-            return {
-                "complexity": "medium",
-                "top_k": self.vector_config.top_k,
-                "vector_weight": 0.7,
-                "bm25_weight": 0.3
-            }
+            return {"complexity": "medium", "top_k": self.vector_config.top_k, "vector_weight": 0.7, "bm25_weight": 0.3}
 
         try:
             params = apply_dynamic_parameters(query)
-            logger.debug(
-                f"Dynamic tuning: complexity={params['complexity']}, "
-                f"top_k={params['top_k']}"
-            )
+            logger.debug(f"Dynamic tuning: complexity={params['complexity']}, top_k={params['top_k']}")
             return params
         except Exception as e:
-            logger.warning(f"Dynamic tuning failed: {e}, using defaults")
-            return {
-                "complexity": "medium",
-                "top_k": self.vector_config.top_k,
-                "vector_weight": 0.7,
-                "bm25_weight": 0.3
-            }
+            logger.warning(f"Dynamic tuning failed: {e}, using defaults", exc_info=True)
+            return {"complexity": "medium", "top_k": self.vector_config.top_k, "vector_weight": 0.7, "bm25_weight": 0.3}
 
     def _apply_query_expansion(self, query: str) -> str:
         """Apply query expansion if enabled."""
@@ -180,26 +165,17 @@ class UnifiedVectorRAGAgent(BaseAgent):
 
         try:
             expanded = self._expand_query(
-                query,
-                max_expansion_ratio=getattr(
-                    self.settings,
-                    "query_expansion_max_ratio",
-                    3.0
-                )
+                query, max_expansion_ratio=getattr(self.settings, "query_expansion_max_ratio", 3.0)
             )
             if expanded and expanded != query:
                 logger.info(f"Query expanded: '{query}' -> '{expanded}'")
                 return expanded
         except Exception as e:
-            logger.warning(f"Query expansion failed: {e}")
+            logger.warning(f"Query expansion failed: {e}", exc_info=True)
 
         return query
 
-    def _apply_agent_filtering(
-        self,
-        allowed_sources: list[str] | None,
-        agent_class: str | None
-    ) -> list[str] | None:
+    def _apply_agent_filtering(self, allowed_sources: list[str] | None, agent_class: str | None) -> list[str] | None:
         """Apply agent class document filtering."""
         if not agent_class:
             return allowed_sources
@@ -211,22 +187,15 @@ class UnifiedVectorRAGAgent(BaseAgent):
             elif class_sources is not None:
                 allowed_set = set(class_sources)
                 filtered = [s for s in allowed_sources if s in allowed_set]
-                logger.debug(
-                    f"Agent filter for {agent_class}: "
-                    f"{len(allowed_sources)} -> {len(filtered)} sources"
-                )
+                logger.debug(f"Agent filter for {agent_class}: {len(allowed_sources)} -> {len(filtered)} sources")
                 return filtered
         except Exception as e:
-            logger.warning(f"Agent filtering failed: {e}")
+            logger.warning(f"Agent filtering failed: {e}", exc_info=True)
 
         return allowed_sources
 
     def _execute_retrieval(
-        self,
-        query: str,
-        allowed_sources: list[str] | None,
-        strategy: str | None,
-        dynamic_params: dict[str, Any]
+        self, query: str, allowed_sources: list[str] | None, strategy: str | None, dynamic_params: dict[str, Any]
     ) -> tuple:
         """Execute hybrid retrieval with diagnostics."""
         try:
@@ -234,9 +203,9 @@ class UnifiedVectorRAGAgent(BaseAgent):
                 query,
                 allowed_sources=allowed_sources,
                 retrieval_strategy=strategy,
-                dynamic_top_k=dynamic_params.get('top_k'),
-                dynamic_vector_weight=dynamic_params.get('vector_weight'),
-                dynamic_bm25_weight=dynamic_params.get('bm25_weight'),
+                dynamic_top_k=dynamic_params.get("top_k"),
+                dynamic_vector_weight=dynamic_params.get("vector_weight"),
+                dynamic_bm25_weight=dynamic_params.get("bm25_weight"),
             )
             return results, diagnostics
         except TypeError:
@@ -307,32 +276,21 @@ class UnifiedVectorRAGAgent(BaseAgent):
                 effective_count += 1
         return effective_count
 
-    def _evaluate_retrieval(
-        self,
-        query: str,
-        citations: list[dict[str, Any]]
-    ) -> dict[str, Any] | None:
+    def _evaluate_retrieval(self, query: str, citations: list[dict[str, Any]]) -> dict[str, Any] | None:
         """Evaluate retrieval quality with Self-RAG."""
         if not self.self_rag_evaluator:
             return None
 
         try:
             # Convert citations to document format
-            documents = [
-                {"content": c["content"], "source": c["source"]}
-                for c in citations
-            ]
+            documents = [{"content": c["content"], "source": c["source"]} for c in citations]
 
             # This would be async in real implementation
             # For now, return placeholder
             logger.info("Self-RAG evaluation would run here")
-            return {
-                "enabled": True,
-                "evaluated_count": len(documents),
-                "note": "Self-RAG evaluation placeholder"
-            }
+            return {"enabled": True, "evaluated_count": len(documents), "note": "Self-RAG evaluation placeholder"}
         except Exception as e:
-            logger.warning(f"Self-RAG evaluation failed: {e}")
+            logger.warning(f"Self-RAG evaluation failed: {e}", exc_info=True)
             return {"enabled": True, "error": str(e)}
 
     def _build_result(
@@ -346,7 +304,7 @@ class UnifiedVectorRAGAgent(BaseAgent):
         search_query: str,
         strategy: str | None,
         evaluation: dict[str, Any] | None,
-        dynamic_params: dict[str, Any]
+        dynamic_params: dict[str, Any],
     ) -> dict[str, Any]:
         """Build final result dictionary."""
         # Add query expansion info
@@ -358,7 +316,9 @@ class UnifiedVectorRAGAgent(BaseAgent):
             }
         else:
             diagnostics["query_expansion"] = {
-                "enabled": bool(getattr(self.settings, "query_expansion_enabled", self.vector_config.enable_query_expansion)),
+                "enabled": bool(
+                    getattr(self.settings, "query_expansion_enabled", self.vector_config.enable_query_expansion)
+                ),
             }
 
         # Add dynamic parameters info
@@ -404,10 +364,7 @@ def run_vector_rag(
     """
     agent = UnifiedVectorRAGAgent()
     result = agent.run(
-        query=question,
-        allowed_sources=allowed_sources,
-        retrieval_strategy=retrieval_strategy,
-        agent_class=agent_class
+        query=question, allowed_sources=allowed_sources, retrieval_strategy=retrieval_strategy, agent_class=agent_class
     )
 
     # Extract core result (remove BaseAgent wrapper fields for compatibility)

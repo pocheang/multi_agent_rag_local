@@ -8,11 +8,11 @@ from app.retrievers.bm25_retriever import bm25_search
 from app.retrievers.hybrid.caching import cache_lookup, cache_store, clear_retrieval_cache
 from app.retrievers.hybrid.parent_expansion import expand_to_parent_context
 from app.retrievers.hybrid.strategy import strategy_flags
-from app.retrievers.stores.parent import get_parent_text_map
 from app.retrievers.reranker import rerank
+from app.retrievers.stores.parent import get_parent_text_map
 from app.retrievers.stores.vector import similarity_search
-from app.services.query_rewrite import build_rewrite_queries
 from app.services.observability.tracing import traced_span
+from app.services.query_rewrite import build_rewrite_queries
 
 
 def hybrid_search_with_diagnostics(
@@ -226,4 +226,3 @@ __all__ = [
     "bm25_search",
     "get_parent_text_map",
 ]
-

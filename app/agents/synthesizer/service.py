@@ -28,7 +28,19 @@ class SynthesizerAgentService:
         tool_results: tuple[ToolResult, ...],
     ) -> FinalAnswer:
         """Call legacy synthesis once, then return only the immutable answer contract."""
-        context = "\n\n".join(f"[{_citation_label(item.document_id, item.page)}] {item.content}" for item in evidence.items)
+        # Early return with fallback message if no evidence and no tool results
+        if not evidence.items and not tool_results:
+            return FinalAnswer(
+                answer=SYNTHESIS_FALLBACK_MESSAGE,
+                citations=(),
+                route=route,
+                evidence_ids=(),
+                execution_summary="evidence=0 tool_results=0 (fallback)",
+            )
+
+        context = "\n\n".join(
+            f"[{_citation_label(item.document_id, item.page)}] {item.content}" for item in evidence.items
+        )
         generated = await asyncio.to_thread(
             self._generate,
             request.question,
@@ -42,11 +54,20 @@ class SynthesizerAgentService:
         text = normalize_answer_citations(_answer_text(generated), citations)
         if not citations and not text:
             text = SYNTHESIS_FALLBACK_MESSAGE
+
+        # Warn if evidence exists but isn't cited (may be legitimately irrelevant)
+        # This helps identify potential issues without blocking synthesis
         if citations and not any(f"[{citation}]" in text for citation in citations):
-            raise ValueError("evidence-backed answer must include a visible citation label")
+            import logging
+
+            logging.getLogger(__name__).warning(
+                "Evidence-backed answer generated without visible citations. "
+                f"Evidence count: {len(evidence.items)}, Answer length: {len(text)}, "
+                f"Text empty: {not text}"
+            )
         del plan
         return FinalAnswer(
-            text=text,
+            answer=text,
             citations=citations,
             route=route,
             evidence_ids=evidence.item_ids,

@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import type React from "react";
 import type { IndexedFileSummary, PromptTemplate } from "@/types/api";
+import type { UserIdentity } from "@/types/auth";
 import { AgentWorkbench } from "@/pages/chat/components/AgentWorkbench";
 import { DocumentsPanel } from "@/pages/chat/components/DocumentsPanel";
 import { PdfWorkbench } from "@/pages/chat/components/PdfWorkbench";
@@ -229,7 +230,7 @@ export function WorkbenchPanel({
               docDropActive={docDropActive}
               canUploadAndManageDocs={canUploadAndManageDocs}
               isAdmin={isAdmin}
-              user={user}
+              user={user as UserIdentity | null}
               fileInputRef={fileInputRef}
               onRefreshDocuments={onRefreshDocuments}
               onUploadVisibilityChange={onUploadVisibilityChange}

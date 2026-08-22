@@ -28,7 +28,6 @@ from app.api.dependencies import (
     auth_service,
     auto_ingest_watcher,
     settings,
-    shadow_queue,
 )  # noqa: F401
 from app.api.transport.errors import not_found  # noqa: F401
 from app.api.transport.middleware import request_timing_middleware  # noqa: F401

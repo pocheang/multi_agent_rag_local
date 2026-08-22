@@ -38,9 +38,28 @@ class ToolAgentService:
     ) -> tuple[ToolResult, ...]:
         """Invoke an explicit owned-connector command, or leave ordinary RAG queries untouched."""
         call = self._disable_connector_call(request.question, execution_id)
-        actor = request.actor
-        if call is None or actor is None or not actor.user_id or self._gateway is None or self._connectors is None:
+        if call is None:
             return ()
+
+        actor = request.actor
+        if actor is None or not actor.user_id:
+            return (
+                ToolResult(
+                    tool_id=call.tool_id,
+                    status="failed",
+                    summary="authentication required: no valid actor",
+                ),
+            )
+
+        if self._gateway is None or self._connectors is None:
+            return (
+                ToolResult(
+                    tool_id=call.tool_id,
+                    status="failed",
+                    summary="tool system not initialized",
+                ),
+            )
+
         connector_id = call.arguments[0].value
         owned = next(
             (item for item in self._connectors.list_for_owner(actor.user_id) if item.connector_id == connector_id),
@@ -51,7 +70,7 @@ class ToolAgentService:
                 ToolResult(
                     tool_id=call.tool_id,
                     status="failed",
-                    summary="owned enabled connector not found",
+                    summary=f"connector '{connector_id}' not found or not enabled for user",
                 ),
             )
         return (await self._gateway.invoke(call, actor),)
@@ -65,7 +84,9 @@ class ToolAgentService:
     ) -> tuple[ToolResult, ...]:
         """Use the same governed boundary when called by the typed orchestration engine."""
         del route, plan, evidence
-        return await self.invoke_requested(request, execution_id=request.execution_id or request.request_id or str(uuid4()))
+        return await self.invoke_requested(
+            request, execution_id=request.execution_id or request.request_id or str(uuid4())
+        )
 
     @staticmethod
     def _disable_connector_call(question: str, execution_id: str) -> ToolCall | None:

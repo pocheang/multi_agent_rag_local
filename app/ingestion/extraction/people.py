@@ -78,5 +78,3 @@ def build_people_summary(people_info: dict) -> str:
         f"face_count={int(people_info.get('face_count', 0))}; "
         f"detector_mode={people_info.get('detector_mode', 'face')}"
     )
-
-

@@ -152,5 +152,3 @@ def reorder_page_text_multicolumn(page_text: str, has_multicolumn: bool = False)
         pass
 
     return page_text
-
-

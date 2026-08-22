@@ -81,5 +81,3 @@ def is_chinese_dominant(text: str) -> bool:
         True if Chinese characters dominate
     """
     return detect_language(text) == "zh"
-
-

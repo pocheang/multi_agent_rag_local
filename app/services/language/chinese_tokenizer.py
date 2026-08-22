@@ -152,4 +152,3 @@ def get_tokenizer(user_dict_path: str | None = None) -> ChineseTokenizer:
     if _tokenizer is None:
         _tokenizer = ChineseTokenizer(user_dict_path)
     return _tokenizer
-

@@ -149,5 +149,3 @@ def create_hybrid_baseline(
         alpha=alpha,
         score_threshold=score_threshold,
     )
-
-

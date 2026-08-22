@@ -13,6 +13,10 @@ import logging
 import re
 from dataclasses import dataclass
 
+from app.agents.router.calibration import ConfidenceCalibrator
+from app.agents.router.config import ENABLE_CALIBRATION, ENABLE_WEB_ROUTE_DOWNGRADE
+from app.agents.router.examples import get_mixed_examples
+from app.agents.shared.cache import cached_router_decision
 from app.agents.shared.config import (
     AGENT_CLASS_GENERAL,
     ROUTE_VECTOR,
@@ -23,12 +27,8 @@ from app.agents.shared.config import (
     VALID_ROUTES,
     VALID_SKILLS,
 )
-from app.agents.router.calibration import ConfidenceCalibrator
-from app.agents.router.config import ENABLE_CALIBRATION, ENABLE_WEB_ROUTE_DOWNGRADE
-from app.agents.router.examples import get_mixed_examples
-from app.agents.shared.cache import cached_router_decision
-from app.domain.text import normalize_string
 from app.core.models import get_chat_model, get_reasoning_model
+from app.domain.text import normalize_string
 from app.prompts import build_router_prompt
 from app.services.agent_classifier import classify_agent_class, pick_cyber_skill
 from app.services.llm_intent_classifier import classify_intent_with_llm
@@ -66,9 +66,7 @@ class LegacyRouteDecision:
 
 
 # Inject few-shot examples into prompt
-ROUTER_PROMPT = build_router_prompt(
-    get_mixed_examples(vector_count=2, graph_count=2, hybrid_count=1, react_count=1)
-)
+ROUTER_PROMPT = build_router_prompt(get_mixed_examples(vector_count=2, graph_count=2, hybrid_count=1, react_count=1))
 
 
 def _extract_json(text: str) -> dict:
@@ -151,17 +149,13 @@ Suggested skill: {skill}"""
         else:
             confidence = 0.7
 
-        logger.info(
-            f"Fallback reasoning result: route={route}, confidence={confidence:.2f}"
-        )
+        logger.info(f"Fallback reasoning result: route={route}, confidence={confidence:.2f}")
 
         # Check if reasoning model improved confidence
         if confidence >= ROUTER_LOW_CONFIDENCE_THRESHOLD:
             return (route, reason, confidence)
         else:
-            logger.warning(
-                f"Fallback reasoning still low confidence: {confidence:.2f}"
-            )
+            logger.warning(f"Fallback reasoning still low confidence: {confidence:.2f}")
             return None
 
     except Exception as e:
@@ -290,9 +284,7 @@ Suggested skill: {skill}"""
 
         # Check if confidence is too low and trigger fallback
         if route_confidence < ROUTER_LOW_CONFIDENCE_THRESHOLD:
-            logger.info(
-                f"Low confidence detected: {route_confidence:.2f} < {ROUTER_LOW_CONFIDENCE_THRESHOLD}"
-            )
+            logger.info(f"Low confidence detected: {route_confidence:.2f} < {ROUTER_LOW_CONFIDENCE_THRESHOLD}")
 
             # Try fallback with reasoning model
             fallback_result = _try_fallback_with_reasoning(question, agent_class, skill, route_confidence)
@@ -305,8 +297,7 @@ Suggested skill: {skill}"""
             else:
                 # Fallback to safe route (vector)
                 logger.warning(
-                    f"Fallback to safe route: original_route={route}, "
-                    f"original_confidence={route_confidence:.2f}"
+                    f"Fallback to safe route: original_route={route}, original_confidence={route_confidence:.2f}"
                 )
                 route = ROUTE_VECTOR
                 reason = _append_reason(reason, "fallback_safe_route")
@@ -331,9 +322,7 @@ Suggested skill: {skill}"""
     raw_confidence = route_confidence
     if _calibrator is not None:
         calibrated_confidence = _calibrator.calibrate(raw_confidence)
-        logger.debug(
-            f"Calibrated confidence: {raw_confidence:.2f} -> {calibrated_confidence:.2f}"
-        )
+        logger.debug(f"Calibrated confidence: {raw_confidence:.2f} -> {calibrated_confidence:.2f}")
     else:
         calibrated_confidence = raw_confidence
 
@@ -380,10 +369,7 @@ def record_routing_feedback(raw_confidence: float, was_correct: bool) -> None:
     """
     if _calibrator is not None:
         _calibrator.record_feedback(raw_confidence, was_correct)
-        logger.info(
-            f"Recorded routing feedback: confidence={raw_confidence:.2f}, "
-            f"correct={was_correct}"
-        )
+        logger.info(f"Recorded routing feedback: confidence={raw_confidence:.2f}, correct={was_correct}")
 
 
 def get_calibration_stats() -> dict[str, dict]:

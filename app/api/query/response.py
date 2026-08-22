@@ -4,11 +4,11 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any
 
-from app.api.dependencies import settings
+from app.api import dependencies as api_dependencies
 from app.api.schemas import Citation, QueryResponse
+from app.services.evidence_conflict import detect_evidence_conflict
 from app.services.observability.agent_execution_tracker import AgentExecutionTracker
 from app.services.observability.alerting import resolve_signing_secret, sign_payload
-from app.services.evidence_conflict import detect_evidence_conflict
 from app.services.runtime.rag_runtime_scope import execution_route_from_result
 
 
@@ -81,7 +81,8 @@ def maybe_sign_response(
     question: str,
 ) -> tuple[str | None, str | None]:
     """Attach an optional HMAC signature to response metadata."""
-    if not bool(getattr(settings, "response_signing_enabled", True)):
+    settings = api_dependencies.get_query_runtime().settings
+    if not bool(settings.response_signing_enabled):
         return None, None
     kid, secret = resolve_signing_secret()
     if not kid or not secret:
@@ -188,7 +189,9 @@ def prepare_query_response(
         "source_scope": result.get("source_scope", {}),
     }
     grounding_support = float((result.get("grounding", {}) or {}).get("support_ratio", 0.0) or 0.0)
-    return PreparedQueryResponse(response=response, history_metadata=history_metadata, grounding_support=grounding_support)
+    return PreparedQueryResponse(
+        response=response, history_metadata=history_metadata, grounding_support=grounding_support
+    )
 
 
 __all__ = [
@@ -199,5 +202,3 @@ __all__ = [
     "parse_query_response",
     "prepare_query_response",
 ]
-
-

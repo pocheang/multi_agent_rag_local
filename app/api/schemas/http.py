@@ -36,6 +36,8 @@ class QueryResponse(BaseModel):
     detected_language: str = Field(default="zh", description="Detected or forced response language")
     debug: dict[str, Any] = Field(default_factory=dict)
     execution_id: str | None = Field(default=None, description="Execution tracking ID for agent-tracking endpoints")
+    status: str = Field(default="completed", description="Query status: completed, processing, pending")
+    request_id: str | None = Field(default=None, description="Request ID for status tracking")
 
 
 class SessionSummary(BaseModel):
@@ -44,6 +46,7 @@ class SessionSummary(BaseModel):
     created_at: str | None = None
     updated_at: str | None = None
     message_count: int = 0
+    pinned: bool = False
 
 
 class ChatMessage(BaseModel):
@@ -70,6 +73,7 @@ class AuthUser(BaseModel):
     role: str = "viewer"
     status: str = "active"
     display_name: str | None = None
+    credit_balance: int = Field(default=10, ge=0)
 
 
 class AuthLoginResponse(BaseModel):
@@ -124,6 +128,7 @@ class AdminUserSummary(BaseModel):
     department: str | None = None
     user_type: str | None = None
     data_scope: str | None = None
+    credit_balance: int = Field(default=10, ge=0)
     is_online: bool = False
     is_online_10m: bool = False
     created_at: str | None = None
@@ -135,6 +140,10 @@ class AdminRoleUpdateRequest(BaseModel):
 
 class AdminStatusUpdateRequest(BaseModel):
     status: str
+
+
+class AdminCreditAddRequest(BaseModel):
+    amount: int = Field(..., ge=1, le=1_000_000, strict=True)
 
 
 class AdminUserClassificationUpdateRequest(BaseModel):
@@ -326,6 +335,7 @@ class ProviderCatalogEntry(BaseModel):
 class ModelCatalogResponse(BaseModel):
     version: str
     providers: dict[str, ProviderCatalogEntry]
+
 
 class AdminModelSettings(BaseModel):
     enabled: bool = Field(

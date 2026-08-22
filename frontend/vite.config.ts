@@ -98,6 +98,7 @@ export default defineConfig({
       "/query": createBackendProxy(),
       "/admin": createBackendProxy(),
       "/user": createBackendProxy(),
+      "/api/v1": createBackendProxy(),
       "/api": createBackendProxy(),
       "/app/auth": createBackendProxy(true),
       "/app/sessions": createBackendProxy(true),

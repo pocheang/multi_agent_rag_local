@@ -245,5 +245,3 @@ def ocr_image_bytes(
     content = f"{summary}\n{people_summary}\n{vision_summary}\n[image_ocr]\n{ocr_text}"
 
     return [Document(page_content=content, metadata=metadata)]
-
-

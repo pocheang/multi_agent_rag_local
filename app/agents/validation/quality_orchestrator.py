@@ -7,26 +7,26 @@ comprehensive quality report with weighted scoring and penalty rules.
 """
 
 import logging
-from typing import Dict, Any
+from typing import Any
 
-from app.agents.shared.quality_models import (
-    QualityReport,
-    QualityBreakdown,
-    ExecutionStats,
-    RouteValidationResult,
-    RetrievalQualityResult,
-    AnswerValidationResult
-)
 from app.agents.shared.config import (
-    QUALITY_WEIGHT_ROUTE,
-    QUALITY_WEIGHT_RETRIEVAL,
+    HALLUCINATION_HIGH_RISK_THRESHOLD,
+    QUALITY_HIGH_THRESHOLD,
+    QUALITY_LOW_THRESHOLD,
+    QUALITY_MEDIUM_THRESHOLD,
     QUALITY_WEIGHT_ANSWER_FACT,
     QUALITY_WEIGHT_ANSWER_QUALITY,
     QUALITY_WEIGHT_CITATION,
-    QUALITY_HIGH_THRESHOLD,
-    QUALITY_MEDIUM_THRESHOLD,
-    QUALITY_LOW_THRESHOLD,
-    HALLUCINATION_HIGH_RISK_THRESHOLD
+    QUALITY_WEIGHT_RETRIEVAL,
+    QUALITY_WEIGHT_ROUTE,
+)
+from app.agents.shared.quality_models import (
+    AnswerValidationResult,
+    ExecutionStats,
+    QualityBreakdown,
+    QualityReport,
+    RetrievalQualityResult,
+    RouteValidationResult,
 )
 
 logger = logging.getLogger(__name__)
@@ -59,7 +59,7 @@ def orchestrate_quality(
     route_validation: RouteValidationResult,
     retrieval_quality: RetrievalQualityResult,
     answer_validation: AnswerValidationResult,
-    execution_metadata: Dict[str, Any]
+    execution_metadata: dict[str, Any],
 ) -> QualityReport:
     """
     Fuse quality scores from all validators into comprehensive report.
@@ -92,16 +92,16 @@ def orchestrate_quality(
         "retrieval_quality": retrieval_quality.overall_quality,
         "answer_factuality": answer_validation.validation_details.factual_consistency,
         "answer_quality": answer_validation.validation_details.answer_quality,
-        "citation_completeness": answer_validation.validation_details.citation_completeness
+        "citation_completeness": answer_validation.validation_details.citation_completeness,
     }
 
     # Weighted average
     overall_confidence = (
-        scores["route_confidence"] * QUALITY_WEIGHT_ROUTE +
-        scores["retrieval_quality"] * QUALITY_WEIGHT_RETRIEVAL +
-        scores["answer_factuality"] * QUALITY_WEIGHT_ANSWER_FACT +
-        scores["answer_quality"] * QUALITY_WEIGHT_ANSWER_QUALITY +
-        scores["citation_completeness"] * QUALITY_WEIGHT_CITATION
+        scores["route_confidence"] * QUALITY_WEIGHT_ROUTE
+        + scores["retrieval_quality"] * QUALITY_WEIGHT_RETRIEVAL
+        + scores["answer_factuality"] * QUALITY_WEIGHT_ANSWER_FACT
+        + scores["answer_quality"] * QUALITY_WEIGHT_ANSWER_QUALITY
+        + scores["citation_completeness"] * QUALITY_WEIGHT_CITATION
     )
 
     # Apply penalties
@@ -123,20 +123,20 @@ def orchestrate_quality(
     breakdown = QualityBreakdown(
         route_decision={
             "score": route_validation.confidence,
-            "status": "✓ 通过" if route_validation.is_valid else "⚠ 警告"
+            "status": "✓ 通过" if route_validation.is_valid else "⚠ 警告",
         },
         retrieval={
             "score": retrieval_quality.overall_quality,
-            "status": "✓ 良好" if retrieval_quality.overall_quality >= 0.7 else "⚠ 一般"
+            "status": "✓ 良好" if retrieval_quality.overall_quality >= 0.7 else "⚠ 一般",
         },
         answer_factuality={
             "score": answer_validation.validation_details.factual_consistency,
-            "status": "✓ 可信" if answer_validation.validation_details.factual_consistency >= 0.8 else "⚠ 需核实"
+            "status": "✓ 可信" if answer_validation.validation_details.factual_consistency >= 0.8 else "⚠ 需核实",
         },
         citations={
             "score": answer_validation.validation_details.citation_completeness,
-            "status": "✓ 完整" if answer_validation.validation_details.citation_completeness >= 0.8 else "⚠ 不完整"
-        }
+            "status": "✓ 完整" if answer_validation.validation_details.citation_completeness >= 0.8 else "⚠ 不完整",
+        },
     )
 
     # Aggregate issues from all validators
@@ -144,37 +144,33 @@ def orchestrate_quality(
 
     # Route warnings
     if route_validation.warnings:
-        all_issues.extend([
-            {"severity": "info", "component": "route", "message": w}
-            for w in route_validation.warnings
-        ])
+        all_issues.extend([{"severity": "info", "component": "route", "message": w} for w in route_validation.warnings])
 
     # Retrieval issues
     if retrieval_quality.issues:
-        all_issues.extend([
-            {"severity": "info", "component": "retrieval", "message": i}
-            for i in retrieval_quality.issues
-        ])
+        all_issues.extend(
+            [{"severity": "info", "component": "retrieval", "message": i} for i in retrieval_quality.issues]
+        )
 
     # Answer issues
     if answer_validation.issues:
-        all_issues.extend([
-            {
-                "severity": issue.severity,
-                "component": "answer",
-                "message": f"[{issue.type}] {issue.content[:50]}... - {issue.suggestion}"
-            }
-            for issue in answer_validation.issues
-        ])
+        all_issues.extend(
+            [
+                {
+                    "severity": issue.severity,
+                    "component": "answer",
+                    "message": f"[{issue.type}] {issue.content[:50]}... - {issue.suggestion}",
+                }
+                for issue in answer_validation.issues
+            ]
+        )
 
     # Aggregate suggestions from retrieval
     all_suggestions = list(retrieval_quality.suggestions)
 
     # Calculate validation overhead
     validation_overhead = (
-        route_validation.execution_time_ms +
-        retrieval_quality.execution_time_ms +
-        answer_validation.execution_time_ms
+        route_validation.execution_time_ms + retrieval_quality.execution_time_ms + answer_validation.execution_time_ms
     )
 
     return QualityReport(
@@ -190,6 +186,6 @@ def orchestrate_quality(
             validation_overhead_ms=validation_overhead,
             retry_count=execution_metadata.get("retry_count", 0),
             route_retry=execution_metadata.get("route_retry", 0),
-            answer_retry=execution_metadata.get("answer_retry", 0)
-        )
+            answer_retry=execution_metadata.get("answer_retry", 0),
+        ),
     )

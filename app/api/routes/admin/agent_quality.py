@@ -12,20 +12,22 @@ Provides comprehensive agent performance metrics including:
 import logging
 from typing import Any
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 
 from app.api.deps.auth import require_admin
 from app.services.observability.agent_execution_tracker import AgentExecutionTracker
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/api/v1/admin/agent-quality", tags=["admin-agent-quality"])
+router = APIRouter(
+    prefix="/api/v1/admin/agent-quality",
+    tags=["admin-agent-quality"],
+    dependencies=[Depends(require_admin)],
+)
 
 
 @router.get("/stats")
-async def get_agent_quality_stats(
-    _admin=require_admin,
-) -> dict[str, Any]:
+async def get_agent_quality_stats() -> dict[str, Any]:
     """
     Get comprehensive agent quality statistics for dashboard.
 
@@ -86,16 +88,12 @@ async def get_agent_quality_stats(
 
     except Exception as e:
         logger.exception("Failed to retrieve agent quality statistics")
-        raise HTTPException(
-            status_code=500,
-            detail=f"Failed to retrieve agent quality statistics: {str(e)}"
-        )
+        raise HTTPException(status_code=500, detail=f"Failed to retrieve agent quality statistics: {str(e)}")
 
 
 @router.get("/agents/{agent_name}")
 async def get_agent_details(
     agent_name: str,
-    _admin=require_admin,
 ) -> dict[str, Any]:
     """
     Get detailed statistics for a specific agent.
@@ -141,7 +139,6 @@ async def get_agent_details(
 @router.get("/timeline")
 async def get_execution_timeline(
     hours: int = Query(default=24, ge=1, le=168, description="Number of hours to include"),
-    _admin=require_admin,
 ) -> dict[str, Any]:
     """
     Get execution timeline data for the specified time range.
@@ -191,9 +188,7 @@ async def get_execution_timeline(
 
 
 @router.get("/errors")
-async def get_error_distribution(
-    _admin=require_admin,
-) -> dict[str, Any]:
+async def get_error_distribution() -> dict[str, Any]:
     """
     Get error distribution statistics.
 
@@ -237,9 +232,7 @@ async def get_error_distribution(
 
 
 @router.post("/clear")
-async def clear_agent_stats(
-    _admin=require_admin,
-) -> dict[str, str]:
+async def clear_agent_stats() -> dict[str, str]:
     """
     Clear all agent execution statistics.
 

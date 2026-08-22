@@ -26,55 +26,45 @@
 """
 
 # 核心模块提示词
-from .skills.ai_knowledge_prompts import (
-    AI_KNOWLEDGE_ASSISTANT_SYSTEM_PROMPT,
-    AI_KNOWLEDGE_ASSISTANT_USER_PROMPT_TEMPLATE,
-    get_ai_knowledge_assistant_prompts,
-)
-from .skills.comparison_timeline_prompts import (
-    COMPARE_ENTITIES_SYSTEM_PROMPT,
-    COMPARE_ENTITIES_USER_PROMPT_TEMPLATE,
-    TIMELINE_BUILDER_SYSTEM_PROMPT,
-    TIMELINE_BUILDER_USER_PROMPT_TEMPLATE,
-    get_compare_entities_prompts,
-    get_timeline_builder_prompts,
-)
 from .core.canonical_agent_prompts import (
     ANSWER_PROMPT as CANONICAL_ANSWER_PROMPT,
+)
+from .core.canonical_agent_prompts import (
     QUERY_DECOMPOSITION_PROMPT,
-    REACT_SYSTEM_PROMPT as CANONICAL_REACT_SYSTEM_PROMPT,
-    REVIEW_PROMPT as CANONICAL_REVIEW_PROMPT,
-    ROUTER_PROMPT_TEMPLATE as CANONICAL_ROUTER_PROMPT_TEMPLATE,
     build_router_prompt,
 )
-
-# 专业技能提示词
-from .skills.cybersecurity_skills_prompts import (
-    CYBER_ATTACK_ANALYSIS_SYSTEM_PROMPT,
-    CYBER_ATTACK_ANALYSIS_USER_PROMPT_TEMPLATE,
-    CYBER_DEFENSE_HARDENING_SYSTEM_PROMPT,
-    CYBER_DEFENSE_HARDENING_USER_PROMPT_TEMPLATE,
-    INCIDENT_RESPONSE_PLAYBOOK_SYSTEM_PROMPT,
-    INCIDENT_RESPONSE_PLAYBOOK_USER_PROMPT_TEMPLATE,
-    get_cyber_attack_analysis_prompts,
-    get_cyber_defense_hardening_prompts,
-    get_incident_response_playbook_prompts,
+from .core.canonical_agent_prompts import (
+    REACT_SYSTEM_PROMPT as CANONICAL_REACT_SYSTEM_PROMPT,
+)
+from .core.canonical_agent_prompts import (
+    REVIEW_PROMPT as CANONICAL_REVIEW_PROMPT,
+)
+from .core.canonical_agent_prompts import (
+    ROUTER_PROMPT_TEMPLATE as CANONICAL_ROUTER_PROMPT_TEMPLATE,
 )
 from .core.intent_prompts import (
     INTENT_CLASSIFICATION_SYSTEM_PROMPT,
     INTENT_CLASSIFICATION_USER_PROMPT_TEMPLATE,
 )
+from .core.react_prompts import (
+    REACT_SYSTEM_PROMPT,
+    REACT_USER_PROMPT_TEMPLATE,
+)
+from .core.review_prompts import (
+    REVIEW_SYSTEM_PROMPT,
+    REVIEW_USER_PROMPT_TEMPLATE,
+)
+from .core.router_prompts import (
+    ROUTER_SYSTEM_PROMPT,
+    ROUTER_USER_PROMPT_TEMPLATE,
+)
+from .core.synthesis_prompts import (
+    SYNTHESIS_SYSTEM_PROMPT,
+    SYNTHESIS_USER_PROMPT_TEMPLATE,
+)
 from .manager import (
     PromptManager,
     get_prompt_manager,
-)
-from .skills.pdf_web_prompts import (
-    PDF_TEXT_READER_SYSTEM_PROMPT,
-    PDF_TEXT_READER_USER_PROMPT_TEMPLATE,
-    WEB_FACT_CHECK_SYSTEM_PROMPT,
-    WEB_FACT_CHECK_USER_PROMPT_TEMPLATE,
-    get_pdf_text_reader_prompts,
-    get_web_fact_check_prompts,
 )
 from .retrieval.rag_quick_retrieval_prompts import (
     CONTEXT_SUMMARY_SYSTEM_PROMPT,
@@ -93,25 +83,43 @@ from .retrieval.rag_quick_retrieval_prompts import (
     get_keyword_search_prompts,
     get_quick_answer_prompts,
 )
-from .core.react_prompts import (
-    REACT_SYSTEM_PROMPT,
-    REACT_USER_PROMPT_TEMPLATE,
-)
-from .core.review_prompts import (
-    REVIEW_SYSTEM_PROMPT,
-    REVIEW_USER_PROMPT_TEMPLATE,
-)
-from .core.router_prompts import (
-    ROUTER_SYSTEM_PROMPT,
-    ROUTER_USER_PROMPT_TEMPLATE,
-)
 from .retrieval.self_rag_prompts import (
     SELF_RAG_ANSWER_QUALITY_PROMPT,
     SELF_RAG_RETRIEVAL_PROMPT,
 )
-from .core.synthesis_prompts import (
-    SYNTHESIS_SYSTEM_PROMPT,
-    SYNTHESIS_USER_PROMPT_TEMPLATE,
+from .skills.ai_knowledge_prompts import (
+    AI_KNOWLEDGE_ASSISTANT_SYSTEM_PROMPT,
+    AI_KNOWLEDGE_ASSISTANT_USER_PROMPT_TEMPLATE,
+    get_ai_knowledge_assistant_prompts,
+)
+from .skills.comparison_timeline_prompts import (
+    COMPARE_ENTITIES_SYSTEM_PROMPT,
+    COMPARE_ENTITIES_USER_PROMPT_TEMPLATE,
+    TIMELINE_BUILDER_SYSTEM_PROMPT,
+    TIMELINE_BUILDER_USER_PROMPT_TEMPLATE,
+    get_compare_entities_prompts,
+    get_timeline_builder_prompts,
+)
+
+# 专业技能提示词
+from .skills.cybersecurity_skills_prompts import (
+    CYBER_ATTACK_ANALYSIS_SYSTEM_PROMPT,
+    CYBER_ATTACK_ANALYSIS_USER_PROMPT_TEMPLATE,
+    CYBER_DEFENSE_HARDENING_SYSTEM_PROMPT,
+    CYBER_DEFENSE_HARDENING_USER_PROMPT_TEMPLATE,
+    INCIDENT_RESPONSE_PLAYBOOK_SYSTEM_PROMPT,
+    INCIDENT_RESPONSE_PLAYBOOK_USER_PROMPT_TEMPLATE,
+    get_cyber_attack_analysis_prompts,
+    get_cyber_defense_hardening_prompts,
+    get_incident_response_playbook_prompts,
+)
+from .skills.pdf_web_prompts import (
+    PDF_TEXT_READER_SYSTEM_PROMPT,
+    PDF_TEXT_READER_USER_PROMPT_TEMPLATE,
+    WEB_FACT_CHECK_SYSTEM_PROMPT,
+    WEB_FACT_CHECK_USER_PROMPT_TEMPLATE,
+    get_pdf_text_reader_prompts,
+    get_web_fact_check_prompts,
 )
 
 

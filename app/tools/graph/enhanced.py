@@ -497,4 +497,3 @@ def _determine_confidence(
 
     # Low confidence: weak signal and poor coverage
     return "low"
-

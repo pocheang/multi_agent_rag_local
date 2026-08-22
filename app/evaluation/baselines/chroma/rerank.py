@@ -137,5 +137,3 @@ def create_rerank_baseline(
     return RerankBaseline(
         vectorstore=vectorstore, rerank_fn=rerank_fn, k=k, initial_k=initial_k, score_threshold=score_threshold
     )
-
-

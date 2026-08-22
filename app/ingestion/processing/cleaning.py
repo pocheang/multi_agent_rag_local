@@ -121,5 +121,3 @@ def clean_pdf_pages(pages_content: list[str]) -> list[str]:
             cleaned_pages.append(cleaned)
 
     return cleaned_pages
-
-

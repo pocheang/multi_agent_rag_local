@@ -7,10 +7,10 @@ from typing import Any
 
 from .classification import ChunkType, classify_chunk_type
 
-
 # ============================================================================
 # 元数据增强
 # ============================================================================
+
 
 def enhance_chunk_metadata(
     chunk_text: str,
@@ -64,10 +64,14 @@ def enhance_chunk_metadata(
 
     # 上下文信息
     if prev_chunk_text:
-        metadata["prev_chunk_preview"] = prev_chunk_text[:100] + "..." if len(prev_chunk_text) > 100 else prev_chunk_text
+        metadata["prev_chunk_preview"] = (
+            prev_chunk_text[:100] + "..." if len(prev_chunk_text) > 100 else prev_chunk_text
+        )
 
     if next_chunk_text:
-        metadata["next_chunk_preview"] = next_chunk_text[:100] + "..." if len(next_chunk_text) > 100 else next_chunk_text
+        metadata["next_chunk_preview"] = (
+            next_chunk_text[:100] + "..." if len(next_chunk_text) > 100 else next_chunk_text
+        )
 
     # 位置信息
     if chunk_index == 0:
@@ -95,14 +99,41 @@ def extract_keywords(text: str, top_n: int = 10) -> list[str]:
         List of keywords
     """
     # 移除标点和特殊字符
-    clean_text = re.sub(r'[^\w\s]', ' ', text.lower())
+    clean_text = re.sub(r"[^\w\s]", " ", text.lower())
     words = clean_text.split()
 
     # 停用词（简化版）
-    stopwords = set([
-        "the", "a", "an", "and", "or", "but", "in", "on", "at", "to", "for", "of", "with", "by",
-        "是", "的", "了", "在", "有", "和", "与", "及", "等", "中", "将", "可以", "进行"
-    ])
+    stopwords = set(
+        [
+            "the",
+            "a",
+            "an",
+            "and",
+            "or",
+            "but",
+            "in",
+            "on",
+            "at",
+            "to",
+            "for",
+            "of",
+            "with",
+            "by",
+            "是",
+            "的",
+            "了",
+            "在",
+            "有",
+            "和",
+            "与",
+            "及",
+            "等",
+            "中",
+            "将",
+            "可以",
+            "进行",
+        ]
+    )
 
     # 过滤停用词和短词
     keywords = [w for w in words if len(w) > 3 and w not in stopwords]
@@ -131,27 +162,27 @@ def extract_entities(text: str) -> dict[str, list[str]]:
     entities: dict[str, list[str]] = {}
 
     # 技术术语（大写缩写）
-    acronyms = re.findall(r'\b[A-Z]{2,10}\b', text)
+    acronyms = re.findall(r"\b[A-Z]{2,10}\b", text)
     if acronyms:
         entities["acronyms"] = list(set(acronyms))[:5]
 
     # 数字（版本号、ID等）
-    numbers = re.findall(r'\b\d+(?:\.\d+)*\b', text)
+    numbers = re.findall(r"\b\d+(?:\.\d+)*\b", text)
     if numbers:
         entities["numbers"] = list(set(numbers))[:5]
 
     # IP地址
-    ips = re.findall(r'\b\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\b', text)
+    ips = re.findall(r"\b\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\b", text)
     if ips:
         entities["ip_addresses"] = list(set(ips))
 
     # 邮箱
-    emails = re.findall(r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b', text)
+    emails = re.findall(r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b", text)
     if emails:
         entities["emails"] = list(set(emails))
 
     # URL
-    urls = re.findall(r'https?://[^\s]+', text)
+    urls = re.findall(r"https?://[^\s]+", text)
     if urls:
         entities["urls"] = list(set(urls))[:3]
 
@@ -212,6 +243,3 @@ def calculate_importance_score(text: str, chunk_type: ChunkType, metadata: dict[
 
     # 限制在0-1范围
     return max(0.0, min(1.0, score))
-
-
-

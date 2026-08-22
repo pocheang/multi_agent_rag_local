@@ -5,14 +5,6 @@ Canonical implementations live under app.ingestion.chunking.
 
 from app.ingestion.chunking.classification import (
     ChunkType,
-    _is_code_block,
-    _is_definition,
-    _is_heading,
-    _is_list,
-    _is_metadata_info,
-    _is_procedure,
-    _is_quote,
-    _is_table,
     classify_chunk_type,
 )
 from app.ingestion.chunking.metadata import (
@@ -22,10 +14,6 @@ from app.ingestion.chunking.metadata import (
     extract_keywords,
 )
 from app.ingestion.chunking.splitter import (
-    _SimpleTextSplitter,
-    _build_splitter,
-    _clone_document,
-    _sanitize_chunk_params,
     get_smart_separators,
     split_documents,
     split_documents_enhanced,
@@ -42,4 +30,3 @@ __all__ = [
     "split_documents",
     "split_documents_enhanced",
 ]
-

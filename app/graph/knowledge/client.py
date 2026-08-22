@@ -3,7 +3,7 @@ import threading
 import time
 
 from neo4j import GraphDatabase
-from neo4j.exceptions import CypherSyntaxError, ClientError
+from neo4j.exceptions import ClientError, CypherSyntaxError
 
 from app.core.config import get_settings
 
@@ -85,16 +85,12 @@ class Neo4jClient:
         Raises:
             Exception: If query fails and cannot be retried
         """
-        from app.graph.knowledge.cypher_validation import validate_cypher_query, get_simpler_query
+        from app.graph.knowledge.cypher_validation import get_simpler_query, validate_cypher_query
 
         # Validate query before execution
         validation = validate_cypher_query(cypher)
         if not validation.is_valid:
-            logger.warning(
-                "Cypher query validation failed: %s (type: %s)",
-                validation.error,
-                validation.error_type
-            )
+            logger.warning("Cypher query validation failed: %s (type: %s)", validation.error, validation.error_type)
             # Try to get a simpler query if validation fails
             if query_type:
                 allowed_sources = params.get("allowed_sources")
@@ -280,7 +276,7 @@ class Neo4jClient:
 
             for batch_idx, i in enumerate(range(0, len(triplets), batch_size), 1):
                 batch_start = time.time()
-                batch = triplets[i:i + batch_size]
+                batch = triplets[i : i + batch_size]
 
                 # Ensure all triplets have required fields with defaults
                 normalized_batch = [
@@ -381,7 +377,9 @@ class Neo4jClient:
             """
             params = {"entity": entity, "limit": limit}
         with self.driver.session() as session:
-            return [dict(r) for r in self._execute_query_safe(session, cypher, query_type="entity_paths_2hop", **params)]
+            return [
+                dict(r) for r in self._execute_query_safe(session, cypher, query_type="entity_paths_2hop", **params)
+            ]
 
     def delete_by_source(self, source: str) -> int:
         count_cypher = """

@@ -88,5 +88,3 @@ async def export_logs(
         )
     else:
         return Response(content=data, media_type="application/json")
-
-

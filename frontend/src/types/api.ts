@@ -14,6 +14,7 @@ export type SessionSummary = {
   title: string;
   message_count: number;
   updated_at?: string;
+  pinned?: boolean;
 };
 
 export type Citation = {
@@ -206,6 +207,7 @@ export type AdminUserSummary = {
   department?: string | null;
   user_type?: string | null;
   data_scope?: string | null;
+  credit_balance: number;
   is_online?: boolean;
   is_online_10m?: boolean;
   created_at?: string;
@@ -423,4 +425,41 @@ export type SystemLogEntry = {
   line?: number;
   thread?: string;
   exception?: string;
+};
+
+// Clarification types
+export type ClarificationQuestion = {
+  question: string;
+  options: string[];
+  allow_custom_input: boolean;
+  field_name: string;
+};
+
+export type ClarificationContext = {
+  collected_info: Record<string, string>;
+  asked_questions: string[];
+  clarification_round: number;
+  max_rounds: number;
+  intent: string;
+};
+
+export type ClarificationCheckRequest = {
+  question: string;
+  session_id: string;
+  field_name?: string;
+  answer?: string;
+};
+
+export type ClarificationResponse = {
+  action: "CONTINUE" | "NEED_CLARIFICATION";
+  clarification?: ClarificationQuestion;
+  context: ClarificationContext;
+  route?: {
+    intent: string;
+    route?: string;
+    confidence: number;
+    requires_plan: boolean;
+    allowed_capabilities: string[];
+    reason: string;
+  };
 };

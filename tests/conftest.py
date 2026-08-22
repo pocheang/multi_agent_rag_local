@@ -1,6 +1,7 @@
 """Pytest configuration and shared fixtures for all tests."""
 
 from unittest.mock import MagicMock
+from pathlib import Path
 
 import pytest
 
@@ -11,11 +12,19 @@ def cleanup_test_users():
     import os
     import sqlite3
 
-    db_path = "data/app.db"
+    db_path_value = os.environ.get("PYTEST_APP_DB_PATH", "").strip()
+    if not db_path_value:
+        yield
+        return
+
+    db_path = Path(db_path_value).resolve()
+    canonical_db = Path("data/app.db").resolve()
+    if db_path == canonical_db:
+        raise RuntimeError("PYTEST_APP_DB_PATH must not point to the application database")
 
     # Clean up before test
     try:
-        if os.path.exists(db_path):
+        if db_path.exists():
             conn = sqlite3.connect(db_path)
             conn.execute("""
                 DELETE FROM users
@@ -33,7 +42,7 @@ def cleanup_test_users():
 
     # Clean up after test
     try:
-        if os.path.exists(db_path):
+        if db_path.exists():
             conn = sqlite3.connect(db_path)
             conn.execute("""
                 DELETE FROM users

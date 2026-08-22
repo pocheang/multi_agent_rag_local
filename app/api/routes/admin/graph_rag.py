@@ -16,7 +16,11 @@ from fastapi import APIRouter, Depends, Request
 from app.api.dependencies import _require_permission, _require_user
 from app.services.legacy_graph_rag_admin import (
     clear_graph_rag_caches as clear_graph_rag_caches_facade,
+)
+from app.services.legacy_graph_rag_admin import (
     get_graph_rag_cache_stats as get_graph_rag_cache_stats_facade,
+)
+from app.services.legacy_graph_rag_admin import (
     get_graph_rag_config_values as get_graph_rag_config_values_facade,
 )
 

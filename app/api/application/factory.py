@@ -7,6 +7,8 @@ from fastapi import FastAPI
 from app.api.application.lifespan import lifespan
 from app.api.application.router_registry import register_routers
 from app.api.application.static_files import StaticFilePaths, configure_static_files
+from app.api.middleware.csrf import CSRFProtectionMiddleware
+from app.api.middleware.rate_limit import RateLimitMiddleware
 from app.api.transport.middleware import request_timing_middleware
 
 _APP_BASE_API_SEGMENTS = {
@@ -82,6 +84,20 @@ def create_app(settings_obj, static_paths: StaticFilePaths | None = None, static
     app = FastAPI(title="QueryMind（智询）", lifespan=lifespan)
     app.middleware("http")(rewrite_app_prefixed_api_paths)
     _configure_cors(app, settings_obj)
+
+    # Add security middleware with Redis support
+    # CSRF protection (validates X-CSRF-Token header on state-changing requests)
+    csrf_enabled = getattr(settings_obj, "csrf_enabled", True)
+    if csrf_enabled:
+        app.add_middleware(CSRFProtectionMiddleware)
+
+    # Rate limiting (prevents brute-force attacks on sensitive endpoints)
+    # Now supports Redis for distributed deployments
+    rate_limit_enabled = getattr(settings_obj, "rate_limit_enabled", True)
+    redis_url = getattr(settings_obj, "redis_url", None)
+    if rate_limit_enabled:
+        app.add_middleware(RateLimitMiddleware, redis_url=redis_url)
+
     app.middleware("http")(request_timing_middleware)
     register_routers(app)
     configure_static_files(app, static_paths, static_handlers)

@@ -9,9 +9,10 @@ import "@/styles/pages/profile.css";
 
 type Props = {
   user: AuthUser | null;
+  onUserUpdated: (user: AuthUser) => void;
 };
 
-export function ProfilePage({ user }: Props) {
+export function ProfilePage({ user, onUserUpdated }: Props) {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const [displayName, setDisplayName] = useState("");
@@ -33,7 +34,8 @@ export function ProfilePage({ user }: Props) {
     setStatus(t("pages.profile.saving"));
 
     try {
-      await authApi.updateProfile(displayName);
+      const updatedUser = await authApi.updateProfile(displayName);
+      onUserUpdated(updatedUser);
       setStatus(t("pages.profile.saved"));
       window.setTimeout(() => setStatus(""), 3000);
     } catch (e) {
@@ -112,6 +114,12 @@ export function ProfilePage({ user }: Props) {
             <div className="info-item">
               <span className="info-label">{t("pages.profile.status")}</span>
               <span className="info-value status-active">{user.status}</span>
+            </div>
+            <div className="info-item">
+              <span className="info-label">{t("pages.profile.credits")}</span>
+              <span className="info-value">
+                {user.role.toLowerCase() === "admin" ? t("pages.profile.unlimitedCredits") : user.credit_balance}
+              </span>
             </div>
           </div>
         </div>

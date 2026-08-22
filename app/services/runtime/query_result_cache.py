@@ -10,6 +10,14 @@ from typing import Any
 from app.core.config import get_settings
 from app.services.runtime.resilience import TTLCache
 
+try:
+    from redis.exceptions import RedisError
+except ImportError:  # pragma: no cover - Redis is an optional backend
+
+    class RedisError(Exception):
+        """Fallback type used when redis-py is not installed."""
+
+
 logger = logging.getLogger(__name__)
 
 _REDIS_CLIENT = None
@@ -22,7 +30,27 @@ def _redis_retry_cooldown_seconds() -> float:
     return max(1.0, float(getattr(settings, "redis_retry_cooldown_seconds", 15) or 15))
 
 
+def _mark_redis_unavailable(exc: BaseException) -> None:
+    """Drop a failed client so cache operations can degrade to memory."""
+    global _REDIS_CLIENT, _REDIS_UNAVAILABLE_UNTIL
+    with _REDIS_LOCK:
+        client = _REDIS_CLIENT
+        _REDIS_CLIENT = None
+        _REDIS_UNAVAILABLE_UNTIL = time.monotonic() + _redis_retry_cooldown_seconds()
+    if client is not None:
+        try:
+            client.close()
+        except Exception:
+            pass
+    logger.warning("Redis query cache unavailable; using memory cache: %s", exc)
+
+
 def _get_redis_client():
+    """
+    Get or create Redis client with proper connection pooling and error handling.
+
+    P0 FIX: Improved timeout configuration and connection cleanup.
+    """
     global _REDIS_CLIENT, _REDIS_UNAVAILABLE_UNTIL
     if _REDIS_CLIENT is not None:
         return _REDIS_CLIENT
@@ -37,17 +65,21 @@ def _get_redis_client():
         try:
             import redis  # type: ignore
 
+            # P0 FIX: Increased timeouts from 0.2s to 2s for stability
+            # Added retry_on_timeout and socket_keepalive for resilience
             _REDIS_CLIENT = redis.from_url(
                 str(getattr(settings, "redis_url", "")),
                 decode_responses=True,
-                socket_connect_timeout=0.2,
-                socket_timeout=0.2,
-                retry_on_timeout=False,
-                max_connections=50,  # Connection pool configuration (was missing)
+                socket_connect_timeout=2.0,  # Increased from 0.2s
+                socket_timeout=2.0,  # Increased from 0.2s
+                retry_on_timeout=True,  # Enable retry on transient failures
+                max_connections=50,
                 health_check_interval=30,
+                socket_keepalive=True,  # Keep connections alive
             )
             _REDIS_CLIENT.ping()
             _REDIS_UNAVAILABLE_UNTIL = 0.0
+            logger.info("Redis client initialized successfully for query result cache")
             return _REDIS_CLIENT
         except (ImportError, AttributeError) as e:
             logger.debug(f"Redis not available for query result cache: {e}")
@@ -139,59 +171,81 @@ class QueryResultCache:
 
     def get(self, key: str, session_id: str | None = None, user_id: str | None = None) -> dict[str, Any] | None:
         """
-        èŽ·å–ç¼“å­˜æ•°æ®ï¼Œå¹¶éªŒè¯ç”¨æˆ·å½’å±žã€‚
+        Get cached data with user ownership verification.
+
+        P0 FIX: Enforce user_id requirement to prevent cache isolation bypass.
 
         Args:
-            key: ç¼“å­˜é”®
-            session_id: å¯é€‰çš„ä¼šè¯ID
-            user_id: å¯é€‰çš„ç”¨æˆ·IDï¼Œç”¨äºŽéªŒè¯ç¼“å­˜å½’å±ž
+            key: Cache key
+            session_id: Optional session ID
+            user_id: REQUIRED user ID for cache ownership verification (P0 FIX: now required)
 
         Returns:
-            ç¼“å­˜æ•°æ®ï¼Œå¦‚æžœéªŒè¯å¤±è´¥åˆ™è¿”å›ž None
+            Cached data, or None if verification fails or user_id is missing
         """
         if self._effective_backend() == "off":
             return None
+
+        # P0 FIX: Enforce user_id requirement to prevent cache isolation bypass
+        if not user_id:
+            logger.warning("Cache get without user_id is rejected for security isolation")
+            return None
+
+        # Check session cache
         if session_id:
             v = self._session_memory.get(f"session:{session_id}:{key}")
             if isinstance(v, dict):
-                # éªŒè¯ç”¨æˆ·å½’å±ž
-                if user_id and v.get("user_id") != user_id:
+                # P0 FIX: Strict user ownership verification (removed "if user_id and")
+                if v.get("user_id") != user_id:
                     logger.warning(
                         "Cache ownership mismatch (session): key=%s, expected_user=%s, cached_user=%s",
-                        key,
+                        key[:16],
                         user_id,
                         v.get("user_id"),
                     )
                     return None
                 return v
+
+        # Check Redis cache
         backend = self._effective_backend()
         if backend == "redis":
             client = _get_redis_client()
             if client is not None:
                 try:
-                    raw = client.get(f"qcache:{key}")
+                    # P0 FIX: Redis key includes user_id for isolation
+                    raw = client.get(f"qcache:{user_id}:{key}")
                     if raw:
                         data = json.loads(raw)
                         if isinstance(data, dict):
-                            # éªŒè¯ç”¨æˆ·å½’å±ž
-                            if user_id and data.get("user_id") != user_id:
-                                logger.warning(
-                                    "Cache ownership mismatch (redis): key=%s, expected_user=%s, cached_user=%s",
-                                    key,
+                            # P0 FIX: Double verification of user ownership
+                            if data.get("user_id") != user_id:
+                                logger.error(
+                                    "SECURITY: Cache ownership mismatch in Redis: key=%s, expected_user=%s, cached_user=%s",
+                                    key[:16],
                                     user_id,
                                     data.get("user_id"),
                                 )
+                                # Delete poisoned cache
+                                try:
+                                    client.delete(f"qcache:{user_id}:{key}")
+                                except Exception:
+                                    pass
                                 return None
                             return data
+                except RedisError as exc:
+                    _mark_redis_unavailable(exc)
+                    logger.warning("query_cache_get_failed key=%s", key[:16], exc_info=True)
                 except (json.JSONDecodeError, ValueError, TypeError, OSError):
-                    logger.warning("query_cache_get_failed key=%s", key, exc_info=True)
+                    logger.warning("query_cache_get_failed key=%s", key[:16], exc_info=True)
+
+        # Check memory cache
         v = self._memory.get(key)
         if isinstance(v, dict):
-            # éªŒè¯ç”¨æˆ·å½’å±ž
-            if user_id and v.get("user_id") != user_id:
+            # P0 FIX: Strict user ownership verification
+            if v.get("user_id") != user_id:
                 logger.warning(
                     "Cache ownership mismatch (memory): key=%s, expected_user=%s, cached_user=%s",
-                    key,
+                    key[:16],
                     user_id,
                     v.get("user_id"),
                 )
@@ -201,21 +255,27 @@ class QueryResultCache:
 
     def set(self, key: str, value: dict[str, Any], session_id: str | None = None, user_id: str | None = None) -> None:
         """
-        ä¿å­˜ç¼“å­˜æ•°æ®ï¼Œå¼ºåˆ¶åŒ…å«ç”¨æˆ·IDä»¥ç¡®ä¿éš”ç¦»ã€‚
+        Store cache data with enforced user ID for isolation.
+
+        P0 FIX: Enforce user_id requirement and include it in Redis keys.
 
         Args:
-            key: ç¼“å­˜é”®
-            value: ç¼“å­˜å€¼
-            session_id: å¯é€‰çš„ä¼šè¯ID
-            user_id: å¯é€‰çš„ç”¨æˆ·IDï¼Œå°†è¢«ä¿å­˜åˆ°ç¼“å­˜æ•°æ®ä¸­
+            key: Cache key
+            value: Cache value
+            session_id: Optional session ID
+            user_id: REQUIRED user ID for cache isolation (P0 FIX: now required)
         """
         if self._effective_backend() == "off":
             return
 
-        # åˆ›å»ºç¼“å­˜æ•°æ®å‰¯æœ¬å¹¶ç¡®ä¿åŒ…å« user_id
+        # P0 FIX: Enforce user_id requirement
+        if not user_id:
+            logger.error("Cache set without user_id is rejected for security isolation")
+            return
+
+        # Create cache value copy and ensure user_id is included
         cache_value = dict(value)
-        if user_id:
-            cache_value["user_id"] = user_id
+        cache_value["user_id"] = user_id
 
         self._memory.set(key, cache_value)
         if session_id:
@@ -224,25 +284,40 @@ class QueryResultCache:
             client = _get_redis_client()
             if client is not None:
                 try:
-                    client.setex(f"qcache:{key}", self._ttl_seconds, json.dumps(cache_value, ensure_ascii=False))
+                    # P0 FIX: Redis key includes user_id for isolation
+                    client.setex(
+                        f"qcache:{user_id}:{key}", self._ttl_seconds, json.dumps(cache_value, ensure_ascii=False)
+                    )
+                except RedisError as exc:
+                    _mark_redis_unavailable(exc)
+                    logger.warning("query_cache_set_failed key=%s", key[:16], exc_info=True)
                 except (json.JSONDecodeError, ValueError, TypeError, OSError):
-                    logger.warning("query_cache_set_failed key=%s", key, exc_info=True)
+                    logger.warning("query_cache_set_failed key=%s", key[:16], exc_info=True)
 
-    def mark_inflight(self, key: str) -> bool:
+    def mark_inflight(self, key: str, user_id: str | None = None) -> bool:
+        """
+        P0 FIX: Atomic check-and-set for inflight marking to prevent race conditions.
+        Added user_id parameter for better isolation.
+        """
         now = time.time()
         backend = self._effective_backend()
+
+        # P0 FIX: Hold lock during entire check-and-set operation
         with self._lock:
             # gc old inflight marks
             stale = [k for k, ts in self._inflight.items() if (now - ts) > self._ttl_seconds]
             for s in stale:
                 self._inflight.pop(s, None)
                 self._inflight_tokens.pop(s, None)
+
+            # P0 FIX: Check happens inside lock
             if key in self._inflight:
                 return False
+
             if backend == "redis":
                 client = _get_redis_client()
                 if client is not None:
-                    token = hashlib.sha256(f"{key}:{now}".encode()).hexdigest()
+                    token = hashlib.sha256(f"{key}:{now}:{user_id or ''}".encode()).hexdigest()
                     try:
                         locked = bool(
                             client.set(
@@ -252,12 +327,19 @@ class QueryResultCache:
                                 ex=max(1, int(self._ttl_seconds)),
                             )
                         )
+                    except RedisError as exc:
+                        _mark_redis_unavailable(exc)
+                        logger.warning("query_inflight_lock_failed key=%s", key[:16], exc_info=True)
+                        locked = True
                     except (ValueError, TypeError, OSError):
-                        logger.warning("query_inflight_lock_failed key=%s", key, exc_info=True)
-                        locked = False
+                        logger.warning("query_inflight_lock_failed key=%s", key[:16], exc_info=True)
+                        locked = True
                     if not locked:
                         return False
-                    self._inflight_tokens[key] = token
+                    if _REDIS_CLIENT is not None:
+                        self._inflight_tokens[key] = token
+
+            # P0 FIX: Set happens inside lock
             self._inflight[key] = now
             return True
 
@@ -273,8 +355,11 @@ class QueryResultCache:
                     current = client.get(f"qinflight:{key}")
                     if current == token:
                         client.delete(f"qinflight:{key}")
+                except RedisError as exc:
+                    _mark_redis_unavailable(exc)
+                    logger.warning("query_inflight_clear_failed key=%s", key[:16], exc_info=True)
                 except (ValueError, TypeError, OSError):
-                    logger.warning("query_inflight_clear_failed key=%s", key, exc_info=True)
+                    logger.warning("query_inflight_clear_failed key=%s", key[:16], exc_info=True)
 
     def is_inflight(self, key: str) -> bool:
         backend = self._effective_backend()
@@ -283,8 +368,11 @@ class QueryResultCache:
             if client is not None:
                 try:
                     return bool(client.exists(f"qinflight:{key}"))
+                except RedisError as exc:
+                    _mark_redis_unavailable(exc)
+                    logger.warning("query_inflight_check_failed key=%s", key[:16], exc_info=True)
                 except (ValueError, TypeError, OSError):
-                    logger.warning("query_inflight_check_failed key=%s", key, exc_info=True)
+                    logger.warning("query_inflight_check_failed key=%s", key[:16], exc_info=True)
         with self._lock:
             return key in self._inflight
 
@@ -304,8 +392,11 @@ class QueryResultCache:
                                 "events": list(data.get("events", []) or []),
                                 "done": bool(data.get("done", False)),
                             }
+                except RedisError as exc:
+                    _mark_redis_unavailable(exc)
+                    logger.warning("query_stream_get_failed key=%s", key[:16], exc_info=True)
                 except (json.JSONDecodeError, ValueError, TypeError, OSError):
-                    logger.warning("query_stream_get_failed key=%s", key, exc_info=True)
+                    logger.warning("query_stream_get_failed key=%s", key[:16], exc_info=True)
         mem = self._stream_memory.get(key)
         if isinstance(mem, dict):
             return {
@@ -330,8 +421,11 @@ class QueryResultCache:
                 try:
                     ttl = max(1, int(getattr(get_settings(), "stream_replay_cache_ttl_seconds", 600) or 600))
                     client.setex(f"qstream:{key}", ttl, json.dumps(row, ensure_ascii=False))
+                except RedisError as exc:
+                    _mark_redis_unavailable(exc)
+                    logger.warning("query_stream_append_failed key=%s", key[:16], exc_info=True)
                 except (json.JSONDecodeError, ValueError, TypeError, OSError):
-                    logger.warning("query_stream_append_failed key=%s", key, exc_info=True)
+                    logger.warning("query_stream_append_failed key=%s", key[:16], exc_info=True)
 
     def mark_stream_done(self, key: str) -> None:
         cur = self.get_stream_events(key)
@@ -343,7 +437,24 @@ class QueryResultCache:
                 try:
                     ttl = max(1, int(getattr(get_settings(), "stream_replay_cache_ttl_seconds", 600) or 600))
                     client.setex(f"qstream:{key}", ttl, json.dumps(row, ensure_ascii=False))
+                except RedisError as exc:
+                    _mark_redis_unavailable(exc)
+                    logger.warning("query_stream_done_failed key=%s", key[:16], exc_info=True)
                 except (json.JSONDecodeError, ValueError, TypeError, OSError):
-                    logger.warning("query_stream_done_failed key=%s", key, exc_info=True)
+                    logger.warning("query_stream_done_failed key=%s", key[:16], exc_info=True)
 
-
+    def clear_stream_events(self, key: str) -> None:
+        """Remove stale replay events after a stream failed before completion."""
+        self._stream_memory.delete(key)
+        if self._effective_backend() != "redis":
+            return
+        client = _get_redis_client()
+        if client is None:
+            return
+        try:
+            client.delete(f"qstream:{key}")
+        except RedisError as exc:
+            _mark_redis_unavailable(exc)
+            logger.warning("query_stream_clear_failed key=%s", key[:16], exc_info=True)
+        except (ValueError, TypeError, OSError):
+            logger.warning("query_stream_clear_failed key=%s", key[:16], exc_info=True)

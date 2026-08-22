@@ -11,12 +11,11 @@ Web Research Activity Logger
 - 支持导出和报告生成
 """
 
-import logging
 import json
+import logging
+from collections import Counter, defaultdict
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Optional, Dict, List
-from collections import Counter, defaultdict
 
 logger = logging.getLogger("app.agents.web_activity_logger")
 
@@ -49,13 +48,13 @@ class WebActivityLogger:
 
     def log_search(
         self,
-        user_id: Optional[str] = None,
-        session_id: Optional[str] = None,
+        user_id: str | None = None,
+        session_id: str | None = None,
         query: str = "",
         query_sanitized: bool = False,
-        result: Dict = None,
-        ip_address: Optional[str] = None,
-        user_agent: Optional[str] = None,
+        result: dict = None,
+        ip_address: str | None = None,
+        user_agent: str | None = None,
     ):
         """
         记录一次Web搜索活动
@@ -78,12 +77,15 @@ class WebActivityLogger:
             source = citation.get("source", "")
             if source.startswith("http"):
                 from urllib.parse import urlparse
+
                 domain = urlparse(source).netloc
-                websites.append({
-                    "domain": domain,
-                    "url": source,
-                    "score": citation.get("metadata", {}).get("source_score", 0.0),
-                })
+                websites.append(
+                    {
+                        "domain": domain,
+                        "url": source,
+                        "score": citation.get("metadata", {}).get("source_score", 0.0),
+                    }
+                )
 
         # 构建日志记录
         log_entry = {
@@ -111,10 +113,10 @@ class WebActivityLogger:
 
     def get_logs(
         self,
-        start_date: Optional[datetime] = None,
-        end_date: Optional[datetime] = None,
-        user_id: Optional[str] = None,
-    ) -> List[Dict]:
+        start_date: datetime | None = None,
+        end_date: datetime | None = None,
+        user_id: str | None = None,
+    ) -> list[dict]:
         """
         读取日志记录
 
@@ -140,7 +142,7 @@ class WebActivityLogger:
             log_file = self.log_dir / f"web_activity_{current.strftime('%Y%m%d')}.jsonl"
             if log_file.exists():
                 try:
-                    with open(log_file, "r", encoding="utf-8") as f:
+                    with open(log_file, encoding="utf-8") as f:
                         for line in f:
                             if line.strip():
                                 entry = json.loads(line)
@@ -185,10 +187,10 @@ class WebActivityAnalyzer:
 
     def analyze(
         self,
-        start_date: Optional[datetime] = None,
-        end_date: Optional[datetime] = None,
-        user_id: Optional[str] = None,
-    ) -> Dict:
+        start_date: datetime | None = None,
+        end_date: datetime | None = None,
+        user_id: str | None = None,
+    ) -> dict:
         """
         分析Web搜索活动
 
@@ -203,10 +205,7 @@ class WebActivityAnalyzer:
         logs = self.logger.get_logs(start_date, end_date, user_id)
 
         if not logs:
-            return {
-                "total_searches": 0,
-                "message": "No data available for the specified period"
-            }
+            return {"total_searches": 0, "message": "No data available for the specified period"}
 
         # 统计指标
         total_searches = len(logs)
@@ -228,18 +227,17 @@ class WebActivityAnalyzer:
         top_websites = []
         for domain, count in website_counter.most_common(20):
             avg_score = sum(website_scores[domain]) / len(website_scores[domain])
-            top_websites.append({
-                "domain": domain,
-                "visit_count": count,
-                "avg_trust_score": round(avg_score, 2),
-            })
+            top_websites.append(
+                {
+                    "domain": domain,
+                    "visit_count": count,
+                    "avg_trust_score": round(avg_score, 2),
+                }
+            )
 
         # 用户统计
         user_counter = Counter(log.get("user_id", "anonymous") for log in logs)
-        top_users = [
-            {"user_id": user, "search_count": count}
-            for user, count in user_counter.most_common(10)
-        ]
+        top_users = [{"user_id": user, "search_count": count} for user, count in user_counter.most_common(10)]
 
         # 时间分布
         hour_distribution = Counter()
@@ -283,8 +281,8 @@ class WebActivityAnalyzer:
 
     def generate_report(
         self,
-        start_date: Optional[datetime] = None,
-        end_date: Optional[datetime] = None,
+        start_date: datetime | None = None,
+        end_date: datetime | None = None,
         output_format: str = "text",
     ) -> str:
         """
@@ -309,7 +307,7 @@ class WebActivityAnalyzer:
         else:  # text
             return self._generate_text_report(analysis)
 
-    def _generate_text_report(self, analysis: Dict) -> str:
+    def _generate_text_report(self, analysis: dict) -> str:
         """生成文本格式报告"""
         summary = analysis["summary"]
 
@@ -359,7 +357,7 @@ class WebActivityAnalyzer:
 
         return "\n".join(report)
 
-    def _generate_html_report(self, analysis: Dict) -> str:
+    def _generate_html_report(self, analysis: dict) -> str:
         """生成HTML格式报告"""
         summary = analysis["summary"]
 
@@ -478,19 +476,19 @@ class WebActivityAnalyzer:
         <div class="stat-grid">
             <div class="stat-card">
                 <div class="stat-label">总搜索次数</div>
-                <div class="stat-value">{summary['total_searches']}</div>
+                <div class="stat-value">{summary["total_searches"]}</div>
             </div>
             <div class="stat-card">
                 <div class="stat-label">成功率</div>
-                <div class="stat-value">{summary['success_rate']}%</div>
+                <div class="stat-value">{summary["success_rate"]}%</div>
             </div>
             <div class="stat-card">
                 <div class="stat-label">独立用户</div>
-                <div class="stat-value">{summary['unique_users']}</div>
+                <div class="stat-value">{summary["unique_users"]}</div>
             </div>
             <div class="stat-card">
                 <div class="stat-label">访问网站</div>
-                <div class="stat-value">{summary['unique_websites']}</div>
+                <div class="stat-value">{summary["unique_websites"]}</div>
             </div>
         </div>
 
@@ -508,7 +506,7 @@ class WebActivityAnalyzer:
 """
 
         for i, website in enumerate(analysis["top_websites"][:15], 1):
-            score = website['avg_trust_score']
+            score = website["avg_trust_score"]
             if score >= 0.7:
                 score_class = "trust-high"
             elif score >= 0.5:
@@ -519,8 +517,8 @@ class WebActivityAnalyzer:
             html += f"""
                 <tr>
                     <td>{i}</td>
-                    <td>{website['domain']}</td>
-                    <td>{website['visit_count']}</td>
+                    <td>{website["domain"]}</td>
+                    <td>{website["visit_count"]}</td>
                     <td><span class="trust-score {score_class}">{score:.2f}</span></td>
                 </tr>
 """
@@ -545,8 +543,8 @@ class WebActivityAnalyzer:
             html += f"""
                 <tr>
                     <td>{i}</td>
-                    <td>{user['user_id']}</td>
-                    <td>{user['search_count']}</td>
+                    <td>{user["user_id"]}</td>
+                    <td>{user["search_count"]}</td>
                 </tr>
 """
 

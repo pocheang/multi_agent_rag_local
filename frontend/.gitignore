@@ -1,3 +1,37 @@
 node_modules
 dist
 .DS_Store
+
+# Build outputs
+*.log
+*.tsbuildinfo
+.vite
+
+# Environment files
+.env
+.env.local
+.env.*.local
+!.env.example
+
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+.idea
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# OS
+Thumbs.db
+
+# Testing
+coverage
+.nyc_output
+
+# Temporary files
+*.tmp
+*.temp
+.cache
