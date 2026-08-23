@@ -1,5 +1,6 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react-swc";
+import tailwindcss from "@tailwindcss/vite";
 // @ts-ignore - JavaScript plugin without type definitions
 import inlineCriticalCSS from './vite-plugin-inline-critical.js';
 
@@ -36,7 +37,7 @@ function createBackendProxy(rewriteAppBase = false) {
 }
 
 export default defineConfig({
-  plugins: [react(), inlineCriticalCSS()],
+  plugins: [react(), tailwindcss(), inlineCriticalCSS()],
   base: "/",
   resolve: {
     alias: {

@@ -111,6 +111,12 @@ export function App() {
         // TODO: Send to error tracking service (e.g., Sentry)
       }}
     >
+      {/* Tailwind v4 smoke test - hidden element verifying tw: prefix and theme variables */}
+      <div
+        className="tw:hidden tw:flex tw:bg-surface tw:text-text-primary"
+        data-testid="tailwind-smoke-test"
+        aria-hidden="true"
+      />
       <ToastProvider>
         <Suspense fallback={<RouteFallback />}>
           <Routes>

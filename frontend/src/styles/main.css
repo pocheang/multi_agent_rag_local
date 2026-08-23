@@ -13,6 +13,9 @@
 /* Shared theme variables and shared component theme rules */
 @import "./themes/dark/index.css";
 
+/* Tailwind CSS v4 utilities */
+@import "./tailwind.css";
+
 /* Atomic shared components */
 @import "./components/buttons/index.css";
 @import "./components/forms/index.css";

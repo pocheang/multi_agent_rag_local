@@ -6,6 +6,8 @@
   "scripts": {
     "dev": "vite",
     "test": "vitest --config vitest.config.ts",
+    "test:visual": "playwright test -c playwright.visual.config.ts",
+    "test:visual:update": "playwright test -c playwright.visual.config.ts --update-snapshots",
     "build": "tsc -b && vite build",
     "extract-critical": "node scripts/extract-critical-css.js",
     "preview": "vite preview --host 0.0.0.0 --port 4173",
@@ -34,6 +36,7 @@
     "@eslint/js": "^9.39.5",
     "@fullhuman/postcss-purgecss": "^8.0.0",
     "@playwright/test": "^1.59.1",
+    "@tailwindcss/vite": "^4.3.3",
     "@testing-library/jest-dom": "^7.0.1",
     "@testing-library/react": "^16.3.2",
     "@testing-library/user-event": "^14.6.4",
@@ -51,6 +54,7 @@
     "jsdom": "^26.1.0",
     "prettier": "^3.9.6",
     "purgecss": "^8.0.0",
+    "tailwindcss": "^4.3.3",
     "typescript": "^5.9.3",
     "vite": "^6.4.2",
     "vitest": "^3.2.7"
