@@ -56,6 +56,9 @@ class Settings(BaseSettings):
     corpus_store_path: str = Field(default="./data/chunks/chunks.jsonl", alias="CORPUS_STORE_PATH")
     parent_store_path_str: str = Field(default="./data/chunks/parents.jsonl", alias="PARENT_STORE_PATH")
     evidence_artifact_root: str = Field(default="./data/evidence", alias="EVIDENCE_ARTIFACT_ROOT")
+    wiki_db_path_str: str = Field(default="./data/wiki/wiki.db", alias="WIKI_DB_PATH")
+    wiki_generation_timeout_ms: int = Field(default=30_000, ge=100, le=120_000, alias="WIKI_GENERATION_TIMEOUT_MS")
+    wiki_scan_limit: int = Field(default=500, ge=10, le=10_000, alias="WIKI_SCAN_LIMIT")
 
     parent_chunk_size: int = Field(default=1500, alias="PARENT_CHUNK_SIZE")
     parent_chunk_overlap: int = Field(default=200, alias="PARENT_CHUNK_OVERLAP")
@@ -364,6 +367,10 @@ class Settings(BaseSettings):
     @property
     def evidence_artifact_path(self) -> Path:
         return Path(self.evidence_artifact_root)
+
+    @property
+    def wiki_db_path(self) -> Path:
+        return Path(self.wiki_db_path_str)
 
     @property
     def sessions_path(self) -> Path:

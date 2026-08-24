@@ -64,8 +64,8 @@ def build_default_adapters() -> dict[KnowledgeSource, KnowledgeAdapter]:
         "bm25": CallableKnowledgeAdapter("bm25", _retrieve_bm25),
         "graph": CallableKnowledgeAdapter("graph", _retrieve_graph),
         "multimodal": CallableKnowledgeAdapter("multimodal", _retrieve_multimodal),
+        "wiki": CallableKnowledgeAdapter("wiki", _retrieve_wiki),
         "web": CallableKnowledgeAdapter("web", _retrieve_web),
-        "wiki": UnavailableKnowledgeAdapter("wiki", "LLM Wiki provider is not configured"),
         "memory": UnavailableKnowledgeAdapter("memory", "GBrain long-term memory provider is not configured"),
         "tool": UnavailableKnowledgeAdapter("tool", "tool retrieval is delegated to the governed Tool Agent"),
     }
@@ -132,6 +132,39 @@ async def _retrieve_multimodal(plan: KnowledgeSourcePlan, scope: AccessScope) ->
 
     async def one(query: str) -> tuple[EvidenceItem, ...]:
         return await retriever.retrieve_evidence(query, scope, top_k=plan.top_k)
+
+    return _flatten(await asyncio.gather(*(one(query) for query in plan.queries)))
+
+
+async def _retrieve_wiki(plan: KnowledgeSourcePlan, scope: AccessScope) -> tuple[EvidenceItem, ...]:
+    from app.wiki.store import WikiStore
+
+    store = await asyncio.to_thread(WikiStore)
+
+    async def one(query: str) -> tuple[EvidenceItem, ...]:
+        rows = await asyncio.to_thread(store.search, query, scope, top_k=plan.top_k)
+        output: list[EvidenceItem] = []
+        for article, score in rows:
+            wiki_uri = f"wiki://{article.tenant_id}/{article.article_id}/v{article.version}"
+            for reference in article.source_references:
+                output.append(
+                    EvidenceItem(
+                        content=f"# {article.title}\n\n{article.content}",
+                        source=reference.source,
+                        document_id=reference.document_id,
+                        version=reference.document_version,
+                        page=reference.page,
+                        chunk_id=reference.chunk_id,
+                        image_id=reference.image_id,
+                        artifact_uri=wiki_uri,
+                        modality="image" if reference.image_id else "text",
+                        layer="knowledge",
+                        acl_tags=reference.acl_tags,
+                        retriever=f"wiki:v{article.version}",
+                        score=score,
+                    )
+                )
+        return tuple(output[: plan.top_k])
 
     return _flatten(await asyncio.gather(*(one(query) for query in plan.queries)))
 
