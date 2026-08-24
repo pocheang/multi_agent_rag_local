@@ -272,7 +272,24 @@ class OrchestrationEngine:
         answer = result.get("final_answer")
         if not isinstance(answer, FinalAnswer):
             raise RuntimeError("LangGraph workflow completed without FinalAnswer")
-        await reporter(ExecutionEvent(stage="complete", status="completed"))
+        from app.services.observability.workflow_diagnostics import summarize_workflow_execution
+
+        workflow_diagnostics = summarize_workflow_execution(result)
+        answer = answer.model_copy(
+            update={
+                "execution_metadata": {
+                    **dict(answer.execution_metadata),
+                    "workflow_diagnostics": workflow_diagnostics,
+                }
+            }
+        )
+        await reporter(
+            ExecutionEvent(
+                stage="complete",
+                status="completed",
+                duration_ms=int(workflow_diagnostics["total_stage_latency_ms"]),
+            )
+        )
         return answer
 
 
