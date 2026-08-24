@@ -27,6 +27,7 @@ def build_workflow(
         services=services,
         policy=policy or ExecutionPolicy(),
         max_verifier_retries=active_settings.verifier_max_retries,
+        context_token_budget=active_settings.knowledge_context_token_budget,
         monitor=monitor,
     )
     graph = StateGraph(OrchestrationGraphState)

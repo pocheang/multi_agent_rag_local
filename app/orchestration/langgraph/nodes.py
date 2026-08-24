@@ -7,6 +7,7 @@ from typing import Any, Protocol
 
 from app.domain.contracts import (
     EvidenceBundle,
+    EvidenceItem,
     FinalAnswer,
     RouteDecision,
     TaskPlan,
@@ -23,6 +24,7 @@ from app.domain.workflow import (
     RouterDecision,
     VerificationDecision,
 )
+from app.knowledge.context import ContextBuilder
 from app.orchestration.langgraph.state import OrchestrationGraphState
 from app.orchestration.policies import ExecutionPolicy
 from app.orchestration.request import OrchestrationRequest
@@ -49,6 +51,10 @@ class WorkflowServices(Protocol):
         [OrchestrationRequest, RouteDecision, TaskPlan | None, EvidenceBundle, tuple[ToolResult, ...]],
         Awaitable[FinalAnswer],
     ]
+    candidate_synthesizer: Callable[
+        [OrchestrationRequest, ContextBundle, tuple[ToolResult, ...]],
+        Awaitable[CandidateAnswer],
+    ] | None
     finalizer: Callable[
         [OrchestrationRequest, EvidenceBundle, FinalAnswer, ExecutionPolicy],
         Awaitable[FinalAnswer],
@@ -81,11 +87,13 @@ class WorkflowNodeRuntime:
         services: WorkflowServices,
         policy: ExecutionPolicy,
         max_verifier_retries: int,
+        context_token_budget: int,
         monitor: Any = None,
     ) -> None:
         self._services = services
         self._policy = policy
         self._max_verifier_retries = max(0, min(1, int(max_verifier_retries)))
+        self._context_builder = ContextBuilder(token_budget=context_token_budget)
         self._monitor = monitor
 
     async def privacy_permission(self, state: OrchestrationGraphState) -> dict[str, Any]:
@@ -201,10 +209,10 @@ class WorkflowNodeRuntime:
             expected_type=KnowledgeStrategy,
         )
         orchestrator = getattr(self._services, "knowledge_orchestrator", None)
+        scope = state.get("permission_scope")
+        if scope is None:
+            raise StageExecutionError("knowledge", PermissionError("knowledge retrieval requires access scope"))
         if orchestrator is not None:
-            scope = state.get("permission_scope")
-            if scope is None:
-                raise StageExecutionError("knowledge", PermissionError("knowledge retrieval requires access scope"))
             context, event = await self._run_stage(
                 state,
                 event_stage="knowledge",
@@ -226,10 +234,13 @@ class WorkflowNodeRuntime:
                 operation=lambda: self._services.retriever(request, route, plan),
                 expected_type=EvidenceBundle,
             )
-            context = ContextBundle(
-                evidence=evidence.items,
-                rendered_context="\n\n".join(item.content for item in evidence.items),
+            context = self._context_builder.build(
+                evidence.items,
+                scope,
                 diagnostics=dict(evidence.diagnostics),
+            )
+            evidence = evidence.model_copy(
+                update={"items": context.evidence, "diagnostics": context.diagnostics}
             )
         tool_results: tuple[ToolResult, ...] = ()
         trace = [strategy_event, event]
@@ -253,10 +264,22 @@ class WorkflowNodeRuntime:
 
     async def synthesizer(self, state: OrchestrationGraphState) -> dict[str, Any]:
         request = _required(state, "request", OrchestrationRequest)
+        context = _required(state, "context", ContextBundle)
+        tool_results = state.get("tool_results", ())
+        candidate_synthesizer = getattr(self._services, "candidate_synthesizer", None)
+        if candidate_synthesizer is not None:
+            candidate_answer, event = await self._run_stage(
+                state,
+                event_stage="synthesize",
+                timeout_stage="synthesize",
+                operation=lambda: candidate_synthesizer(request, context, tool_results),
+                expected_type=CandidateAnswer,
+            )
+            return {"candidate_answer": candidate_answer, "trace": (event,)}
+
         route = _required(state, "route", RouteDecision)
         evidence = _required(state, "evidence_bundle", EvidenceBundle)
         plan = state.get("task_plan")
-        tool_results = state.get("tool_results", ())
         candidate, event = await self._run_stage(
             state,
             event_stage="synthesize",
@@ -288,48 +311,69 @@ class WorkflowNodeRuntime:
     async def verifier(self, state: OrchestrationGraphState) -> dict[str, Any]:
         request = _required(state, "request", OrchestrationRequest)
         evidence = _required(state, "evidence_bundle", EvidenceBundle)
-        candidate = _required(state, "candidate", FinalAnswer)
-        finalizer = self._services.finalizer
-        if finalizer is None:
-
-            async def operation() -> FinalAnswer:
-                return candidate
-
-        else:
-
-            async def operation() -> FinalAnswer:
-                return await finalizer(request, evidence, candidate, self._policy)
-
+        route = _required(state, "route", RouteDecision)
+        context = _required(state, "context", ContextBundle)
+        candidate_answer = _required(state, "candidate_answer", CandidateAnswer)
         verifier = self._services.verifier
-        answer, event = await self._run_stage(
-            state,
-            event_stage="finalize" if verifier is not None else "verifier",
-            timeout_stage="finalize",
-            operation=operation,
-            expected_type=FinalAnswer,
-        )
         retry_count = int(state.get("retry_count", 0))
-        trace = [event]
-        if verifier is not None:
-            context = _required(state, "context", ContextBundle)
-            candidate_answer = _required(state, "candidate_answer", CandidateAnswer).model_copy(
-                update={"text": answer.answer, "unresolved_items": answer.unresolved_items}
-            )
-            decision, verifier_event = await self._run_stage(
-                state,
-                event_stage="verifier",
-                timeout_stage="verifier",
-                operation=lambda: verifier(request, context, candidate_answer, retry_count),
-                expected_type=VerificationDecision,
-            )
-            trace.append(verifier_event)
+        if verifier is None:
+
+            async def verification_operation() -> VerificationDecision:
+                status = "degraded" if candidate_answer.unresolved_items else "approved"
+                return VerificationDecision(status=status, missing_aspects=candidate_answer.unresolved_items)
+
         else:
-            status = "approved" if answer.validation.approved else answer.validation.state
-            if status == "validated":
-                status = "approved"
-            decision = VerificationDecision(status=status)
+
+            async def verification_operation() -> VerificationDecision:
+                return await verifier(request, context, candidate_answer, retry_count)
+
+        decision, verifier_event = await self._run_stage(
+            state,
+            event_stage="verifier",
+            timeout_stage="verifier",
+            operation=verification_operation,
+            expected_type=VerificationDecision,
+        )
+        if decision.status == "retry_retrieval" and retry_count >= self._max_verifier_retries:
+            decision = decision.model_copy(
+                update={
+                    "status": "degraded",
+                    "retry_query": None,
+                    "missing_aspects": tuple(decision.missing_aspects) + ("verifier retry budget exhausted",),
+                }
+            )
         if decision.status == "retry_retrieval":
-            retry_count += 1
+            return {
+                "verification": decision,
+                "retry_count": retry_count + 1,
+                "trace": (verifier_event,),
+            }
+
+        cited_items = _items_for_references(candidate_answer.citations, evidence)
+        base_answer = FinalAnswer(
+            answer=candidate_answer.text,
+            citations=tuple(_citation_label(item.source, item.page) for item in cited_items),
+            route=route,
+            evidence=evidence,
+            evidence_ids=tuple(item.item_id for item in cited_items),
+            unresolved_items=candidate_answer.unresolved_items,
+            conflict_notes=decision.conflicts,
+            execution_summary=f"verifier={decision.status} evidence={len(evidence.items)}",
+            validation=_verification_status(decision),
+        )
+        finalizer = self._services.finalizer
+        trace = [verifier_event]
+        if finalizer is None:
+            answer = base_answer
+        else:
+            answer, finalize_event = await self._run_stage(
+                state,
+                event_stage="finalize",
+                timeout_stage="finalize",
+                operation=lambda: finalizer(request, evidence, base_answer, self._policy),
+                expected_type=FinalAnswer,
+            )
+            trace.append(finalize_event)
         return {
             "final_answer": answer,
             "verification": decision,
@@ -346,7 +390,9 @@ class WorkflowNodeRuntime:
         async def operation() -> FinalAnswer:
             if scope is None:
                 raise PermissionError("output filtering requires an access scope")
-            dlp = self._services.privacy.filter_output(answer.answer, evidence.items, scope)
+            cited_ids = frozenset(answer.evidence_ids)
+            cited_items = tuple(item for item in evidence.items if item.item_id in cited_ids)
+            dlp = self._services.privacy.filter_output(answer.answer, cited_items, scope)
             labels = tuple(_citation_label(item.source, item.page) for item in dlp.citations)
             safe_evidence = evidence.model_copy(update={"items": dlp.citations, "citations": labels})
             validation = answer.validation
@@ -397,7 +443,8 @@ class WorkflowNodeRuntime:
 
     def after_verifier(self, state: OrchestrationGraphState) -> str:
         decision = _required(state, "verification", VerificationDecision)
-        if decision.status == "retry_retrieval" and int(state.get("retry_count", 0)) <= self._max_verifier_retries:
+        retry_count = int(state.get("retry_count", 0))
+        if decision.status == "retry_retrieval" and 0 < retry_count <= self._max_verifier_retries:
             return "knowledge"
         return "output_filter"
 
@@ -448,6 +495,36 @@ def _validate_tool_results(value: Any) -> tuple[ToolResult, ...]:
     if not isinstance(value, tuple) or not all(isinstance(item, ToolResult) for item in value):
         raise TypeError("expected a tuple of ToolResult values")
     return value
+
+
+def _items_for_references(
+    references: tuple[EvidenceRef, ...],
+    evidence: EvidenceBundle,
+) -> tuple[EvidenceItem, ...]:
+    """Resolve exact, versioned references without silently widening citations."""
+
+    keys = {
+        (ref.document_id, ref.version, ref.page, ref.chunk_id, ref.image_id)
+        for ref in references
+    }
+    return tuple(
+        item
+        for item in evidence.items
+        if (item.document_id, item.version, item.page, item.chunk_id, item.image_id) in keys
+    )
+
+
+def _verification_status(decision: VerificationDecision) -> ValidationStatus:
+    issues = (
+        tuple(decision.unsupported_claims)
+        + tuple(decision.citation_errors)
+        + tuple(decision.conflicts)
+        + tuple(decision.missing_aspects)
+    )
+    if decision.status == "approved":
+        return ValidationStatus(state="validated", approved=True, method="verifier", issues=issues)
+    state = "rejected" if decision.status == "rejected" else "degraded"
+    return ValidationStatus(state=state, approved=False, method="verifier", issues=issues)
 
 
 def _knowledge_hints(route: RouteDecision) -> frozenset[str]:

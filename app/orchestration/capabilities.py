@@ -12,6 +12,7 @@ from app.agents.rag.service import RAGAgentService
 from app.agents.router.service import RouterAgentService
 from app.agents.synthesizer.service import SynthesizerAgentService
 from app.agents.tool.service import ToolAgentService
+from app.agents.verifier.service import VerifierAgentService
 from app.core.config import get_settings
 from app.knowledge.orchestrator import KnowledgeOrchestrator
 from app.orchestration.engine import OrchestrationServices
@@ -32,6 +33,7 @@ class CoreCapabilities:
     typed_knowledge_orchestrator: KnowledgeOrchestrator = field(default_factory=KnowledgeOrchestrator)
     typed_tools: ToolAgentService = field(default_factory=ToolAgentService)
     typed_synthesizer: SynthesizerAgentService = field(default_factory=SynthesizerAgentService)
+    typed_verifier: VerifierAgentService = field(default_factory=VerifierAgentService)
     typed_finalizer: FinalizationService = field(default_factory=FinalizationService)
     privacy: PrivacyService = field(default_factory=PrivacyService)
     access_scope_resolver: AccessScopeResolver = field(default_factory=AccessScopeResolver)
@@ -50,7 +52,9 @@ class CoreCapabilities:
             retriever=self.typed_rag.retrieve,
             tool_runner=self.typed_tools.run,
             synthesizer=self.typed_synthesizer.synthesize,
+            candidate_synthesizer=self.typed_synthesizer.synthesize_candidate,
             finalizer=self.typed_finalizer.finalize,
+            verifier=self.typed_verifier.verify,
             clarifier=self.typed_clarifier.clarify,
             knowledge_agent=self.typed_knowledge.decide,
             knowledge_orchestrator=(

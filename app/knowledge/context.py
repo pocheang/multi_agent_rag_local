@@ -36,7 +36,7 @@ class ContextBuilder:
     ) -> ContextBundle:
         raw = tuple(items)
         authorized = tuple(masked for item in raw if (masked := mask_evidence(item, scope)) is not None)
-        resolved, conflicts_dropped = _resolve_conflicts(authorized)
+        resolved, conflict_notes = _resolve_conflicts(authorized)
         bounded, truncated = _truncate(resolved, self._token_budget)
         rendered = "\n\n".join(_render_item(index, item) for index, item in enumerate(bounded, start=1))
         merged_diagnostics = dict(diagnostics or {})
@@ -45,7 +45,8 @@ class ContextBuilder:
                 "context_input_count": len(raw),
                 "context_authorized_count": len(authorized),
                 "context_scope_dropped": len(raw) - len(authorized),
-                "context_conflicts_dropped": conflicts_dropped,
+                "context_conflicts_dropped": len(conflict_notes),
+                "context_conflicts": conflict_notes,
                 "context_token_budget": self._token_budget,
                 "context_truncated": truncated,
                 "context_output_count": len(bounded),
@@ -58,10 +59,10 @@ class ContextBuilder:
         )
 
 
-def _resolve_conflicts(items: tuple[EvidenceItem, ...]) -> tuple[tuple[EvidenceItem, ...], int]:
+def _resolve_conflicts(items: tuple[EvidenceItem, ...]) -> tuple[tuple[EvidenceItem, ...], tuple[str, ...]]:
     winners: dict[str, EvidenceItem] = {}
     without_group: list[EvidenceItem] = []
-    dropped = 0
+    notes: list[str] = []
     for item in items:
         if not item.conflict_group:
             without_group.append(item)
@@ -71,13 +72,20 @@ def _resolve_conflicts(items: tuple[EvidenceItem, ...]) -> tuple[tuple[EvidenceI
             _priority(item) == _priority(current) and _score(item) > _score(current)
         ):
             if current is not None:
-                dropped += 1
+                notes.append(_conflict_note(item.conflict_group, item, current))
             winners[item.conflict_group] = item
         else:
-            dropped += 1
+            notes.append(_conflict_note(item.conflict_group, current, item))
     resolved = without_group + list(winners.values())
     resolved.sort(key=lambda item: (_priority(item), -_score(item), item.item_id))
-    return tuple(resolved), dropped
+    return tuple(resolved), tuple(notes[:20])
+
+
+def _conflict_note(group: str, winner: EvidenceItem, loser: EvidenceItem) -> str:
+    return (
+        f"{group}: {winner.layer}:{winner.document_id} overrides "
+        f"{loser.layer}:{loser.document_id}"
+    )
 
 
 def _truncate(items: tuple[EvidenceItem, ...], token_budget: int) -> tuple[tuple[EvidenceItem, ...], bool]:

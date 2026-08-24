@@ -45,6 +45,10 @@ Synthesizer = Callable[
     [OrchestrationRequest, RouteDecision, TaskPlan | None, EvidenceBundle, tuple[ToolResult, ...]],
     Awaitable[FinalAnswer],
 ]
+CandidateSynthesizer = Callable[
+    [OrchestrationRequest, ContextBundle, tuple[ToolResult, ...]],
+    Awaitable[CandidateAnswer],
+]
 Finalizer = Callable[[OrchestrationRequest, EvidenceBundle, FinalAnswer, ExecutionPolicy], Awaitable[FinalAnswer]]
 Clarifier = Callable[[OrchestrationRequest, RouterDecision], Awaitable[ClarificationResult]]
 Verifier = Callable[
@@ -78,6 +82,7 @@ class OrchestrationServices:
         retriever: Retriever,
         tool_runner: ToolRunner,
         synthesizer: Synthesizer,
+        candidate_synthesizer: CandidateSynthesizer | None = None,
         finalizer: Finalizer | None = None,
         clarifier: Clarifier | None = None,
         verifier: Verifier | None = None,
@@ -93,6 +98,7 @@ class OrchestrationServices:
         self.retriever = retriever
         self.tool_runner = tool_runner
         self.synthesizer = synthesizer
+        self.candidate_synthesizer = candidate_synthesizer
         self.finalizer = finalizer
         self.clarifier = clarifier
         self.verifier = verifier

@@ -13,7 +13,7 @@ Validator = Callable[[str, str, list[dict[str, Any]], list[dict[str, Any]]], Awa
 
 
 class FinalizationService:
-    """The only terminal-answer policy boundary for every Engine execution."""
+    """Deterministic terminal grounding, safety, and quality boundary."""
 
     def __init__(self, validator: Validator | None = None) -> None:
         self._validator = validator or _validate
@@ -27,15 +27,16 @@ class FinalizationService:
     ) -> FinalAnswer:
         grounded, grounding = _ground(candidate.answer, evidence)
         safe, safety = _sanitize(grounded)
-        validation = await self._validation_status(request, safe, evidence)
+        verified = candidate.validation.method.startswith("verifier")
+        validation = candidate.validation if verified else await self._validation_status(request, safe, evidence)
         quality = _quality_report(validation, grounding, policy)
 
         return candidate.model_copy(
             update={
                 "answer": safe,
-                "citations": candidate.citations or evidence.citations,
+                "citations": candidate.citations if verified else candidate.citations or evidence.citations,
                 "evidence": evidence,
-                "evidence_ids": candidate.evidence_ids or evidence.item_ids,
+                "evidence_ids": candidate.evidence_ids if verified else candidate.evidence_ids or evidence.item_ids,
                 "grounding": grounding,
                 "safety": safety,
                 "validation": validation,
