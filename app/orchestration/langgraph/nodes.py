@@ -15,7 +15,7 @@ from app.domain.contracts import (
 )
 from app.domain.errors import StageExecutionError
 from app.domain.events import EventStage, ExecutionEvent
-from app.domain.knowledge import EvidenceRef
+from app.domain.knowledge import EvidenceRef, KnowledgeStrategy
 from app.domain.workflow import (
     CandidateAnswer,
     ClarificationResult,
@@ -58,6 +58,10 @@ class WorkflowServices(Protocol):
         [OrchestrationRequest, ContextBundle, CandidateAnswer, int],
         Awaitable[VerificationDecision],
     ] | None
+    knowledge_agent: Callable[
+        [OrchestrationRequest, RouterDecision, TaskPlan | None, VerificationDecision | None],
+        Awaitable[KnowledgeStrategy],
+    ]
     privacy: PrivacyService
     access_scope_resolver: AccessScopeResolver
 
@@ -175,7 +179,21 @@ class WorkflowNodeRuntime:
     async def knowledge(self, state: OrchestrationGraphState) -> dict[str, Any]:
         request = _required(state, "request", OrchestrationRequest)
         route = _required(state, "route", RouteDecision)
+        route_decision = _required(state, "route_decision", RouterDecision)
         plan = state.get("task_plan")
+        retry_feedback = state.get("verification") if int(state.get("retry_count", 0)) > 0 else None
+        strategy, strategy_event = await self._run_stage(
+            state,
+            event_stage="knowledge_strategy",
+            timeout_stage="knowledge_strategy",
+            operation=lambda: self._services.knowledge_agent(
+                request,
+                route_decision,
+                plan,
+                retry_feedback,
+            ),
+            expected_type=KnowledgeStrategy,
+        )
         evidence, event = await self._run_stage(
             state,
             event_stage="knowledge",
@@ -184,7 +202,7 @@ class WorkflowNodeRuntime:
             expected_type=EvidenceBundle,
         )
         tool_results: tuple[ToolResult, ...] = ()
-        trace = [event]
+        trace = [strategy_event, event]
         if plan is not None and self._policy.should_run_tools(route, plan):
             tool_results, tool_event = await self._run_stage(
                 state,
@@ -202,6 +220,7 @@ class WorkflowNodeRuntime:
         )
         return {
             "evidence_bundle": evidence,
+            "knowledge_strategy": strategy,
             "context": context,
             "tool_results": tool_results,
             "trace": tuple(trace),

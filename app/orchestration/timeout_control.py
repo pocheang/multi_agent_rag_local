@@ -129,6 +129,7 @@ class ExecutionBudget:
             "route": self.config.route_timeout_ms,
             "clarification": self.config.route_timeout_ms,
             "plan": self.config.plan_timeout_ms,
+            "knowledge_strategy": self.config.plan_timeout_ms,
             "rag": self.config.retrieval_timeout_ms,
             "knowledge": self.config.retrieval_timeout_ms,
             "tool": self.config.tool_timeout_ms,

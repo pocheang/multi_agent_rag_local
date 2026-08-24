@@ -14,6 +14,7 @@ EventStage = Literal[
     "route",
     "clarification",
     "plan",
+    "knowledge_strategy",
     "knowledge",
     "rag",
     "tool",

@@ -9,6 +9,7 @@ from typing import Any, Protocol
 from app.core.config import get_settings
 from app.domain.contracts import EvidenceBundle, FinalAnswer, RouteDecision, TaskPlan, ToolResult
 from app.domain.events import ExecutionEvent
+from app.domain.knowledge import KnowledgeStrategy
 from app.domain.workflow import (
     CandidateAnswer,
     ClarificationResult,
@@ -50,6 +51,10 @@ Verifier = Callable[
     [OrchestrationRequest, ContextBundle, CandidateAnswer, int],
     Awaitable[VerificationDecision],
 ]
+KnowledgeAgent = Callable[
+    [OrchestrationRequest, RouterDecision, TaskPlan | None, VerificationDecision | None],
+    Awaitable[KnowledgeStrategy],
+]
 
 
 class CompatibilityStreamExecutor(Protocol):
@@ -72,6 +77,7 @@ class OrchestrationServices:
         finalizer: Finalizer | None = None,
         clarifier: Clarifier | None = None,
         verifier: Verifier | None = None,
+        knowledge_agent: KnowledgeAgent | None = None,
         privacy: PrivacyService | None = None,
         access_scope_resolver: AccessScopeResolver | None = None,
         context: object | None = None,
@@ -85,6 +91,7 @@ class OrchestrationServices:
         self.finalizer = finalizer
         self.clarifier = clarifier
         self.verifier = verifier
+        self.knowledge_agent = knowledge_agent or _default_knowledge_agent
         self.privacy = privacy or PrivacyService()
         self.access_scope_resolver = access_scope_resolver or AccessScopeResolver()
         self.context = context
@@ -264,3 +271,16 @@ def _terminal_payload(answer: FinalAnswer) -> dict[str, Any]:
         "quality_report": answer.quality_report.model_dump(mode="json") if answer.quality_report is not None else None,
         "execution_metadata": dict(answer.execution_metadata),
     }
+
+
+async def _default_knowledge_agent(
+    request: OrchestrationRequest,
+    route: RouterDecision,
+    plan: TaskPlan | None,
+    retry_feedback: VerificationDecision | None,
+) -> KnowledgeStrategy:
+    """Lazy compatibility default that avoids orchestration import cycles."""
+
+    from app.agents.knowledge.service import KnowledgeAgentService
+
+    return await KnowledgeAgentService().decide(request, route, plan, retry_feedback)
