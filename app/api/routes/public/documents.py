@@ -33,7 +33,7 @@ from app.api.transport.errors import (
 )
 from app.api.utils.auth_helpers import _client_ip
 from app.api.utils.string_utils import normalize_string
-from app.ingestion.loaders import IMAGE_EXTENSIONS
+from app.ingestion.loaders import IMAGE_EXTENSIONS, OFFICE_EXTENSIONS
 from app.services.documents.dedup import (
     UploadInvalidFileError,
     UploadPayloadTooLargeError,
@@ -242,8 +242,8 @@ async def upload_files(
             max_file_bytes=settings.upload_max_file_bytes,
             max_total_bytes=settings.upload_max_total_bytes,
             read_chunk_bytes=settings.upload_read_chunk_bytes,
-            supported_suffixes={".txt", ".md", ".pdf", *IMAGE_EXTENSIONS},
-            signature_suffixes={".pdf", *IMAGE_EXTENSIONS},
+            supported_suffixes={".txt", ".md", ".pdf", *IMAGE_EXTENSIONS, *OFFICE_EXTENSIONS},
+            signature_suffixes={".pdf", *IMAGE_EXTENSIONS, *OFFICE_EXTENSIONS},
             is_valid_signature=_is_probably_valid_upload_signature,
             agent_class_for_upload=_guess_agent_class_for_upload,
             parser_profile_for_upload=choose_parser_profile,
@@ -325,6 +325,8 @@ async def upload_files(
             uploads=storage_result.saved_uploads,
             owner_user_id=str(user.get("user_id", "")),
             visibility=storage_result.visibility_applied,
+            tenant_id=str(user.get("tenant_id", "") or user.get("user_id", "")),
+            acl_tags=tuple(str(value) for value in user.get("acl_tags", ()) or ()),
         )
     except Exception as e:
         _audit(request, action="document.upload", resource_type="document", result="failed", user=user, detail=str(e))

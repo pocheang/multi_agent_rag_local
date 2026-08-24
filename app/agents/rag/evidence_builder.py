@@ -104,7 +104,7 @@ class EvidenceItemBuilder:
             layer = "evidence"
         raw_acl = metadata.get("acl_tags", ()) or ()
         if isinstance(raw_acl, str):
-            raw_acl = (raw_acl,)
+            raw_acl = tuple(tag.strip() for tag in raw_acl.split(",") if tag.strip())
         try:
             return EvidenceItem(
                 content=content,

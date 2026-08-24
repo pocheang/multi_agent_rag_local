@@ -235,6 +235,12 @@ class Neo4jClient:
         MERGE (h:Entity {name: triplet.head})
         MERGE (t:Entity {name: triplet.tail})
         MERGE (s:Source {name: triplet.source})
+        SET s.document_id = triplet.document_id,
+            s.version = triplet.version,
+            s.tenant_id = triplet.tenant_id,
+            s.owner_user_id = triplet.owner_user_id,
+            s.visibility = triplet.visibility,
+            s.acl_tags = triplet.acl_tags
         MERGE (h)-[r:RELATED {type: triplet.relation}]->(t)
         SET r.sources = CASE
             WHEN r.sources IS NULL THEN [triplet.source]
@@ -287,6 +293,12 @@ class Neo4jClient:
                         "source": t["source"],
                         "chunk_id": t.get("chunk_id", ""),
                         "page": t.get("page"),
+                        "document_id": t.get("document_id", ""),
+                        "version": t.get("version"),
+                        "tenant_id": t.get("tenant_id", ""),
+                        "owner_user_id": t.get("owner_user_id", ""),
+                        "visibility": t.get("visibility", "private"),
+                        "acl_tags": t.get("acl_tags", ""),
                         "confidence": float(t.get("confidence", 0.7)),
                     }
                     for t in batch

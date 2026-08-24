@@ -182,6 +182,8 @@ def split_documents_enhanced(
             continue
 
         source = str(base_metadata.get("source", "") or "")
+        document_id = str(base_metadata.get("document_id", "") or "")
+        version = str(base_metadata.get("version", "") or "")
         doc_type = base_metadata.get("doc_type") or base_metadata.get("file_type")
         language = base_metadata.get("language", "mixed")
 
@@ -208,9 +210,10 @@ def split_documents_enhanced(
                 continue
 
             # 生成parent ID
-            if source:
+            identity = f"{document_id}|v{version}" if document_id and version else source
+            if identity:
                 text_hash = hashlib.sha1(parent_text.encode("utf-8")).hexdigest()[:12]
-                parent_seed = f"{source}|{doc_idx}|{parent_idx}|{text_hash}"
+                parent_seed = f"{identity}|{doc_idx}|{parent_idx}|{text_hash}"
                 parent_id = f"parent-{hashlib.sha1(parent_seed.encode('utf-8')).hexdigest()[:16]}"
             else:
                 parent_id = f"parent-{doc_idx}-{parent_idx}-{uuid.uuid4().hex[:8]}"

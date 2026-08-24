@@ -152,6 +152,9 @@ def _multimodal_item(row: Any) -> EvidenceItem | None:
     raw_modality = str(getattr(row, "modality", "text") or "text")
     modality = "image" if raw_modality in {"image", "chart"} else "table" if raw_modality == "table" else "text"
     image_id = str(metadata.get("image_id") or getattr(row, "id", "") or "").strip() if modality == "image" else None
+    raw_acl = metadata.get("acl_tags", ()) or ()
+    if isinstance(raw_acl, str):
+        raw_acl = tuple(tag.strip() for tag in raw_acl.split(",") if tag.strip())
     try:
         return EvidenceItem(
             content=content,
@@ -164,7 +167,7 @@ def _multimodal_item(row: Any) -> EvidenceItem | None:
             artifact_uri=_optional_text(metadata.get("artifact_uri") or metadata.get("original_image")),
             modality=modality,
             layer="evidence",
-            acl_tags=frozenset(str(tag) for tag in metadata.get("acl_tags", ()) or ()),
+            acl_tags=frozenset(str(tag) for tag in raw_acl),
             retriever="multimodal",
             score=_bounded_score(getattr(row, "score", None)),
         )

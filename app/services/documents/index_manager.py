@@ -9,7 +9,13 @@ from app.core.config import get_settings
 from app.retrievers.stores.corpus import read_corpus_records, write_corpus_records
 from app.retrievers.stores.parent import read_parent_records, write_parent_records
 from app.services.documents.dedup import compute_sha256
-from app.services.documents.registry import delete_document_by_source, get_document_by_source, update_document_by_source
+from app.services.documents.registry import (
+    delete_document_by_source,
+    get_document_by_source,
+    get_document_record,
+    update_document_by_source,
+    update_document_record,
+)
 from app.services.runtime.runtime_ops import append_index_freshness
 
 logger = logging.getLogger(__name__)
@@ -26,6 +32,14 @@ def _record_source_name(record: dict[str, Any]) -> str:
     return Path(source).name if source else ""
 
 
+def _record_version(record: dict[str, Any]) -> int | None:
+    try:
+        value = int((record.get("metadata", {}) or {}).get("version"))
+    except (TypeError, ValueError):
+        return None
+    return value if value > 0 else None
+
+
 def _require_registered_filename_source(filename: str, source: str) -> dict[str, Any]:
     """Require the explicit source to be the registered document named by filename."""
     record = get_document_by_source(source)
@@ -40,6 +54,9 @@ def _select_records(
     records: list[dict[str, Any]],
     filename: str,
     source: str | None = None,
+    document_id: str | None = None,
+    version: int | None = None,
+    tenant_id: str | None = None,
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     filename_matches = [row for row in records if _record_source_name(row) == filename]
     if source is None:
@@ -49,6 +66,12 @@ def _select_records(
         removed = filename_matches
     else:
         removed = [row for row in filename_matches if _record_source(row) == source]
+    if document_id is not None:
+        removed = [row for row in removed if str((row.get("metadata", {}) or {}).get("document_id", "")) == document_id]
+    if version is not None:
+        removed = [row for row in removed if _record_version(row) == version]
+    if tenant_id is not None:
+        removed = [row for row in removed if str((row.get("metadata", {}) or {}).get("tenant_id", "")) == tenant_id]
     removed_ids = {id(row) for row in removed}
     keep = [row for row in records if id(row) not in removed_ids]
     return removed, keep
@@ -72,6 +95,14 @@ def list_indexed_files() -> list[dict[str, Any]]:
                 "chunks": 0,
                 "pages": set(),
                 "owner_user_id": meta.get("owner_user_id"),
+                "tenant_id": str(meta.get("tenant_id", "") or ""),
+                "document_id": str(meta.get("document_id", "") or ""),
+                "version": _record_version(row),
+                "acl_tags": tuple(
+                    tag.strip()
+                    for tag in str(meta.get("acl_tags", "") or "").split(",")
+                    if tag.strip()
+                ),
                 "visibility": str(meta.get("visibility", "private") or "private"),
                 "agent_class": str(meta.get("agent_class", "general") or "general"),
                 "in_uploads": False,
@@ -86,6 +117,12 @@ def list_indexed_files() -> list[dict[str, Any]]:
         entry["chunks"] += 1
         if not entry.get("owner_user_id") and meta.get("owner_user_id"):
             entry["owner_user_id"] = meta.get("owner_user_id")
+        if not entry.get("tenant_id") and meta.get("tenant_id"):
+            entry["tenant_id"] = str(meta.get("tenant_id"))
+        if not entry.get("document_id") and meta.get("document_id"):
+            entry["document_id"] = str(meta.get("document_id"))
+        if entry.get("version") is None and _record_version(row) is not None:
+            entry["version"] = _record_version(row)
         if str(meta.get("visibility", "")).strip():
             entry["visibility"] = str(meta.get("visibility"))
         if str(meta.get("agent_class", "")).strip():
@@ -207,16 +244,24 @@ def _reset_retrieval_cache() -> None:
     clear_retrieval_cache()
 
 
-def _delete_parent_records(filename: str, source: str | None = None) -> int:
-    parent_records = read_parent_records()
-    removed, keep = _select_records(records=parent_records, filename=filename, source=source)
-    write_parent_records(keep)
-    return len(removed)
-
-
-def delete_file_index(filename: str, remove_physical_file: bool = False, source: str | None = None) -> dict[str, Any]:
+def delete_file_index(
+    filename: str,
+    remove_physical_file: bool = False,
+    source: str | None = None,
+    *,
+    document_id: str | None = None,
+    version: int | None = None,
+    tenant_id: str | None = None,
+) -> dict[str, Any]:
     records = read_corpus_records()
-    removed, keep = _select_records(records=records, filename=filename, source=source)
+    removed, keep = _select_records(
+        records=records,
+        filename=filename,
+        source=source,
+        document_id=document_id,
+        version=version,
+        tenant_id=tenant_id,
+    )
     removed_ids: list[str] = []
     for row in removed:
         if row.get("id"):
@@ -224,7 +269,16 @@ def delete_file_index(filename: str, remove_physical_file: bool = False, source:
 
     _delete_vector_documents(removed_ids)
     write_corpus_records(keep)
-    _delete_parent_records(filename=filename, source=source)
+    parent_records = read_parent_records()
+    _, kept_parents = _select_records(
+        records=parent_records,
+        filename=filename,
+        source=source,
+        document_id=document_id,
+        version=version,
+        tenant_id=tenant_id,
+    )
+    write_parent_records(kept_parents)
     _reset_bm25()
     _reset_retrieval_cache()
 
@@ -262,8 +316,15 @@ def delete_file_index(filename: str, remove_physical_file: bool = False, source:
 
 def delete_document_index(filename: str, *, source: str, remove_physical_file: bool) -> dict[str, Any]:
     """Delete a document's index and synchronize its persisted lifecycle status."""
-    _require_registered_filename_source(filename, source)
-    result = delete_file_index(filename, remove_physical_file=remove_physical_file, source=source)
+    record = _require_registered_filename_source(filename, source)
+    result = delete_file_index(
+        filename,
+        remove_physical_file=remove_physical_file,
+        source=source,
+        document_id=str(record.get("document_id", "") or "") or None,
+        version=int(record.get("version", 1) or 1),
+        tenant_id=str(record.get("tenant_id", "") or "") or None,
+    )
     if remove_physical_file:
         delete_document_by_source(source)
     else:
@@ -304,7 +365,14 @@ def rebuild_file_index(
     source: str | None = None,
     metadata_overrides_by_source: dict[str, dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
-    delete_file_index(filename, remove_physical_file=False, source=source)
+    override = (metadata_overrides_by_source or {}).get(str(source or ""), {})
+    delete_file_index(
+        filename,
+        remove_physical_file=False,
+        source=source,
+        document_id=str(override.get("document_id", "") or "") or None,
+        tenant_id=str(override.get("tenant_id", "") or "") or None,
+    )
     settings = get_settings()
     if source:
         candidates = [Path(source)]
@@ -387,6 +455,10 @@ def rebuild_document_index(filename: str, *, source: str, user_id: str) -> dict[
         metadata_overrides_by_source={
             source: {
                 "owner_user_id": owner_user_id,
+                "tenant_id": str(record.get("tenant_id", "") or owner_user_id),
+                "document_id": str(record.get("document_id", "") or ""),
+                "version": int(record.get("version", 1) or 1),
+                "acl_tags": tuple(str(value) for value in record.get("acl_tags", ()) or ()),
                 "visibility": visibility,
                 "agent_class": agent_class,
                 "parser_profile": parser_profile_name,
@@ -414,3 +486,61 @@ def rebuild_all_vector_index() -> dict[str, Any]:
     _reset_bm25()
     _reset_retrieval_cache()
     return {"ok": True, "records_reindexed": len(records)}
+
+
+def rollback_document_version(document_id: str, version: int, *, tenant_id: str) -> dict[str, Any]:
+    """Activate one immutable Evidence version without touching another tenant's document."""
+
+    from app.services.documents.ingest import ingest_paths
+    from app.services.evidence import ArtifactStore, ManifestStore
+
+    record = get_document_record(document_id)
+    if record is None:
+        raise ValueError(f"document not found: {document_id}")
+    record_tenant = str(record.get("tenant_id", "") or "")
+    if record_tenant != tenant_id:
+        raise PermissionError("document does not belong to the requested tenant")
+    artifacts = ArtifactStore()
+    manifest = ManifestStore(artifacts).load(tenant_id, document_id, version)
+    original = next((item for item in manifest.artifacts if item.kind == "original"), None)
+    if original is None:
+        raise RuntimeError("evidence manifest has no original artifact")
+    archived_path = artifacts.resolve(original.uri)
+    source = str(record.get("source", "") or manifest.source)
+    delete_file_index(
+        Path(source).name,
+        remove_physical_file=False,
+        source=source,
+        document_id=document_id,
+        version=int(record.get("version", 1) or 1),
+        tenant_id=tenant_id,
+    )
+    metadata = {
+        "document_id": document_id,
+        "version": version,
+        "tenant_id": tenant_id,
+        "source": source,
+        "owner_user_id": str(record.get("owner_user_id", "") or ""),
+        "visibility": str(record.get("visibility", "private") or "private"),
+        "acl_tags": tuple(str(value) for value in record.get("acl_tags", ()) or ()),
+        "agent_class": str(record.get("agent_class", "general") or "general"),
+        "parser_profile": str(record.get("parser_profile", "") or ""),
+    }
+    result = ingest_paths(
+        [archived_path],
+        metadata_overrides_by_source={str(archived_path): metadata},
+        persist_evidence=False,
+    )
+    updated = update_document_record(
+        document_id,
+        {
+            "version": version,
+            "sha256": manifest.sha256,
+            "status": "ready",
+            "stage": "rollback_complete",
+            "error": "",
+            "chunks_indexed": int(result.get("chunks_indexed", 0) or 0),
+            "triplets_written": int(result.get("triplets_written", 0) or 0),
+        },
+    )
+    return {"ok": True, "document": updated, "result": result}

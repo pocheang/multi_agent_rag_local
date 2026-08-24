@@ -1,8 +1,10 @@
 from __future__ import annotations
 
-import hashlib
 import json
+import os
+import tempfile
 import threading
+import uuid
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -24,10 +26,14 @@ def _default_path() -> Path:
 def _normalize_record(row: dict[str, Any]) -> dict[str, Any]:
     out = dict(row)
     out.setdefault("document_id", "")
+    out.setdefault("version", 1)
+    out.setdefault("latest_version", out.get("version", 1))
+    out.setdefault("tenant_id", out.get("owner_user_id", ""))
     out.setdefault("source", "")
     out.setdefault("filename", "")
     out.setdefault("sha256", "")
     out.setdefault("owner_user_id", "")
+    out.setdefault("acl_tags", [])
     out.setdefault("visibility", "private")
     out.setdefault("agent_class", "general")
     out.setdefault("parser_profile", "")
@@ -41,9 +47,10 @@ def _normalize_record(row: dict[str, Any]) -> dict[str, Any]:
     return out
 
 
-def _document_id_for(source: str, owner_user_id: str) -> str:
-    seed = f"{owner_user_id}|{source}"
-    return f"doc-{hashlib.sha1(seed.encode('utf-8')).hexdigest()[:16]}"
+def _new_document_id() -> str:
+    """Create an identity independent from a mutable filesystem path."""
+
+    return f"doc-{uuid.uuid4().hex}"
 
 
 def _read_document_records(target: Path) -> list[dict[str, Any]]:
@@ -60,9 +67,24 @@ def _read_document_records(target: Path) -> list[dict[str, Any]]:
 
 def _write_document_records(target: Path, records: list[dict[str, Any]]) -> None:
     target.parent.mkdir(parents=True, exist_ok=True)
-    with target.open("w", encoding="utf-8") as f:
-        for row in records:
-            f.write(json.dumps(_normalize_record(row), ensure_ascii=False) + "\n")
+    temporary: Path | None = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            mode="w",
+            encoding="utf-8",
+            dir=target.parent,
+            prefix=f".{target.name}.",
+            delete=False,
+        ) as handle:
+            temporary = Path(handle.name)
+            for row in records:
+                handle.write(json.dumps(_normalize_record(row), ensure_ascii=False) + "\n")
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(temporary, target)
+    finally:
+        if temporary is not None and temporary.exists():
+            temporary.unlink()
 
 
 def list_document_records(path: Path | None = None) -> list[dict[str, Any]]:
@@ -87,6 +109,15 @@ def get_document_by_source(source: str, path: Path | None = None) -> dict[str, A
         return None
 
 
+def get_document_record(document_id: str, path: Path | None = None) -> dict[str, Any] | None:
+    target = path or _default_path()
+    with _LOCK:
+        for row in _read_document_records(target):
+            if str(row.get("document_id", "")) == str(document_id):
+                return row
+        return None
+
+
 def create_document_record(
     *,
     source: str,
@@ -96,38 +127,62 @@ def create_document_record(
     visibility: str,
     agent_class: str,
     parser_profile: str = "",
+    tenant_id: str = "",
+    acl_tags: tuple[str, ...] = (),
+    document_id: str | None = None,
     path: Path | None = None,
 ) -> dict[str, Any]:
     target = path or _default_path()
     source_value = str(source)
-    document_id = _document_id_for(source_value, str(owner_user_id))
     now = _now_iso()
-    incoming = _normalize_record(
-        {
-            "document_id": document_id,
-            "source": source_value,
-            "filename": filename,
-            "sha256": sha256,
-            "owner_user_id": owner_user_id,
-            "visibility": visibility,
-            "agent_class": agent_class,
-            "parser_profile": parser_profile,
-            "status": "pending",
-            "stage": "uploaded",
-            "error": "",
-            "chunks_indexed": 0,
-            "triplets_written": 0,
-            "created_at": now,
-            "updated_at": now,
-        }
-    )
     with _LOCK:
         rows = _read_document_records(target)
+        existing = next(
+            (
+                row
+                for row in rows
+                if (document_id and row.get("document_id") == document_id)
+                or (
+                    not document_id
+                    and str(row.get("source", "")) == source_value
+                    and str(row.get("owner_user_id", "")) == str(owner_user_id)
+                    and str(row.get("tenant_id", "") or row.get("owner_user_id", ""))
+                    == str(tenant_id or owner_user_id)
+                )
+            ),
+            None,
+        )
+        stable_document_id = str(existing.get("document_id")) if existing else (document_id or _new_document_id())
+        previous_version = int(existing.get("version", 1) or 1) if existing else 0
+        latest_version = int(existing.get("latest_version", previous_version) or previous_version) if existing else 0
+        version = latest_version + 1 if existing and str(existing.get("sha256", "")) != sha256 else max(1, previous_version)
+        incoming = _normalize_record(
+            {
+                "document_id": stable_document_id,
+                "version": version,
+                "latest_version": max(latest_version, version),
+                "tenant_id": tenant_id or (existing or {}).get("tenant_id") or owner_user_id,
+                "source": source_value,
+                "filename": filename,
+                "sha256": sha256,
+                "owner_user_id": owner_user_id,
+                "acl_tags": list(acl_tags),
+                "visibility": visibility,
+                "agent_class": agent_class,
+                "parser_profile": parser_profile,
+                "status": "pending",
+                "stage": "uploaded",
+                "error": "",
+                "chunks_indexed": 0,
+                "triplets_written": 0,
+                "created_at": (existing or {}).get("created_at") or now,
+                "updated_at": now,
+            }
+        )
         replaced = False
         out: list[dict[str, Any]] = []
         for row in rows:
-            if row["document_id"] == document_id or row["source"] == source_value:
-                incoming["created_at"] = row.get("created_at") or incoming["created_at"]
+            if row["document_id"] == stable_document_id:
                 out.append(incoming)
                 replaced = True
             else:
@@ -228,6 +283,10 @@ def merge_visible_document_status(
             },
         )
         row["document_id"] = record.get("document_id")
+        row["version"] = int(record.get("version", 1) or 1)
+        row["latest_version"] = int(record.get("latest_version", record.get("version", 1)) or 1)
+        row["tenant_id"] = str(record.get("tenant_id", "") or "")
+        row["acl_tags"] = list(record.get("acl_tags", []) or [])
         row["owner_user_id"] = record.get("owner_user_id")
         row["visibility"] = record.get("visibility", "private")
         row["agent_class"] = record.get("agent_class", "general")

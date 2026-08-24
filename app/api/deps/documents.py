@@ -236,4 +236,8 @@ def _is_probably_valid_upload_signature(suffix: str, head: bytes) -> bool:
         return prefix.startswith(b"II*\x00") or prefix.startswith(b"MM\x00*")
     if suffix == ".webp":
         return len(prefix) >= 12 and prefix.startswith(b"RIFF") and prefix[8:12] == b"WEBP"
+    if suffix in {".docx", ".pptx", ".xlsx"}:
+        return prefix.startswith(b"PK\x03\x04")
+    if suffix == ".xls":
+        return prefix.startswith(b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1")
     return True

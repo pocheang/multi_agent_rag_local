@@ -30,14 +30,17 @@ def documents_to_records(documents: list["Document"]) -> list[dict[str, Any]]:
         chunk_id = metadata.get("chunk_id")
         if not chunk_id:
             source = str(metadata.get("source", "") or "")
+            document_id = str(metadata.get("document_id", "") or "")
+            version = str(metadata.get("version", "") or "")
             parent_id = str(metadata.get("parent_id", "") or "")
             parent_index = str(metadata.get("parent_index", "") or "")
             child_index = str(metadata.get("child_index", "") or "")
             page = str(metadata.get("page", "") or "")
             image_index = str(metadata.get("image_index", "") or "")
             text_hash = hashlib.sha1(str(doc.page_content or "").encode("utf-8")).hexdigest()[:16]
-            if source:
-                stable_seed = f"{source}|{page}|{parent_id}|{parent_index}|{child_index}|{image_index}|{text_hash}"
+            identity = f"{document_id}|v{version}" if document_id and version else source
+            if identity:
+                stable_seed = f"{identity}|{page}|{parent_id}|{parent_index}|{child_index}|{image_index}|{text_hash}"
                 chunk_id = f"chunk-{hashlib.sha1(stable_seed.encode('utf-8')).hexdigest()[:16]}"
             else:
                 chunk_id = f"chunk-{i}-{uuid.uuid4().hex[:8]}"

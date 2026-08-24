@@ -3,14 +3,15 @@ from pathlib import Path
 from typing import Any
 
 from app.graph.knowledge.client import Neo4jClient
-from app.ingestion import loaders
 from app.ingestion.chunking.splitter import split_documents
 from app.ingestion.graph_extractor import extract_graph_triplets
+from app.ingestion.loaders.dispatch import load_document_with_evidence
 from app.retrievers.bm25_retriever import reset_bm25_cache
 from app.retrievers.hybrid.retriever import clear_retrieval_cache
 from app.retrievers.stores.corpus import documents_to_records, read_corpus_records, write_corpus_records
 from app.retrievers.stores.parent import read_parent_records, write_parent_records
 from app.retrievers.stores.vector import add_documents, clear_vector_store_cache, get_vector_store
+from app.services.evidence import ArtifactStore, ManifestStore, ParsedDocument, build_manifest
 
 logger = logging.getLogger(__name__)
 
@@ -33,8 +34,23 @@ def ingest_paths(
     reset_vector_store: bool = False,
     metadata_overrides_by_source: dict[str, dict[str, Any]] | None = None,
     parser_profiles_by_source: dict[str, dict[str, Any]] | None = None,
+    persist_evidence: bool = True,
 ) -> dict:
-    docs = loaders.load_documents(paths=paths)
+    docs = []
+    parsed_documents: list[ParsedDocument] = []
+    for path in paths:
+        source = str(path)
+        metadata = dict((metadata_overrides_by_source or {}).get(source, {}))
+        parsed, loaded = load_document_with_evidence(path, metadata)
+        image_artifacts = _persist_evidence(parsed, path) if persist_evidence else _existing_image_artifacts(parsed)
+        canonical = _canonical_metadata(parsed)
+        for doc in loaded:
+            doc.metadata = {**(doc.metadata or {}), **metadata, **canonical}
+            image_id = str(doc.metadata.get("image_id", "") or "")
+            if image_id in image_artifacts:
+                doc.metadata["artifact_uri"] = image_artifacts[image_id]
+        docs.extend(loaded)
+        parsed_documents.append(parsed)
     if not docs:
         return {"loaded_documents": 0, "chunks_indexed": 0, "triplets_written": 0}
 
@@ -53,13 +69,6 @@ def ingest_paths(
                 pages_by_source.setdefault(source, set()).add(int(page))
             except (ValueError, TypeError):
                 pass
-
-    if metadata_overrides_by_source:
-        for doc in docs:
-            source = str((doc.metadata or {}).get("source", "")).strip()
-            extra = metadata_overrides_by_source.get(source)
-            if extra:
-                doc.metadata = {**(doc.metadata or {}), **extra}
 
     chunks, parent_records = split_documents(docs)
     records = documents_to_records(chunks)
@@ -112,6 +121,13 @@ def ingest_paths(
                 if profile.get("enable_graph") is False:
                     continue
                 chunk_id = str(chunk.metadata.get("chunk_id", ""))
+                document_id = str(chunk.metadata.get("document_id", "") or "")
+                tenant_id = str(chunk.metadata.get("tenant_id", "") or "")
+                version_raw = chunk.metadata.get("version")
+                try:
+                    version = int(version_raw) if version_raw is not None else None
+                except (TypeError, ValueError):
+                    version = None
                 page_raw = chunk.metadata.get("page")
                 try:
                     page = int(page_raw) if page_raw is not None else None
@@ -131,6 +147,12 @@ def ingest_paths(
                                 "source": source,
                                 "chunk_id": chunk_id,
                                 "page": page,
+                                "document_id": document_id,
+                                "version": version,
+                                "tenant_id": tenant_id,
+                                "owner_user_id": str(chunk.metadata.get("owner_user_id", "") or ""),
+                                "visibility": str(chunk.metadata.get("visibility", "private") or "private"),
+                                "acl_tags": str(chunk.metadata.get("acl_tags", "") or ""),
                                 "confidence": triplet.confidence,
                             }
                         )
@@ -168,9 +190,89 @@ def ingest_paths(
         "chunks_indexed": len(chunks),
         "triplets_written": count_triplets,
         "pages_by_source": {k: len(v) for k, v in pages_by_source.items()},
+        "evidence_manifests": [
+            {
+                "document_id": parsed.document.document_id,
+                "version": parsed.document.version,
+                "tenant_id": parsed.document.tenant_id,
+            }
+            for parsed in parsed_documents
+        ],
     }
 
 
 def ingest_docs_dir(data_dir: Path, reset_vector_store: bool = True) -> dict:
     paths = [p for p in data_dir.rglob("*") if p.is_file()]
     return ingest_paths(paths, reset_vector_store=reset_vector_store)
+
+
+def _canonical_metadata(parsed: ParsedDocument) -> dict[str, Any]:
+    document = parsed.document
+    return {
+        "source": document.source,
+        "filename": document.filename,
+        "document_id": document.document_id,
+        "version": document.version,
+        "tenant_id": document.tenant_id,
+        "owner_user_id": document.owner_user_id,
+        "visibility": document.visibility,
+        "acl_tags": ",".join(document.acl_tags),
+        "sha256": document.sha256,
+        "parser": parsed.parser,
+    }
+
+
+def _persist_evidence(parsed: ParsedDocument, path: Path) -> dict[str, str]:
+    store = ArtifactStore()
+    document = parsed.document
+    artifacts = [
+        store.put_file(
+            path,
+            tenant_id=document.tenant_id,
+            document_id=document.document_id,
+            version=document.version,
+        )
+    ]
+    image_uris: dict[str, str] = {}
+    for image in parsed.images:
+        suffix = Path(image.filename).suffix or ".bin"
+        artifact = store.put_bytes(
+            image.data,
+            tenant_id=document.tenant_id,
+            document_id=document.document_id,
+            version=document.version,
+            relative_path=f"images/{image.image_id}{suffix}",
+            kind="image",
+            media_type=image.media_type,
+            page=image.page,
+            image_id=image.image_id,
+        )
+        artifacts.append(artifact)
+        image_uris[image.image_id] = artifact.uri
+    parsed_artifact = store.put_json(
+        parsed.model_dump(mode="json"),
+        tenant_id=document.tenant_id,
+        document_id=document.document_id,
+        version=document.version,
+        relative_path="parsed/document.json",
+    )
+    artifacts.append(parsed_artifact)
+    manifest = build_manifest(parsed, tuple(artifacts))
+    manifests = ManifestStore(store)
+    try:
+        manifests.save(manifest)
+    except FileExistsError:
+        existing = manifests.load(document.tenant_id, document.document_id, document.version)
+        if existing.sha256 != manifest.sha256:
+            raise RuntimeError("existing manifest version has a different source hash") from None
+    return image_uris
+
+
+def _existing_image_artifacts(parsed: ParsedDocument) -> dict[str, str]:
+    document = parsed.document
+    manifest = ManifestStore(ArtifactStore()).load(document.tenant_id, document.document_id, document.version)
+    return {
+        str(artifact.image_id): artifact.uri
+        for artifact in manifest.artifacts
+        if artifact.kind in {"image", "masked_image"} and artifact.image_id
+    }

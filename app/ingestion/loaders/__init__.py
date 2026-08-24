@@ -9,12 +9,13 @@ from app.ingestion.extraction.people import build_people_summary, detect_people_
 from app.ingestion.extraction.vision import build_vision_summary, describe_image_with_vision
 from app.ingestion.loaders import dispatch as loaders_module
 from app.ingestion.loaders.image_loader import load_image_file
+from app.ingestion.loaders.office_loader import OFFICE_EXTENSIONS
 from app.ingestion.loaders.pdf_loader import load_pdf_image_ocr, load_pdf_text
 from app.ingestion.loaders.text_loader import load_text_file
 
 IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".bmp", ".tif", ".tiff", ".webp", ".gif"}
 TEXT_EXTENSIONS = {".txt", ".md", ".csv", ".log", ".json", ".yaml", ".yml", ".toml", ".ini"}
-SUPPORTED_EXTENSIONS = {".pdf", *IMAGE_EXTENSIONS, *TEXT_EXTENSIONS}
+SUPPORTED_EXTENSIONS = {".pdf", *IMAGE_EXTENSIONS, *TEXT_EXTENSIONS, *OFFICE_EXTENSIONS}
 
 load_pdf_enhanced = loaders_module.load_pdf_enhanced
 load_pdf_with_docling = loaders_module.load_pdf_with_docling
@@ -50,8 +51,14 @@ def load_documents(data_dir: Path | None = None, paths: list[Path] | None = None
     return loaders_module.load_documents(data_dir=data_dir, paths=paths)
 
 
+load_parsed_document = loaders_module.load_parsed_document
+load_document_with_evidence = loaders_module.load_document_with_evidence
+
+
 __all__ = [
     "load_documents",
+    "load_parsed_document",
+    "load_document_with_evidence",
     "load_pdf_text",
     "load_pdf_image_ocr",
     "load_image_file",
@@ -68,4 +75,5 @@ __all__ = [
     "IMAGE_EXTENSIONS",
     "TEXT_EXTENSIONS",
     "SUPPORTED_EXTENSIONS",
+    "OFFICE_EXTENSIONS",
 ]

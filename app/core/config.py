@@ -55,6 +55,7 @@ class Settings(BaseSettings):
     data_dir: str = Field(default="./data/docs", alias="DATA_DIR")
     corpus_store_path: str = Field(default="./data/chunks/chunks.jsonl", alias="CORPUS_STORE_PATH")
     parent_store_path_str: str = Field(default="./data/chunks/parents.jsonl", alias="PARENT_STORE_PATH")
+    evidence_artifact_root: str = Field(default="./data/evidence", alias="EVIDENCE_ARTIFACT_ROOT")
 
     parent_chunk_size: int = Field(default=1500, alias="PARENT_CHUNK_SIZE")
     parent_chunk_overlap: int = Field(default=200, alias="PARENT_CHUNK_OVERLAP")
@@ -356,6 +357,10 @@ class Settings(BaseSettings):
     @property
     def parent_store_path(self) -> Path:
         return Path(self.parent_store_path_str)
+
+    @property
+    def evidence_artifact_path(self) -> Path:
+        return Path(self.evidence_artifact_root)
 
     @property
     def sessions_path(self) -> Path:
