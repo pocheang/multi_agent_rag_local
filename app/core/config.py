@@ -296,6 +296,19 @@ class Settings(BaseSettings):
     planner_max_tool_budget: int = Field(default=4, ge=0, le=32, alias="PLANNER_MAX_TOOL_BUDGET")
     knowledge_source_timeout_ms: int = Field(default=10_000, ge=100, le=120_000, alias="KNOWLEDGE_SOURCE_TIMEOUT_MS")
     knowledge_max_sources: int = Field(default=6, ge=1, le=8, alias="KNOWLEDGE_MAX_SOURCES")
+    knowledge_orchestrator_enabled: bool = Field(default=False, alias="KNOWLEDGE_ORCHESTRATOR_ENABLED")
+    knowledge_context_token_budget: int = Field(
+        default=8_000,
+        ge=256,
+        le=128_000,
+        alias="KNOWLEDGE_CONTEXT_TOKEN_BUDGET",
+    )
+    knowledge_reranker_timeout_ms: int = Field(
+        default=10_000,
+        ge=100,
+        le=120_000,
+        alias="KNOWLEDGE_RERANKER_TIMEOUT_MS",
+    )
     perf_gate_max_p95_ms: int = Field(default=4000, alias="PERF_GATE_MAX_P95_MS")
     perf_gate_max_error_rate_percent: float = Field(default=5.0, alias="PERF_GATE_MAX_ERROR_RATE_PERCENT")
     admin_create_approval_token: str = Field(default="", alias="ADMIN_CREATE_APPROVAL_TOKEN")

@@ -55,6 +55,10 @@ KnowledgeAgent = Callable[
     [OrchestrationRequest, RouterDecision, TaskPlan | None, VerificationDecision | None],
     Awaitable[KnowledgeStrategy],
 ]
+KnowledgeOrchestrator = Callable[
+    [KnowledgeStrategy, Any, Callable[[ExecutionEvent], Awaitable[None]]],
+    Awaitable[ContextBundle],
+]
 
 
 class CompatibilityStreamExecutor(Protocol):
@@ -78,6 +82,7 @@ class OrchestrationServices:
         clarifier: Clarifier | None = None,
         verifier: Verifier | None = None,
         knowledge_agent: KnowledgeAgent | None = None,
+        knowledge_orchestrator: KnowledgeOrchestrator | None = None,
         privacy: PrivacyService | None = None,
         access_scope_resolver: AccessScopeResolver | None = None,
         context: object | None = None,
@@ -92,14 +97,20 @@ class OrchestrationServices:
         self.clarifier = clarifier
         self.verifier = verifier
         self.knowledge_agent = knowledge_agent or _default_knowledge_agent
+        self.knowledge_orchestrator = knowledge_orchestrator
         self.privacy = privacy or PrivacyService()
         self.access_scope_resolver = access_scope_resolver or AccessScopeResolver()
         self.context = context
         self._event_reporter_binder = event_reporter_binder
+        self._event_reporter: Callable[[ExecutionEvent], Awaitable[None]] = _discard_event
 
     def bind_event_reporter(self, reporter: Callable[[ExecutionEvent], Awaitable[None]]) -> None:
+        self._event_reporter = reporter
         if self._event_reporter_binder is not None:
             self._event_reporter_binder(reporter)
+
+    async def report_event(self, event: ExecutionEvent) -> None:
+        await self._event_reporter(event)
 
 
 class OrchestrationEngine:
@@ -257,6 +268,10 @@ class OrchestrationEngine:
             raise RuntimeError("LangGraph workflow completed without FinalAnswer")
         await reporter(ExecutionEvent(stage="complete", status="completed"))
         return answer
+
+
+async def _discard_event(event: ExecutionEvent) -> None:
+    del event
 
 
 def _terminal_payload(answer: FinalAnswer) -> dict[str, Any]:

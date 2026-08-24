@@ -62,8 +62,14 @@ class WorkflowServices(Protocol):
         [OrchestrationRequest, RouterDecision, TaskPlan | None, VerificationDecision | None],
         Awaitable[KnowledgeStrategy],
     ]
+    knowledge_orchestrator: Callable[
+        [KnowledgeStrategy, Any, Callable[[ExecutionEvent], Awaitable[None]]],
+        Awaitable[ContextBundle],
+    ] | None
     privacy: PrivacyService
     access_scope_resolver: AccessScopeResolver
+
+    async def report_event(self, event: ExecutionEvent) -> None: ...
 
 
 class WorkflowNodeRuntime:
@@ -194,13 +200,37 @@ class WorkflowNodeRuntime:
             ),
             expected_type=KnowledgeStrategy,
         )
-        evidence, event = await self._run_stage(
-            state,
-            event_stage="knowledge",
-            timeout_stage="knowledge",
-            operation=lambda: self._services.retriever(request, route, plan),
-            expected_type=EvidenceBundle,
-        )
+        orchestrator = getattr(self._services, "knowledge_orchestrator", None)
+        if orchestrator is not None:
+            scope = state.get("permission_scope")
+            if scope is None:
+                raise StageExecutionError("knowledge", PermissionError("knowledge retrieval requires access scope"))
+            context, event = await self._run_stage(
+                state,
+                event_stage="knowledge",
+                timeout_stage="knowledge",
+                operation=lambda: orchestrator(strategy, scope, self._services.report_event),
+                expected_type=ContextBundle,
+            )
+            evidence = EvidenceBundle(
+                route=route,
+                plan=plan,
+                items=context.evidence,
+                diagnostics=context.diagnostics,
+            )
+        else:
+            evidence, event = await self._run_stage(
+                state,
+                event_stage="knowledge",
+                timeout_stage="knowledge",
+                operation=lambda: self._services.retriever(request, route, plan),
+                expected_type=EvidenceBundle,
+            )
+            context = ContextBundle(
+                evidence=evidence.items,
+                rendered_context="\n\n".join(item.content for item in evidence.items),
+                diagnostics=dict(evidence.diagnostics),
+            )
         tool_results: tuple[ToolResult, ...] = ()
         trace = [strategy_event, event]
         if plan is not None and self._policy.should_run_tools(route, plan):
@@ -213,11 +243,6 @@ class WorkflowNodeRuntime:
                 validator=_validate_tool_results,
             )
             trace.append(tool_event)
-        context = ContextBundle(
-            evidence=evidence.items,
-            rendered_context="\n\n".join(item.content for item in evidence.items),
-            diagnostics=dict(evidence.diagnostics),
-        )
         return {
             "evidence_bundle": evidence,
             "knowledge_strategy": strategy,

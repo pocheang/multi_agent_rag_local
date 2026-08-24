@@ -8,7 +8,7 @@ from app.retrievers.bm25_retriever import bm25_search
 from app.retrievers.hybrid.caching import cache_lookup, cache_store, clear_retrieval_cache
 from app.retrievers.hybrid.parent_expansion import expand_to_parent_context
 from app.retrievers.hybrid.strategy import strategy_flags
-from app.retrievers.reranker import rerank
+from app.retrievers.reranker import rerank_with_diagnostics
 from app.retrievers.stores.parent import get_parent_text_map
 from app.retrievers.stores.vector import similarity_search
 from app.services.observability.tracing import traced_span
@@ -105,7 +105,7 @@ def hybrid_search_with_diagnostics(
         fused.sort(key=lambda x: x.get("hybrid_score", 0.0), reverse=True)
 
         rerank_top_n = int(diag.get("reranker_top_n", getattr(settings, "reranker_top_n", 5)) or 5)
-        reranked = rerank(query, fused, top_n=rerank_top_n)
+        reranked, reranker_diagnostics = rerank_with_diagnostics(query, fused, top_n=rerank_top_n)
         expanded = _expand_to_parent_context(reranked)
         diagnostics = {
             **diag,
@@ -117,6 +117,7 @@ def hybrid_search_with_diagnostics(
             "post_expand_count": len(expanded),
             "cache_hit": False,
             "cache_backend": "none",
+            **reranker_diagnostics,
         }
         cache_store(cache_key, expanded, diagnostics, settings)
         return expanded, diagnostics
