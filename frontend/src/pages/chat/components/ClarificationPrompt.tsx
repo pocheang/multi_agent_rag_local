@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { ClarificationQuestion, ClarificationContext } from "../../../types/api";
 
@@ -21,6 +21,12 @@ export const ClarificationPrompt: React.FC<ClarificationPromptProps> = ({
   const [selectedOption, setSelectedOption] = useState<string>("");
   const [customInput, setCustomInput] = useState<string>("");
   const [useCustom, setUseCustom] = useState<boolean>(false);
+
+  useEffect(() => {
+    setSelectedOption("");
+    setCustomInput("");
+    setUseCustom(false);
+  }, [question.field_name]);
 
   const handleSubmit = () => {
     const answer = useCustom ? customInput.trim() : selectedOption;

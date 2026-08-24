@@ -2,20 +2,21 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 
-from app.agents.router.enhanced_service import EnhancedRouterService
+from app.agents.clarification.service import ClarificationAgentService
+from app.agents.router.service import RouterAgentService
 from app.api.dependencies import (
     _history_store_for_user,
     _require_permission,
     _require_user,
     _require_valid_session_id,
 )
-from app.domain.contracts import ClarificationContext
-from app.orchestration.request import OrchestrationRequest, RequestScope
+from app.domain.contracts import ClarificationContext, ClarificationQuestion
+from app.orchestration.request import OrchestrationRequest, RequestActor, RequestScope
 
 router = APIRouter(prefix="/api/v1/clarification", tags=["clarification"])
 
@@ -23,19 +24,28 @@ router = APIRouter(prefix="/api/v1/clarification", tags=["clarification"])
 class ClarificationCheckRequest(BaseModel):
     """Request to check if clarification is needed."""
 
-    question: str = Field(..., description="User's question")
-    session_id: str = Field(..., description="Session ID")
-    field_name: str | None = Field(None, description="Field name for user's answer")
-    answer: str | None = Field(None, description="User's answer to clarification question")
+    question: str = Field(..., min_length=1, max_length=20_000, description="User's question")
+    session_id: str = Field(..., min_length=1, max_length=128, description="Session ID")
+    field_name: str | None = Field(
+        None,
+        pattern=r"^[a-z][a-z0-9_]{0,63}$",
+        description="Field name for user's answer",
+    )
+    answer: str | None = Field(None, min_length=1, max_length=4_000, description="User's answer")
+    workflow_thread_id: str | None = Field(None, min_length=1, max_length=512)
+    resume_token: str | None = Field(None, min_length=1, max_length=256)
 
 
 class ClarificationResponse(BaseModel):
     """Response with clarification decision."""
 
-    action: str = Field(..., description="CONTINUE or NEED_CLARIFICATION")
-    clarification: dict[str, Any] | None = Field(None, description="Next clarification question")
-    context: dict[str, Any] = Field(..., description="Current clarification context")
+    action: Literal["CONTINUE", "NEED_CLARIFICATION"]
+    clarification: ClarificationQuestion | None = Field(None, description="Next clarification question")
+    context: ClarificationContext = Field(..., description="Current clarification context")
     route: dict[str, Any] | None = Field(None, description="Route decision if CONTINUE")
+    complete_query: str | None = Field(None, description="Original query enriched with confirmed fields")
+    workflow_thread_id: str = Field(..., description="Tenant-scoped clarification thread")
+    resume_token: str | None = Field(None, description="Signed resume correlation token when configured")
 
 
 @router.post("/check", response_model=ClarificationResponse)
@@ -49,7 +59,7 @@ async def check_clarification(
     Flow:
     1. If user provided an answer, update clarification context
     2. Get current clarification context from session
-    3. Execute enhanced router decision
+    3. Execute the clarification agent
     4. Return CONTINUE or NEED_CLARIFICATION with next question
 
     Args:
@@ -65,6 +75,19 @@ async def check_clarification(
     """
     _require_permission(user, "query:run", request, "query")
     req.session_id = _require_valid_session_id(req.session_id)
+    tenant_id = str(user.get("tenant_id", "") or user.get("user_id", "") or "")
+    user_id = str(user.get("user_id", "") or "")
+    workflow_thread_id = ":".join((tenant_id, user_id, req.session_id))
+    clarification_service = ClarificationAgentService()
+    if req.workflow_thread_id and req.workflow_thread_id != workflow_thread_id:
+        raise HTTPException(status_code=409, detail="Clarification workflow thread does not match this session")
+    if req.resume_token is not None and not clarification_service.resume_token_is_valid(
+        workflow_thread_id,
+        req.resume_token,
+    ):
+        raise HTTPException(status_code=409, detail="Invalid clarification resume token")
+    if bool(req.field_name) != bool(req.answer):
+        raise HTTPException(status_code=422, detail="field_name and answer must be submitted together")
 
     # Get history store for authenticated user
     history_store = _history_store_for_user(user)
@@ -93,6 +116,7 @@ async def check_clarification(
             "clarification_round": 0,
             "max_rounds": 10,
             "intent": "",
+            "original_query": "",
         }
     context = ClarificationContext(**ctx_data)
 
@@ -107,55 +131,76 @@ async def check_clarification(
         if role and content:
             conversation_turns.append(ConversationTurn(role=role, content=content))
 
-    # Build orchestration request
+    # Build orchestration request with the same identity used by the main workflow.
     orchestration_req = OrchestrationRequest(
         question=req.question,
         session_id=req.session_id,
         conversation=tuple(conversation_turns),
+        actor=RequestActor(
+            user_id=user_id,
+            tenant_id=tenant_id,
+            username=str(user.get("username", "") or ""),
+            role=str(user.get("role", "viewer") or "viewer"),
+            permissions=frozenset(str(value) for value in user.get("permissions", ()) or ()),
+        ),
         use_reasoning=False,
         source_scope=RequestScope(),
     )
 
-    # Execute enhanced router
-    router_service = EnhancedRouterService()
-    decision = await router_service.route(orchestration_req, context)
+    result = await clarification_service.clarify(
+        orchestration_req,
+        context=context,
+        workflow_thread_id=workflow_thread_id,
+    )
+    history_store.set_clarification_context(req.session_id, result.context.model_dump(mode="json"))
+
+    route_decision = None
+    if result.action == "continue":
+        complete_request = orchestration_req.model_copy(
+            update={"question": result.complete_query or orchestration_req.question}
+        )
+        route_decision = await RouterAgentService().route(complete_request)
 
     # If CONTINUE, reset clarification context
-    if decision.action == "CONTINUE":
+    if result.action == "continue":
         history_store.reset_clarification_context(req.session_id)
 
     # Build response
     return ClarificationResponse(
-        action=decision.action.value,
+        action="NEED_CLARIFICATION" if result.action == "ask" else "CONTINUE",
         clarification=(
             {
-                "question": decision.clarification.question,
-                "options": decision.clarification.options,
-                "allow_custom_input": decision.clarification.allow_custom_input,
-                "field_name": decision.clarification.field_name,
+                "question": result.question.question,
+                "options": result.question.options,
+                "allow_custom_input": result.question.allow_custom_input,
+                "field_name": result.question.field_name,
             }
-            if decision.clarification
+            if result.question
             else None
         ),
         context={
-            "collected_info": decision.context.collected_info,
-            "asked_questions": decision.context.asked_questions,
-            "clarification_round": decision.context.clarification_round,
-            "max_rounds": decision.context.max_rounds,
-            "intent": decision.context.intent,
+            "collected_info": result.context.collected_info,
+            "asked_questions": result.context.asked_questions,
+            "clarification_round": result.context.clarification_round,
+            "max_rounds": result.context.max_rounds,
+            "intent": result.context.intent,
+            "original_query": result.context.original_query,
         },
         route=(
             {
-                "intent": decision.intent,
-                "route": decision.route,
-                "confidence": decision.confidence,
-                "requires_plan": decision.requires_plan,
-                "allowed_capabilities": list(decision.allowed_capabilities),
-                "reason": decision.reason,
+                "intent": route_decision.intent,
+                "route": route_decision.route,
+                "confidence": route_decision.confidence,
+                "requires_plan": route_decision.requires_plan,
+                "allowed_capabilities": list(route_decision.allowed_capabilities),
+                "reason": route_decision.reason,
             }
-            if decision.action == "CONTINUE"
+            if route_decision is not None
             else None
         ),
+        complete_query=result.complete_query,
+        workflow_thread_id=workflow_thread_id,
+        resume_token=clarification_service.issue_resume_token(workflow_thread_id),
     )
 
 

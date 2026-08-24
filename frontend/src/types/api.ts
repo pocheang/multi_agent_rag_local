@@ -441,6 +441,7 @@ export type ClarificationContext = {
   clarification_round: number;
   max_rounds: number;
   intent: string;
+  original_query?: string;
 };
 
 export type ClarificationCheckRequest = {
@@ -448,12 +449,17 @@ export type ClarificationCheckRequest = {
   session_id: string;
   field_name?: string;
   answer?: string;
+  workflow_thread_id?: string;
+  resume_token?: string;
 };
 
 export type ClarificationResponse = {
   action: "CONTINUE" | "NEED_CLARIFICATION";
   clarification?: ClarificationQuestion;
   context: ClarificationContext;
+  complete_query?: string;
+  workflow_thread_id: string;
+  resume_token?: string | null;
   route?: {
     intent: string;
     route?: string;

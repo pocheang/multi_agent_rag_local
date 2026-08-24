@@ -273,6 +273,7 @@ class ClarificationContext(BaseModel):
     clarification_round: int = Field(default=0, description="Current round number")
     max_rounds: int = Field(default=10, description="Maximum rounds (dynamically set)")
     intent: str = Field(default="", description="Identified intent type")
+    original_query: str = Field(default="", description="Query that owns this clarification state")
 
 
 class EnhancedRouteDecision(ImmutableContract):

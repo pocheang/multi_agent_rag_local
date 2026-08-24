@@ -30,6 +30,8 @@ export function useClarification({
         session_id: currentSessionId,
         field_name: fieldName,
         answer: answer,
+        workflow_thread_id: clarification.workflow_thread_id,
+        ...(clarification.resume_token ? { resume_token: clarification.resume_token } : {}),
       });
 
       if (response.action === "NEED_CLARIFICATION") {
@@ -37,9 +39,10 @@ export function useClarification({
         setClarification(response);
       } else {
         // Information is sufficient, execute query
+        const completeQuery = response.complete_query?.trim() || originalQuestion;
         setClarification(null);
         setOriginalQuestion("");
-        await onClarificationComplete(originalQuestion);
+        await onClarificationComplete(completeQuery);
       }
     } catch (error) {
       console.error("Clarification answer failed:", error);

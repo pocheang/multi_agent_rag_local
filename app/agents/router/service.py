@@ -6,6 +6,7 @@ import asyncio
 import re
 from collections.abc import Callable
 
+from app.agents.clarification.rules import assess_completeness, missing_fields
 from app.domain.contracts import RouteDecision
 from app.orchestration.request import OrchestrationRequest
 
@@ -42,6 +43,17 @@ class RouterAgentService:
                 requires_plan=True,
                 allowed_capabilities=frozenset({"rag", "tool"}),
                 reason="explicit_owned_connector_command",
+            )
+        completeness = assess_completeness(request.question)
+        missing = missing_fields(completeness, {})
+        if missing:
+            return RouteDecision(
+                intent="knowledge_retrieval",
+                route="clarification",
+                confidence=1.0,
+                requires_plan=completeness.complexity == "complex",
+                allowed_capabilities=frozenset({"rag"}),
+                reason=f"missing_required_information:{','.join(missing)}",
             )
         legacy = await asyncio.to_thread(
             self._decider,

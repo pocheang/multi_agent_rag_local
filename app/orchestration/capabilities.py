@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
+from app.agents.clarification.service import ClarificationAgentService
 from app.agents.planner.service import PlannerAgentService
 from app.agents.rag.service import RAGAgentService
 from app.agents.router.service import RouterAgentService
@@ -21,6 +22,7 @@ class CoreCapabilities:
     """Injectable canonical capabilities used by production and focused tests."""
 
     typed_router: RouterAgentService = field(default_factory=RouterAgentService)
+    typed_clarifier: ClarificationAgentService = field(default_factory=ClarificationAgentService)
     typed_planner: PlannerAgentService = field(default_factory=PlannerAgentService)
     typed_rag: RAGAgentService = field(default_factory=RAGAgentService)
     typed_tools: ToolAgentService = field(default_factory=ToolAgentService)
@@ -43,6 +45,7 @@ class CoreCapabilities:
             tool_runner=self.typed_tools.run,
             synthesizer=self.typed_synthesizer.synthesize,
             finalizer=self.typed_finalizer.finalize,
+            clarifier=self.typed_clarifier.clarify,
             privacy=self.privacy,
             access_scope_resolver=self.access_scope_resolver,
             context=self.context,

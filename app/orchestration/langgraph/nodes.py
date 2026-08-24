@@ -136,7 +136,7 @@ class WorkflowNodeRuntime:
         if clarifier is None:
             raise StageExecutionError(
                 "clarification",
-                RuntimeError("clarification service is not configured until Task 4"),
+                RuntimeError("clarification service is not configured"),
             )
         result, event = await self._run_stage(
             state,
@@ -148,7 +148,9 @@ class WorkflowNodeRuntime:
         if result.action == "ask":
             raise StageExecutionError(
                 "clarification",
-                RuntimeError("clarification requires workflow resume support from Task 4"),
+                RuntimeError(
+                    "interactive clarification is required; use the clarification API with the returned thread"
+                ),
             )
         complete_query = result.complete_query or request.question
         return {
