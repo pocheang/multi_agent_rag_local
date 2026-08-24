@@ -19,6 +19,7 @@ from app.domain.knowledge import AccessScope, EvidenceRef, KnowledgeSource, Know
 
 if TYPE_CHECKING:
     from app.orchestration.request import OrchestrationRequest
+    from app.privacy.models import PrivacyResult
 
 
 class ImmutableWorkflowContract(BaseModel):
@@ -103,7 +104,7 @@ class WorkflowState(TypedDict, total=False):
     """Typed state passed between LangGraph nodes."""
 
     request: OrchestrationRequest
-    privacy: Any
+    privacy: PrivacyResult
     permission_scope: AccessScope
     route_decision: RouterDecision
     clarification: ClarificationResult

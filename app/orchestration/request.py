@@ -14,6 +14,7 @@ class RequestActor(ImmutableContract):
     """Identity and permissions available to a single execution."""
 
     user_id: str | None = None
+    tenant_id: str | None = None
     username: str | None = None
     role: str | None = None
     permissions: frozenset[str] = Field(default_factory=frozenset)
@@ -24,6 +25,8 @@ class RequestScope(ImmutableContract):
 
     allowed_sources: frozenset[str] | None = None
     document_ids: frozenset[str] | None = None
+    acl_tags: frozenset[str] | None = None
+    allowed_fields: frozenset[str] | None = None
     agent_class_hint: str | None = None
 
 
