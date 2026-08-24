@@ -96,9 +96,11 @@ class MemoryItem(ImmutableKnowledgeContract):
     memory_id: str = Field(min_length=1)
     kind: Literal["preference", "stable_fact", "task", "explicit_remember"]
     content: str = Field(min_length=1)
+    memory_key: str = Field(default="", max_length=128)
     updated_at: str
     expires_at: str | None = None
     supersedes: str | None = None
+    source_session_id: str | None = None
 
 
 __all__ = [

@@ -5,6 +5,7 @@ Memory-related helper functions for the QueryMind API.
 from typing import Any
 
 from app.core.config import get_settings
+from app.memory.long_term import memory_base_dir
 from app.services.sessions.memory_store import MemoryStore, build_memory_context
 
 settings = get_settings()
@@ -12,7 +13,9 @@ settings = get_settings()
 
 def _memory_store_for_user(user: dict[str, Any]) -> MemoryStore:
     """Get the memory store for a user."""
-    return MemoryStore(base_dir=settings.sessions_path / user["user_id"] / "_long_memory")
+    user_id = str(user["user_id"])
+    tenant_id = str(user.get("tenant_id") or user_id)
+    return MemoryStore(base_dir=memory_base_dir(settings.sessions_path, tenant_id=tenant_id, user_id=user_id))
 
 
 def _memory_signals_from_result(result: dict[str, Any]) -> dict[str, Any]:

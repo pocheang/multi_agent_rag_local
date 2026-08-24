@@ -16,6 +16,7 @@ from typing import Any
 
 from app.core.config import get_settings
 from app.domain.text import normalize_string
+from app.memory.long_term import memory_base_dir
 from app.orchestration.request import ConversationTurn, OrchestrationRequest, RequestScope
 from app.services.agent_classifier import classify_agent_class
 from app.services.documents.index_manager import list_indexed_files
@@ -256,9 +257,11 @@ def _memory_context(user: dict[str, Any], session_id: str | None, question: str)
     if not session_id:
         return ""
     session = _history_store(user).get_session(session_id) or {}
-    long_term = MemoryStore(base_dir=_SETTINGS.sessions_path / str(user["user_id"]) / "_long_memory").list_long_term(
-        session_id
-    )
+    user_id = str(user["user_id"])
+    tenant_id = str(user.get("tenant_id") or user_id)
+    long_term = MemoryStore(
+        base_dir=memory_base_dir(_SETTINGS.sessions_path, tenant_id=tenant_id, user_id=user_id)
+    ).list_long_term(session_id)
     return build_memory_context(
         question=question, session_messages=session.get("messages", []) or [], long_term_memories=long_term
     )

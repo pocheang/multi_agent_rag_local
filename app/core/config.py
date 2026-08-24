@@ -105,6 +105,10 @@ class Settings(BaseSettings):
 
     # Session metadata storage backend
     session_metadata_backend: str = Field(default="database", alias="SESSION_METADATA_BACKEND")  # memory|database
+    long_term_memory_enabled: bool = Field(default=True, alias="LONG_TERM_MEMORY_ENABLED")
+    long_term_memory_max_items: int = Field(default=100, ge=1, le=10_000, alias="LONG_TERM_MEMORY_MAX_ITEMS")
+    memory_task_ttl_days: int = Field(default=30, ge=1, le=3650, alias="MEMORY_TASK_TTL_DAYS")
+    memory_stable_fact_ttl_days: int = Field(default=365, ge=1, le=3650, alias="MEMORY_STABLE_FACT_TTL_DAYS")
 
     # Query Analysis & Clarification
     # Query Analysis & Clarification

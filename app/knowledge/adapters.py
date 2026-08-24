@@ -65,8 +65,8 @@ def build_default_adapters() -> dict[KnowledgeSource, KnowledgeAdapter]:
         "graph": CallableKnowledgeAdapter("graph", _retrieve_graph),
         "multimodal": CallableKnowledgeAdapter("multimodal", _retrieve_multimodal),
         "wiki": CallableKnowledgeAdapter("wiki", _retrieve_wiki),
+        "memory": CallableKnowledgeAdapter("memory", _retrieve_memory),
         "web": CallableKnowledgeAdapter("web", _retrieve_web),
-        "memory": UnavailableKnowledgeAdapter("memory", "GBrain long-term memory provider is not configured"),
         "tool": UnavailableKnowledgeAdapter("tool", "tool retrieval is delegated to the governed Tool Agent"),
     }
 
@@ -165,6 +165,30 @@ async def _retrieve_wiki(plan: KnowledgeSourcePlan, scope: AccessScope) -> tuple
                     )
                 )
         return tuple(output[: plan.top_k])
+
+    return _flatten(await asyncio.gather(*(one(query) for query in plan.queries)))
+
+
+async def _retrieve_memory(plan: KnowledgeSourcePlan, scope: AccessScope) -> tuple[EvidenceItem, ...]:
+    from app.memory.long_term import GBrainLongTermMemory
+
+    provider = GBrainLongTermMemory()
+
+    async def one(query: str) -> tuple[EvidenceItem, ...]:
+        memories = await provider.search(query, scope, plan.top_k)
+        return tuple(
+            EvidenceItem(
+                content=memory.content,
+                source=f"memory://{scope.tenant_id}/{scope.user_id}/{memory.memory_id}",
+                document_id=f"memory:{memory.memory_id}",
+                version=1,
+                modality="text",
+                layer="memory",
+                retriever="gbrain",
+                score=1.0 / rank,
+            )
+            for rank, memory in enumerate(memories, start=1)
+        )
 
     return _flatten(await asyncio.gather(*(one(query) for query in plan.queries)))
 
