@@ -7,9 +7,10 @@ from typing import Any
 from fastapi import Request
 from fastapi.responses import StreamingResponse
 
-from app.api.dependencies import QueryRuntime, _sse_response, _trace_id, runtime_metrics
+from app.api.dependencies import QueryRuntime, _trace_id, runtime_metrics
 from app.api.query.response import ensure_trackable_execution_result
 from app.api.transport.errors import conflict
+from app.api.transport.responses import _sse_response
 from app.graph.streaming import encode_sse
 from app.services.observability.alerting import emit_alert
 

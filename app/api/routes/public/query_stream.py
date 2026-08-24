@@ -18,7 +18,6 @@ from app.api.dependencies import (
     _require_permission,
     _require_user,
     _reserve_chat_credit,
-    _sse_response,
     _trace_id,
     _user_api_settings_for_runtime,
     runtime_metrics,
@@ -29,6 +28,7 @@ from app.api.query.streaming.cache import cached_stream_response, claim_stream
 from app.api.query.streaming.execution import StreamExecutionContext, stream_execution_events
 from app.api.query.streaming.transport import serialize_compatibility_event, versioned_stream_response
 from app.api.transport.errors import bad_request, rate_limited
+from app.api.transport.responses import _sse_response
 from app.graph.streaming.sse_encoder import encode_sse
 from app.pipeline.contracts import PipelineRequest, PipelineUser, SourceScope
 from app.pipeline.profiles import PipelineProfile

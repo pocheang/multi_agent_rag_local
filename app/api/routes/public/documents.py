@@ -3,7 +3,7 @@
 from pathlib import Path
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends, File, Form, Request, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
 
 from app.api.dependencies import (
     _audit,
@@ -29,7 +29,6 @@ from app.api.transport.errors import (
     forbidden,
     internal_error,
     not_found,
-    payload_too_large,
     rate_limited,
 )
 from app.api.utils.auth_helpers import _client_ip
