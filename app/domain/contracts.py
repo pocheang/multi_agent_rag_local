@@ -8,7 +8,7 @@ from enum import StrEnum
 from typing import Any, Literal
 from uuid import uuid4
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import AliasChoices, BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from app.domain.knowledge import EvidenceLayer, Modality
 
@@ -67,7 +67,11 @@ class PlannedTask(ImmutableContract):
     task_id: str = Field(min_length=1)
     prompt: str = Field(min_length=1)
     depends_on: tuple[str, ...] = Field(default_factory=tuple)
-    retrieval_required: bool = True
+    parallel_group: str | None = None
+    knowledge_required: bool = Field(
+        default=True,
+        validation_alias=AliasChoices("knowledge_required", "retrieval_required"),
+    )
     tool_required: bool = False
     budget: TaskBudget = Field(default_factory=TaskBudget)
 
@@ -77,11 +81,18 @@ class PlannedTask(ImmutableContract):
             raise ValueError("a task cannot depend on itself")
         return self
 
+    @property
+    def retrieval_required(self) -> bool:
+        """Backward-compatible name for the canonical knowledge requirement."""
+
+        return self.knowledge_required
+
 
 class TaskPlan(ImmutableContract):
     """A validated task DAG that the orchestrator can execute or trace."""
 
     tasks: tuple[PlannedTask, ...] = Field(min_length=1)
+    plan_fallback_reason: str | None = None
 
     @model_validator(mode="after")
     def validate_dependencies(self) -> TaskPlan:
@@ -121,6 +132,23 @@ class TaskPlan(ImmutableContract):
     def requires_tools(self) -> bool:
         """Return whether at least one task requires a governed tool call."""
         return any(task.tool_required for task in self.tasks)
+
+    @property
+    def execution_layers(self) -> tuple[tuple[str, ...], ...]:
+        """Return deterministic DAG ready sets for future parallel execution."""
+
+        remaining = {task.task_id: set(task.depends_on) for task in self.tasks}
+        layers: list[tuple[str, ...]] = []
+        completed: set[str] = set()
+        while remaining:
+            ready = tuple(sorted(task_id for task_id, deps in remaining.items() if deps <= completed))
+            if not ready:  # The model validator already rejects cycles.
+                break
+            layers.append(ready)
+            completed.update(ready)
+            for task_id in ready:
+                remaining.pop(task_id)
+        return tuple(layers)
 
 
 class EvidenceItem(ImmutableContract):
