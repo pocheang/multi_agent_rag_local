@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 import asyncio
-from collections.abc import Awaitable, Callable, Mapping, Sequence
-from typing import Any, Protocol
+from collections.abc import Awaitable, Callable, Sequence
+from typing import Protocol
 
 from app.agents.rag.evidence_builder import (
     bundle_from_bm25_records,
@@ -131,81 +131,13 @@ async def _retrieve_multimodal(plan: KnowledgeSourcePlan, scope: AccessScope) ->
     retriever = MultiModalRetriever()
 
     async def one(query: str) -> tuple[EvidenceItem, ...]:
-        rows = await retriever.retrieve(query, top_k=plan.top_k)
-        return tuple(
-            item
-            for row in rows
-            if (item := _multimodal_item(row)) is not None
-            if _matches_scope(item, scope)
-        )
+        return await retriever.retrieve_evidence(query, scope, top_k=plan.top_k)
 
     return _flatten(await asyncio.gather(*(one(query) for query in plan.queries)))
 
 
-def _multimodal_item(row: Any) -> EvidenceItem | None:
-    metadata = row.metadata if isinstance(getattr(row, "metadata", None), Mapping) else {}
-    document_id = str(getattr(row, "doc_id", "") or metadata.get("document_id") or metadata.get("doc_id") or "").strip()
-    source = str(metadata.get("source") or metadata.get("artifact_uri") or document_id).strip()
-    content = str(getattr(row, "content", "") or "").strip()
-    if not document_id or not source or not content:
-        return None
-    raw_modality = str(getattr(row, "modality", "text") or "text")
-    modality = "image" if raw_modality in {"image", "chart"} else "table" if raw_modality == "table" else "text"
-    image_id = str(metadata.get("image_id") or getattr(row, "id", "") or "").strip() if modality == "image" else None
-    raw_acl = metadata.get("acl_tags", ()) or ()
-    if isinstance(raw_acl, str):
-        raw_acl = tuple(tag.strip() for tag in raw_acl.split(",") if tag.strip())
-    try:
-        return EvidenceItem(
-            content=content,
-            source=source,
-            document_id=document_id,
-            version=_positive_int(metadata.get("version")),
-            page=_positive_int(getattr(row, "page_number", None) or metadata.get("page")),
-            chunk_id=_optional_text(metadata.get("chunk_id")),
-            image_id=image_id or None,
-            artifact_uri=_optional_text(metadata.get("artifact_uri") or metadata.get("original_image")),
-            modality=modality,
-            layer="evidence",
-            acl_tags=frozenset(str(tag) for tag in raw_acl),
-            retriever="multimodal",
-            score=_bounded_score(getattr(row, "score", None)),
-        )
-    except (TypeError, ValueError):
-        return None
-
-
-def _matches_scope(item: EvidenceItem, scope: AccessScope) -> bool:
-    if scope.document_ids and item.document_id not in scope.document_ids:
-        return False
-    if scope.allowed_sources and item.source not in scope.allowed_sources:
-        return False
-    return not item.acl_tags or bool(item.acl_tags.intersection(scope.acl_tags))
-
-
 def _flatten(groups: Sequence[Sequence[EvidenceItem]]) -> tuple[EvidenceItem, ...]:
     return tuple(item for group in groups for item in group)
-
-
-def _optional_text(value: object) -> str | None:
-    text = str(value or "").strip()
-    return text or None
-
-
-def _positive_int(value: object) -> int | None:
-    try:
-        number = int(value) if value is not None else None
-    except (TypeError, ValueError):
-        return None
-    return number if number is not None and number > 0 else None
-
-
-def _bounded_score(value: object) -> float | None:
-    try:
-        score = float(value) if value is not None else None
-    except (TypeError, ValueError):
-        return None
-    return min(1.0, max(0.0, score)) if score is not None else None
 
 
 __all__ = [

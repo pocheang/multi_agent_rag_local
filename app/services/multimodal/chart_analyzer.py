@@ -71,6 +71,11 @@ class ChartAnalyzer:
                 bbox=image.bbox,
                 metadata={
                     "source_image_id": image.image_id,
+                    "document_id": image.document_id,
+                    "tenant_id": image.tenant_id,
+                    "version": image.version,
+                    "artifact_uri": image.artifact_uri or "",
+                    "source": image.metadata.get("source", image.artifact_uri or image.doc_id),
                     "width": image.metadata.get("width", 0),
                     "height": image.metadata.get("height", 0),
                 },
@@ -149,7 +154,7 @@ class ChartAnalyzer:
             prompt = self._create_chart_analysis_prompt(chart_type)
 
             # Encode image
-            image_base64 = base64.b64encode(image.image_data).decode("utf-8")
+            image_base64 = base64.b64encode(self._safe_image_bytes(image)).decode("utf-8")
 
             # Call vision API
             description = await self._call_vision_api(image_base64, prompt)
@@ -323,14 +328,9 @@ class ChartAnalyzer:
             collection_name: ChromaDB collection name
         """
         try:
-            from app.retrievers.stores.chroma_store import get_chroma_client
+            from app.retrievers.stores.vector import get_named_vector_store
 
-            # Get ChromaDB client
-            client = get_chroma_client()
-            collection = client.get_or_create_collection(
-                name=collection_name,
-                metadata={"hnsw:space": "cosine"},
-            )
+            store = get_named_vector_store(collection_name)
 
             # Create text for indexing
             text_parts = []
@@ -346,13 +346,19 @@ class ChartAnalyzer:
             text_to_index = "\n\n".join(text_parts)
 
             # Add to collection
-            collection.add(
+            store.add_texts(
                 ids=[chart.chart_id],
-                documents=[text_to_index],
+                texts=[text_to_index],
                 metadatas=[
                     {
                         "doc_id": chart.doc_id,
+                        "document_id": chart.metadata.get("document_id", chart.doc_id),
+                        "tenant_id": chart.metadata.get("tenant_id", "shared"),
+                        "version": chart.metadata.get("version", 1),
                         "page_number": chart.page_number,
+                        "image_id": chart.metadata.get("source_image_id", ""),
+                        "artifact_uri": chart.metadata.get("artifact_uri", ""),
+                        "source": chart.metadata.get("source", chart.doc_id),
                         "type": "chart",
                         "chart_type": chart.chart_type,
                         "has_title": bool(chart.title),
@@ -366,6 +372,14 @@ class ChartAnalyzer:
         except Exception as e:
             logger.error(f"Error indexing chart {chart.chart_id}: {e}")
             raise
+
+    @staticmethod
+    def _safe_image_bytes(image: ImageContent) -> bytes:
+        """Never allow chart VLM analysis to bypass the masking boundary."""
+
+        if image.masked_image_data and image.metadata.get("masking_status") in {"clean", "masked"}:
+            return image.masked_image_data
+        raise PermissionError("chart analysis requires a privacy-approved image derivative")
 
     def format_chart_as_text(self, chart: ChartContent) -> str:
         """Format chart as text for display or embedding.

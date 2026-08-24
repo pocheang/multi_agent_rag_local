@@ -320,26 +320,25 @@ class TableExtractor:
             collection_name: ChromaDB collection name
         """
         try:
-            from app.retrievers.stores.chroma_store import get_chroma_client
+            from app.retrievers.stores.vector import get_named_vector_store
 
-            # Get ChromaDB client
-            client = get_chroma_client()
-            collection = client.get_or_create_collection(
-                name=collection_name,
-                metadata={"hnsw:space": "cosine"},
-            )
+            store = get_named_vector_store(collection_name)
 
             # Create text representation for indexing
             text_to_index = f"{table.summary}\n\n{self.format_table_as_text(table)}"
 
             # Add to collection
-            collection.add(
+            store.add_texts(
                 ids=[table.table_id],
-                documents=[text_to_index],
+                texts=[text_to_index],
                 metadatas=[
                     {
                         "doc_id": table.doc_id,
+                        "document_id": table.metadata.get("document_id", table.doc_id),
+                        "tenant_id": table.metadata.get("tenant_id", "shared"),
+                        "version": table.metadata.get("version", 1),
                         "page_number": table.page_number,
+                        "source": table.metadata.get("source", table.doc_id),
                         "type": "table",
                         "num_rows": table.metadata.get("num_rows", 0),
                         "num_cols": table.metadata.get("num_cols", 0),

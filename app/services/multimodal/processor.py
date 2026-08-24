@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any
 
 from app.core.config import get_settings
+from app.domain.knowledge import AccessScope
 from app.services.multimodal.chart_analyzer import ChartAnalyzer
 from app.services.multimodal.image_processor import ImageProcessor
 from app.services.multimodal.models import ChartContent, DocumentChunk, ImageContent, TableContent
@@ -33,6 +34,9 @@ class MultiModalDocumentProcessor:
         pdf_path: str | Path,
         doc_id: str,
         index_content: bool = True,
+        *,
+        tenant_id: str = "shared",
+        version: int = 1,
     ) -> dict[str, Any]:
         """Process document with full multi-modal pipeline.
 
@@ -63,7 +67,14 @@ class MultiModalDocumentProcessor:
             extraction_tasks = []
 
             if self.enable_image_processing:
-                extraction_tasks.append(self.image_processor.extract_images_from_pdf(pdf_path, doc_id))
+                extraction_tasks.append(
+                    self.image_processor.extract_images_from_pdf(
+                        pdf_path,
+                        doc_id,
+                        tenant_id=tenant_id,
+                        version=version,
+                    )
+                )
             else:
                 extraction_tasks.append(asyncio.sleep(0))  # Placeholder
 
@@ -82,6 +93,15 @@ class MultiModalDocumentProcessor:
 
             if self.enable_table_extraction:
                 tables = extraction_results[1] if isinstance(extraction_results[1], list) else []
+                for table in tables:
+                    table.metadata.update(
+                        {
+                            "document_id": doc_id,
+                            "tenant_id": tenant_id,
+                            "version": version,
+                            "source": str(pdf_path),
+                        }
+                    )
 
             logger.info(f"Extracted {len(images)} images and {len(tables)} tables")
 
@@ -109,6 +129,15 @@ class MultiModalDocumentProcessor:
             chunks = await self.smart_chunker.chunk_document(
                 pdf_path, doc_id, images=images, tables=tables, charts=charts
             )
+            for chunk in chunks:
+                chunk.metadata.update(
+                    {
+                        "document_id": doc_id,
+                        "tenant_id": tenant_id,
+                        "version": version,
+                        "source": str(pdf_path),
+                    }
+                )
 
             logger.info(f"Created {len(chunks)} document chunks")
 
@@ -164,7 +193,7 @@ class MultiModalDocumentProcessor:
 
         # Index images
         for image in images:
-            if image.description:  # Only index if we have a description
+            if image.description and image.metadata.get("masking_status") in {"clean", "masked"}:
                 indexing_tasks.append(self.image_processor.index_image(image))
 
         # Index tables
@@ -191,24 +220,26 @@ class MultiModalDocumentProcessor:
             chunk: DocumentChunk to index
         """
         try:
-            from app.retrievers.stores.chroma_store import get_chroma_client
+            from app.retrievers.stores.vector import get_named_vector_store
 
-            client = get_chroma_client()
-            collection = client.get_or_create_collection(
-                name="text_chunks",
-                metadata={"hnsw:space": "cosine"},
-            )
+            store = get_named_vector_store("text_chunks")
 
             # Format chunk for indexing
             text = self.smart_chunker.format_chunk_for_indexing(chunk)
 
             # Add to collection
-            collection.add(
+            store.add_texts(
+                texts=[text],
                 ids=[chunk.chunk_id],
-                documents=[text],
                 metadatas=[
                     {
                         "doc_id": chunk.doc_id,
+                        "document_id": chunk.metadata.get("document_id", chunk.doc_id),
+                        "tenant_id": chunk.metadata.get("tenant_id", "shared"),
+                        "version": chunk.metadata.get("version", 1),
+                        "source": chunk.metadata.get("source", chunk.doc_id),
+                        "chunk_id": chunk.chunk_id,
+                        "page_number": min(chunk.page_numbers) if chunk.page_numbers else 0,
                         "page_numbers": ",".join(map(str, chunk.page_numbers)),
                         "heading": chunk.heading or "",
                         "has_multimodal": chunk.has_multimodal_content,
@@ -221,7 +252,14 @@ class MultiModalDocumentProcessor:
         except Exception as e:
             logger.error(f"Error indexing chunk {chunk.chunk_id}: {e}")
 
-    async def reprocess_document_images(self, doc_id: str, pdf_path: str | Path) -> dict[str, Any]:
+    async def reprocess_document_images(
+        self,
+        doc_id: str,
+        pdf_path: str | Path,
+        *,
+        tenant_id: str = "shared",
+        version: int = 1,
+    ) -> dict[str, Any]:
         """Reprocess only images for an existing document.
 
         Useful for improving descriptions or adding OCR to existing indexed documents.
@@ -236,7 +274,12 @@ class MultiModalDocumentProcessor:
         logger.info(f"Reprocessing images for document {doc_id}")
 
         # Extract images
-        images = await self.image_processor.extract_images_from_pdf(pdf_path, doc_id)
+        images = await self.image_processor.extract_images_from_pdf(
+            pdf_path,
+            doc_id,
+            tenant_id=tenant_id,
+            version=version,
+        )
 
         # Process images
         images = await self.image_processor.process_images_batch(
@@ -251,7 +294,7 @@ class MultiModalDocumentProcessor:
 
         # Re-index
         for image in images:
-            if image.description:
+            if image.description and image.metadata.get("masking_status") in {"clean", "masked"}:
                 await self.image_processor.index_image(image)
 
         for chart in charts:
@@ -263,7 +306,7 @@ class MultiModalDocumentProcessor:
             "num_charts_identified": len(charts),
         }
 
-    async def get_document_statistics(self, doc_id: str) -> dict[str, Any]:
+    async def get_document_statistics(self, doc_id: str, scope: AccessScope) -> dict[str, Any]:
         """Get statistics about multi-modal content for a document.
 
         Args:
@@ -277,7 +320,11 @@ class MultiModalDocumentProcessor:
         retriever = MultiModalRetriever()
 
         # Retrieve all content for document
-        results = await retriever.retrieve_by_doc_id(doc_id, modalities=["text", "image", "table", "chart"])
+        results = await retriever.retrieve_by_doc_id(
+            doc_id,
+            scope,
+            modalities=["text", "image", "table", "chart"],
+        )
 
         stats = {
             "doc_id": doc_id,

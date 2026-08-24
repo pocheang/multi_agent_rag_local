@@ -12,6 +12,10 @@ import fitz  # PyMuPDF
 from PIL import Image
 
 from app.core.config import get_settings
+from app.ingestion.embedding.visual import VisualEmbeddingProvider, build_visual_embedding_provider
+from app.privacy.image_masking import ImageMaskingService
+from app.privacy.models import ImageInput
+from app.services.evidence import ArtifactStore
 from app.services.multimodal.models import ImageContent
 
 logger = logging.getLogger(__name__)
@@ -20,7 +24,12 @@ logger = logging.getLogger(__name__)
 class ImageProcessor:
     """Process images from documents with GPT-4V and OCR."""
 
-    def __init__(self):
+    def __init__(
+        self,
+        image_masking: ImageMaskingService | None = None,
+        visual_embedding: VisualEmbeddingProvider | None = None,
+        artifact_store: ArtifactStore | None = None,
+    ):
         self.settings = get_settings()
         self.vision_model = getattr(self.settings, "vision_model", "gpt-4-vision-preview")
         self.max_image_tokens = getattr(self.settings, "max_image_tokens", 1000)
@@ -28,8 +37,18 @@ class ImageProcessor:
         self.ocr_engine = getattr(self.settings, "ocr_engine", "tesseract")
         self.min_image_size = (50, 50)  # Minimum image dimensions
         self.max_image_size = (2048, 2048)  # Maximum for GPT-4V
+        self.image_masking = image_masking or ImageMaskingService()
+        self.visual_embedding = visual_embedding or build_visual_embedding_provider(self.settings)
+        self.artifact_store = artifact_store or ArtifactStore(settings=self.settings)
 
-    async def extract_images_from_pdf(self, pdf_path: str | Path, doc_id: str) -> list[ImageContent]:
+    async def extract_images_from_pdf(
+        self,
+        pdf_path: str | Path,
+        doc_id: str,
+        *,
+        tenant_id: str = "shared",
+        version: int = 1,
+    ) -> list[ImageContent]:
         """Extract images from PDF document.
 
         Args:
@@ -71,6 +90,18 @@ class ImageProcessor:
 
                             # Generate image ID
                             image_id = self._generate_image_id(doc_id, page_num + 1, img_index)
+                            media_type = _image_media_type(image_ext)
+                            artifact = self.artifact_store.put_bytes(
+                                image_bytes,
+                                tenant_id=tenant_id,
+                                document_id=doc_id,
+                                version=version,
+                                relative_path=f"images/{image_id}.{image_ext}",
+                                kind="image",
+                                media_type=media_type,
+                                page=page_num + 1,
+                                image_id=image_id,
+                            )
 
                             # Create ImageContent (description will be generated later)
                             image_content = ImageContent(
@@ -81,8 +112,13 @@ class ImageProcessor:
                                 description="",  # To be filled by GPT-4V
                                 ocr_text=None,  # To be filled by OCR
                                 bbox=bbox,
+                                tenant_id=tenant_id,
+                                version=version,
+                                artifact_uri=artifact.uri,
                                 metadata={
                                     "format": image_ext,
+                                    "media_type": media_type,
+                                    "source": str(pdf_path),
                                     "width": pil_image.size[0],
                                     "height": pil_image.size[1],
                                     "mode": pil_image.mode,
@@ -132,7 +168,7 @@ class ImageProcessor:
         """
         try:
             # Prepare image data
-            image_base64 = base64.b64encode(image.image_data).decode("utf-8")
+            image_base64 = base64.b64encode(self._masked_bytes(image)).decode("utf-8")
 
             # Determine image type hint from context
             image_type_hint = self._detect_image_type_hint(image)
@@ -152,6 +188,8 @@ class ImageProcessor:
 
             return description
 
+        except PermissionError:
+            raise
         except Exception as e:
             logger.error(f"Error generating description for {image.image_id}: {e}")
             return f"[Image on page {image.page_number}]"
@@ -274,7 +312,7 @@ class ImageProcessor:
             return ""
 
         try:
-            pil_image = Image.open(BytesIO(image.image_data))
+            pil_image = Image.open(BytesIO(self._masked_bytes(image)))
 
             if self.ocr_engine == "tesseract":
                 ocr_text = await self._ocr_tesseract(pil_image)
@@ -290,6 +328,8 @@ class ImageProcessor:
 
             return ocr_text
 
+        except PermissionError:
+            raise
         except Exception as e:
             logger.error(f"OCR error for {image.image_id}: {e}")
             return ""
@@ -383,6 +423,16 @@ class ImageProcessor:
                     if perform_ocr:
                         await self.perform_ocr(img)
 
+                    safe_content = self._masked_bytes(img)
+                    embedding = await self.visual_embedding.embed_image(
+                        safe_content,
+                        description="\n".join(value for value in (img.description, img.ocr_text or "") if value),
+                    )
+                    img.visual_embedding = embedding.vector
+                    img.embedding_model = embedding.model
+                    img.metadata["visual_embedding_backend"] = embedding.backend
+                    img.metadata["visual_embedding_fallback_reason"] = embedding.fallback_reason or ""
+
                 except Exception as e:
                     logger.error(f"Error processing image {img.image_id}: {e}")
 
@@ -404,6 +454,43 @@ class ImageProcessor:
         # Images under 500K pixels are considered simple
         return total_pixels < 500_000
 
+    def _masked_bytes(self, image: ImageContent) -> bytes:
+        """Fail closed so OCR and every external VLM consume only a safe derivative."""
+
+        if image.masked_image_data:
+            return image.masked_image_data
+        media_type = str(
+            image.metadata.get("media_type")
+            or _image_media_type(str(image.metadata.get("format", "png") or "png"))
+        )
+        result = self.image_masking.mask(
+            ImageInput(
+                image_id=image.image_id,
+                content=image.image_data,
+                media_type=media_type,
+                source_reference=image.artifact_uri,
+                processing_target="external",
+            )
+        )
+        image.metadata["masking_status"] = result.status
+        image.metadata["masking_reason"] = result.reason
+        image.metadata["masked_regions"] = len(result.regions)
+        if not result.safe_for_external or not result.content:
+            raise PermissionError(f"image masking did not produce a safe derivative: {result.status}")
+        image.masked_image_data = result.content
+        image.masked_artifact_uri = self.artifact_store.put_bytes(
+            result.content,
+            tenant_id=image.tenant_id,
+            document_id=image.document_id,
+            version=image.version,
+            relative_path=f"masked/{image.image_id}.{_image_extension(result.media_type)}",
+            kind="masked_image",
+            media_type=result.media_type,
+            page=image.page_number,
+            image_id=image.image_id,
+        ).uri
+        return result.content
+
     async def index_image(self, image: ImageContent, collection_name: str = "image_descriptions") -> None:
         """Index image content in vector database.
 
@@ -412,14 +499,9 @@ class ImageProcessor:
             collection_name: ChromaDB collection name
         """
         try:
-            from app.retrievers.stores.chroma_store import get_chroma_client
+            from app.retrievers.stores.vector import get_named_vector_store
 
-            # Get ChromaDB client
-            client = get_chroma_client()
-            collection = client.get_or_create_collection(
-                name=collection_name,
-                metadata={"hnsw:space": "cosine"},
-            )
+            store = get_named_vector_store(collection_name)
 
             # Combine description and OCR text for indexing
             text_to_index = image.description
@@ -427,13 +509,22 @@ class ImageProcessor:
                 text_to_index += f"\n\nExtracted text: {image.ocr_text}"
 
             # Add to collection
-            collection.add(
+            store.add_texts(
                 ids=[image.image_id],
-                documents=[text_to_index],
+                texts=[text_to_index],
                 metadatas=[
                     {
                         "doc_id": image.doc_id,
+                        "document_id": image.document_id,
+                        "tenant_id": image.tenant_id,
+                        "version": image.version,
                         "page_number": image.page_number,
+                        "image_id": image.image_id,
+                        "artifact_uri": image.artifact_uri or "",
+                        "masked_artifact_uri": image.masked_artifact_uri or "",
+                        "source": image.metadata.get("source", image.artifact_uri or image.doc_id),
+                        "embedding_model": image.embedding_model or "",
+                        "visual_embedding_backend": image.metadata.get("visual_embedding_backend", ""),
                         "type": "image",
                         "image_type": image.image_type,
                         "has_ocr": bool(image.ocr_text),
@@ -443,8 +534,55 @@ class ImageProcessor:
                 ],
             )
 
+            if image.visual_embedding:
+                from app.retrievers.stores.vector import get_chroma_client
+
+                get_chroma_client().get_or_create_collection(
+                    name="visual_embeddings",
+                    metadata={"hnsw:space": "cosine"},
+                ).upsert(
+                    ids=[image.image_id],
+                    embeddings=[list(image.visual_embedding)],
+                    documents=[text_to_index],
+                    metadatas=[
+                        {
+                            "doc_id": image.doc_id,
+                            "document_id": image.document_id,
+                            "tenant_id": image.tenant_id,
+                            "version": image.version,
+                            "page_number": image.page_number,
+                            "image_id": image.image_id,
+                            "artifact_uri": image.artifact_uri or "",
+                            "masked_artifact_uri": image.masked_artifact_uri or "",
+                            "source": image.metadata.get("source", image.artifact_uri or image.doc_id),
+                            "embedding_model": image.embedding_model or "",
+                            "visual_embedding_backend": image.metadata.get("visual_embedding_backend", ""),
+                            "type": "image",
+                        }
+                    ],
+                )
+
             logger.info(f"Indexed image {image.image_id} in collection {collection_name}")
 
         except Exception as e:
             logger.error(f"Error indexing image {image.image_id}: {e}")
             raise
+
+
+def _image_media_type(extension: str) -> str:
+    return {
+        "jpg": "image/jpeg",
+        "jpeg": "image/jpeg",
+        "png": "image/png",
+        "webp": "image/webp",
+        "tif": "image/tiff",
+        "tiff": "image/tiff",
+    }.get(str(extension or "").lower(), "application/octet-stream")
+
+
+def _image_extension(media_type: str) -> str:
+    return {
+        "image/jpeg": "jpg",
+        "image/webp": "webp",
+        "image/tiff": "tiff",
+    }.get(str(media_type or "").lower(), "png")
