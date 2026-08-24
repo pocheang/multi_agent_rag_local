@@ -4,7 +4,7 @@
     "."
   ],
   "graphs": {
-    "local_rag_workflow": "app.graph.studio_entry:get_graph"
+    "local_rag_workflow": "app.orchestration.langgraph.workflow:get_graph"
   }
 }
 

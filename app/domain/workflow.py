@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+import operator
 from collections.abc import Awaitable, Callable, Sequence
-from typing import TYPE_CHECKING, Any, Literal, Protocol, TypedDict
+from typing import TYPE_CHECKING, Annotated, Any, Literal, Protocol, TypedDict
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -116,8 +117,8 @@ class WorkflowState(TypedDict, total=False):
     verification: VerificationDecision
     final_answer: FinalAnswer
     retry_count: int
-    errors: tuple[WorkflowError, ...]
-    trace: tuple[ExecutionEvent, ...]
+    errors: Annotated[tuple[WorkflowError, ...], operator.add]
+    trace: Annotated[tuple[ExecutionEvent, ...], operator.add]
 
 
 class KnowledgeAgentPort(Protocol):

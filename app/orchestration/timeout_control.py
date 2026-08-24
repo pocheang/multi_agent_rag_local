@@ -125,12 +125,17 @@ class ExecutionBudget:
     def get_stage_timeout(self, stage: str) -> int:
         """Get timeout for specific stage, adjusted for remaining budget."""
         stage_timeouts = {
+            "privacy_permission": self.config.finalization_timeout_ms,
             "route": self.config.route_timeout_ms,
+            "clarification": self.config.route_timeout_ms,
             "plan": self.config.plan_timeout_ms,
             "rag": self.config.retrieval_timeout_ms,
+            "knowledge": self.config.retrieval_timeout_ms,
             "tool": self.config.tool_timeout_ms,
             "synthesize": self.config.synthesis_timeout_ms,
+            "verifier": self.config.finalization_timeout_ms,
             "finalize": self.config.finalization_timeout_ms,
+            "output_filter": self.config.finalization_timeout_ms,
         }
 
         # Get configured timeout for stage

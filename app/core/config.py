@@ -288,6 +288,8 @@ class Settings(BaseSettings):
     query_retry_enabled: bool = Field(default=True, alias="QUERY_RETRY_ENABLED")
     query_retry_max_attempts: int = Field(default=2, alias="QUERY_RETRY_MAX_ATTEMPTS")
     query_retry_base_delay_ms: int = Field(default=120, alias="QUERY_RETRY_BASE_DELAY_MS")
+    verifier_max_retries: int = Field(default=1, ge=0, le=1, alias="VERIFIER_MAX_RETRIES")
+    langgraph_recursion_limit: int = Field(default=20, ge=12, le=100, alias="LANGGRAPH_RECURSION_LIMIT")
     perf_gate_max_p95_ms: int = Field(default=4000, alias="PERF_GATE_MAX_P95_MS")
     perf_gate_max_error_rate_percent: float = Field(default=5.0, alias="PERF_GATE_MAX_ERROR_RATE_PERCENT")
     admin_create_approval_token: str = Field(default="", alias="ADMIN_CREATE_APPROVAL_TOKEN")

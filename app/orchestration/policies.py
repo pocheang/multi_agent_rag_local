@@ -22,7 +22,7 @@ class ExecutionPolicy:
     require_answer_validation: bool = False
     require_quality_report: bool = False
     allow_planning: bool = True
-    allowed_routes: frozenset[str] = frozenset({"vector", "graph", "web", "react", "hybrid"})
+    allowed_routes: frozenset[str] = frozenset({"vector", "graph", "web", "react", "hybrid", "clarification"})
 
     @classmethod
     def for_profile(cls, profile: PipelineProfile | str) -> ExecutionPolicy:

@@ -12,6 +12,8 @@ from app.agents.synthesizer.service import SynthesizerAgentService
 from app.agents.tool.service import ToolAgentService
 from app.orchestration.engine import OrchestrationServices
 from app.orchestration.finalization import FinalizationService
+from app.privacy.service import PrivacyService
+from app.services.security.access_scope import AccessScopeResolver
 
 
 @dataclass
@@ -24,6 +26,8 @@ class CoreCapabilities:
     typed_tools: ToolAgentService = field(default_factory=ToolAgentService)
     typed_synthesizer: SynthesizerAgentService = field(default_factory=SynthesizerAgentService)
     typed_finalizer: FinalizationService = field(default_factory=FinalizationService)
+    privacy: PrivacyService = field(default_factory=PrivacyService)
+    access_scope_resolver: AccessScopeResolver = field(default_factory=AccessScopeResolver)
     context: Any = None  # Legacy context object, type varies by implementation
 
     def orchestration_services(self) -> OrchestrationServices:
@@ -39,6 +43,8 @@ class CoreCapabilities:
             tool_runner=self.typed_tools.run,
             synthesizer=self.typed_synthesizer.synthesize,
             finalizer=self.typed_finalizer.finalize,
+            privacy=self.privacy,
+            access_scope_resolver=self.access_scope_resolver,
             context=self.context,
             event_reporter_binder=self.typed_rag.set_degradation_reporter,
         )

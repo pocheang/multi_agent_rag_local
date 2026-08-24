@@ -4,14 +4,16 @@ from __future__ import annotations
 
 from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from app.core.config import Settings, get_settings
 from app.domain.knowledge import AccessScope
-from app.orchestration.request import RequestActor, RequestScope
 from app.services.documents.index_manager import list_indexed_files
 from app.services.runtime.rag_runtime_scope import is_under_path
 from app.services.security.rbac import can
+
+if TYPE_CHECKING:
+    from app.orchestration.request import RequestActor, RequestScope
 
 DEFAULT_CONTEXT_FIELDS = frozenset(
     {
