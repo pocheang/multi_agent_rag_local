@@ -10,6 +10,8 @@ from uuid import uuid4
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from app.domain.knowledge import EvidenceLayer, Modality
+
 Intent = Literal["general_qa", "knowledge_retrieval", "web_search", "tool_call", "hybrid"]
 Capability = Literal["rag", "web", "tool"]
 ToolStatus = Literal["succeeded", "failed", "approval_required", "skipped"]
@@ -128,7 +130,14 @@ class EvidenceItem(ImmutableContract):
     content: str = Field(min_length=1)
     source: str = Field(min_length=1)
     document_id: str = Field(min_length=1)
+    version: int | None = Field(default=None, ge=1)
     page: int | None = Field(default=None, ge=1)
+    chunk_id: str | None = None
+    image_id: str | None = None
+    artifact_uri: str | None = None
+    modality: Modality = "text"
+    layer: EvidenceLayer = "evidence"
+    acl_tags: frozenset[str] = Field(default_factory=frozenset)
     retriever: str = Field(default="unknown", min_length=1)
     score: float | None = Field(default=None, ge=0, le=1)
     retrieved_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
@@ -140,6 +149,12 @@ class EvidenceItem(ImmutableContract):
         if not value.strip():
             raise ValueError("must not be blank")
         return value
+
+    @model_validator(mode="after")
+    def require_modality_provenance(self) -> EvidenceItem:
+        if self.modality == "image" and not (self.image_id or "").strip():
+            raise ValueError("image evidence requires image_id")
+        return self
 
 
 class EvidenceBundle(ImmutableContract):

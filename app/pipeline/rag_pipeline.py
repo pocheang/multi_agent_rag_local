@@ -156,7 +156,19 @@ class RAGPipeline:
         # Prefer structured evidence items for citations (preserves document_id and page)
         if answer.evidence.items:
             citations = tuple(
-                PipelineCitation(source=item.source, content=item.content, document_id=item.document_id, page=item.page)
+                PipelineCitation(
+                    source=item.source,
+                    content=item.content,
+                    document_id=item.document_id,
+                    version=item.version,
+                    page=item.page,
+                    chunk_id=item.chunk_id,
+                    image_id=item.image_id,
+                    artifact_uri=item.artifact_uri,
+                    modality=item.modality,
+                    layer=item.layer,
+                    metadata={"acl_tags": sorted(item.acl_tags)} if item.acl_tags else {},
+                )
                 for item in answer.evidence.items
             )
         else:
@@ -167,7 +179,15 @@ class RAGPipeline:
                 content=item.content,
                 source=item.source,
                 document_id=item.document_id,
+                version=item.version,
+                page=item.page,
+                chunk_id=item.chunk_id,
+                image_id=item.image_id,
+                artifact_uri=item.artifact_uri,
+                modality=item.modality,
+                layer=item.layer,
                 score=item.score,
+                metadata={"acl_tags": sorted(item.acl_tags)} if item.acl_tags else {},
             )
             for item in answer.evidence.items
         )

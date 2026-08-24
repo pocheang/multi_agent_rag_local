@@ -139,7 +139,13 @@ class PipelineCitation(BaseModel):
     source: str
     content: str = ""
     document_id: str | None = None
+    version: int | None = Field(default=None, ge=1)
     page: int | None = None
+    chunk_id: str | None = None
+    image_id: str | None = None
+    artifact_uri: str | None = None
+    modality: str | None = None
+    layer: str | None = None
     metadata: dict[str, Any] = Field(default_factory=dict)
 
 
@@ -151,6 +157,13 @@ class PipelineContext(BaseModel):
     content: str
     source: str | None = None
     document_id: str | None = None
+    version: int | None = Field(default=None, ge=1)
+    page: int | None = Field(default=None, ge=1)
+    chunk_id: str | None = None
+    image_id: str | None = None
+    artifact_uri: str | None = None
+    modality: str | None = None
+    layer: str | None = None
     score: float | None = None
     metadata: dict[str, Any] = Field(default_factory=dict)
 
