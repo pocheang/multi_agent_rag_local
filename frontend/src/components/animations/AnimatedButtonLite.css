@@ -33,7 +33,6 @@
   user-select: none;
   -webkit-tap-highlight-color: transparent;
 }
-
 .animated-btn-lite:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
@@ -272,29 +271,4 @@
   .animated-btn-lite:active:not(:disabled) {
     transform: none !important;
   }
-}
-
-/* ============================================
-   Dark Mode 适配
-   ============================================ */
-
-:root[data-theme="dark"] .animated-btn-lite--secondary {
-  background: var(--surface-3);
-  border-color: var(--border-dark);
-}
-
-:root[data-theme="dark"] .animated-btn-lite--ghost:hover:not(:disabled) {
-  background: var(--surface-3);
-}
-
-/* 确保danger按钮在深色模式下也是红色 */
-:root[data-theme="dark"] .animated-btn-lite--danger {
-  background: #ef4444 !important;
-  color: white !important;
-  border: none !important;
-}
-
-:root[data-theme="dark"] .animated-btn-lite--danger:hover:not(:disabled) {
-  background: #dc2626 !important;
-  box-shadow: 0 4px 12px rgba(239, 68, 68, 0.6) !important;
 }

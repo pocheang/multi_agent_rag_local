@@ -2,25 +2,21 @@ import type { UserIdentity } from "@/types/auth";
 import { TopbarMenu } from "@/pages/chat/components/TopbarMenu";
 
 type Props = {
-  themeLabel: string;
   sidebarCollapsed: boolean;
   user: UserIdentity | null;
   topbarHidden: boolean;
   sectionsHidden: boolean;
   onToggleSidebar: () => void;
   onOpenSettings: () => void;
-  onThemeToggle: () => void;
   onToggleTopbar: () => void;
   onToggleSections: () => void;
 };
 
 export function ChatTopbar({
-  themeLabel,
   user,
   topbarHidden,
   sectionsHidden,
   onOpenSettings,
-  onThemeToggle,
   onToggleTopbar,
   onToggleSections,
 }: Props) {
@@ -55,13 +51,11 @@ export function ChatTopbar({
       >
         <TopbarMenu
           user={user}
-          themeLabel={themeLabel}
           topbarHidden={topbarHidden}
           sectionsHidden={sectionsHidden}
           onToggleTopbar={onToggleTopbar}
           onToggleSections={onToggleSections}
           onOpenSettings={onOpenSettings}
-          onThemeToggle={onThemeToggle}
         />
       </div>
     </header>

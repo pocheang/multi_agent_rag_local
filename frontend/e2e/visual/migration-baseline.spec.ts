@@ -1,6 +1,5 @@
 import { expect, test, type Page, type Route } from "@playwright/test";
 
-type Theme = "light" | "dark";
 type Language = "en" | "zh";
 
 type BaselineCase = {
@@ -8,7 +7,6 @@ type BaselineCase = {
   path: string;
   ready: string;
   authenticated: boolean;
-  theme: Theme;
   language: Language;
   viewport: { width: number; height: number };
   settleMs?: number;
@@ -47,7 +45,7 @@ const mockSessionDetail = {
       message_id: "m_assistant_visual",
       role: "assistant",
       content:
-        "The baseline captures routes, themes, languages, and responsive boundaries before Tailwind utilities replace legacy CSS.",
+        "The baseline captures routes, languages, and responsive boundaries before Tailwind utilities replace legacy CSS.",
       created_at: "2026-08-23T07:31:00Z",
       metadata: {
         route: "research",
@@ -84,10 +82,9 @@ function json(route: Route, body: unknown, status = 200) {
   });
 }
 
-async function preparePage(page: Page, options: Pick<BaselineCase, "authenticated" | "language" | "theme">) {
-  await page.addInitScript(({ authenticated, language, theme }) => {
+async function preparePage(page: Page, options: Pick<BaselineCase, "authenticated" | "language">) {
+  await page.addInitScript(({ authenticated, language }) => {
     localStorage.setItem("language", language);
-    localStorage.setItem("theme_preference", theme);
     if (authenticated) localStorage.setItem("auth_token", "visual-baseline-token");
     else localStorage.removeItem("auth_token");
 
@@ -250,7 +247,6 @@ const cases: BaselineCase[] = [
     path: "/",
     ready: ".landing-root",
     authenticated: false,
-    theme: "light",
     language: "en",
     viewport: desktop,
   },
@@ -259,7 +255,6 @@ const cases: BaselineCase[] = [
     path: "/app/login",
     ready: ".auth-root",
     authenticated: false,
-    theme: "light",
     language: "en",
     viewport: desktop,
   },
@@ -268,7 +263,6 @@ const cases: BaselineCase[] = [
     path: "/app",
     ready: ".page-shell",
     authenticated: true,
-    theme: "light",
     language: "en",
     viewport: desktop,
   },
@@ -277,7 +271,6 @@ const cases: BaselineCase[] = [
     path: "/app/admin",
     ready: ".admin-shell",
     authenticated: true,
-    theme: "light",
     language: "en",
     viewport: desktop,
   },
@@ -286,7 +279,6 @@ const cases: BaselineCase[] = [
     path: "/app/analytics",
     ready: ".analytics-page",
     authenticated: true,
-    theme: "light",
     language: "en",
     viewport: desktop,
     settleMs: 2_500,
@@ -296,7 +288,6 @@ const cases: BaselineCase[] = [
     path: "/app/architecture",
     ready: ".architecture-shell",
     authenticated: true,
-    theme: "light",
     language: "en",
     viewport: desktop,
     settleMs: 2_500,
@@ -306,7 +297,6 @@ const cases: BaselineCase[] = [
     path: "/app/profile",
     ready: ".profile-page",
     authenticated: true,
-    theme: "light",
     language: "en",
     viewport: desktop,
   },
@@ -315,7 +305,6 @@ const cases: BaselineCase[] = [
     path: "/app/change-password",
     ready: ".change-password-card",
     authenticated: true,
-    theme: "light",
     language: "en",
     viewport: desktop,
   },
@@ -324,43 +313,6 @@ const cases: BaselineCase[] = [
     path: "/missing-visual-route",
     ready: ".not-found",
     authenticated: false,
-    theme: "light",
-    language: "en",
-    viewport: desktop,
-  },
-  {
-    name: "landing-en-dark-desktop",
-    path: "/",
-    ready: ".landing-root",
-    authenticated: false,
-    theme: "dark",
-    language: "en",
-    viewport: desktop,
-  },
-  {
-    name: "login-en-dark-desktop",
-    path: "/app/login",
-    ready: ".auth-root",
-    authenticated: false,
-    theme: "dark",
-    language: "en",
-    viewport: desktop,
-  },
-  {
-    name: "chat-en-dark-desktop",
-    path: "/app",
-    ready: ".page-shell",
-    authenticated: true,
-    theme: "dark",
-    language: "en",
-    viewport: desktop,
-  },
-  {
-    name: "admin-en-dark-desktop",
-    path: "/app/admin",
-    ready: ".admin-shell",
-    authenticated: true,
-    theme: "dark",
     language: "en",
     viewport: desktop,
   },
@@ -369,7 +321,6 @@ const cases: BaselineCase[] = [
     path: "/",
     ready: ".landing-root",
     authenticated: false,
-    theme: "light",
     language: "zh",
     viewport: desktop,
   },
@@ -378,7 +329,6 @@ const cases: BaselineCase[] = [
     path: "/app/login",
     ready: ".auth-root",
     authenticated: false,
-    theme: "light",
     language: "zh",
     viewport: desktop,
   },
@@ -387,7 +337,6 @@ const cases: BaselineCase[] = [
     path: "/app",
     ready: ".page-shell",
     authenticated: true,
-    theme: "light",
     language: "zh",
     viewport: desktop,
   },
@@ -396,7 +345,6 @@ const cases: BaselineCase[] = [
     path: "/",
     ready: ".landing-root",
     authenticated: false,
-    theme: "light",
     language: "en",
     viewport: { width: 375, height: 812 },
   },
@@ -405,7 +353,6 @@ const cases: BaselineCase[] = [
     path: "/app",
     ready: ".page-shell",
     authenticated: true,
-    theme: "light",
     language: "en",
     viewport: { width: 375, height: 812 },
   },
@@ -414,7 +361,6 @@ const cases: BaselineCase[] = [
     path: "/app",
     ready: ".page-shell",
     authenticated: true,
-    theme: "light",
     language: "en",
     viewport: { width: 768, height: 1024 },
   },
@@ -423,7 +369,6 @@ const cases: BaselineCase[] = [
     path: "/app",
     ready: ".page-shell",
     authenticated: true,
-    theme: "light",
     language: "en",
     viewport: { width: 1079, height: 900 },
   },
@@ -432,7 +377,6 @@ const cases: BaselineCase[] = [
     path: "/app",
     ready: ".page-shell",
     authenticated: true,
-    theme: "light",
     language: "en",
     viewport: { width: 1081, height: 900 },
   },

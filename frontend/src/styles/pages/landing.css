@@ -20,15 +20,6 @@
   --landing-badge-border: rgba(59, 130, 246, 0.2);
 }
 
-:root[data-theme="dark"] .landing-root {
-  --landing-nav-bg: rgba(10, 14, 26, 0.75);
-  --landing-card-bg: rgba(19, 24, 42, 0.55);
-  --landing-tier-bg: rgba(19, 24, 42, 0.65);
-  --landing-step-bg: rgba(19, 24, 42, 0.65);
-  --landing-sandbox-bg: rgba(19, 24, 42, 0.85);
-  --landing-badge-border: rgba(91, 140, 255, 0.2);
-}
-
 /* --- Floating Neon/Glass Orbs Background --- */
 .landing-orb-container {
   position: absolute;
@@ -103,10 +94,6 @@
   padding: 0 var(--space-8);
   z-index: var(--z-sticky);
   transition: background-color var(--transition-base), border-color var(--transition-base);
-}
-
-:root[data-theme="dark"] .landing-nav {
-  border-bottom-color: var(--border-light);
 }
 
 .landing-logo {

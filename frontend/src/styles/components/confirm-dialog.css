@@ -37,15 +37,6 @@
   overflow: hidden;
 }
 
-:root[data-theme="dark"] .confirm-dialog {
-  background: linear-gradient(135deg, rgba(25, 35, 60, 0.98), rgba(18, 26, 45, 0.98));
-  border-color: rgba(91, 140, 255, 0.25);
-  box-shadow:
-    0 20px 48px rgba(0, 0, 0, 0.8),
-    0 8px 24px rgba(91, 140, 255, 0.2),
-    inset 0 1px 0 rgba(255, 255, 255, 0.1);
-}
-
 @keyframes dialogSlideIn {
   from {
     opacity: 0;
@@ -60,10 +51,6 @@
 .confirm-dialog-header {
   padding: 20px 24px 16px;
   border-bottom: 1px solid var(--border-light);
-}
-
-:root[data-theme="dark"] .confirm-dialog-header {
-  border-bottom-color: rgba(91, 140, 255, 0.15);
 }
 
 .confirm-dialog-title {
@@ -115,18 +102,6 @@
   border-color: var(--border-strong);
 }
 
-:root[data-theme="dark"] .confirm-dialog-btn-cancel {
-  background: rgba(100, 122, 180, 0.15);
-  border-color: rgba(100, 122, 180, 0.25);
-  color: var(--text-secondary);
-}
-
-:root[data-theme="dark"] .confirm-dialog-btn-cancel:hover {
-  background: rgba(100, 122, 180, 0.25);
-  border-color: rgba(100, 122, 180, 0.35);
-  color: var(--text-primary);
-}
-
 .confirm-dialog-btn-confirm {
   background: var(--accent);
   color: white;
@@ -140,16 +115,6 @@
   box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
 }
 
-:root[data-theme="dark"] .confirm-dialog-btn-confirm {
-  background: linear-gradient(135deg, #5b8cff, #8b7aff);
-  border-color: rgba(139, 122, 255, 0.5);
-}
-
-:root[data-theme="dark"] .confirm-dialog-btn-confirm:hover {
-  background: linear-gradient(135deg, #6b9cff, #9b8aff);
-  box-shadow: 0 4px 16px rgba(91, 140, 255, 0.4);
-}
-
 .confirm-dialog-btn-confirm.danger {
   background: var(--danger);
   border-color: var(--danger);
@@ -159,16 +124,6 @@
   background: var(--danger-hover);
   border-color: var(--danger-hover);
   box-shadow: 0 4px 12px rgba(239, 68, 68, 0.3);
-}
-
-:root[data-theme="dark"] .confirm-dialog-btn-confirm.danger {
-  background: linear-gradient(135deg, rgba(255, 85, 112, 0.9), rgba(255, 100, 130, 0.9));
-  border-color: rgba(255, 85, 112, 0.5);
-}
-
-:root[data-theme="dark"] .confirm-dialog-btn-confirm.danger:hover {
-  background: linear-gradient(135deg, rgba(255, 100, 130, 1), rgba(255, 115, 145, 1));
-  box-shadow: 0 4px 16px rgba(255, 85, 112, 0.4);
 }
 
 .confirm-dialog-btn:active {

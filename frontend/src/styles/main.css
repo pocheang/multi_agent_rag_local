@@ -10,9 +10,6 @@
 @import "./core/reset.css";
 @import "./core/utilities.css";
 
-/* Shared theme variables and shared component theme rules */
-@import "./themes/dark/index.css";
-
 /* Tailwind CSS v4 utilities */
 @import "./tailwind.css";
 

@@ -6,7 +6,6 @@ import type { AuthUser } from "@/types/api";
 import { validateUsername, validatePassword } from "@/lib/validation";
 import { useFormState } from "@/hooks/useFormState";
 import { AuthInput } from "@/components/AuthInput";
-import { ThemeToggle } from "@/components/ThemeToggle";
 import { LanguageToggle } from "@/components/LanguageToggle";
 import { secureGetItem, secureSetItem, secureRemoveItem, secureHasItem } from "@/lib/secureStorage";
 
@@ -15,11 +14,9 @@ import "@/styles/pages/auth-entry.css";
 
 type Props = {
   onLogin: (user: AuthUser) => void;
-  themeLabel: string;
-  onThemeToggle: () => void;
 };
 
-export function LoginPage({ onLogin, themeLabel, onThemeToggle }: Props) {
+export function LoginPage({ onLogin }: Props) {
   const { t } = useTranslation();
   const [searchParams, setSearchParams] = useSearchParams();
   const mode = searchParams.get("mode") === "register" ? "register" : "login";
@@ -123,7 +120,6 @@ export function LoginPage({ onLogin, themeLabel, onThemeToggle }: Props) {
     <div className="auth-root">
       <div className="auth-toolbar">
         <LanguageToggle />
-        <ThemeToggle themeLabel={themeLabel} onThemeToggle={onThemeToggle} />
       </div>
 
       <main className="auth-card">

@@ -10,7 +10,6 @@
   z-index: var(--z-modal-backdrop);
   animation: fade-in 0.2s ease-out;
 }
-
 @keyframes fade-in {
   from {
     opacity: 0;
@@ -217,15 +216,4 @@
     order: 1;
     font-weight: 500;
   }
-}
-
-/* Dark Mode */
-:root[data-theme="dark"] .keyboard-help-backdrop {
-  background: rgba(0, 0, 0, 0.7);
-}
-
-:root[data-theme="dark"] .keyboard-key {
-  background: var(--bg-tertiary);
-  border-color: var(--border-strong);
-  box-shadow: 0 2px 0 0 var(--border-strong);
 }

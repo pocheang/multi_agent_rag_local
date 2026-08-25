@@ -4,16 +4,10 @@ import { Link } from "react-router-dom";
 import { useFormState } from "@/hooks/useFormState";
 import { AuthInput } from "@/components/AuthInput";
 import { LanguageToggle } from "@/components/LanguageToggle";
-import { ThemeToggle } from "@/components/ThemeToggle";
 
 import "@/styles/pages/auth-entry.css";
 
-type Props = {
-  themeLabel: string;
-  onThemeToggle: () => void;
-};
-
-export function ForgotPasswordPage({ themeLabel, onThemeToggle }: Props) {
+export function ForgotPasswordPage() {
   const { t } = useTranslation();
   const [email, setEmail] = useState("");
   const { status, setStatus, error, setError, loading, setLoading } = useFormState();
@@ -47,7 +41,6 @@ export function ForgotPasswordPage({ themeLabel, onThemeToggle }: Props) {
       <div className="auth-root">
         <div className="auth-toolbar">
           <LanguageToggle />
-          <ThemeToggle themeLabel={themeLabel} onThemeToggle={onThemeToggle} />
         </div>
 
         <main className="auth-card forgot-password-card">
@@ -113,7 +106,6 @@ export function ForgotPasswordPage({ themeLabel, onThemeToggle }: Props) {
     <div className="auth-root">
       <div className="auth-toolbar">
         <LanguageToggle />
-        <ThemeToggle themeLabel={themeLabel} onThemeToggle={onThemeToggle} />
       </div>
 
       <main className="auth-card forgot-password-card">

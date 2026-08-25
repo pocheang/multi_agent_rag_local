@@ -15,18 +15,6 @@
   --transition-base: 200ms cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-:root[data-theme="dark"] {
-  --bg: #0a0e1a;
-  --bg-secondary: #0f1419;
-  --surface: #13182a;
-  --text-primary: #e8eef5;
-  --text-secondary: #b8c5d6;
-  --text-tertiary: #7a8ba3;
-  --border-light: #1e2738;
-  --accent: #5b8cff;
-  --accent-hover: #6d9aff;
-}
-
 * {
   box-sizing: border-box;
 }

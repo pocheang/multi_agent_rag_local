@@ -22,16 +22,6 @@
   animation: skeleton-list-shimmer 1.5s ease-in-out infinite;
 }
 
-:root[data-theme="dark"] .skeleton-list::before,
-:root[data-theme="dark"] .skeleton-list::after {
-  background: linear-gradient(
-    90deg,
-    rgba(25, 36, 62, 0.4) 0%,
-    rgba(35, 46, 72, 0.6) 50%,
-    rgba(25, 36, 62, 0.4) 100%
-  );
-}
-
 :root[data-theme="light"] .skeleton-list::before,
 :root[data-theme="light"] .skeleton-list::after {
   background: linear-gradient(

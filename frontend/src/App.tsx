@@ -1,8 +1,6 @@
 import { lazy, Suspense, useEffect, useState, type ReactNode } from "react";
 import { Navigate, Route, Routes, useLocation, useNavigate } from "react-router-dom";
-import { useTranslation } from "react-i18next";
 import { authApi } from "@/lib/api";
-import { applyTheme, getSavedTheme, nextTheme, saveTheme, type ThemeMode } from "@/lib/theme";
 import type { AuthUser } from "@/types/api";
 import { ToastProvider } from "@/components/animations/AnimatedToastLite";
 import { getPermissionCheck } from "@/hooks/usePermissions";
@@ -41,20 +39,13 @@ function Protected({
 }
 
 export function App() {
-  const { t } = useTranslation();
   const [user, setUser] = useState<AuthUser | null>(null);
   const [authReady, setAuthReady] = useState(false);
-  const [theme, setTheme] = useState<ThemeMode>(getSavedTheme());
   const location = useLocation();
   const navigate = useNavigate();
 
   // Performance monitoring (production only)
   usePerformanceMonitoring(import.meta.env.PROD);
-
-  useEffect(() => {
-    applyTheme(theme);
-    saveTheme(theme);
-  }, [theme]);
 
   useEffect(() => {
     authApi
@@ -66,13 +57,6 @@ export function App() {
       })
       .finally(() => setAuthReady(true));
   }, []);
-
-  const themeLabel = theme === "dark" ? t("theme.dark") : t("theme.light");
-  const handleThemeToggle = () => setTheme((prev) => nextTheme(prev));
-  const themeControls = {
-    themeLabel,
-    onThemeToggle: handleThemeToggle,
-  };
 
   const logout = async () => {
     await authApi.logout();
@@ -122,29 +106,29 @@ export function App() {
           <Routes>
           <Route
             path="/app/login"
-            element={renderGuestOnly(<LoginPage onLogin={loginSuccess} {...themeControls} />)}
+            element={renderGuestOnly(<LoginPage onLogin={loginSuccess} />)}
           />
           <Route
             path="/app"
-            element={renderProtected(<ChatPage user={user} onLogout={logout} onUserRefresh={refreshUser} {...themeControls} />)}
+            element={renderProtected(<ChatPage user={user} onLogout={logout} onUserRefresh={refreshUser} />)}
           />
           <Route
             path="/app/admin"
             element={renderProtected(
-              <AdminPage user={user} onLogout={logout} {...themeControls} />,
+              <AdminPage user={user} onLogout={logout} />,
               permissions.canAccessAdmin,
             )}
           />
           <Route
             path="/app/analytics"
             element={renderProtected(
-              <AnalyticsPage user={user} onLogout={logout} {...themeControls} />,
+              <AnalyticsPage user={user} onLogout={logout} />,
               permissions.canViewAnalytics,
             )}
           />
           <Route
             path="/app/change-password"
-            element={renderProtected(<ChangePasswordPage {...themeControls} />)}
+            element={renderProtected(<ChangePasswordPage />)}
           />
           <Route
             path="/app/profile"
@@ -152,11 +136,11 @@ export function App() {
           />
           <Route
             path="/app/architecture"
-            element={<ArchitecturePage isLoggedIn={!!user} {...themeControls} />}
+            element={<ArchitecturePage isLoggedIn={!!user} />}
           />
           <Route
             path="/"
-            element={<LandingPage isLoggedIn={!!user} {...themeControls} />}
+            element={<LandingPage isLoggedIn={!!user} />}
           />
           <Route path="*" element={<NotFoundPage pathname={location.pathname} />} />
         </Routes>

@@ -23,8 +23,6 @@
   gap: 0.5rem;
 }
 
-/* .theme-toggle 样式已移至 components/theme-toggle.css */
-
 .auth-card {
   width: min(1024px, 100%);
   max-width: 100%;
@@ -230,68 +228,6 @@
     opacity: 1;
     transform: translateY(0);
   }
-}
-
-/* Dark theme for auth pages */
-/* .theme-toggle dark styles are now in components/theme-toggle.css */
-
-:root[data-theme="dark"] .auth-root {
-  background:
-    radial-gradient(circle at top left, rgba(40, 60, 100, 0.3), transparent 32%),
-    linear-gradient(180deg, #0f1419 0%, #1a1f2e 100%);
-}
-
-:root[data-theme="dark"] .auth-card,
-:root[data-theme="dark"] .change-password-card {
-  background: rgba(25, 30, 40, 0.94);
-  border-color: rgba(60, 70, 85, 0.5);
-  box-shadow: 0 30px 70px rgba(0, 0, 0, 0.4);
-}
-
-:root[data-theme="dark"] .auth-intro {
-  background:
-    radial-gradient(circle at top left, rgba(85, 145, 226, 0.18), transparent 34%),
-    linear-gradient(180deg, #09131f 0%, #0f1b2d 100%);
-}
-
-:root[data-theme="dark"] .auth-intro h1,
-:root[data-theme="dark"] .auth-info-panel h3 {
-  color: #eef5fd;
-}
-
-:root[data-theme="dark"] .auth-intro p {
-  color: #bfd0e2;
-}
-
-:root[data-theme="dark"] .auth-feature-card,
-:root[data-theme="dark"] .auth-info-panel {
-  background: rgba(14, 24, 39, 0.72);
-  border-color: rgba(54, 74, 98, 0.78);
-  box-shadow: 0 16px 28px rgba(0, 0, 0, 0.18);
-  color: #eef5fd;
-}
-
-:root[data-theme="dark"] .auth-feature-icon {
-  background: rgba(108, 182, 255, 0.12);
-}
-
-:root[data-theme="dark"] .auth-form {
-  background: rgba(20, 25, 35, 0.88);
-}
-
-:root[data-theme="dark"] .auth-intro .badge,
-:root[data-theme="dark"] .badge-success {
-  background: rgba(9, 18, 31, 0.46);
-  border-color: rgba(135, 181, 235, 0.18);
-  color: #9fd4ff;
-}
-
-:root[data-theme="dark"] .auth-intro-orb {
-  background: radial-gradient(circle, rgba(60, 100, 180, 0.2), transparent 68%);
-}
-
-:root[data-theme="dark"] .auth-intro-orb-small {
-  background: radial-gradient(circle, rgba(80, 120, 200, 0.25), transparent 64%);
 }
 
 /* Responsive */

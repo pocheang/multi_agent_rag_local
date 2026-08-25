@@ -1,5 +1,5 @@
 /* ============================================
-   Sidebar Rail - Minimal Dark Dock
+   Sidebar Rail - Light Dock
    ============================================ */
 
 .page-shell .sidebar-rail {
@@ -11,10 +11,10 @@
   overflow: hidden;
   position: relative;
   background:
-    radial-gradient(circle at 50% 0%, rgba(111, 93, 255, 0.12), transparent 28%),
-    linear-gradient(180deg, rgba(6, 10, 20, 0.99), rgba(9, 13, 27, 0.98));
-  border-right: 1px solid rgba(112, 132, 185, 0.2);
-  box-shadow: inset -1px 0 0 rgba(255, 255, 255, 0.03), 14px 0 34px rgba(0, 0, 0, 0.2);
+    radial-gradient(circle at 50% 0%, rgba(99, 102, 241, 0.08), transparent 30%),
+    linear-gradient(180deg, #ffffff, #f8fafc);
+  border-right: 1px solid #e2e8f0;
+  box-shadow: inset -1px 0 0 rgba(203, 213, 225, 0.28), 10px 0 28px rgba(15, 23, 42, 0.06);
 }
 
 .page-shell .sidebar-rail-actions,
@@ -42,7 +42,7 @@
   position: relative;
   border: 0;
   background: transparent;
-  color: rgba(232, 238, 245, 0.86);
+  color: #64748b;
   cursor: pointer;
   transition:
     background 0.16s ease,
@@ -60,13 +60,13 @@
 }
 
 .page-shell .sidebar-rail-btn.active {
-  background: rgba(255, 255, 255, 0.08);
-  color: #ffffff;
+  background: #eef2ff;
+  color: #4f46e5;
 }
 
 .page-shell .sidebar-rail-btn:hover {
-  background: rgba(255, 255, 255, 0.07);
-  color: #ffffff;
+  background: #f1f5f9;
+  color: #334155;
   transform: translateY(-1px);
 }
 
@@ -110,12 +110,12 @@
   background: currentColor;
   transform: rotate(-45deg);
   transform-origin: center;
-  box-shadow: -8px 8px 0 -1px #090d1b;
+  box-shadow: -8px 8px 0 -1px #f8fafc;
 }
 
 .page-shell .sidebar-rail-btn:hover .rail-icon-edit::before,
 .page-shell .sidebar-rail-btn.active .rail-icon-edit::before {
-  box-shadow: -8px 8px 0 -1px #182034;
+  box-shadow: -8px 8px 0 -1px #eef2ff;
 }
 
 .page-shell .rail-icon-search {
@@ -173,7 +173,7 @@
   height: 7px;
   border-radius: 999px;
   background: #3dd68c;
-  border: 2px solid #090d1b;
+  border: 2px solid #f8fafc;
 }
 
 .page-shell .sidebar-rail-user:hover {

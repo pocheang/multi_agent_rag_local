@@ -14,7 +14,6 @@ function isChatRouteCss(id: string) {
     id.includes('pages/chat.css') ||
     id.includes('pages/chat-responsive.css') ||
     id.includes('themes/light/chat.css') ||
-    id.includes('themes/dark/chat.css') ||
     id.includes('components/topbar') ||
     id.includes('components/sidebar') ||
     id.includes('components/welcome-screen.css') ||

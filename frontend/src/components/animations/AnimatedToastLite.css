@@ -240,65 +240,6 @@
 }
 
 /* ============================================
-   Dark Mode 适配
-   ============================================ */
-
-:root[data-theme="dark"] .toast-lite {
-  background: #1f2937;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4),
-              0 2px 8px rgba(0, 0, 0, 0.3);
-}
-
-:root[data-theme="dark"] .toast-lite--info {
-  background: linear-gradient(135deg, #1e3a5f 0%, #1e40af 100%);
-  border-left-color: #60a5fa;
-}
-
-:root[data-theme="dark"] .toast-lite--info .toast-lite__icon {
-  color: #60a5fa;
-}
-
-:root[data-theme="dark"] .toast-lite--success {
-  background: linear-gradient(135deg, #064e3b 0%, #065f46 100%);
-  border-left-color: #34d399;
-}
-
-:root[data-theme="dark"] .toast-lite--success .toast-lite__icon {
-  color: #34d399;
-}
-
-:root[data-theme="dark"] .toast-lite--warning {
-  background: linear-gradient(135deg, #78350f 0%, #92400e 100%);
-  border-left-color: #fbbf24;
-}
-
-:root[data-theme="dark"] .toast-lite--warning .toast-lite__icon {
-  color: #fbbf24;
-}
-
-:root[data-theme="dark"] .toast-lite--error {
-  background: linear-gradient(135deg, #7f1d1d 0%, #991b1b 100%);
-  border-left-color: #f87171;
-}
-
-:root[data-theme="dark"] .toast-lite--error .toast-lite__icon {
-  color: #f87171;
-}
-
-:root[data-theme="dark"] .toast-lite__message {
-  color: #f9fafb;
-}
-
-:root[data-theme="dark"] .toast-lite__close {
-  color: #9ca3af;
-}
-
-:root[data-theme="dark"] .toast-lite__close:hover {
-  background: rgba(255, 255, 255, 0.1);
-  color: #f9fafb;
-}
-
-/* ============================================
    无障碍：减少动画
    ============================================ */
 

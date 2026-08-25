@@ -13,5 +13,4 @@
 @import "../features/runtime-panels.css";
 @import "../features/hidden-sections.css";
 @import "../themes/light/chat.css";
-@import "../themes/dark/chat.css";
 @import "./chat-responsive.css";

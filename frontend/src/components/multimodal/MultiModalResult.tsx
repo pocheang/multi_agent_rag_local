@@ -23,7 +23,7 @@ export const MultiModalResult: React.FC<MultiModalResultProps> = ({ result }) =>
   return (
     <div className="multimodal-result">
       {result.type === 'text' && (
-        <div className="text-content prose dark:prose-invert max-w-none">
+        <div className="text-content prose max-w-none">
           <p className="whitespace-pre-wrap">{result.content}</p>
         </div>
       )}
@@ -44,11 +44,11 @@ export const MultiModalResult: React.FC<MultiModalResultProps> = ({ result }) =>
       )}
 
       {result.type === 'chart' && (
-        <div className="chart-content border rounded-lg p-4 my-4 bg-blue-50 dark:bg-blue-900/20">
+        <div className="chart-content border rounded-lg p-4 my-4 bg-blue-50">
           <div className="flex items-start space-x-3">
             <div className="flex-shrink-0">
               <svg
-                className="w-6 h-6 text-blue-600 dark:text-blue-400"
+                className="w-6 h-6 text-blue-600"
                 fill="none"
                 stroke="currentColor"
                 viewBox="0 0 24 24"
@@ -62,10 +62,10 @@ export const MultiModalResult: React.FC<MultiModalResultProps> = ({ result }) =>
               </svg>
             </div>
             <div className="flex-1">
-              <h4 className="text-sm font-semibold text-gray-900 dark:text-gray-100 mb-1">
+              <h4 className="text-sm font-semibold text-gray-900 mb-1">
                 图表内容
               </h4>
-              <p className="text-sm text-gray-700 dark:text-gray-300 whitespace-pre-wrap">
+              <p className="text-sm text-gray-700 whitespace-pre-wrap">
                 {result.description || result.content}
               </p>
               {result.image_url && (
@@ -82,8 +82,8 @@ export const MultiModalResult: React.FC<MultiModalResultProps> = ({ result }) =>
 
       {/* Metadata badge */}
       {result.metadata && typeof result.metadata === 'object' && (
-        <div className="mt-2 flex items-center space-x-2 text-xs text-gray-500 dark:text-gray-400">
-          <span className="px-2 py-1 bg-gray-100 dark:bg-gray-700 rounded">
+        <div className="mt-2 flex items-center space-x-2 text-xs text-gray-500">
+          <span className="px-2 py-1 bg-gray-100 rounded">
             {result.type === 'text' && '文本'}
             {result.type === 'image' && '图片'}
             {result.type === 'table' && '表格'}

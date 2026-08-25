@@ -17,7 +17,6 @@ import { useAdminActions } from "@/pages/admin/useAdminActions";
 import { useAdminState } from "@/pages/admin/useAdminState";
 import { formatAuditTime } from "@/pages/admin/utils";
 import { ROLE_OPTIONS, STATUS_OPTIONS, ACTION_KEYWORD_OPTIONS } from "@/pages/admin/constants";
-import { getThemeIcon } from "@/lib/theme";
 
 // Route-specific CSS (code-split by Vite)
 import "@/styles/pages/admin-entry.css";
@@ -25,17 +24,13 @@ import "@/styles/pages/admin-entry.css";
 type Props = {
   user: AuthUser | null;
   onLogout: () => Promise<void>;
-  themeLabel: string;
-  onThemeToggle: () => void;
 };
 
-export function AdminPage({ user, onLogout, themeLabel, onThemeToggle }: Props) {
+export function AdminPage({ user, onLogout }: Props) {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const state = useAdminState();
   const isAdmin = useMemo(() => (user?.role || "").toLowerCase() === "admin", [user?.role]);
-  const themeIcon = getThemeIcon(themeLabel);
-
   // Pagination state for audit logs
   const [auditPage, setAuditPage] = useState(1);
   const [auditPageSize, setAuditPageSize] = useState(20);
@@ -114,9 +109,6 @@ export function AdminPage({ user, onLogout, themeLabel, onThemeToggle }: Props) 
         </div>
         <div className="top-actions">
           <LanguageToggle />
-          <button className="secondary" type="button" onClick={onThemeToggle}>
-            {themeIcon} {themeLabel}
-          </button>
           <button className="secondary" type="button" onClick={() => navigate('/app/analytics')}>
             {t("pages.admin.viewAnalytics")}
           </button>

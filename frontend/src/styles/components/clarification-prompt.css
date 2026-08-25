@@ -224,13 +224,6 @@
   font-weight: 500;
 }
 
-/* Dark mode adjustments */
-@media (prefers-color-scheme: dark) {
-  .clarification-prompt {
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
-  }
-}
-
 /* Responsive */
 @media (max-width: 768px) {
   .clarification-prompt {

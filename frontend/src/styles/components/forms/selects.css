@@ -26,7 +26,7 @@ select {
   background-repeat: no-repeat;
   background-size: 1.5em 1.5em;
   padding-right: var(--space-10);
-  color-scheme: dark;
+  color-scheme: light;
 }
 
 select:hover {

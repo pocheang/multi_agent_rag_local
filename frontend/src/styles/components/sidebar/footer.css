@@ -80,28 +80,6 @@
   text-decoration: none;
 }
 
-/* Dark theme styles (default) */
-:root[data-theme="dark"] .page-shell .sidebar-user-action-btn,
-:root:not([data-theme]) .page-shell .sidebar-user-action-btn {
-  background: rgba(18, 26, 45, 0.72);
-  border: 1px solid rgba(111, 132, 189, 0.16);
-  color: var(--text-tertiary);
-}
-
-:root[data-theme="dark"] .page-shell .sidebar-user-action-btn:hover,
-:root:not([data-theme]) .page-shell .sidebar-user-action-btn:hover {
-  background: rgba(61, 83, 137, 0.42);
-  border-color: rgba(91, 140, 255, 0.38);
-  color: var(--text-primary);
-  transform: translateY(-1px);
-  box-shadow: 0 12px 24px rgba(0, 0, 0, 0.22);
-}
-
-:root[data-theme="dark"] .page-shell .sidebar-user-action-admin,
-:root:not([data-theme]) .page-shell .sidebar-user-action-admin {
-  color: #b8c7ff;
-}
-
 .page-shell .sidebar-collapse-btn-bottom {
   width: 100%;
   min-height: 34px;

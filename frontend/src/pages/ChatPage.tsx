@@ -35,7 +35,7 @@ import { useSectionToggle, useTopbarToggle } from "@/hooks/useSectionToggle";
 // Route-specific CSS (code-split by Vite)
 import "@/styles/pages/chat-entry.css";
 
-export function ChatPage({ user, onLogout, onUserRefresh, themeLabel, onThemeToggle }: Props) {
+export function ChatPage({ user, onLogout, onUserRefresh }: Props) {
   const [executionId, setExecutionId] = useState<string | null>(null);
   const permissionUser: UserIdentity | null = user;
   const { sectionsHidden, toggleSections } = useSectionToggle();
@@ -292,14 +292,12 @@ export function ChatPage({ user, onLogout, onUserRefresh, themeLabel, onThemeTog
   return (
     <>
       <ChatTopbar
-        themeLabel={themeLabel}
         sidebarCollapsed={sidebarCollapsed}
         user={permissionUser}
         topbarHidden={topbarHidden}
         sectionsHidden={sectionsHidden}
         onToggleSidebar={handleSidebarToggle}
         onOpenSettings={() => setSettingsOpen(true)}
-        onThemeToggle={onThemeToggle}
         onToggleTopbar={toggleTopbar}
         onToggleSections={toggleSections}
       />

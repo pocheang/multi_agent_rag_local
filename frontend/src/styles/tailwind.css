@@ -3,8 +3,6 @@
 @import "tailwindcss/theme.css" layer(theme) prefix(tw);
 @import "tailwindcss/utilities.css" layer(utilities) prefix(tw);
 
-@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
-
 @theme inline {
   --color-bg: var(--bg);
   --color-bg-secondary: var(--bg-secondary);

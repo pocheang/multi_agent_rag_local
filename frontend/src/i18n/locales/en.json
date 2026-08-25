@@ -404,11 +404,6 @@
     "yes": "Yes",
     "no": "No"
   },
-  "theme": {
-    "light": "Light",
-    "dark": "Dark",
-    "toggle": "Toggle Theme"
-  },
   "language": {
     "en": "English",
     "zh": "中文",
@@ -823,7 +818,6 @@
       "openSidebar": "Open sidebar",
       "openSettings": "Open settings",
       "settings": "Settings",
-      "toggleTheme": "Toggle theme, current: {{theme}}",
       "architecture": "Architecture",
       "viewArchitecture": "View system architecture",
       "brandSubtitle": "AI Knowledge Operations",
@@ -1034,7 +1028,7 @@
         "React Router: SPA routing management",
         "Critical CSS Extraction: 86% size optimization (99KB → 14KB)",
         "Code Splitting: On-demand loading + lazy load optimization",
-        "Modern CSS Architecture: Modular + theme system",
+        "Modern CSS Architecture: Modular + light color system",
         "SSE Streaming Rendering: Real-time message stream display",
         "Responsive Design: Mobile adaptation"
       ]
@@ -1107,7 +1101,7 @@
           "Hover over a toast to pause auto-close",
           "Click toast or close button to manually dismiss",
           "Multiple toasts stack automatically",
-          "Supports dark/light theme auto-adaptation",
+          "Uses a consistent light interface",
           "On mobile, adapts to full width display"
         ]
       }

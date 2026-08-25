@@ -2,31 +2,25 @@ import { useState, useRef, useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import { Link } from "react-router-dom";
 import { LanguageToggle } from "@/components/LanguageToggle";
-import { getThemeIcon } from "@/lib/theme";
 import { RoleBadge } from "@/hooks/usePermissions";
 import type { UserIdentity } from "@/types/auth";
 
 type Props = {
   user: UserIdentity | null;
-  themeLabel: string;
   topbarHidden?: boolean;  // Optional - reserved for future use
   sectionsHidden?: boolean;  // Optional - reserved for future use
   onToggleTopbar?: () => void;  // Optional - reserved for future use
   onToggleSections?: () => void;  // Optional - reserved for future use
   onOpenSettings: () => void;
-  onThemeToggle: () => void;
 };
 
 export function TopbarMenu({
   user,
-  themeLabel,
   onOpenSettings,
-  onThemeToggle,
 }: Props) {
   const { t } = useTranslation();
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
-  const themeIcon = getThemeIcon(themeLabel);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -103,19 +97,6 @@ export function TopbarMenu({
               <span className="menu-item-label">{t("components.chat.settings")}</span>
             </button>
           )}
-
-          {/* Theme toggle */}
-          <button
-            type="button"
-            className="topbar-menu-item"
-            onClick={() => {
-              onThemeToggle();
-              setMenuOpen(false);
-            }}
-          >
-            <span className="menu-item-icon">{themeIcon}</span>
-            <span className="menu-item-label">{themeLabel}</span>
-          </button>
 
           {/* Architecture link */}
           <Link

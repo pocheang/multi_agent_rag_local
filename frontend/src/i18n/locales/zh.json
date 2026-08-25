@@ -404,11 +404,6 @@
     "yes": "是",
     "no": "否"
   },
-  "theme": {
-    "light": "亮色",
-    "dark": "暗色",
-    "toggle": "切换主题"
-  },
   "language": {
     "en": "English",
     "zh": "中文",
@@ -823,7 +818,6 @@
       "openSidebar": "打开侧边栏",
       "openSettings": "打开设置",
       "settings": "设置",
-      "toggleTheme": "切换主题，当前：{{theme}}",
       "architecture": "架构",
       "viewArchitecture": "查看系统架构",
       "brandSubtitle": "AI 知识运营",
@@ -1034,7 +1028,7 @@
         "React Router：SPA 路由管理",
         "关键CSS提取：86% 体积优化 (99KB → 14KB)",
         "代码分割：按需加载 + 懒加载优化",
-        "现代CSS架构：模块化 + 主题系统",
+        "现代CSS架构：模块化 + 亮色系统",
         "SSE 流式渲染：实时消息流展示",
         "响应式设计：移动端适配"
       ]
@@ -1107,7 +1101,7 @@
           "Hover到Toast上会暂停自动关闭",
           "点击Toast或关闭按钮可以手动关闭",
           "多个Toast会自动堆叠显示",
-          "支持深色/浅色主题自动适配",
+          "采用统一亮色界面",
           "在手机上会自适应为全宽显示"
         ]
       }

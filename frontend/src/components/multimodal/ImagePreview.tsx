@@ -19,7 +19,7 @@ export const ImagePreview: React.FC<ImagePreviewProps> = ({
   const [isExpanded, setIsExpanded] = React.useState(false);
 
   return (
-    <div className="image-preview border rounded-lg p-4 my-4 bg-gray-50 dark:bg-gray-800">
+    <div className="image-preview border rounded-lg p-4 my-4 bg-gray-50">
       <div className="flex flex-col space-y-3">
         {/* Image */}
         <div className="relative">
@@ -33,7 +33,7 @@ export const ImagePreview: React.FC<ImagePreviewProps> = ({
           />
           <button
             onClick={() => setIsExpanded(!isExpanded)}
-            className="absolute top-2 right-2 bg-white dark:bg-gray-700 px-3 py-1 rounded-md shadow-md text-sm"
+            className="absolute top-2 right-2 bg-white px-3 py-1 rounded-md shadow-md text-sm"
           >
             {isExpanded ? '收起' : '展开'}
           </button>
@@ -41,19 +41,19 @@ export const ImagePreview: React.FC<ImagePreviewProps> = ({
 
         {/* Description */}
         <div className="text-sm">
-          <span className="font-semibold text-gray-700 dark:text-gray-300">
+          <span className="font-semibold text-gray-700">
             图片描述：
           </span>
-          <p className="mt-1 text-gray-600 dark:text-gray-400">{description}</p>
+          <p className="mt-1 text-gray-600">{description}</p>
         </div>
 
         {/* OCR Text (if available) */}
         {ocrText && (
           <div className="text-sm border-t pt-3">
-            <span className="font-semibold text-gray-700 dark:text-gray-300">
+            <span className="font-semibold text-gray-700">
               识别文字：
             </span>
-            <p className="mt-1 text-gray-600 dark:text-gray-400 whitespace-pre-wrap">
+            <p className="mt-1 text-gray-600 whitespace-pre-wrap">
               {ocrText}
             </p>
           </div>

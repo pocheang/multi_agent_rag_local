@@ -20,36 +20,36 @@ export const TableViewer: React.FC<TableViewerProps> = ({
   const hasMore = data.rows.length > maxRows;
 
   return (
-    <div className="table-viewer border rounded-lg p-4 my-4 bg-white dark:bg-gray-800">
+    <div className="table-viewer border rounded-lg p-4 my-4 bg-white">
       {/* Summary */}
       {summary && (
-        <div className="mb-3 text-sm text-gray-600 dark:text-gray-400">
+        <div className="mb-3 text-sm text-gray-600">
           {summary}
         </div>
       )}
 
       {/* Table */}
       <div className="overflow-x-auto">
-        <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
-          <thead className="bg-gray-50 dark:bg-gray-700">
+        <table className="min-w-full divide-y divide-gray-200">
+          <thead className="bg-gray-50">
             <tr>
               {data.headers.map((header, idx) => (
                 <th
                   key={idx}
-                  className="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider"
+                  className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
                 >
                   {header}
                 </th>
               ))}
             </tr>
           </thead>
-          <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
+          <tbody className="bg-white divide-y divide-gray-200">
             {displayRows.map((row, rowIdx) => (
-              <tr key={rowIdx} className="hover:bg-gray-50 dark:hover:bg-gray-700">
+              <tr key={rowIdx} className="hover:bg-gray-50">
                 {row.map((cell, cellIdx) => (
                   <td
                     key={cellIdx}
-                    className="px-4 py-2 text-sm text-gray-900 dark:text-gray-100 whitespace-nowrap"
+                    className="px-4 py-2 text-sm text-gray-900 whitespace-nowrap"
                   >
                     {cell !== null && cell !== undefined ? String(cell) : '—'}
                   </td>
@@ -65,7 +65,7 @@ export const TableViewer: React.FC<TableViewerProps> = ({
         <div className="mt-3 text-center">
           <button
             onClick={() => setIsExpanded(!isExpanded)}
-            className="text-sm text-blue-600 dark:text-blue-400 hover:underline"
+            className="text-sm text-blue-600 hover:underline"
           >
             {isExpanded
               ? '收起'
