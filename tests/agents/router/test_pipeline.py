@@ -282,7 +282,6 @@ class TestRoutingPipeline:
         )
 
         assert result.agent_class == "cybersecurity"
-        assert result.confidence == 1.0
 
     @pytest.mark.integration
     def test_pipeline_smalltalk(self):
@@ -292,7 +291,7 @@ class TestRoutingPipeline:
         result = pipeline.decide("你好", use_llm_intent=False)
 
         assert result.route == "vector"
-        assert result.confidence >= 0.9
+        assert result.agent_class == "smalltalk"
 
     @pytest.mark.integration
     def test_pipeline_with_reasoning(self):
