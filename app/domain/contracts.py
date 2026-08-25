@@ -8,7 +8,9 @@ from enum import StrEnum
 from typing import Any, Literal
 from uuid import uuid4
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import AliasChoices, BaseModel, ConfigDict, Field, field_validator, model_validator
+
+from app.domain.knowledge import EvidenceLayer, Modality
 
 Intent = Literal["general_qa", "knowledge_retrieval", "web_search", "tool_call", "hybrid"]
 Capability = Literal["rag", "web", "tool"]
@@ -65,7 +67,11 @@ class PlannedTask(ImmutableContract):
     task_id: str = Field(min_length=1)
     prompt: str = Field(min_length=1)
     depends_on: tuple[str, ...] = Field(default_factory=tuple)
-    retrieval_required: bool = True
+    parallel_group: str | None = None
+    knowledge_required: bool = Field(
+        default=True,
+        validation_alias=AliasChoices("knowledge_required", "retrieval_required"),
+    )
     tool_required: bool = False
     budget: TaskBudget = Field(default_factory=TaskBudget)
 
@@ -75,11 +81,18 @@ class PlannedTask(ImmutableContract):
             raise ValueError("a task cannot depend on itself")
         return self
 
+    @property
+    def retrieval_required(self) -> bool:
+        """Backward-compatible name for the canonical knowledge requirement."""
+
+        return self.knowledge_required
+
 
 class TaskPlan(ImmutableContract):
     """A validated task DAG that the orchestrator can execute or trace."""
 
     tasks: tuple[PlannedTask, ...] = Field(min_length=1)
+    plan_fallback_reason: str | None = None
 
     @model_validator(mode="after")
     def validate_dependencies(self) -> TaskPlan:
@@ -120,6 +133,23 @@ class TaskPlan(ImmutableContract):
         """Return whether at least one task requires a governed tool call."""
         return any(task.tool_required for task in self.tasks)
 
+    @property
+    def execution_layers(self) -> tuple[tuple[str, ...], ...]:
+        """Return deterministic DAG ready sets for future parallel execution."""
+
+        remaining = {task.task_id: set(task.depends_on) for task in self.tasks}
+        layers: list[tuple[str, ...]] = []
+        completed: set[str] = set()
+        while remaining:
+            ready = tuple(sorted(task_id for task_id, deps in remaining.items() if deps <= completed))
+            if not ready:  # The model validator already rejects cycles.
+                break
+            layers.append(ready)
+            completed.update(ready)
+            for task_id in ready:
+                remaining.pop(task_id)
+        return tuple(layers)
+
 
 class EvidenceItem(ImmutableContract):
     """One attributable fact or excerpt returned by a retriever."""
@@ -128,7 +158,14 @@ class EvidenceItem(ImmutableContract):
     content: str = Field(min_length=1)
     source: str = Field(min_length=1)
     document_id: str = Field(min_length=1)
+    version: int | None = Field(default=None, ge=1)
     page: int | None = Field(default=None, ge=1)
+    chunk_id: str | None = None
+    image_id: str | None = None
+    artifact_uri: str | None = None
+    modality: Modality = "text"
+    layer: EvidenceLayer = "evidence"
+    acl_tags: frozenset[str] = Field(default_factory=frozenset)
     retriever: str = Field(default="unknown", min_length=1)
     score: float | None = Field(default=None, ge=0, le=1)
     retrieved_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
@@ -140,6 +177,12 @@ class EvidenceItem(ImmutableContract):
         if not value.strip():
             raise ValueError("must not be blank")
         return value
+
+    @model_validator(mode="after")
+    def require_modality_provenance(self) -> EvidenceItem:
+        if self.modality == "image" and not (self.image_id or "").strip():
+            raise ValueError("image evidence requires image_id")
+        return self
 
 
 class EvidenceBundle(ImmutableContract):
@@ -258,6 +301,7 @@ class ClarificationContext(BaseModel):
     clarification_round: int = Field(default=0, description="Current round number")
     max_rounds: int = Field(default=10, description="Maximum rounds (dynamically set)")
     intent: str = Field(default="", description="Identified intent type")
+    original_query: str = Field(default="", description="Query that owns this clarification state")
 
 
 class EnhancedRouteDecision(ImmutableContract):

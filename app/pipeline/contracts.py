@@ -35,6 +35,7 @@ class PipelineUser(_ImmutableContract):
     """Identity and authorization data needed by downstream adapters."""
 
     user_id: str | None = None
+    tenant_id: str | None = None
     username: str | None = None
     role: str | None = None
     permissions: frozenset[str] = Field(default_factory=frozenset)
@@ -45,6 +46,8 @@ class SourceScope(_ImmutableContract):
 
     allowed_sources: frozenset[str] | None = None
     document_ids: frozenset[str] | None = None
+    acl_tags: frozenset[str] | None = None
+    allowed_fields: frozenset[str] | None = None
     agent_class_hint: str | None = None
 
 
@@ -106,6 +109,7 @@ def to_orchestration_request(request: PipelineRequest) -> OrchestrationRequest:
         actor=(
             RequestActor(
                 user_id=request.user.user_id,
+                tenant_id=request.user.tenant_id or request.user.user_id,
                 username=request.user.username,
                 role=request.user.role,
                 permissions=request.user.permissions,
@@ -116,6 +120,8 @@ def to_orchestration_request(request: PipelineRequest) -> OrchestrationRequest:
         source_scope=RequestScope(
             allowed_sources=request.source_scope.allowed_sources,
             document_ids=request.source_scope.document_ids,
+            acl_tags=request.source_scope.acl_tags,
+            allowed_fields=request.source_scope.allowed_fields,
             agent_class_hint=request.source_scope.agent_class_hint,
         ),
         retrieval_strategy=request.retrieval_strategy,
@@ -139,7 +145,13 @@ class PipelineCitation(BaseModel):
     source: str
     content: str = ""
     document_id: str | None = None
+    version: int | None = Field(default=None, ge=1)
     page: int | None = None
+    chunk_id: str | None = None
+    image_id: str | None = None
+    artifact_uri: str | None = None
+    modality: str | None = None
+    layer: str | None = None
     metadata: dict[str, Any] = Field(default_factory=dict)
 
 
@@ -151,6 +163,13 @@ class PipelineContext(BaseModel):
     content: str
     source: str | None = None
     document_id: str | None = None
+    version: int | None = Field(default=None, ge=1)
+    page: int | None = Field(default=None, ge=1)
+    chunk_id: str | None = None
+    image_id: str | None = None
+    artifact_uri: str | None = None
+    modality: str | None = None
+    layer: str | None = None
     score: float | None = None
     metadata: dict[str, Any] = Field(default_factory=dict)
 

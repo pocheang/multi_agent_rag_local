@@ -34,7 +34,7 @@ class EvidenceItemBuilder:
         )
         page = self._extract_value(citation, metadata, "page")
 
-        return self._build_item(content, source, document_id, page, score)
+        return self._build_item(content, source, document_id, page, score, metadata)
 
     def from_vector_match(self, match: tuple[Any, Any]) -> EvidenceItem | None:
         """Build from vector retriever format (document, relevance_score tuple)."""
@@ -54,7 +54,7 @@ class EvidenceItemBuilder:
 
         page = self._extract_value({}, metadata, "page")
 
-        return self._build_item(content, source, document_id, page, relevance)
+        return self._build_item(content, source, document_id, page, relevance, metadata)
 
     def from_bm25_record(self, record: Mapping[str, Any]) -> EvidenceItem | None:
         """Build from BM25 retriever format (flat dict with optional metadata)."""
@@ -74,7 +74,7 @@ class EvidenceItemBuilder:
         page = self._extract_value(record, metadata, "page")
         score = self._extract_value(record, metadata, "bm25_score", "score")
 
-        return self._build_item(content, source, document_id, page, score)
+        return self._build_item(content, source, document_id, page, score, metadata)
 
     def _build_item(
         self,
@@ -83,16 +83,44 @@ class EvidenceItemBuilder:
         document_id: str,
         page: Any,
         score: Any,
+        metadata: Mapping[str, Any],
     ) -> EvidenceItem | None:
         """Construct EvidenceItem with type conversion and validation."""
+        modality = str(metadata.get("modality") or "text").lower()
+        if modality == "chart":
+            modality = "image"
+        if modality not in {"text", "table", "image", "page", "graph"}:
+            modality = "text"
+        image_id = self._extract_text({}, metadata, "image_id") or None
+        if modality == "image" and image_id is None:
+            modality = "text"
+        layer = {
+            "wiki": "knowledge",
+            "memory": "memory",
+            "web": "web",
+            "tool": "tool",
+        }.get(self.retriever, str(metadata.get("layer") or "evidence"))
+        if layer not in {"evidence", "knowledge", "memory", "web", "tool"}:
+            layer = "evidence"
+        raw_acl = metadata.get("acl_tags", ()) or ()
+        if isinstance(raw_acl, str):
+            raw_acl = tuple(tag.strip() for tag in raw_acl.split(",") if tag.strip())
         try:
             return EvidenceItem(
                 content=content,
                 source=source,
                 document_id=document_id,
+                version=self._normalize_page(metadata.get("version")),
                 page=self._normalize_page(page),
+                chunk_id=self._extract_text({}, metadata, "chunk_id") or None,
+                image_id=image_id,
+                artifact_uri=self._extract_text({}, metadata, "artifact_uri", "original_image") or None,
+                modality=modality,
+                layer=layer,
+                acl_tags=frozenset(str(tag) for tag in raw_acl),
                 retriever=self.retriever,
                 score=self._normalize_score(score),
+                conflict_group=self._extract_text({}, metadata, "conflict_group") or None,
             )
         except (TypeError, ValueError):
             return None

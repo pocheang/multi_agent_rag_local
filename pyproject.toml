@@ -65,6 +65,12 @@ paddle = [
 docling = [
   "docling>=2.93.0",
 ]
+# Spreadsheet ingestion. DOCX/PPTX use Docling with a package-XML fallback.
+office = [
+  "openpyxl>=3.1.0",
+  "pandas>=2.2.0,<3.0",
+  "xlrd>=2.0.1",
+]
 # PDF/image/table extraction support.
 multimodal = [
   "pandas>=2.2.0,<3.0",
@@ -79,7 +85,7 @@ reranker = [
 ]
 # Convenience meta-extra: equivalent to the historical full install.
 full = [
-  "querymind[ocr,paddle,docling,reranker,multimodal]",
+  "querymind[ocr,paddle,docling,office,reranker,multimodal]",
 ]
 dev = [
   "pytest>=8.0.0",

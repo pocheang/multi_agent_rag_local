@@ -6,10 +6,20 @@ import asyncio
 from collections.abc import AsyncIterator, Awaitable, Callable
 from typing import Any, Protocol
 
+from app.core.config import get_settings
 from app.domain.contracts import EvidenceBundle, FinalAnswer, RouteDecision, TaskPlan, ToolResult
-from app.domain.errors import StageExecutionError
 from app.domain.events import ExecutionEvent
+from app.domain.knowledge import KnowledgeStrategy
+from app.domain.workflow import (
+    CandidateAnswer,
+    ClarificationResult,
+    ContextBundle,
+    RouterDecision,
+    VerificationDecision,
+)
 from app.orchestration.event_publisher import EventPublisher, NullEventPublisher
+from app.orchestration.langgraph.checkpoint import checkpoint_config
+from app.orchestration.langgraph.workflow import build_workflow
 from app.orchestration.policies import ExecutionPolicy
 from app.orchestration.request import OrchestrationRequest
 from app.orchestration.standard_request_policy import (
@@ -21,8 +31,9 @@ from app.orchestration.timeout_control import (
     ExecutionBudget,
     TimeoutConfig,
     get_timeout_config,
-    run_with_timeout,
 )
+from app.privacy.service import PrivacyService
+from app.services.security.access_scope import AccessScopeResolver
 
 Router = Callable[[OrchestrationRequest], Awaitable[RouteDecision]]
 Planner = Callable[[OrchestrationRequest, RouteDecision], Awaitable[TaskPlan]]
@@ -34,7 +45,24 @@ Synthesizer = Callable[
     [OrchestrationRequest, RouteDecision, TaskPlan | None, EvidenceBundle, tuple[ToolResult, ...]],
     Awaitable[FinalAnswer],
 ]
+CandidateSynthesizer = Callable[
+    [OrchestrationRequest, ContextBundle, tuple[ToolResult, ...]],
+    Awaitable[CandidateAnswer],
+]
 Finalizer = Callable[[OrchestrationRequest, EvidenceBundle, FinalAnswer, ExecutionPolicy], Awaitable[FinalAnswer]]
+Clarifier = Callable[[OrchestrationRequest, RouterDecision], Awaitable[ClarificationResult]]
+Verifier = Callable[
+    [OrchestrationRequest, ContextBundle, CandidateAnswer, int],
+    Awaitable[VerificationDecision],
+]
+KnowledgeAgent = Callable[
+    [OrchestrationRequest, RouterDecision, TaskPlan | None, VerificationDecision | None],
+    Awaitable[KnowledgeStrategy],
+]
+KnowledgeOrchestrator = Callable[
+    [KnowledgeStrategy, Any, Callable[[ExecutionEvent], Awaitable[None]]],
+    Awaitable[ContextBundle],
+]
 
 
 class CompatibilityStreamExecutor(Protocol):
@@ -54,7 +82,14 @@ class OrchestrationServices:
         retriever: Retriever,
         tool_runner: ToolRunner,
         synthesizer: Synthesizer,
+        candidate_synthesizer: CandidateSynthesizer | None = None,
         finalizer: Finalizer | None = None,
+        clarifier: Clarifier | None = None,
+        verifier: Verifier | None = None,
+        knowledge_agent: KnowledgeAgent | None = None,
+        knowledge_orchestrator: KnowledgeOrchestrator | None = None,
+        privacy: PrivacyService | None = None,
+        access_scope_resolver: AccessScopeResolver | None = None,
         context: object | None = None,
         event_reporter_binder: Callable[[Callable[[ExecutionEvent], Awaitable[None]]], None] | None = None,
     ) -> None:
@@ -63,13 +98,25 @@ class OrchestrationServices:
         self.retriever = retriever
         self.tool_runner = tool_runner
         self.synthesizer = synthesizer
+        self.candidate_synthesizer = candidate_synthesizer
         self.finalizer = finalizer
+        self.clarifier = clarifier
+        self.verifier = verifier
+        self.knowledge_agent = knowledge_agent or _default_knowledge_agent
+        self.knowledge_orchestrator = knowledge_orchestrator
+        self.privacy = privacy or PrivacyService()
+        self.access_scope_resolver = access_scope_resolver or AccessScopeResolver()
         self.context = context
         self._event_reporter_binder = event_reporter_binder
+        self._event_reporter: Callable[[ExecutionEvent], Awaitable[None]] = _discard_event
 
     def bind_event_reporter(self, reporter: Callable[[ExecutionEvent], Awaitable[None]]) -> None:
+        self._event_reporter = reporter
         if self._event_reporter_binder is not None:
             self._event_reporter_binder(reporter)
+
+    async def report_event(self, event: ExecutionEvent) -> None:
+        await self._event_reporter(event)
 
 
 class OrchestrationEngine:
@@ -82,20 +129,39 @@ class OrchestrationEngine:
         publisher: EventPublisher | None = None,
         policy: ExecutionPolicy | None = None,
         timeout_config: TimeoutConfig | None = None,
+        checkpointer: Any = None,
     ) -> None:
         self._services = services
         self._publisher = publisher or NullEventPublisher()
         self._policy = policy or ExecutionPolicy()
         self._timeout_config = timeout_config
         self._services.bind_event_reporter(self._publisher.publish)
-
-        # Initialize performance monitoring
+        settings = get_settings()
+        self._recursion_limit = settings.langgraph_recursion_limit
         try:
             from app.services.performance.monitor import get_monitor
 
             self._monitor = get_monitor()
         except Exception:
             self._monitor = None
+        self._workflow = build_workflow(
+            services,
+            policy=self._policy,
+            settings=settings,
+            checkpointer=None,
+            monitor=self._monitor,
+        )
+        self._checkpointed_workflow = (
+            build_workflow(
+                services,
+                policy=self._policy,
+                settings=settings,
+                checkpointer=checkpointer,
+                monitor=self._monitor,
+            )
+            if checkpointer is not None
+            else None
+        )
 
     def prepare_standard_request(self, request: OrchestrationRequest) -> PreparedStandardRequest:
         """Retain the request preparation seam without selecting a workflow."""
@@ -183,186 +249,52 @@ class OrchestrationEngine:
         publish: Callable[[ExecutionEvent], Awaitable[None]] | None = None,
     ) -> FinalAnswer:
         reporter = publish or self._publisher.publish
-
-        # Initialize execution budget with timeout control
         timeout_config = self._timeout_config or get_timeout_config(request.profile)
         budget = ExecutionBudget(timeout_config)
-
-        # Stage 1: Route
-        route = await self._execute_stage_with_optional_monitoring(
-            stage="route",
-            operation=lambda: self._services.router(request),
-            expected_type=RouteDecision,
-            budget=budget,
-            reporter=reporter,
+        self._services.bind_event_reporter(reporter)
+        persistence_config = checkpoint_config(request)
+        workflow = self._workflow
+        invoke_config: dict[str, Any] = {"recursion_limit": self._recursion_limit}
+        if persistence_config is not None and self._checkpointed_workflow is not None:
+            workflow = self._checkpointed_workflow
+            invoke_config.update(persistence_config)
+        result = await workflow.ainvoke(
+            {
+                "request": request,
+                "retry_count": 0,
+                "errors": (),
+                "trace": (),
+                "budget": budget,
+                "reporter": reporter,
+            },
+            config=invoke_config,
         )
-        self._policy.validate_route(route)
+        answer = result.get("final_answer")
+        if not isinstance(answer, FinalAnswer):
+            raise RuntimeError("LangGraph workflow completed without FinalAnswer")
+        from app.services.observability.workflow_diagnostics import summarize_workflow_execution
 
-        # Stage 2: Plan (optional)
-        plan = None
-        if self._policy.should_plan(route):
-            plan = await self._execute_stage_with_optional_monitoring(
-                stage="plan",
-                operation=lambda: self._services.planner(request, route),
-                expected_type=TaskPlan,
-                budget=budget,
-                reporter=reporter,
-            )
-
-        # Stage 3: Retrieval
-        evidence = await self._execute_stage_with_optional_monitoring(
-            stage="rag",
-            operation=lambda: self._services.retriever(request, route, plan),
-            expected_type=EvidenceBundle,
-            budget=budget,
-            reporter=reporter,
-        )
-
-        # Stage 4: Tool execution (optional)
-        tool_results: tuple[ToolResult, ...] = ()
-        if self._policy.should_run_tools(route, plan):
-            tool_results = await self._execute_stage(
-                stage="tool",
-                operation=lambda: self._services.tool_runner(request, route, plan, evidence),
-                expected_type=tuple,
-                budget=budget,
-                reporter=reporter,
-                custom_validator=self._validate_tool_results,
-            )
-
-        # Stage 5: Synthesis
-        candidate = await self._execute_stage_with_optional_monitoring(
-            stage="synthesize",
-            operation=lambda: self._services.synthesizer(request, route, plan, evidence, tool_results),
-            expected_type=FinalAnswer,
-            budget=budget,
-            reporter=reporter,
-        )
-
-        # Stage 6: Finalization (optional)
-        finalizer = self._services.finalizer
-        if finalizer is not None:
-            answer = await self._execute_stage_with_optional_monitoring(
-                stage="finalize",
-                operation=lambda: finalizer(request, evidence, candidate, self._policy),
-                expected_type=FinalAnswer,
-                budget=budget,
-                reporter=reporter,
-            )
-        else:
-            answer = candidate
-
-        # Add budget statistics to execution metadata
+        workflow_diagnostics = summarize_workflow_execution(result)
         answer = answer.model_copy(
             update={
                 "execution_metadata": {
-                    **(answer.execution_metadata or {}),
-                    "budget_stats": budget.get_stats(),
+                    **dict(answer.execution_metadata),
+                    "workflow_diagnostics": workflow_diagnostics,
                 }
             }
         )
-
-        await reporter(ExecutionEvent(stage="complete", status="completed"))
-        return answer
-
-    async def _execute_stage(
-        self,
-        stage: str,
-        operation: Callable[[], Awaitable[Any]],
-        expected_type: type[Any],
-        budget: ExecutionBudget,
-        reporter: Callable[[ExecutionEvent], Awaitable[None]],
-        *,
-        custom_validator: Callable[[Any], Any] | None = None,
-    ) -> Any:
-        """Execute a single pipeline stage with timeout, validation, and event reporting.
-
-        Args:
-            stage: Stage name for timeout tracking and events
-            operation: Async operation to execute
-            expected_type: Expected return type for validation
-            budget: Execution budget for timeout control
-            reporter: Event reporter for stage completion
-            custom_validator: Optional custom validation function (overrides type check)
-
-        Returns:
-            Validated stage result
-
-        Raises:
-            TimeoutError: If stage exceeds timeout budget
-            StageExecutionError: If stage fails validation or execution
-        """
-        # run_with_timeout() already calls budget.check_budget() internally
-        result = await run_with_timeout(stage, operation, budget)
-
-        # Validate result type
-        try:
-            if custom_validator is not None:
-                result = custom_validator(result)
-            elif not isinstance(result, expected_type):
-                raise TypeError(f"expected {expected_type.__name__}, got {type(result).__name__}")
-        except Exception as exc:
-            # Wrap validation errors in StageExecutionError for consistency
-            raise StageExecutionError(stage, exc) from exc
-
         await reporter(
             ExecutionEvent(
-                stage=stage,
+                stage="complete",
                 status="completed",
-                duration_ms=budget.stage_times.get(stage, 0),
+                duration_ms=int(workflow_diagnostics["total_stage_latency_ms"]),
             )
         )
-        return result
+        return answer
 
-    async def _execute_stage_with_optional_monitoring(
-        self,
-        stage: str,
-        operation: Callable[[], Awaitable[Any]],
-        expected_type: type[Any],
-        budget: ExecutionBudget,
-        reporter: Callable[[ExecutionEvent], Awaitable[None]],
-        *,
-        custom_validator: Callable[[Any], Any] | None = None,
-    ) -> Any:
-        """Execute stage with optional performance monitoring.
 
-        Wraps _execute_stage with monitor.measure_async if monitor is available.
-        This eliminates code duplication from the if/else monitoring pattern.
-
-        Args:
-            Same as _execute_stage
-
-        Returns:
-            Stage execution result
-        """
-        if self._monitor:
-            # Map stage names to monitor metric names
-            metric_name = f"orchestration_{stage}"
-            async with self._monitor.measure_async(metric_name):
-                return await self._execute_stage(
-                    stage=stage,
-                    operation=operation,
-                    expected_type=expected_type,
-                    budget=budget,
-                    reporter=reporter,
-                    custom_validator=custom_validator,
-                )
-        else:
-            return await self._execute_stage(
-                stage=stage,
-                operation=operation,
-                expected_type=expected_type,
-                budget=budget,
-                reporter=reporter,
-                custom_validator=custom_validator,
-            )
-
-    @staticmethod
-    def _validate_tool_results(value: Any) -> tuple[ToolResult, ...]:
-        """Validate tool results are a tuple of ToolResult instances."""
-        if not isinstance(value, tuple) or not all(isinstance(item, ToolResult) for item in value):
-            raise TypeError("expected a tuple of ToolResult values")
-        return value
+async def _discard_event(event: ExecutionEvent) -> None:
+    del event
 
 
 def _terminal_payload(answer: FinalAnswer) -> dict[str, Any]:
@@ -377,3 +309,16 @@ def _terminal_payload(answer: FinalAnswer) -> dict[str, Any]:
         "quality_report": answer.quality_report.model_dump(mode="json") if answer.quality_report is not None else None,
         "execution_metadata": dict(answer.execution_metadata),
     }
+
+
+async def _default_knowledge_agent(
+    request: OrchestrationRequest,
+    route: RouterDecision,
+    plan: TaskPlan | None,
+    retry_feedback: VerificationDecision | None,
+) -> KnowledgeStrategy:
+    """Lazy compatibility default that avoids orchestration import cycles."""
+
+    from app.agents.knowledge.service import KnowledgeAgentService
+
+    return await KnowledgeAgentService().decide(request, route, plan, retry_feedback)

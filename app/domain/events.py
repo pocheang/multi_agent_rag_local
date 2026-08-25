@@ -9,7 +9,22 @@ from pydantic import Field
 
 from app.domain.contracts import ImmutableContract
 
-EventStage = Literal["route", "plan", "rag", "tool", "synthesize", "finalize", "complete", "failed"]
+EventStage = Literal[
+    "privacy_permission",
+    "route",
+    "clarification",
+    "plan",
+    "knowledge_strategy",
+    "knowledge",
+    "rag",
+    "tool",
+    "synthesize",
+    "verifier",
+    "finalize",
+    "output_filter",
+    "complete",
+    "failed",
+]
 EventStatus = Literal["completed", "failed", "skipped"]
 
 

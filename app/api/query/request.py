@@ -26,7 +26,7 @@ from app.api.query.response import (
     prepare_query_response,
 )
 from app.api.schemas import QueryRequest
-from app.api.transport.errors import bad_request, conflict, rate_limited
+from app.api.transport.errors import bad_request, rate_limited
 from app.services.input_normalizer import normalize_and_validate_user_question
 from app.services.observability.alerting import emit_alert
 from app.services.security.quota import QuotaExceededError

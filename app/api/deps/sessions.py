@@ -4,7 +4,7 @@ Session-related helper functions for the QueryMind API.
 
 from typing import Any
 
-from app.api.transport.errors import bad_request, not_found
+from app.api.transport.errors import bad_request
 from app.core.config import get_settings
 from app.services.sessions.history import HistoryStore, validate_session_id
 

@@ -3,6 +3,7 @@
 import logging
 import time
 from abc import ABC, abstractmethod
+from collections.abc import Callable
 from typing import Any
 
 logger = logging.getLogger(__name__)
@@ -197,7 +198,7 @@ class BaseAgent(ABC):
     def _handle_error(
         self,
         error: Exception,
-        fallback_func: callable | None = None,
+        fallback_func: Callable[..., Any] | None = None,
         **fallback_kwargs,
     ) -> dict[str, Any]:
         """

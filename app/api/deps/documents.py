@@ -14,8 +14,7 @@ from fastapi import Request
 from app.core.config import get_settings
 from app.ingestion.loaders import IMAGE_EXTENSIONS
 from app.services.agent_classifier import classify_agent_class
-from app.services.documents.index_manager import list_indexed_files
-from app.services.runtime.rag_runtime_scope import is_under_path
+from app.services.security.access_scope import list_visible_document_rows
 
 logger = logging.getLogger(__name__)
 
@@ -47,31 +46,7 @@ def _is_source_manageable_for_user(source: str | None, user: dict[str, Any]) -> 
 
 def _list_visible_documents_for_user(user: dict[str, Any]) -> list[dict[str, Any]]:
     """List all documents visible to the user."""
-    user_upload_root = (settings.uploads_path / user["user_id"]).resolve()
-    docs_root = settings.docs_path.resolve()
-    user_id = str(user.get("user_id", ""))
-    items: list[dict[str, Any]] = []
-    for row in list_indexed_files():
-        source = str(row.get("source", "") or "")
-        if not source:
-            continue
-        source_path = Path(source).resolve()
-        # Treat curated data/docs content as a shared knowledge base.
-        if is_under_path(source_path, docs_root):
-            items.append(row)
-            continue
-        owner_user_id = str(row.get("owner_user_id", "") or "")
-        visibility = str(row.get("visibility", "private") or "private").lower()
-        if visibility == "public":
-            items.append(row)
-            continue
-        if owner_user_id and owner_user_id == user_id:
-            items.append(row)
-            continue
-        # Backward compatibility for legacy records without owner_user_id.
-        if user_upload_root in source_path.parents:
-            items.append(row)
-    return items
+    return list_visible_document_rows(user, settings=settings)
 
 
 def _allowed_sources_for_user(user: dict[str, Any]) -> list[str]:
@@ -261,4 +236,8 @@ def _is_probably_valid_upload_signature(suffix: str, head: bytes) -> bool:
         return prefix.startswith(b"II*\x00") or prefix.startswith(b"MM\x00*")
     if suffix == ".webp":
         return len(prefix) >= 12 and prefix.startswith(b"RIFF") and prefix[8:12] == b"WEBP"
+    if suffix in {".docx", ".pptx", ".xlsx"}:
+        return prefix.startswith(b"PK\x03\x04")
+    if suffix == ".xls":
+        return prefix.startswith(b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1")
     return True

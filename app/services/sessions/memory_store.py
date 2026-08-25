@@ -1,11 +1,12 @@
 import json
 import re
-import uuid
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
 from app.core.config import get_settings
+from app.domain.knowledge import MemoryItem
+from app.memory.resolver import MemoryResolver
 from app.services.sessions.history import validate_session_id
 
 try:
@@ -25,6 +26,7 @@ LONG_TERM_WINDOW_SIZE = 20
 LONG_TERM_TOP_N = 5
 LONG_TERM_RETRIEVAL_TOP_K = 3
 LONG_TERM_FALLBACK_K = 2
+GLOBAL_MEMORY_SESSION_ID = "_global"
 
 
 def _now_iso() -> str:
@@ -69,17 +71,6 @@ def score_memory_candidate(answer: str, signals: dict[str, Any] | None = None) -
     return round(float(score), 6), normalized_signals
 
 
-def _is_candidate_answer_usable(answer: str, signals: dict[str, Any] | None = None) -> bool:
-    text = (answer or "").strip()
-    if len(text) < 20:
-        return False
-    payload = signals or {}
-    reason = str(payload.get("reason", "")).strip().lower()
-    if "pdf_agent_" in reason:
-        return False
-    return True
-
-
 def _pair_user_assistant_rounds(messages: list[dict[str, Any]]) -> list[tuple[str, str]]:
     rounds: list[tuple[str, str]] = []
     pending_user: str | None = None
@@ -121,7 +112,7 @@ def retrieve_relevant_long_term_memories(
         return []
 
     query_tokens = tokenize(question)
-    docs = [f"{m.get('question', '')}\n{m.get('answer', '')}" for m in active]
+    docs = [str(m.get("content") or f"{m.get('question', '')}\n{m.get('answer', '')}") for m in active]
     tokenized = [tokenize(d) for d in docs]
 
     ranked_indexes: list[int] = []
@@ -165,7 +156,13 @@ def build_long_term_memory_context(
     blocks: list[str] = []
     for idx, item in enumerate(selected, start=1):
         score = float(item.get("score", 0.0) or 0.0)
-        blocks.append(f"[Memory {idx}] score={score:.3f}\nQ: {item.get('question', '')}\nA: {item.get('answer', '')}")
+        content = str(item.get("content", "") or "").strip()
+        if content:
+            blocks.append(f"[Memory {idx}] kind={item.get('kind', 'unknown')} score={score:.3f}\n{content}")
+        else:
+            blocks.append(
+                f"[Memory {idx}] score={score:.3f}\nQ: {item.get('question', '')}\nA: {item.get('answer', '')}"
+            )
     return "Long-term memory (selected):\n" + "\n\n".join(blocks)
 
 
@@ -188,8 +185,10 @@ def build_memory_context(
 class MemoryStore:
     def __init__(self, base_dir: Path | None = None):
         settings = get_settings()
+        self.settings = settings
         self.base_dir = base_dir or (settings.sessions_path / "_long_memory")
         self.base_dir.mkdir(parents=True, exist_ok=True)
+        self.resolver = MemoryResolver(settings)
 
     def get_session_payload(self, session_id: str) -> dict[str, Any]:
         session_id = validate_session_id(session_id)
@@ -216,26 +215,53 @@ class MemoryStore:
             item = valid.get(str(candidate_id))
             if item is not None:
                 out.append(item)
-        return out
+        if session_id == GLOBAL_MEMORY_SESSION_ID:
+            return out
+        global_rows = self.list_global()
+        row_map = {str(row.get("candidate_id")): row for row in (*global_rows, *out)}
+        session_items = tuple(item for row in out if (item := memory_item_from_row(row)) is not None)
+        global_items = tuple(item for row in global_rows if (item := memory_item_from_row(row)) is not None)
+        resolution = self.resolver.resolve((), (*global_items, *session_items))
+        structured = [row_map[item.memory_id] for item in resolution.items if item.memory_id in row_map]
+        legacy = [row for row in out if memory_item_from_row(row) is None]
+        return [*structured, *legacy][:LONG_TERM_TOP_N]
+
+    def list_global(self) -> list[dict[str, Any]]:
+        data = self.get_session_payload(GLOBAL_MEMORY_SESSION_ID)
+        return [
+            item
+            for item in data.get("candidates", [])
+            if item.get("candidate_id") and not item.get("deleted")
+        ]
 
     def add_candidate(
         self, session_id: str, question: str, answer: str, signals: dict[str, Any] | None = None
     ) -> dict[str, Any] | None:
         session_id = validate_session_id(session_id)
-        if not _is_candidate_answer_usable(answer, signals):
+        proposed = self.resolver.propose(question, source_session_id=session_id)
+        if proposed is None:
             return None
         score, normalized_signals = score_memory_candidate(answer=answer, signals=signals)
+        score = max(score, {"explicit_remember": 1.0, "preference": 0.9, "stable_fact": 0.85, "task": 0.8}[proposed.kind])
         now = _now_iso()
         candidate = {
-            "candidate_id": uuid.uuid4().hex,
+            "candidate_id": proposed.memory_id,
             "question": (question or "").strip(),
-            "answer": (answer or "").strip(),
+            "answer": proposed.content,
+            "content": proposed.content,
+            "kind": proposed.kind,
+            "memory_key": proposed.memory_key,
             "score": score,
             "signals": normalized_signals,
             "created_at": now,
+            "updated_at": proposed.updated_at,
+            "expires_at": proposed.expires_at,
+            "supersedes": proposed.supersedes,
+            "source_session_id": session_id,
             "deleted": False,
         }
 
+        candidate = self._upsert_global(candidate)
         data = self.get_session_payload(session_id)
         data.setdefault("candidates", []).append(candidate)
         data["candidates"] = sorted(data.get("candidates", []), key=lambda x: x.get("created_at", ""), reverse=True)[
@@ -263,7 +289,18 @@ class MemoryStore:
         data["updated_at"] = _now_iso()
         self._recompute_long_term_ids(data)
         self._write(session_id, data)
+        if session_id != GLOBAL_MEMORY_SESSION_ID:
+            self._expire_in_payload(GLOBAL_MEMORY_SESSION_ID, candidate_id)
         return True
+
+    def upsert_memory(self, item: MemoryItem) -> MemoryItem:
+        normalized = self.resolver.normalize_item(item)
+        candidate = _candidate_from_memory(normalized)
+        canonical = self._upsert_global(candidate)
+        return memory_item_from_row(canonical) or normalized
+
+    def expire_memory(self, memory_id: str) -> bool:
+        return self._expire_in_payload(GLOBAL_MEMORY_SESSION_ID, memory_id)
 
     @staticmethod
     def _new_payload(session_id: str) -> dict[str, Any]:
@@ -281,6 +318,44 @@ class MemoryStore:
         temp_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
         temp_path.replace(path)
 
+    def _upsert_global(self, candidate: dict[str, Any]) -> dict[str, Any]:
+        data = self.get_session_payload(GLOBAL_MEMORY_SESSION_ID)
+        memory_key = str(candidate.get("memory_key", "") or "")
+        for existing in data.get("candidates", []):
+            if existing.get("deleted") or not memory_key or str(existing.get("memory_key", "")) != memory_key:
+                continue
+            if _normalized_memory_content(existing) == _normalized_memory_content(candidate):
+                existing["updated_at"] = candidate.get("updated_at")
+                existing["source_session_id"] = candidate.get("source_session_id")
+                self._recompute_long_term_ids(data)
+                self._write(GLOBAL_MEMORY_SESSION_ID, data)
+                return dict(existing)
+            existing["deleted"] = True
+            candidate["supersedes"] = existing.get("candidate_id")
+        data.setdefault("candidates", []).append(dict(candidate))
+        data["candidates"] = sorted(
+            data.get("candidates", []),
+            key=lambda row: str(row.get("updated_at") or row.get("created_at") or ""),
+            reverse=True,
+        )[: self.settings.long_term_memory_max_items]
+        data["updated_at"] = _now_iso()
+        self._recompute_long_term_ids(data)
+        self._write(GLOBAL_MEMORY_SESSION_ID, data)
+        return dict(candidate)
+
+    def _expire_in_payload(self, session_id: str, memory_id: str) -> bool:
+        data = self.get_session_payload(session_id)
+        found = False
+        for item in data.get("candidates", []):
+            if str(item.get("candidate_id")) == memory_id and not item.get("deleted"):
+                item["deleted"] = True
+                found = True
+        if found:
+            data["updated_at"] = _now_iso()
+            self._recompute_long_term_ids(data)
+            self._write(session_id, data)
+        return found
+
     @staticmethod
     def _recompute_long_term_ids(payload: dict[str, Any]) -> None:
         candidates = [x for x in payload.get("candidates", []) if not x.get("deleted")]
@@ -292,3 +367,58 @@ class MemoryStore:
         payload["long_term_ids"] = [
             str(item.get("candidate_id")) for item in ranked[:LONG_TERM_TOP_N] if item.get("candidate_id")
         ]
+
+
+def memory_item_from_row(row: dict[str, Any]) -> MemoryItem | None:
+    memory_id = str(row.get("candidate_id", "") or "").strip()
+    content = str(row.get("content") or row.get("answer") or "").strip()
+    kind = str(row.get("kind", "") or "").strip()
+    if not memory_id or not content or kind not in {"preference", "stable_fact", "task", "explicit_remember"}:
+        return None
+    try:
+        return MemoryItem(
+            memory_id=memory_id,
+            kind=kind,
+            content=content,
+            memory_key=str(row.get("memory_key", "") or ""),
+            updated_at=str(row.get("updated_at") or row.get("created_at") or _now_iso()),
+            expires_at=str(row.get("expires_at")) if row.get("expires_at") else None,
+            supersedes=str(row.get("supersedes")) if row.get("supersedes") else None,
+            source_session_id=str(row.get("source_session_id")) if row.get("source_session_id") else None,
+        )
+    except (TypeError, ValueError):
+        return None
+
+
+def _candidate_from_memory(item: MemoryItem) -> dict[str, Any]:
+    return {
+        "candidate_id": item.memory_id,
+        "question": "",
+        "answer": item.content,
+        "content": item.content,
+        "kind": item.kind,
+        "memory_key": item.memory_key,
+        "score": 1.0,
+        "signals": {"reason": "governed_memory_upsert"},
+        "created_at": item.updated_at,
+        "updated_at": item.updated_at,
+        "expires_at": item.expires_at,
+        "supersedes": item.supersedes,
+        "source_session_id": item.source_session_id,
+        "deleted": False,
+    }
+
+
+def _normalized_memory_content(row: dict[str, Any]) -> str:
+    return " ".join(str(row.get("content") or row.get("answer") or "").casefold().split())
+
+
+__all__ = [
+    "MemoryStore",
+    "build_long_term_memory_context",
+    "build_memory_context",
+    "build_short_term_memory_context",
+    "memory_item_from_row",
+    "retrieve_relevant_long_term_memories",
+    "score_memory_candidate",
+]

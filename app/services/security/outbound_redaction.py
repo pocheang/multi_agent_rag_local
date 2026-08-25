@@ -54,12 +54,14 @@ _BASE_PATTERNS: list[tuple[str, re.Pattern[str]]] = [
 @dataclass
 class _RedactionState:
     counters: dict[str, int] = field(default_factory=dict)
+    replacements: dict[str, int] = field(default_factory=dict)
     seen: dict[tuple[str, str], str] = field(default_factory=dict)
 
     def token_for(self, kind: str, raw: str) -> str:
         value = str(raw or "").strip()
         if not value:
             return value
+        self.replacements[kind] = int(self.replacements.get(kind, 0)) + 1
         key = (kind, _normalize_seen_value(kind, value))
         existing = self.seen.get(key)
         if existing:
@@ -115,11 +117,35 @@ def _active_patterns() -> tuple[tuple[str, re.Pattern[str]], ...]:
     )
 
 
-def _redact_text_with_state(text: str, state: _RedactionState) -> str:
+def _redact_text_with_state(
+    text: str,
+    state: _RedactionState,
+    *,
+    allowed_kinds: frozenset[str] | None = None,
+) -> str:
     sanitized = str(text or "")
     for kind, pattern in _active_patterns():
+        if allowed_kinds is not None and kind not in allowed_kinds:
+            continue
         sanitized = pattern.sub(lambda m, k=kind: state.token_for(k, m.group(0)), sanitized)
     return sanitized
+
+
+def redact_sensitive_text(
+    text: str,
+    *,
+    allowed_kinds: frozenset[str] | None = None,
+) -> tuple[str, dict[str, int]]:
+    """Redact text deterministically and return safe aggregate counts.
+
+    This provider-neutral entry point lets input, context, and output privacy
+    services reuse the exact same patterns and stable tokenization as outbound
+    provider redaction without exposing matched sensitive values.
+    """
+
+    state = _RedactionState()
+    sanitized = _redact_text_with_state(str(text or ""), state, allowed_kinds=allowed_kinds)
+    return sanitized, dict(sorted(state.replacements.items()))
 
 
 def _should_passthrough_string(parent_key: str, value: str) -> bool:

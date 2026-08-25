@@ -55,6 +55,10 @@ class Settings(BaseSettings):
     data_dir: str = Field(default="./data/docs", alias="DATA_DIR")
     corpus_store_path: str = Field(default="./data/chunks/chunks.jsonl", alias="CORPUS_STORE_PATH")
     parent_store_path_str: str = Field(default="./data/chunks/parents.jsonl", alias="PARENT_STORE_PATH")
+    evidence_artifact_root: str = Field(default="./data/evidence", alias="EVIDENCE_ARTIFACT_ROOT")
+    wiki_db_path_str: str = Field(default="./data/wiki/wiki.db", alias="WIKI_DB_PATH")
+    wiki_generation_timeout_ms: int = Field(default=30_000, ge=100, le=120_000, alias="WIKI_GENERATION_TIMEOUT_MS")
+    wiki_scan_limit: int = Field(default=500, ge=10, le=10_000, alias="WIKI_SCAN_LIMIT")
 
     parent_chunk_size: int = Field(default=1500, alias="PARENT_CHUNK_SIZE")
     parent_chunk_overlap: int = Field(default=200, alias="PARENT_CHUNK_OVERLAP")
@@ -101,6 +105,10 @@ class Settings(BaseSettings):
 
     # Session metadata storage backend
     session_metadata_backend: str = Field(default="database", alias="SESSION_METADATA_BACKEND")  # memory|database
+    long_term_memory_enabled: bool = Field(default=True, alias="LONG_TERM_MEMORY_ENABLED")
+    long_term_memory_max_items: int = Field(default=100, ge=1, le=10_000, alias="LONG_TERM_MEMORY_MAX_ITEMS")
+    memory_task_ttl_days: int = Field(default=30, ge=1, le=3650, alias="MEMORY_TASK_TTL_DAYS")
+    memory_stable_fact_ttl_days: int = Field(default=365, ge=1, le=3650, alias="MEMORY_STABLE_FACT_TTL_DAYS")
 
     # Query Analysis & Clarification
     # Query Analysis & Clarification
@@ -119,6 +127,9 @@ class Settings(BaseSettings):
     ocr_engine: str = Field(default="tesseract", alias="OCR_ENGINE")  # tesseract|paddleocr
     ocr_languages: str = Field(default="eng+chi_sim", alias="OCR_LANGUAGES")
     multimodal_fusion_method: str = Field(default="rrf", alias="MULTIMODAL_FUSION_METHOD")  # rrf|weighted
+    visual_embedding_enabled: bool = Field(default=False, alias="VISUAL_EMBEDDING_ENABLED")
+    visual_embedding_backend: str = Field(default="colpali", alias="VISUAL_EMBEDDING_BACKEND")
+    colpali_model: str = Field(default="vidore/colpali-v1.3", alias="COLPALI_MODEL")
     image_weight: float = Field(default=0.3, alias="IMAGE_WEIGHT")
     table_weight: float = Field(default=0.3, alias="TABLE_WEIGHT")
     text_weight: float = Field(default=0.4, alias="TEXT_WEIGHT")
@@ -288,6 +299,27 @@ class Settings(BaseSettings):
     query_retry_enabled: bool = Field(default=True, alias="QUERY_RETRY_ENABLED")
     query_retry_max_attempts: int = Field(default=2, alias="QUERY_RETRY_MAX_ATTEMPTS")
     query_retry_base_delay_ms: int = Field(default=120, alias="QUERY_RETRY_BASE_DELAY_MS")
+    verifier_max_retries: int = Field(default=1, ge=0, le=1, alias="VERIFIER_MAX_RETRIES")
+    langgraph_recursion_limit: int = Field(default=20, ge=12, le=100, alias="LANGGRAPH_RECURSION_LIMIT")
+    planner_max_tasks: int = Field(default=8, ge=1, le=32, alias="PLANNER_MAX_TASKS")
+    planner_max_depth: int = Field(default=4, ge=1, le=16, alias="PLANNER_MAX_DEPTH")
+    planner_max_retrieval_budget: int = Field(default=16, ge=1, le=128, alias="PLANNER_MAX_RETRIEVAL_BUDGET")
+    planner_max_tool_budget: int = Field(default=4, ge=0, le=32, alias="PLANNER_MAX_TOOL_BUDGET")
+    knowledge_source_timeout_ms: int = Field(default=10_000, ge=100, le=120_000, alias="KNOWLEDGE_SOURCE_TIMEOUT_MS")
+    knowledge_max_sources: int = Field(default=6, ge=1, le=8, alias="KNOWLEDGE_MAX_SOURCES")
+    knowledge_orchestrator_enabled: bool = Field(default=False, alias="KNOWLEDGE_ORCHESTRATOR_ENABLED")
+    knowledge_context_token_budget: int = Field(
+        default=8_000,
+        ge=256,
+        le=128_000,
+        alias="KNOWLEDGE_CONTEXT_TOKEN_BUDGET",
+    )
+    knowledge_reranker_timeout_ms: int = Field(
+        default=10_000,
+        ge=100,
+        le=120_000,
+        alias="KNOWLEDGE_RERANKER_TIMEOUT_MS",
+    )
     perf_gate_max_p95_ms: int = Field(default=4000, alias="PERF_GATE_MAX_P95_MS")
     perf_gate_max_error_rate_percent: float = Field(default=5.0, alias="PERF_GATE_MAX_ERROR_RATE_PERCENT")
     admin_create_approval_token: str = Field(default="", alias="ADMIN_CREATE_APPROVAL_TOKEN")
@@ -335,6 +367,14 @@ class Settings(BaseSettings):
     @property
     def parent_store_path(self) -> Path:
         return Path(self.parent_store_path_str)
+
+    @property
+    def evidence_artifact_path(self) -> Path:
+        return Path(self.evidence_artifact_root)
+
+    @property
+    def wiki_db_path(self) -> Path:
+        return Path(self.wiki_db_path_str)
 
     @property
     def sessions_path(self) -> Path:

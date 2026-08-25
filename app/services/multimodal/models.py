@@ -19,6 +19,19 @@ class ImageContent:
     image_type: str = "unknown"  # diagram|chart|photo|screenshot
     created_at: datetime = field(default_factory=datetime.utcnow)
     metadata: dict[str, Any] = field(default_factory=dict)
+    tenant_id: str = "shared"
+    version: int = 1
+    artifact_uri: str | None = None
+    masked_artifact_uri: str | None = None
+    masked_image_data: bytes | None = field(default=None, repr=False)
+    embedding_model: str | None = None
+    visual_embedding: tuple[float, ...] = field(default_factory=tuple, repr=False)
+
+    @property
+    def document_id(self) -> str:
+        """Canonical name while retaining the existing ``doc_id`` attribute."""
+
+        return self.doc_id
 
 
 @dataclass

@@ -72,6 +72,7 @@ class HistoryStore:
                 "clarification_round": 0,
                 "max_rounds": 10,
                 "intent": "",
+                "original_query": "",
             },
         }
         with self._lock:
@@ -520,6 +521,34 @@ class HistoryStore:
 
     # Clarification context management methods
 
+    def set_clarification_context(
+        self,
+        session_id: str,
+        context: dict[str, Any],
+    ) -> dict[str, Any] | None:
+        """Persist a normalized clarification context without advancing its round."""
+
+        try:
+            session_id = validate_session_id(session_id)
+        except ValueError:
+            return None
+        normalized = {
+            "collected_info": dict(context.get("collected_info", {}) or {}),
+            "asked_questions": list(context.get("asked_questions", []) or []),
+            "clarification_round": max(0, int(context.get("clarification_round", 0) or 0)),
+            "max_rounds": max(0, int(context.get("max_rounds", 0) or 0)),
+            "intent": str(context.get("intent", "") or ""),
+            "original_query": str(context.get("original_query", "") or ""),
+        }
+        with self._lock:
+            data = self.get_session(session_id)
+            if data is None:
+                return None
+            data["clarification_context"] = normalized
+            data["updated_at"] = self._now()
+            self._write(session_id, data)
+            return data
+
     def update_clarification_context(
         self,
         session_id: str,
@@ -554,6 +583,7 @@ class HistoryStore:
                     "clarification_round": 0,
                     "max_rounds": 10,
                     "intent": "",
+                    "original_query": "",
                 }
 
             # Update collected information
@@ -598,6 +628,7 @@ class HistoryStore:
                 "clarification_round": 0,
                 "max_rounds": 10,
                 "intent": "",
+                "original_query": "",
             }
             data["updated_at"] = self._now()
             self._write(session_id, data)
@@ -631,6 +662,7 @@ class HistoryStore:
                     "clarification_round": 0,
                     "max_rounds": 10,
                     "intent": "",
+                    "original_query": "",
                 }
 
             return ctx

@@ -6,7 +6,7 @@ try:
     from authlib.integrations.starlette_client import OAuth
 except ModuleNotFoundError:
     OAuth = None
-from fastapi import APIRouter, Depends, Request, Response
+from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from fastapi.responses import RedirectResponse
 from pydantic import BaseModel
 

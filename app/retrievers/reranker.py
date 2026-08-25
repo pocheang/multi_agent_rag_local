@@ -24,7 +24,7 @@ def _load_cross_encoder():
     except ImportError as e:
         logger.warning(f"sentence-transformers not installed: {e}")
         return None
-    except OSError as e:
+    except (OSError, ValueError) as e:
         logger.error(
             f"Reranker model '{settings.reranker_model_name}' not found locally. "
             f"Please download it first:\n"
@@ -90,27 +90,51 @@ def _lexical_fallback_rerank(query: str, candidates: list[dict], top_n: int) -> 
     return rescored[:top_n]
 
 
-def rerank(query: str, candidates: list[dict], top_n: int | None = None) -> list[dict]:
+def lexical_rerank(query: str, candidates: list[dict], top_n: int) -> list[dict]:
+    """Public lexical fallback shared by timeout-aware orchestration."""
+
+    return _lexical_fallback_rerank(query, candidates, top_n)
+
+
+def rerank_with_diagnostics(
+    query: str,
+    candidates: list[dict],
+    top_n: int | None = None,
+) -> tuple[list[dict], dict[str, str | None]]:
+    """Rerank candidates and report the actual backend and fallback reason."""
+
     settings = get_settings()
     if not candidates:
-        return []
+        return [], {"reranker_backend": "none", "reranker_fallback_reason": "no_candidates"}
     limit = top_n or settings.reranker_top_n
     if not settings.enable_reranker:
-        return _lexical_fallback_rerank(query, candidates, top_n=limit)
+        return _lexical_fallback_rerank(query, candidates, top_n=limit), {
+            "reranker_backend": "lexical",
+            "reranker_fallback_reason": "disabled",
+        }
 
     model = _load_cross_encoder()
     if model is None:
-        return _lexical_fallback_rerank(query, candidates, top_n=limit)
+        return _lexical_fallback_rerank(query, candidates, top_n=limit), {
+            "reranker_backend": "lexical",
+            "reranker_fallback_reason": "model_unavailable",
+        }
 
     pairs = [[query, item.get("text", "")] for item in candidates]
     try:
         scores = call_with_circuit_breaker("reranker.predict", lambda: model.predict(pairs))
     except (RuntimeError, ValueError) as e:
         logger.warning(f"Reranker prediction failed: {e}, falling back to lexical reranking")
-        return _lexical_fallback_rerank(query, candidates, top_n=limit)
+        return _lexical_fallback_rerank(query, candidates, top_n=limit), {
+            "reranker_backend": "lexical",
+            "reranker_fallback_reason": f"prediction_error:{type(e).__name__}",
+        }
     except Exception as e:
         logger.error(f"Unexpected reranker error: {e}, falling back to lexical reranking")
-        return _lexical_fallback_rerank(query, candidates, top_n=limit)
+        return _lexical_fallback_rerank(query, candidates, top_n=limit), {
+            "reranker_backend": "lexical",
+            "reranker_fallback_reason": f"prediction_error:{type(e).__name__}",
+        }
 
     rescored = []
     for item, score in zip(candidates, scores, strict=False):
@@ -118,4 +142,14 @@ def rerank(query: str, candidates: list[dict], top_n: int | None = None) -> list
         merged["rerank_score"] = float(score)
         rescored.append(merged)
     rescored.sort(key=lambda x: x.get("rerank_score", 0.0), reverse=True)
-    return rescored[:limit]
+    return rescored[:limit], {"reranker_backend": "bge_cross_encoder", "reranker_fallback_reason": None}
+
+
+def rerank(query: str, candidates: list[dict], top_n: int | None = None) -> list[dict]:
+    """Backward-compatible result-only reranker."""
+
+    results, _ = rerank_with_diagnostics(query, candidates, top_n)
+    return results
+
+
+__all__ = ["lexical_rerank", "rerank", "rerank_with_diagnostics"]

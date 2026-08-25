@@ -104,6 +104,8 @@ def register_and_enqueue_uploads(
     uploads: list[Any],
     owner_user_id: str,
     visibility: str,
+    tenant_id: str = "",
+    acl_tags: tuple[str, ...] = (),
 ) -> list[str]:
     """Create document records and enqueue their ingestion as one runtime operation."""
     document_ids: list[str] = []
@@ -117,6 +119,8 @@ def register_and_enqueue_uploads(
             visibility=visibility,
             agent_class=upload.agent_class,
             parser_profile=str(parser_profile.get("name", "") or ""),
+            tenant_id=tenant_id or owner_user_id,
+            acl_tags=acl_tags,
         )
         document_id = str(record["document_id"])
         document_ids.append(document_id)
@@ -125,6 +129,10 @@ def register_and_enqueue_uploads(
             path=upload.path,
             metadata_overrides={
                 "owner_user_id": owner_user_id,
+                "tenant_id": str(record.get("tenant_id", "") or tenant_id or owner_user_id),
+                "document_id": document_id,
+                "version": int(record.get("version", 1) or 1),
+                "acl_tags": tuple(str(value) for value in record.get("acl_tags", ()) or ()),
                 "visibility": visibility,
                 "agent_class": upload.agent_class,
                 "parser_profile": str(parser_profile.get("name", "") or ""),

@@ -14,10 +14,13 @@ from app.agents.rag.evidence_builder import (
     bundle_from_legacy_payload,
     bundle_from_vector_matches,
 )
-from app.agents.rag.fusion import fuse_evidence
 from app.domain.contracts import EvidenceBundle, RouteDecision, TaskPlan
 from app.domain.events import ExecutionEvent
+from app.domain.knowledge import AccessScope, KnowledgeSource, KnowledgeSourcePlan, KnowledgeStrategy
+from app.knowledge.adapters import CallableKnowledgeAdapter
+from app.knowledge.orchestrator import KnowledgeOrchestrator
 from app.orchestration.request import OrchestrationRequest
+from app.services.security.access_scope import DEFAULT_CONTEXT_FIELDS
 
 logger = logging.getLogger(__name__)
 
@@ -213,17 +216,7 @@ class RequireSpecificRetrieverPolicy(RAGDegradationPolicy):
 
 
 class RAGAgentService:
-    """Run enabled vector, graph, and web retrievers concurrently, then fuse their evidence.
-
-    Concurrent execution: All enabled retrievers run in parallel using asyncio.gather.
-    Timeout behavior: Each retriever has a default 30s timeout. The entire retrieve()
-                     operation has an overall timeout to prevent indefinite blocking.
-    Thread safety: set_degradation_reporter() is NOT thread-safe. Call it during
-                  initialization, not during concurrent retrieve() calls.
-    Degradation policy: Configurable via degradation_policy parameter (default: RequireAtLeastOnePolicy).
-                       Raises RetrievalFailureError if policy is violated.
-    Resource management: Uses a shared thread pool (max 50 workers) for synchronous retrievers.
-    """
+    """Backward-compatible facade that delegates execution to KnowledgeOrchestrator."""
 
     def __init__(
         self,
@@ -287,178 +280,118 @@ class RAGAgentService:
         route: RouteDecision,
         plan: TaskPlan | None,
     ) -> EvidenceBundle:
-        """Retrieve every permitted source for each retrieval-enabled planned task.
+        """Translate the legacy request contract and proxy it to the canonical service."""
 
-        Applies degradation policy to determine if partial failures are acceptable.
-        All retrievers run concurrently with individual timeouts.
-
-        Args:
-            request: The orchestration request
-            route: Routing decision with allowed capabilities
-            plan: Optional task plan for multi-step retrieval
-
-        Returns:
-            Fused evidence bundle from all successful retrievers
-
-        Raises:
-            RetrievalFailureError: If all retrieval attempts fail (degradation policy violation)
-            asyncio.TimeoutError: If overall retrieval exceeds timeout
-        """
-        # Early return: RAG not allowed
         if "rag" not in route.allowed_capabilities:
             return EvidenceBundle()
-
-        # Early return: explicitly empty allowed sources
         if request.source_scope.allowed_sources is not None and not request.source_scope.allowed_sources:
             return EvidenceBundle()
 
-        retrievers = self._enabled_retrievers(route)
-        requests = _retrieval_requests(request, plan, len(retrievers))
-        jobs = [
-            (name, retriever, planned_request)
-            for planned_request, max_retrievals in requests
-            for name, retriever in retrievers[:max_retrievals]
+        enabled: list[tuple[KnowledgeSource, TypedRetriever]] = [
+            ("vector", self._vector),
+            ("bm25", self._bm25),
         ]
-
-        # Early return: no retrieval jobs to execute
-        if not jobs:
-            return EvidenceBundle()
-
-        total_attempts = len(jobs)
-
-        # Execute all retrievers concurrently with individual timeouts
-        # Overall timeout uses multiplier to allow for retries and parallel execution
-        overall_timeout = self._retriever_timeout * OVERALL_TIMEOUT_MULTIPLIER
-        try:
-            results = await asyncio.wait_for(
-                asyncio.gather(
-                    *(
-                        self._run_retriever_with_timeout(retriever, planned_request, route, plan, name)
-                        for name, retriever, planned_request in jobs
-                    ),
-                    return_exceptions=True,
-                ),
-                timeout=overall_timeout,
-            )
-        except TimeoutError:
-            # Overall timeout exceeded - report and raise
-            await self._report_degradation(
-                ExecutionEvent(
-                    stage="rag", status="failed", message=f"Overall retrieval timeout exceeded ({overall_timeout}s)"
-                )
-            )
-            raise
-
-        bundles: list[EvidenceBundle] = []
-        failed_retrievers: list[str] = []
-
-        for (name, _, _), result in zip(jobs, results, strict=True):
-            if isinstance(result, BaseException):
-                failed_retrievers.append(name)
-                # Truncate long error messages for event reporting
-                # Full error is still available in exception traceback for debugging
-                error_msg = str(result)
-                if len(error_msg) > ERROR_MESSAGE_MAX_LENGTH:
-                    error_msg = error_msg[:ERROR_MESSAGE_MAX_LENGTH] + "... (truncated)"
-                await self._report_degradation(
-                    ExecutionEvent(
-                        stage="rag", status="skipped", message=f"{name}: {type(result).__name__}: {error_msg}"
-                    )
-                )
-                continue
-
-            # Defensive: validate result type
-            if not isinstance(result, EvidenceBundle):
-                failed_retrievers.append(name)
-                await self._report_degradation(
-                    ExecutionEvent(
-                        stage="rag",
-                        status="skipped",
-                        message=f"{name}: returned invalid type {type(result).__name__}, expected EvidenceBundle",
-                    )
-                )
-                continue
-
-            bundles.append(result)
-
-        successful_attempts = len(bundles)
-        fused = fuse_evidence(bundles)
-        evidence_count = len(fused.items)
-
-        # Calculate unique failed retrievers once
-        unique_failed = set(failed_retrievers)
-
-        # Apply degradation policy
-        if not self._degradation_policy.is_acceptable(successful_attempts, total_attempts, unique_failed):
-            raise RetrievalFailureError(
-                total_attempts=total_attempts, failed_retrievers=unique_failed, successful_attempts=successful_attempts
-            )
-
-        # Report degradation if no documents found
-        if evidence_count == 0:
-            await self._report_degradation(
-                ExecutionEvent(
-                    stage="rag",
-                    status="completed",
-                    message=(
-                        f"DEGRADED: {successful_attempts}/{total_attempts} retrieval attempts succeeded "
-                        f"but found no matching documents. Will proceed with fallback synthesis."
-                    ),
-                )
-            )
-
-        # Report degradation if some retrievers failed
-        if failed_retrievers:
-            await self._report_degradation(
-                ExecutionEvent(
-                    stage="rag",
-                    status="completed",
-                    message=(
-                        f"DEGRADED: Partial retrieval success: {successful_attempts}/{total_attempts} attempts, "
-                        f"{evidence_count} evidence items. Failed: {', '.join(sorted(unique_failed))}"
-                    ),
-                )
-            )
-
-        return fused
-
-    async def _run_retriever_with_timeout(
-        self,
-        retriever: TypedRetriever,
-        request: OrchestrationRequest,
-        route: RouteDecision,
-        plan: TaskPlan | None,
-        name: str,
-    ) -> EvidenceBundle:
-        """Run a single retriever with timeout protection.
-
-        Args:
-            retriever: The retriever function to execute
-            request: Orchestration request
-            route: Route decision
-            plan: Task plan
-            name: Retriever name (for error reporting)
-
-        Returns:
-            Evidence bundle from the retriever
-
-        Raises:
-            asyncio.TimeoutError: If retriever exceeds individual timeout
-            Exception: Any exception raised by the retriever
-        """
-        try:
-            return await asyncio.wait_for(retriever(request, route, plan), timeout=self._retriever_timeout)
-        except TimeoutError as e:
-            # Re-raise as asyncio.TimeoutError with descriptive message
-            raise TimeoutError(f"{name} retriever exceeded timeout ({self._retriever_timeout}s)") from e
-
-    def _enabled_retrievers(self, route: RouteDecision) -> tuple[tuple[str, TypedRetriever], ...]:
-        retrievers: list[tuple[str, TypedRetriever]] = [("vector", self._vector), ("bm25", self._bm25)]
         if route.intent == "hybrid":
-            retrievers.append(("graph", self._graph))
+            enabled.append(("graph", self._graph))
         if "web" in route.allowed_capabilities:
-            retrievers.append(("web", self._web))
-        return tuple(retrievers)
+            enabled.append(("web", self._web))
+
+        source_queries: dict[KnowledgeSource, list[str]] = {name: [] for name, _ in enabled}
+        for planned_request, max_retrievals in _retrieval_requests(request, plan, len(enabled)):
+            for name, _ in enabled[:max_retrievals]:
+                source_queries[name].append(planned_request.question)
+        selected = tuple((name, retriever) for name, retriever in enabled if source_queries[name])
+        if not selected:
+            return EvidenceBundle(route=route, plan=plan)
+
+        adapters = {
+            name: CallableKnowledgeAdapter(
+                name,
+                _legacy_adapter(name, retriever, request=request, route=route, task_plan=plan),
+            )
+            for name, retriever in selected
+        }
+        strategy = KnowledgeStrategy(
+            sources=tuple(
+                KnowledgeSourcePlan(
+                    source=name,
+                    queries=tuple(dict.fromkeys(source_queries[name])),
+                    top_k=6,
+                    timeout_ms=max(100, int(self._retriever_timeout * 1000)),
+                    required=name in {"vector", "bm25"},
+                )
+                for name, _ in selected
+            ),
+            rewrite=False,
+            rerank=len(selected) > 1,
+            rationale="legacy RAG compatibility proxy",
+        )
+        context = await KnowledgeOrchestrator(adapters=adapters).retrieve(
+            strategy,
+            _compatibility_scope(request),
+            self._report_degradation,
+        )
+        status = dict(context.diagnostics.get("source_status", {}))
+        failed = {str(name) for name, value in status.items() if value != "completed"}
+        successful = len(status) - len(failed)
+        if not self._degradation_policy.is_acceptable(successful, len(status), failed):
+            raise RetrievalFailureError(len(status), failed, successful)
+        return EvidenceBundle(
+            route=route,
+            plan=plan,
+            items=context.evidence,
+            diagnostics=context.diagnostics,
+        )
+
+
+def _legacy_adapter(
+    source: KnowledgeSource,
+    retriever: TypedRetriever,
+    *,
+    request: OrchestrationRequest,
+    route: RouteDecision,
+    task_plan: TaskPlan | None,
+):
+    """Adapt an injected legacy retriever without reimplementing orchestration."""
+
+    async def retrieve(source_plan: KnowledgeSourcePlan, scope: AccessScope) -> tuple:
+        del scope
+        bundles = await asyncio.gather(
+            *(
+                retriever(request.model_copy(update={"question": query}), route, task_plan)
+                for query in source_plan.queries
+            )
+        )
+        items = []
+        for bundle in bundles:
+            if not isinstance(bundle, EvidenceBundle):
+                raise TypeError(f"{source} retriever must return EvidenceBundle")
+            for item in bundle.items:
+                updates = {"retriever": source}
+                if source == "web":
+                    updates["layer"] = "web"
+                items.append(item.model_copy(update=updates))
+        return tuple(items)
+
+    return retrieve
+
+
+def _compatibility_scope(request: OrchestrationRequest) -> AccessScope:
+    """Build a fail-closed scope from the legacy request's already-authorized filters."""
+
+    actor = request.actor
+    user_id = str(actor.user_id if actor and actor.user_id else "legacy").strip()
+    tenant_id = str(actor.tenant_id if actor and actor.tenant_id else user_id).strip()
+    return AccessScope(
+        tenant_id=tenant_id,
+        user_id=user_id,
+        role=str(actor.role if actor and actor.role else "viewer"),
+        permissions=actor.permissions if actor else frozenset(),
+        document_ids=request.source_scope.document_ids or frozenset(),
+        allowed_sources=request.source_scope.allowed_sources or frozenset(),
+        acl_tags=request.source_scope.acl_tags or frozenset(),
+        allowed_fields=request.source_scope.allowed_fields or DEFAULT_CONTEXT_FIELDS,
+    )
 
 
 def _retrieval_requests(
