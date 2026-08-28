@@ -15,7 +15,6 @@ def multi_query_retrieval(
     question: str,
     agent_class: str = "general",
     allowed_sources: list[str] | None = None,
-    retrieval_strategy: str | None = None,
     top_k: int = 5,
     enable_rewrite: bool = True,
 ) -> tuple[list[dict], dict]:
@@ -26,7 +25,6 @@ def multi_query_retrieval(
         question: 用户原始问题
         agent_class: Agent类别
         allowed_sources: 允许的文档来源
-        retrieval_strategy: 检索策略
         top_k: 每个查询返回的结果数
         enable_rewrite: 是否启用查询改写
 
@@ -49,7 +47,6 @@ def multi_query_retrieval(
             results, diagnostics = hybrid_search_with_diagnostics(
                 query,
                 allowed_sources=allowed_sources,
-                retrieval_strategy=retrieval_strategy,
             )
 
             # 记录每个查询的结果数

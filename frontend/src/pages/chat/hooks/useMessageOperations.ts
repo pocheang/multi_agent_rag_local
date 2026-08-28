@@ -20,7 +20,7 @@ export function useMessageOperations(params: UseMessageOperationsParams) {
     refreshSessions,
   } = params;
 
-  const editMessage = async (msg: SessionMessage, useWeb: boolean, useReasoning: boolean) => {
+  const editMessage = async (msg: SessionMessage) => {
     if (!currentSessionId || !msg.message_id) return;
     const next = window.prompt("Edit message content", msg.content || "");
     if (next === null) return;
@@ -31,8 +31,6 @@ export function useMessageOperations(params: UseMessageOperationsParams) {
         msg.message_id,
         next,
         rerun,
-        useWeb,
-        useReasoning,
       );
       setMessages(detail.messages || []);
       await refreshSessions();

@@ -16,7 +16,7 @@ class UnsupportedRouteError(ValueError):
 class ExecutionPolicy:
     """One policy object selects profile behavior on the shared Engine."""
 
-    profile: PipelineProfile = PipelineProfile.STANDARD
+    profile: PipelineProfile = PipelineProfile.ADVANCED
     enable_route_validation: bool = True
     enable_retrieval_quality: bool = False
     require_answer_validation: bool = False
@@ -27,15 +27,6 @@ class ExecutionPolicy:
     @classmethod
     def for_profile(cls, profile: PipelineProfile | str) -> ExecutionPolicy:
         selected = PipelineProfile(profile)
-        if selected is PipelineProfile.STANDARD:
-            return cls(profile=selected)
-        if selected is PipelineProfile.STRICT_QUALITY:
-            return cls(
-                profile=selected,
-                enable_retrieval_quality=True,
-                require_answer_validation=True,
-                require_quality_report=True,
-            )
         return cls(
             profile=selected,
             enable_retrieval_quality=True,

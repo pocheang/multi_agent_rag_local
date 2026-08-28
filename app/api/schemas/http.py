@@ -1,24 +1,6 @@
 from typing import Any
 
-from pydantic import BaseModel, Field, field_validator
-
-
-class QueryRequest(BaseModel):
-    question: str = Field(..., description="User question")
-    use_web_fallback: bool = Field(default=False)
-    use_reasoning: bool = Field(default=False)
-    session_id: str | None = Field(default=None, pattern=r"^[A-Za-z0-9_-]{1,128}$")
-    request_id: str | None = None
-    agent_class_hint: str | None = None
-    retrieval_strategy: str | None = None  # baseline|advanced|safe
-    force_language: str = Field(default="", description="Force response language: 'zh' or 'en', empty for auto-detect")
-
-    @field_validator("force_language")
-    @classmethod
-    def validate_force_language(cls, v: str) -> str:
-        if v and v not in {"zh", "en", ""}:
-            raise ValueError("force_language must be 'zh', 'en', or empty string")
-        return v
+from pydantic import BaseModel, Field
 
 
 class Citation(BaseModel):

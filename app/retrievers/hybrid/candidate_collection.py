@@ -45,7 +45,6 @@ def collect_candidates(
     allowed_sources: list[str] | None,
     vector_threshold: float,
     settings,
-    retrieval_strategy: str | None = None,
     precomputed_vector_results: dict[str, list] | None = None,
     precomputed_raw_vector_results: dict[str, list] | None = None,
     dynamic_top_k: int | None = None,
@@ -54,7 +53,7 @@ def collect_candidates(
 ) -> tuple[list[dict], dict]:
     """Collect and fuse candidates from vector and BM25 retrieval."""
     rrf_k = int(getattr(settings, "hybrid_rrf_k", 60) or 60)
-    flags = strategy_flags(retrieval_strategy)
+    flags = strategy_flags()
 
     # Use dynamic parameters if provided, otherwise use adaptive params or settings
     if dynamic_top_k is not None:
@@ -107,7 +106,6 @@ def collect_candidates(
         "reranker_top_n": reranker_top_n,
         "vector_weight": vector_weight,
         "bm25_weight": bm25_weight,
-        "strategy": retrieval_strategy or "advanced",
         "dynamic_params_applied": dynamic_top_k is not None,
     }
 

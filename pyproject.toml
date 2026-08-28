@@ -104,69 +104,10 @@ where = ["."]
 include = ["app*"]
 
 # ---------------------------------------------------------------------------
-# Tooling configuration (consolidated from pytest.ini and .coveragerc)
+# Tooling configuration
 # ---------------------------------------------------------------------------
-
-[tool.pytest.ini_options]
-pythonpath = ["."]
-testpaths = ["tests"]
-norecursedirs = [
-  ".git",
-  ".venv",
-  ".tmp",
-  "pytest_tmp_run_*",
-  ".pytest_tmp*",
-  ".pytest_basetemp",
-  "artifacts",
-  "frontend/node_modules",
-]
-python_files = ["test_*.py"]
-python_classes = ["Test*"]
-python_functions = ["test_*"]
-addopts = "-v --strict-markers --tb=short"
-markers = [
-  "unit: Unit tests for individual components",
-  "performance: Performance and benchmark tests",
-  "integration: Integration tests across multiple components",
-  "slow: Tests that take significant time to run",
-]
-tmp_path_retention_policy = "none"
-asyncio_mode = "auto"
-asyncio_default_fixture_loop_scope = "function"
-
-[tool.coverage.run]
-source = ["app"]
-branch = true
-omit = [
-  "*/tests/*",
-  "*/test_*.py",
-  "*/__pycache__/*",
-  "*/venv/*",
-  "*/.venv/*",
-  "*/site-packages/*",
-  "*/conftest.py",
-]
-
-[tool.coverage.report]
-precision = 2
-show_missing = true
-skip_covered = false
-exclude_lines = [
-  "pragma: no cover",
-  "def __repr__",
-  "raise AssertionError",
-  "raise NotImplementedError",
-  "if __name__ == .__main__.:",
-  "if TYPE_CHECKING:",
-  "@abstractmethod",
-  "@abc.abstractmethod",
-]
-
-[tool.coverage.html]
-directory = "htmlcov"
-
-[tool.coverage.xml]
-output = "coverage.xml"
+# Note (2026-08-28): pytest/coverage configuration was removed here ahead of the v0.7
+# rewrite — `tests/` was cleared and will be rebuilt against the new architecture.
 
 [tool.ruff]
 target-version = "py311"
@@ -200,8 +141,6 @@ ignore = [
 ]
 
 [tool.ruff.lint.per-file-ignores]
-"tests/**" = ["B011"]                        # tests use plain assert; allow assert False
-"scripts/**" = ["E402", "T201"]              # scripts may print and import after sys.path edits
 "app/services/agent_document_filter.py" = ["T201"]  # demo block under __main__
 "app/evaluation/service.py" = ["T201"]       # CLI-style table printing is intentional
 

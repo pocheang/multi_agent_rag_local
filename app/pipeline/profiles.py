@@ -14,10 +14,8 @@ from typing import Final
 
 
 class PipelineProfile(StrEnum):
-    """The compatibility profiles for the three existing public query APIs."""
+    """The single supported pipeline profile for the public query API."""
 
-    STANDARD = "standard"
-    STRICT_QUALITY = "strict_quality"
     ADVANCED = "advanced"
 
 
@@ -65,11 +63,8 @@ class ProfileDefinition:
     public_endpoint: str
     capabilities: ProfileCapabilities
     budget: CapabilityBudget
-    default_retrieval_strategy: str | None = None
 
 
-_STANDARD_BUDGET: Final = CapabilityBudget()
-_STRICT_QUALITY_BUDGET: Final = CapabilityBudget()
 _ADVANCED_BUDGET: Final = CapabilityBudget()
 
 
@@ -77,25 +72,6 @@ _ADVANCED_BUDGET: Final = CapabilityBudget()
 # task-1 baseline.  Any change requires a refreshed baseline and release note.
 PROFILE_DEFINITIONS: Final[Mapping[PipelineProfile, ProfileDefinition]] = MappingProxyType(
     {
-        PipelineProfile.STANDARD: ProfileDefinition(
-            profile=PipelineProfile.STANDARD,
-            public_endpoint="/query",
-            capabilities=ProfileCapabilities(),
-            budget=_STANDARD_BUDGET,
-            default_retrieval_strategy=None,
-        ),
-        PipelineProfile.STRICT_QUALITY: ProfileDefinition(
-            profile=PipelineProfile.STRICT_QUALITY,
-            public_endpoint="/api/v1/enhanced/query",
-            capabilities=ProfileCapabilities(
-                route_validation=True,
-                retrieval_quality_scoring=True,
-                answer_validation=True,
-                quality_reporting=True,
-            ),
-            budget=_STRICT_QUALITY_BUDGET,
-            default_retrieval_strategy=None,
-        ),
         PipelineProfile.ADVANCED: ProfileDefinition(
             profile=PipelineProfile.ADVANCED,
             public_endpoint="/api/advanced-rag/query",
@@ -107,7 +83,6 @@ PROFILE_DEFINITIONS: Final[Mapping[PipelineProfile, ProfileDefinition]] = Mappin
                 self_rag_requires_request_opt_in=True,
             ),
             budget=_ADVANCED_BUDGET,
-            default_retrieval_strategy=None,
         ),
     }
 )

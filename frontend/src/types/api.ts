@@ -25,30 +25,6 @@ export type Citation = {
   metadata?: Record<string, unknown>;
 };
 
-export type PipelineProfile = "standard" | "strict_quality" | "advanced";
-
-export type StandardQueryResponse = {
-  answer: string;
-  route: string;
-  citations: Citation[];
-  graph_entities: string[];
-  web_used: boolean;
-  detected_language: string;
-  debug: Record<string, unknown>;
-  execution_id: string | null;
-};
-
-export type StrictQualityQueryResponse = {
-  answer: string;
-  citations: Citation[];
-  quality_report: Record<string, unknown>;
-  route_used: string;
-  route_reason: string;
-  skill_used: string;
-  agent_class: string;
-  execution_metadata: Record<string, unknown>;
-};
-
 export type AdvancedQueryResponse = {
   query: string;
   decomposed_query: Record<string, unknown> | null;
@@ -59,7 +35,6 @@ export type AdvancedQueryResponse = {
 };
 
 export type NormalizedQueryResult = {
-  profile: PipelineProfile;
   answer: string;
   citations: Citation[];
   route?: string;
@@ -70,7 +45,6 @@ export type NormalizedQueryResult = {
 export type SessionMessageMetadata = {
   route?: string;
   execution_route?: string;
-  retrieval_strategy?: string;
   agent_class?: string;
   web_used?: boolean;
   latency_ms?: number;
@@ -382,24 +356,9 @@ export type AdminModelSettingsView = {
   records_reindexed?: number;
 };
 
-export type RetrievalProfileState = {
-  active_profile: string;
-  config_default_profile: string;
-  follow_config_default: boolean;
-  canary: {
-    enabled: boolean;
-    baseline_percent: number;
-    safe_percent: number;
-    seed: string;
-  };
-  updated_at: string;
-  profiles?: Array<{ id: string; label: string; desc: string }>;
-};
-
 export type BenchmarkTrendItem = {
   created_at: string;
   num_queries: number;
-  strategy: string;
   latency_ms: {
     p50: number;
     p95: number;

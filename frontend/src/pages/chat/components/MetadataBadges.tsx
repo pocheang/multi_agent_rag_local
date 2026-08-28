@@ -18,7 +18,6 @@ export function MetadataBadges({ metadata }: Props) {
     <div className="chips">
       {metadata.route && <span className="chip">route: {metadata.route}</span>}
       {metadata.execution_route && <span className="chip">exec: {metadata.execution_route}</span>}
-      {metadata.retrieval_strategy && <span className="chip">strategy: {metadata.retrieval_strategy}</span>}
       {metadata.route === "smalltalk_fast" && <span className="chip">smalltalk-fast</span>}
       {metadata.agent_class && <span className="chip">agent: {metadata.agent_class}</span>}
       <span className="chip">web: {metadata.web_used ? "yes" : "no"}</span>

@@ -45,7 +45,6 @@ from app.services.models.config_store import (
 from app.services.models.runtime import clear_model_caches, probe_chat_model_configuration
 from app.services.observability.alerting import emit_alert
 from app.services.runtime.bulkhead import reset_bulkheads
-from app.services.runtime.runtime_ops import apply_rollback_profile
 from app.services.security.network import OutboundURLValidationError
 
 router = APIRouter(tags=["admin", "settings"])
@@ -174,21 +173,6 @@ def admin_reload_config(request: Request, user: dict[str, Any] = Depends(_requir
             "global_model_settings": public_global_model_settings(get_global_model_settings()),
         },
     }
-
-
-@router.post("/admin/ops/rollback")
-def admin_ops_rollback(request: Request, user: dict[str, Any] = Depends(_require_user)):
-    _require_permission(user, "admin:ops_manage", request, "admin")
-    state = apply_rollback_profile()
-    _audit(
-        request,
-        action="admin.ops.rollback",
-        resource_type="admin",
-        result="success",
-        user=user,
-        detail="runtime_profile_rollback_to_baseline",
-    )
-    return {"ok": True, "state": state}
 
 
 @router.get("/user/api-settings", response_model=UserApiSettingsResponse)

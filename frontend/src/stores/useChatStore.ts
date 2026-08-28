@@ -1,7 +1,7 @@
 import { create } from "zustand";
-import type { IndexedFileSummary, PipelineProfile, PromptTemplate, SessionMessage, SessionSummary } from "@/types/api";
+import type { IndexedFileSummary, PromptTemplate, SessionMessage, SessionSummary } from "@/types/api";
 import type { Toast } from "@/pages/chat/types";
-import type { AgentClassHint, RetrievalStrategy } from "@/pages/chat/constants";
+import type { AgentClassHint } from "@/pages/chat/constants";
 
 export interface ChatState {
   // Session State
@@ -18,11 +18,7 @@ export interface ChatState {
   question: string;
   isSending: boolean;
   runStatus: string;
-  useWeb: boolean;
-  useReasoning: boolean;
   agentClassHint: AgentClassHint;
-  retrievalStrategy: RetrievalStrategy;
-  pipelineProfile: PipelineProfile;
   pdfTargetFile: string;
 
   // Document State
@@ -62,11 +58,7 @@ export interface ChatState {
   setQuestion: (question: string | ((prev: string) => string)) => void;
   setIsSending: (isSending: boolean | ((prev: boolean) => boolean)) => void;
   setRunStatus: (status: string | ((prev: string) => string)) => void;
-  setUseWeb: (useWeb: boolean | ((prev: boolean) => boolean)) => void;
-  setUseReasoning: (useReasoning: boolean | ((prev: boolean) => boolean)) => void;
   setAgentClassHint: (hint: AgentClassHint | ((prev: AgentClassHint) => AgentClassHint)) => void;
-  setRetrievalStrategy: (strategy: RetrievalStrategy | ((prev: RetrievalStrategy) => RetrievalStrategy)) => void;
-  setPipelineProfile: (profile: PipelineProfile | ((prev: PipelineProfile) => PipelineProfile)) => void;
   setPdfTargetFile: (file: string | ((prev: string) => string)) => void;
 
   setDocuments: (docs: IndexedFileSummary[] | ((prev: IndexedFileSummary[]) => IndexedFileSummary[])) => void;
@@ -110,11 +102,7 @@ export const useChatStore = create<ChatState>((set) => ({
   question: "",
   isSending: false,
   runStatus: "",
-  useWeb: false,
-  useReasoning: false,
   agentClassHint: "",
-  retrievalStrategy: "advanced",
-  pipelineProfile: "standard",
   pdfTargetFile: "",
 
   // Document State
@@ -154,11 +142,7 @@ export const useChatStore = create<ChatState>((set) => ({
   setQuestion: (val) => set((s) => ({ question: updateValue(val, s.question) })),
   setIsSending: (val) => set((s) => ({ isSending: updateValue(val, s.isSending) })),
   setRunStatus: (val) => set((s) => ({ runStatus: updateValue(val, s.runStatus) })),
-  setUseWeb: (val) => set((s) => ({ useWeb: updateValue(val, s.useWeb) })),
-  setUseReasoning: (val) => set((s) => ({ useReasoning: updateValue(val, s.useReasoning) })),
   setAgentClassHint: (val) => set((s) => ({ agentClassHint: updateValue(val, s.agentClassHint) })),
-  setRetrievalStrategy: (val) => set((s) => ({ retrievalStrategy: updateValue(val, s.retrievalStrategy) })),
-  setPipelineProfile: (val) => set((s) => ({ pipelineProfile: updateValue(val, s.pipelineProfile) })),
   setPdfTargetFile: (val) => set((s) => ({ pdfTargetFile: updateValue(val, s.pdfTargetFile) })),
 
   setDocuments: (val) => set((s) => ({ documents: updateValue(val, s.documents) })),

@@ -38,7 +38,6 @@ class EnhancedVectorRAGAgent:
         self,
         question: str,
         allowed_sources: list[str] | None = None,
-        retrieval_strategy: str | None = None,
         agent_class: str | None = None,
     ) -> dict[str, Any]:
         """
@@ -47,7 +46,6 @@ class EnhancedVectorRAGAgent:
         Args:
             question: User query
             allowed_sources: Optional list of allowed sources
-            retrieval_strategy: Optional retrieval strategy
 
         Returns:
             Dictionary with retrieval results and optional evaluation
@@ -55,7 +53,6 @@ class EnhancedVectorRAGAgent:
         rag_result = run_vector_rag(
             question,
             allowed_sources,
-            retrieval_strategy,
             agent_class=agent_class,
         )
 
@@ -145,13 +142,11 @@ class EnhancedVectorRAGAgent:
 def run_vector_rag_with_evaluation(
     question: str,
     allowed_sources: list[str] | None = None,
-    retrieval_strategy: str | None = None,
     agent_class: str | None = None,
 ) -> dict[str, Any]:
     """Synchronous compatibility wrapper for vector retrieval."""
     return run_vector_rag(
         question,
         allowed_sources,
-        retrieval_strategy,
         agent_class=agent_class,
     )

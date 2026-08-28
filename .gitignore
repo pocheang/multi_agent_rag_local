@@ -156,29 +156,26 @@ PROJECT_*.md
 PROJECT_*.txt
 ADMIN_*.md
 SECURITY_FIXES_*.md
-V0.*.md
+/V0.*.md
 VERSION_*.md
 DOCUMENTATION_*.md
 DELIVERY_*.md
 GITHUB_*.md
 GIT_*.md
 ROOT_*.md
+PUBLICATION_*.md
+READY_TO_*.md
 
 # 归档和设计文档
 docs/archive/
 !docs/archive/INDEX.md
 docs/design/
-docs/plans/
-docs/project/
-docs/superpowers/
 docs/templates/
-docs/visualizations/
 docs/security/
 
 # ============================================
 # BUILD & METADATA
 # ============================================
-multi_agent_local_rag.egg-info/
 *.manifest
 *.spec
 
@@ -223,31 +220,11 @@ Desktop.ini
 *_screenshot*.png
 *_capture*.png
 capture_*.py
-test_web_functionality.py
 test_*.temp.py
 fix_*.py
 test_*.sh
-code_quality_report.txt
 *_report.txt
-
-# Frontend generated artifacts
-frontend/css-audit-report.json
-frontend/css-audit-report.md
-frontend/css-audit-summary.md
-frontend/css-migration-map.md
-frontend/css-performance-baseline.json
 frontend/.tmp_*.log
-frontend/build-test.log
-frontend/build-output.txt
-frontend/dev-test.log
-frontend/plugin-debug.log
-frontend/vite.config.d.ts
-frontend/vite.config.js
-frontend/src/styles.backup/
-frontend/src/styles/.legacy-backup/
-frontend/src/styles.css.backup*
-frontend/src/styles/components.css.backup.phase*
-frontend/src/styles/pages.css.backup.phase*
 
 # ============================================
 # AI ASSISTANT SETTINGS
@@ -267,24 +244,15 @@ skills-lock.json
 # ============================================
 # DEPLOYMENT & SCRIPTS (仅保留核心)
 # ============================================
-# 本地启动脚本
-start-backend.ps1
-start-frontend.ps1
-start-all.ps1
-README-STARTUP.md
-
-# 发布创建工具
-CREATE_RELEASES_INSTRUCTIONS.md
-HOW_TO_CREATE_RELEASES.md
-create_github_releases*.ps1
-create_releases_*.ps1
-fix_*_tag.ps1
+# 发布相关的一次性脚本/文档（防止再次出现同类噪音）
+PUSH*.sh
+README_PUSH.md
+check_docs_for_github.sh
+check_github_ready.sh
+cleanup_for_github.sh
 
 # 内部配置（保留示例配置）
 config/router_calibration.json
-config/circuit_breaker.json
-config/retry_policy.json
-config/fact_verification.json
 
 # ============================================
 # RUNTIME CONFIGURATION (完全排除)
@@ -295,22 +263,6 @@ config/profiles/*.env
 !config/env/
 !config/env/*.env.example
 !config/profiles/*.env.example
-
-# ============================================
-# TEST DATA & EVALUATION (完全排除)
-# ============================================
-# 测试数据集
-tests/golden_dataset.json
-scripts/create_golden_dataset.py
-scripts/ab_comparison.py
-scripts/load_test.py
-
-# 评估报告
-docs/ab_comparison_report.md
-docs/performance_regression_report.md
-docs/*-optimization-plan.md
-docs/*-optimization-design.md
-docs/runtime_speed_profiles.md
 
 # ============================================
 # ALLOWED FILES (可以发布的)
@@ -366,26 +318,10 @@ docs/runtime_speed_profiles.md
 # ============================================
 # PUBLICATION MATRIX (发布决策参考)
 # ============================================
-# 已发布内容说明：
-# - 应用源代码 (app/, frontend/src/)
-# - 测试代码 (tests/)
-# - 部署脚本示例 (deploy/, docker-compose.yml)
-# - 配置模板 (config/**/*.example, .env.example)
-# - 核心文档 (README, CHANGELOG, LICENSE)
+# 已发布内容：应用源代码 (app/, frontend/src/)、测试代码 (tests/)、部署脚本示例
+# (deploy/, docker-compose.yml)、配置模板 (config/**/*.example, .env.example)、
+# 核心文档 (README, CHANGELOG, LICENSE)。
 #
-# 不发布内容：
-# - 所有运行时数据 (data/, logs/, reports/)
-# - 内部文档 (internal_docs/, docs/archive/, docs/design/)
-# - 敏感配置 (*.env, config/env/*.env)
-# - 临时和调试文件 (*.tmp, *_REPORT.md)
-# - AI 助手配置 (.claude/, .cursor/)
-# 添加到 .gitignore
-PUBLICATION_*.md
-READY_TO_*.md
-PUSH*.sh
-README_PUSH.md
-FINAL_REPORT.md
-GITHUB_*.md
-check_docs_for_github.sh
-check_github_ready.sh
-cleanup_for_github.sh
+# 不发布内容：运行时数据 (data/, logs/, reports/)、内部文档 (internal_docs/,
+# docs/archive/, docs/design/)、敏感配置 (*.env, config/env/*.env)、临时/调试
+# 文件、AI 助手配置 (.claude/, .cursor/)。

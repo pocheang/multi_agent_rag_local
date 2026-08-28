@@ -49,7 +49,6 @@ class SynthesizerAgentService:
             vector_context=generation_context,
             force_language=request.force_language,
             session_id=request.session_id or "",
-            profile=request.profile,
             enable_fact_verification=False,
             enable_self_review=False,
         )

@@ -34,8 +34,6 @@
 
 ### 3. 文档
 - **审计报告**: [cache-security-audit.md](cache-security-audit.md) - 完整的 9 个漏洞分析
-- **修复总结**: [p0-fixes-summary.md](p0-fixes-summary.md) - 详细的修复说明
-- **完成报告**: [p0-completion-report.md](p0-completion-report.md) - 验证清单和下一步
 
 ### 4. 工具
 - **验证脚本**: [scripts/verify_p0_fixes.sh](../../../scripts/verify_p0_fixes.sh)
@@ -185,8 +183,6 @@ locust -f tests/performance/cache_load_test.py \
 ## 📞 相关链接
 
 - **完整审计报告**: [cache-security-audit.md](cache-security-audit.md)
-- **详细修复说明**: [p0-fixes-summary.md](p0-fixes-summary.md)
-- **验证清单**: [p0-completion-report.md](p0-completion-report.md)
 - **测试代码**: [tests/security/test_p0_cache_fixes.py](../../../tests/security/test_p0_cache_fixes.py)
 
 ---

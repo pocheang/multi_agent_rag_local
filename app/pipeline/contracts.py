@@ -65,7 +65,6 @@ class PipelineRequest(_ImmutableContract):
     conversation: tuple[ConversationMessage, ...] = Field(default_factory=tuple)
     user: PipelineUser | None = None
     source_scope: SourceScope = Field(default_factory=SourceScope)
-    retrieval_strategy: str | None = None
     use_reasoning: bool = False
     use_web_fallback: bool = False
     deadline_at: datetime | None = None
@@ -124,7 +123,6 @@ def to_orchestration_request(request: PipelineRequest) -> OrchestrationRequest:
             allowed_fields=request.source_scope.allowed_fields,
             agent_class_hint=request.source_scope.agent_class_hint,
         ),
-        retrieval_strategy=request.retrieval_strategy,
         use_reasoning=request.use_reasoning,
         use_web_fallback=request.use_web_fallback,
         deadline_at=request.deadline_at,

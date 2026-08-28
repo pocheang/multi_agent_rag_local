@@ -10,7 +10,6 @@ from app.domain.contracts import FinalAnswer
 from app.orchestration.capabilities import CoreCapabilities
 from app.orchestration.engine import OrchestrationEngine
 from app.orchestration.policies import ExecutionPolicy
-from app.orchestration.standard_request_policy import PreparedStandardRequest
 from app.pipeline.contracts import (
     DegradationEvent,
     PipelineCitation,
@@ -111,44 +110,6 @@ class RAGPipeline:
         get_profile_definition(selected)
         orchestration_request = to_orchestration_request(request).model_copy(update={"execution_id": execution_id})
         async for event in self._engine_for(selected).execute_stream(orchestration_request):
-            yield event
-
-    def prepare_standard_request(self, request: PipelineRequest) -> PreparedStandardRequest:
-        """Compatibility request preparation; execution remains typed."""
-        if request.profile is not PipelineProfile.STANDARD:
-            raise ValueError("standard request preparation requires the standard profile")
-        engine = self._engine_for(PipelineProfile.STANDARD)
-        if not isinstance(engine, OrchestrationEngine):
-            raise TypeError("an injected pipeline engine cannot prepare standard requests")
-        return engine.prepare_standard_request(to_orchestration_request(request))
-
-    def bind_standard_runtime_context(
-        self, prepared: PreparedStandardRequest, **runtime_ports: Any
-    ) -> PreparedStandardRequest:
-        engine = self._engine_for(PipelineProfile.STANDARD)
-        if not isinstance(engine, OrchestrationEngine):
-            raise TypeError("an injected pipeline engine cannot bind standard runtime context")
-        return engine.bind_standard_runtime_context(prepared, **runtime_ports)
-
-    async def execute_prepared_standard(self, prepared: PreparedStandardRequest) -> PipelineResult:
-        engine = self._engine_for(PipelineProfile.STANDARD)
-        if not isinstance(engine, OrchestrationEngine):
-            raise TypeError("an injected pipeline engine cannot execute prepared requests")
-        return self._result_from_final_answer(
-            PipelineProfile.STANDARD, await engine.execute_prepared_standard(prepared)
-        )
-
-    def execute_prepared_standard_sync(self, prepared: PreparedStandardRequest) -> PipelineResult:
-        return asyncio.run(self.execute_prepared_standard(prepared))
-
-    async def execute_prepared_standard_stream(
-        self, prepared: PreparedStandardRequest, *, execution_id: str, result_postprocessor: object | None = None
-    ) -> AsyncIterator[dict[str, Any]]:
-        del result_postprocessor
-        engine = self._engine_for(PipelineProfile.STANDARD)
-        if not isinstance(engine, OrchestrationEngine):
-            raise TypeError("an injected pipeline engine cannot execute prepared streams")
-        async for event in engine.execute_prepared_standard_stream(prepared, execution_id=execution_id):
             yield event
 
     @staticmethod

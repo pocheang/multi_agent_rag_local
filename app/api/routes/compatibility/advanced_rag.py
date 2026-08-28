@@ -39,10 +39,6 @@ class AdvancedRAGRequest(BaseModel):
         default=None,
         description="Optional list of allowed sources",
     )
-    retrieval_strategy: str | None = Field(
-        default=None,
-        description="Optional retrieval strategy",
-    )
 
 
 def _resolve_advanced_allowed_sources(
@@ -96,7 +92,6 @@ async def _process_advanced_rag_query_impl(
                 permissions=frozenset(user.get("permissions") or []),
             ),
             source_scope=SourceScope(allowed_sources=frozenset(allowed_sources)),
-            retrieval_strategy=request_data.retrieval_strategy,
             enable_decomposition=request_data.enable_decomposition,
             enable_self_rag=request_data.enable_self_rag,
         )

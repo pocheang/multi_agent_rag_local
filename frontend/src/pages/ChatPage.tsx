@@ -2,7 +2,6 @@ import { useEffect, useMemo, useState } from "react";
 import {
   AGENT_MODES,
   type AgentClassHint,
-  type RetrievalStrategy,
 } from "@/pages/chat/constants";
 import type { Props } from "@/pages/chat/types";
 import { ChatTopbar } from "@/pages/chat/components/ChatTopbar";
@@ -53,11 +52,7 @@ export function ChatPage({ user, onLogout, onUserRefresh }: Props) {
     question, setQuestion,
     isSending, setIsSending,
     runStatus, setRunStatus,
-    useWeb, setUseWeb,
-    useReasoning, setUseReasoning,
     agentClassHint, setAgentClassHint,
-    retrievalStrategy, setRetrievalStrategy,
-    pipelineProfile, setPipelineProfile,
     pdfTargetFile, setPdfTargetFile,
     documents, setDocuments,
     docsLoading, setDocsLoading,
@@ -137,7 +132,6 @@ export function ChatPage({ user, onLogout, onUserRefresh }: Props) {
     promptTitle,
     promptContent,
     editingPromptId,
-    useReasoning,
     setSidebarOpen,
     setAgentClassHint,
     setQuestion,
@@ -177,11 +171,6 @@ export function ChatPage({ user, onLogout, onUserRefresh }: Props) {
       await messageActions.ask({
         question: originalQuestion,
         isSending: false,
-        useWeb,
-        useReasoning,
-        agentClassHint,
-        retrievalStrategy,
-        pipelineProfile,
       });
     },
     onNotify: actions.notify,
@@ -214,11 +203,6 @@ export function ChatPage({ user, onLogout, onUserRefresh }: Props) {
         question: questionText,
         isSending: false,
         sessionId,
-        useWeb,
-        useReasoning,
-        agentClassHint,
-        retrievalStrategy,
-        pipelineProfile,
       });
     } catch (error: unknown) {
       // Auth errors are already handled by checkAndInitiateClarification
@@ -234,11 +218,6 @@ export function ChatPage({ user, onLogout, onUserRefresh }: Props) {
         question: questionText,
         isSending: false,
         sessionId: sessionId || undefined,
-        useWeb,
-        useReasoning,
-        agentClassHint,
-        retrievalStrategy,
-        pipelineProfile,
       });
     }
   };
@@ -377,7 +356,7 @@ export function ChatPage({ user, onLogout, onUserRefresh }: Props) {
             containerRef={chatScrollRef}
             documentsCount={documents.length}
             sessionsCount={sessions.length}
-            onEditMessage={(msg) => messageActions.editMessage(msg, useWeb, useReasoning)}
+            onEditMessage={(msg) => messageActions.editMessage(msg)}
             onRemoveMessage={messageActions.removeMessage}
             onCreateSession={async () => { await actions.createSession(); }}
             onNavigateToArchitecture={() => window.location.href = '/app/architecture'}
@@ -404,11 +383,6 @@ export function ChatPage({ user, onLogout, onUserRefresh }: Props) {
             quickPrompts={smartQuickPrompts}
             runStatus={runStatus}
             error={error}
-            useWeb={useWeb}
-            useReasoning={useReasoning}
-            agentClassHint={agentClassHint}
-            retrievalStrategy={retrievalStrategy}
-            pipelineProfile={pipelineProfile}
             onQuestionChange={setQuestion}
             onAsk={async () => {
               if (clarification) return;
@@ -417,11 +391,6 @@ export function ChatPage({ user, onLogout, onUserRefresh }: Props) {
             onStop={() => messageActions.stopCurrentRun(isSending)}
             onClearQuestion={() => setQuestion("")}
             onPromptPick={setQuestion}
-            onUseWebChange={setUseWeb}
-            onUseReasoningChange={setUseReasoning}
-            onAgentClassHintChange={(v) => setAgentClassHint((v as AgentClassHint) || "")}
-            onRetrievalStrategyChange={(v) => setRetrievalStrategy((v as RetrievalStrategy) || "advanced")}
-            onPipelineProfileChange={(v) => setPipelineProfile(v === "strict_quality" || v === "advanced" ? v : "standard")}
             onComposerDragEnter={dragHandlers.onComposerDragEnter}
             onComposerDragOver={dragHandlers.onComposerDragOver}
             onComposerDragLeave={dragHandlers.onComposerDragLeave}

@@ -8,6 +8,7 @@ helper functions from specialized utility modules.
 import logging
 import re
 import threading
+import uuid
 from dataclasses import dataclass
 from typing import Any
 
@@ -17,17 +18,6 @@ from app.api.deps.admin import _runtime_diagnostics_summary as _runtime_diagnost
 from app.api.deps.auth import (
     auth_service,
 )
-from app.api.deps.documents import _enforce_result_source_scope as _enforce_result_source_scope_impl
-from app.api.deps.documents import (
-    _visible_index_fingerprint_for_user,
-)
-from app.api.deps.query import _effective_strategy_for_session as _effective_strategy_for_session_impl
-from app.api.deps.query import _is_overload_mode as _is_overload_mode_impl
-from app.api.deps.query import _launch_shadow_run as _launch_shadow_run_impl
-from app.api.deps.query import _query_cache_key as _query_cache_key_impl
-from app.api.deps.query import _query_model_fingerprint_for_user as _query_model_fingerprint_for_user_impl
-from app.api.deps.query import _run_with_query_runtime as _run_with_query_runtime_impl
-from app.api.deps.query import _user_api_settings_for_runtime as _user_api_settings_for_runtime_impl
 from app.api.deps.sessions import (
     _history_store_for_user,
 )
@@ -41,6 +31,7 @@ from app.api.utils.memory_helpers import _build_memory_context_for_session as _b
 # Import helper functions from utility modules
 from app.api.utils.string_utils import normalize_string
 from app.core.config import Settings, get_settings
+from app.services.agent_classifier import classify_agent_class
 from app.services.auth.user_manager import InsufficientCreditsError
 from app.services.auto_ingest_watcher import AutoIngestWatcher
 from app.services.models.config_store import get_global_model_settings, public_global_model_settings
@@ -185,7 +176,6 @@ def __getattr__(name: str):
         auth_helpers,
         document_helpers,
         memory_helpers,
-        query_helpers,
         request_helpers,
         session_helpers,
     )
@@ -196,7 +186,6 @@ def __getattr__(name: str):
         auth_helpers,
         document_helpers,
         memory_helpers,
-        query_helpers,
         request_helpers,
         session_helpers,
     )
@@ -217,101 +206,9 @@ def __getattr__(name: str):
 # dependencies.
 
 
-def _query_cache_key(
-    *,
-    user: dict[str, Any],
-    session_id: str | None,
-    question: str,
-    use_web_fallback: bool,
-    use_reasoning: bool,
-    retrieval_strategy: str | None,
-    agent_class_hint: str | None,
-    request_id: str | None,
-    mode: str = "query",
-    conversation: Any = None,
-) -> str:
-    """Compute the query cache key, injecting user-scoped fingerprint helpers."""
-    return _query_cache_key_impl(
-        user=user,
-        session_id=session_id,
-        question=question,
-        use_web_fallback=use_web_fallback,
-        use_reasoning=use_reasoning,
-        retrieval_strategy=retrieval_strategy,
-        agent_class_hint=agent_class_hint,
-        request_id=request_id,
-        mode=mode,
-        conversation=conversation,
-        index_fingerprint_fn=_visible_index_fingerprint_for_user,
-        model_fingerprint_fn=_query_model_fingerprint_for_user,
-    )
-
-
-def _run_with_query_runtime(
-    *,
-    user: dict[str, Any],
-    request: Request,
-    fn,
-    runtime: QueryRuntime | None = None,
-):
-    """Run ``fn`` under the shared query guard / metrics runtime."""
-    runtime = runtime or get_query_runtime()
-    return _run_with_query_runtime_impl(
-        user=user,
-        request=request,
-        fn=fn,
-        query_guard=runtime.query_guard,
-        runtime_metrics=runtime_metrics,
-        api_settings_fn=_user_api_settings_for_runtime,
-    )
-
-
-def _is_overload_mode(runtime: QueryRuntime | None = None) -> bool:
-    """Return True when the query guard is currently shedding load."""
-    runtime = runtime or get_query_runtime()
-    return _is_overload_mode_impl(runtime.query_guard)
-
-
-def _launch_shadow_run(
-    *,
-    user: dict[str, Any],
-    session_id: str | None,
-    question: str,
-    primary_result: dict[str, Any],
-) -> None:
-    """Schedule a shadow comparison run on the background queue."""
-    return _launch_shadow_run_impl(
-        user=user,
-        session_id=session_id,
-        question=question,
-        primary_result=primary_result,
-        shadow_queue=get_query_runtime().shadow_queue,
-    )
-
-
-def _effective_strategy_for_session(
-    *, req_strategy: str | None, user: dict[str, Any], session_id: str | None, question: str
-) -> tuple[str, dict[str, Any]]:
-    """Resolve the strategy to use for a session, honoring strategy locks."""
-    return _effective_strategy_for_session_impl(
-        req_strategy=req_strategy,
-        user=user,
-        session_id=session_id,
-        question=question,
-        history_store_fn=_history_store_for_user,
-    )
-
-
 def _build_memory_context_for_session(user: dict[str, Any], session_id: str | None, question: str) -> str:
     """Build the LLM-ready memory context block for a session."""
     return _build_memory_context_for_session_impl(user, session_id, question, _history_store_for_user)
-
-
-def _enforce_result_source_scope(
-    result: dict[str, Any], allowed_sources: list[str], request: Request, user: dict[str, Any]
-) -> dict[str, Any]:
-    """Drop citations outside the user's allowed source scope, with audit logging."""
-    return _enforce_result_source_scope_impl(result, allowed_sources, request, user, _audit)
 
 
 def _runtime_diagnostics_summary() -> dict[str, Any]:
@@ -321,14 +218,27 @@ def _runtime_diagnostics_summary() -> dict[str, Any]:
     return _runtime_diagnostics_summary_impl(get_request_metrics)
 
 
-def _user_api_settings_for_runtime(user: dict[str, Any]) -> dict[str, Any] | None:
-    """Resolve per-user API settings for runtime model selection."""
-    return _user_api_settings_for_runtime_impl(user, auth_service)
+def _trace_id(request: Request) -> str:
+    """Get or generate a trace ID for the request."""
+    return str(getattr(request.state, "trace_id", "") or "").strip() or uuid.uuid4().hex
 
 
-def _query_model_fingerprint_for_user(user: dict[str, Any]) -> str:
-    """Compute a fingerprint of the resolved model config for cache invalidation."""
-    return _query_model_fingerprint_for_user_impl(user, auth_service, get_global_model_settings)
+_ALLOWED_AGENT_CLASSES = {"general", "cybersecurity", "artificial_intelligence", "pdf_text", "policy"}
+
+
+def _normalize_agent_class_hint(value: str | None) -> str | None:
+    """Normalize a public agent-class hint against the allowed class set."""
+    hint = normalize_string(value, lowercase=True)
+    return hint if hint in _ALLOWED_AGENT_CLASSES else None
+
+
+def _resolve_effective_agent_class(question: str, agent_class_hint: str | None) -> str:
+    """Resolve the canonical agent class for a question, honoring an explicit hint."""
+    hinted = _normalize_agent_class_hint(agent_class_hint)
+    if hinted:
+        return hinted
+    guessed = classify_agent_class(question)
+    return guessed if guessed in _ALLOWED_AGENT_CLASSES else "general"
 
 
 # ============================================================================

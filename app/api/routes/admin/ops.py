@@ -30,25 +30,19 @@ from app.api.dependencies import (
 from app.api.routes.compatibility.pipeline_compat import execute_standard_compatibility
 from app.api.transport.errors import bad_request
 from app.api.transport.middleware import get_request_metrics
-from app.services.consistency_guard import text_similarity
 from app.services.models.config_store import get_global_model_settings, public_global_model_settings
 from app.services.observability.log_buffer import list_log_levels, reset_logger_levels, set_logger_level
-from app.services.retrieval.profiles import profile_force_local_only
 from app.services.runtime.runtime_ops import (
     apply_replay_autotune,
     build_ops_alerts,
     build_ops_overview,
     build_runtime_snapshot,
     cached_service_health,
-    compare_retrieval_profiles,
-    get_runtime_state,
     probe_neo4j_ready,
     read_benchmark_trends,
     read_replay_trends,
     run_benchmark,
     run_replay,
-    set_active_profile,
-    set_canary,
     system_resource_snapshot,
 )
 
@@ -165,13 +159,12 @@ def _alerts_payload(*, hours: int) -> dict[str, Any]:
     )
 
 
-def _execute_standard_profile(question: str, strategy: str) -> dict[str, Any]:
+def _execute_standard_profile(question: str) -> dict[str, Any]:
     """Keep operations comparisons on the standard RAGPipeline compatibility contract."""
     return execute_standard_compatibility(
         question=question,
-        use_web_fallback=not profile_force_local_only(strategy),
+        use_web_fallback=True,
         use_reasoning=False,
-        retrieval_strategy=strategy,
     )
 
 
@@ -256,64 +249,6 @@ def admin_ops_export_csv(
     )
 
 
-@router.get("/retrieval-profile")
-def admin_ops_retrieval_profile(request: Request, user: dict[str, Any] = Depends(_require_user)):
-    _require_permission(user, "admin:audit_read", request, "admin")
-    state = get_runtime_state()
-    return {
-        **state,
-        "profiles": [
-            {"id": "baseline", "label": "Baseline", "desc": "Conservative retrieval, lower risk."},
-            {"id": "advanced", "label": "Advanced", "desc": "Default strategy."},
-            {"id": "safe", "label": "Safe", "desc": "Local-only retrieval, web fallback disabled."},
-        ],
-    }
-
-
-@router.post("/retrieval-profile")
-def admin_ops_set_retrieval_profile(
-    payload: dict[str, Any],
-    request: Request,
-    user: dict[str, Any] = Depends(_require_user),
-):
-    _require_permission(user, "admin:ops_manage", request, "admin")
-    follow_default = bool(payload.get("follow_config_default", False))
-    profile = str(payload.get("profile", "") or "advanced")
-    state = set_active_profile(profile=profile, follow_config_default=follow_default)
-    _audit(
-        request,
-        action="admin.ops.profile.set",
-        resource_type="admin",
-        result="success",
-        user=user,
-        detail=f"profile={state['active_profile']}; follow_default={state['follow_config_default']}",
-    )
-    return state
-
-
-@router.post("/canary")
-def admin_ops_set_canary(payload: dict[str, Any], request: Request, user: dict[str, Any] = Depends(_require_user)):
-    _require_permission(user, "admin:ops_manage", request, "admin")
-    state = set_canary(
-        enabled=bool(payload.get("enabled", False)),
-        baseline_percent=int(payload.get("baseline_percent", 0) or 0),
-        safe_percent=int(payload.get("safe_percent", 0) or 0),
-        seed=str(payload.get("seed", "default") or "default"),
-    )
-    _audit(
-        request,
-        action="admin.ops.canary.set",
-        resource_type="admin",
-        result="success",
-        user=user,
-        detail=(
-            f"enabled={state['canary']['enabled']}; baseline={state['canary']['baseline_percent']}; "
-            f"safe={state['canary']['safe_percent']}; seed={state['canary']['seed']}"
-        ),
-    )
-    return state
-
-
 @router.get("/benchmark/trends")
 def admin_ops_benchmark_trends(
     request: Request,
@@ -329,12 +264,11 @@ def admin_ops_benchmark_trends(
 def admin_ops_benchmark_run(
     request: Request,
     max_queries: int = 20,
-    strategy: str = "advanced",
     user: dict[str, Any] = Depends(_require_user),
 ):
     _require_permission(user, "admin:ops_manage", request, "admin")
     try:
-        entry = run_benchmark(max_queries=max_queries, strategy=strategy, execute_query=_execute_standard_profile)
+        entry = run_benchmark(max_queries=max_queries, execute_query=_execute_standard_profile)
     except ValueError as exc:
         raise bad_request(str(exc))
     _audit(
@@ -343,7 +277,7 @@ def admin_ops_benchmark_run(
         resource_type="admin",
         result="success",
         user=user,
-        detail=f"queries={entry['num_queries']}; strategy={entry['strategy']}",
+        detail=f"queries={entry['num_queries']}",
     )
     return {"ok": True, "result": entry}
 
@@ -411,21 +345,6 @@ def admin_ops_replay_trends(
     return {"items": rows, "count": len(rows)}
 
 
-@router.post("/ab-compare")
-def admin_ops_ab_compare(payload: dict[str, Any], request: Request, user: dict[str, Any] = Depends(_require_user)):
-    _require_permission(user, "admin:ops_manage", request, "admin")
-    question = str(payload.get("question", "") or "").strip()
-    try:
-        return compare_retrieval_profiles(
-            question=question,
-            strategies=payload.get("strategies"),
-            execute_query=_execute_standard_profile,
-            similarity=text_similarity,
-        )
-    except ValueError as exc:
-        raise bad_request(str(exc))
-
-
 @router.post("/autotune")
 def admin_ops_autotune(payload: dict[str, Any], request: Request, user: dict[str, Any] = Depends(_require_user)):
     _require_permission(user, "admin:ops_manage", request, "admin")
@@ -463,7 +382,6 @@ def admin_ops_replay_run(
         summary = run_replay(
             history_store=history_store,
             max_questions=max_questions,
-            strategy=str(payload.get("strategy", "advanced") or "advanced"),
             execute_query=_execute_standard_profile,
         )
     except ValueError as exc:

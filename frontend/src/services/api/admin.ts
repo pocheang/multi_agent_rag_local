@@ -7,7 +7,6 @@ import type {
   BenchmarkTrendItem,
   ModelCatalogResponse,
   OpsOverview,
-  RetrievalProfileState,
   SystemLogEntry,
 } from "@/types/api";
 import { request, ApiError, safeParsePayload, authFetch, parseOrThrow } from "@/services/http/client";
@@ -112,26 +111,6 @@ export const adminOpsApi = {
     }
     return res.text();
   },
-  adminOpsRetrievalProfile() {
-    return request<RetrievalProfileState>("/admin/ops/retrieval-profile");
-  },
-  adminOpsSetRetrievalProfile(input: { profile: string; followConfigDefault?: boolean }) {
-    return buildPostRequest<RetrievalProfileState>("/admin/ops/retrieval-profile", {
-      profile: input.profile,
-      follow_config_default: Boolean(input.followConfigDefault),
-    });
-  },
-  adminOpsSetCanary(input: { enabled: boolean; baselinePercent: number; safePercent: number; seed?: string }) {
-    return buildPostRequest<RetrievalProfileState>("/admin/ops/canary", {
-      enabled: input.enabled,
-      baseline_percent: input.baselinePercent,
-      safe_percent: input.safePercent,
-      seed: input.seed || "default",
-    });
-  },
-  adminOpsRollback() {
-    return buildPostRequest<{ ok: boolean; state: RetrievalProfileState }>("/admin/ops/rollback", {});
-  },
   async adminOpsExportAuditReportMd(input: { hours?: number } = {}) {
     const qs = buildQueryString({ hours: input.hours ?? 24 });
     const res = await authFetch(`/admin/ops/audit-report.md?${qs}`, { method: "GET" });
@@ -145,10 +124,9 @@ export const adminOpsApi = {
       limit: input.limit ?? 30,
     });
   },
-  adminRunBenchmark(input: { maxQueries?: number; strategy?: string } = {}) {
+  adminRunBenchmark(input: { maxQueries?: number } = {}) {
     return buildPostRequest<{ ok: boolean; result: BenchmarkTrendItem }>("/admin/ops/benchmark/run", {
       max_queries: input.maxQueries ?? 20,
-      strategy: input.strategy,
     });
   },
 };

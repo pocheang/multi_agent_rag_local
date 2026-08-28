@@ -58,12 +58,11 @@ class OrchestrationRequest(ImmutableContract):
     """All typed request data available to orchestration stages."""
 
     question: str = Field(min_length=1)
-    profile: str = "standard"
+    profile: str = "advanced"
     session_id: str | None = None
     conversation: tuple[ConversationTurn, ...] = Field(default_factory=tuple)
     actor: RequestActor | None = None
     source_scope: RequestScope = Field(default_factory=RequestScope)
-    retrieval_strategy: str | None = None
     use_reasoning: bool = False
     use_web_fallback: bool = False
     deadline_at: datetime | None = None

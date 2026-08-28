@@ -206,23 +206,11 @@ export function AdminPage({ user, onLogout }: Props) {
 
           {state.section === "rag" && (
             <AdminRagSettings
-              profileState={state.profileState}
               benchmarkTrends={state.benchmarkTrends}
               benchmarkRunning={state.benchmarkRunning}
-              canaryEnabled={state.canaryEnabled}
-              canaryBaseline={state.canaryBaseline}
-              canarySafe={state.canarySafe}
-              canarySeed={state.canarySeed}
-              onCanaryEnabledChange={state.setCanaryEnabled}
-              onCanaryBaselineChange={state.setCanaryBaseline}
-              onCanarySafeChange={state.setCanarySafe}
-              onCanarySeedChange={state.setCanarySeed}
               onRefresh={() => void actions.loadRagOps()}
               onReloadConfig={() => void actions.reloadConfig()}
-              onRollback={() => void actions.rollbackRuntime()}
               onExportAuditReport={() => void actions.exportAuditReportMd()}
-              onSetProfile={actions.setRetrievalProfile}
-              onSaveCanary={() => void actions.saveCanary()}
               onRunBenchmark={() => void actions.runBenchmark()}
               formatAuditTime={formatAuditTime}
             />

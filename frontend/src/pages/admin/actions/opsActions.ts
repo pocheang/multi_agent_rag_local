@@ -9,23 +9,13 @@ export function createOpsActions(params: AdminActionsParams, errorHandler: Error
     opsHours,
     opsActorUserId,
     opsActionKeyword,
-    canaryEnabled,
-    canaryBaseline,
-    canarySafe,
-    canarySeed,
-    profileState,
     isAdmin,
     setOps,
-    setProfileState,
     setBenchmarkTrends,
     setError,
     setStatusText,
     setLoadingOps,
     setBenchmarkRunning,
-    setCanaryEnabled,
-    setCanaryBaseline,
-    setCanarySafe,
-    setCanarySeed,
   } = params;
 
   const { handleApiError } = errorHandler;
@@ -50,12 +40,6 @@ export function createOpsActions(params: AdminActionsParams, errorHandler: Error
   const loadRagOps = async () => {
     if (!isAdmin) return;
     try {
-      const state = await appApi.adminOpsRetrievalProfile();
-      setProfileState(state);
-      setCanaryEnabled(Boolean(state.canary?.enabled));
-      setCanaryBaseline(Number(state.canary?.baseline_percent || 0));
-      setCanarySafe(Number(state.canary?.safe_percent || 0));
-      setCanarySeed(String(state.canary?.seed || "default"));
       const trends = await appApi.adminBenchmarkTrends({ limit: 30 });
       setBenchmarkTrends(trends.items || []);
       setError("");
@@ -78,38 +62,10 @@ export function createOpsActions(params: AdminActionsParams, errorHandler: Error
     }
   };
 
-  const setRetrievalProfile = async (profile: string, followDefault = false) => {
-    try {
-      const next = await appApi.adminOpsSetRetrievalProfile({ profile, followConfigDefault: followDefault });
-      setProfileState(next);
-      setStatusText(`已切换检索策略为 ${next.active_profile}`);
-      setError("");
-    } catch (e) {
-      await handleApiError(e, "切换策略失败");
-    }
-  };
-
-  const saveCanary = async () => {
-    try {
-      const next = await appApi.adminOpsSetCanary({
-        enabled: canaryEnabled,
-        baselinePercent: canaryBaseline,
-        safePercent: canarySafe,
-        seed: canarySeed.trim() || "default",
-      });
-      setProfileState(next);
-      setStatusText("灰度发布配置已保存");
-      setError("");
-    } catch (e) {
-      await handleApiError(e, "保存灰度配置失败");
-    }
-  };
-
   const runBenchmark = async () => {
     setBenchmarkRunning(true);
     try {
-      const strategy = profileState?.active_profile || "advanced";
-      await appApi.adminRunBenchmark({ maxQueries: 20, strategy });
+      await appApi.adminRunBenchmark({ maxQueries: 20 });
       const trends = await appApi.adminBenchmarkTrends({ limit: 30 });
       setBenchmarkTrends(trends.items || []);
       setStatusText("基准任务完成，趋势已更新");
@@ -130,19 +86,6 @@ export function createOpsActions(params: AdminActionsParams, errorHandler: Error
     }
   };
 
-  const rollbackRuntime = async () => {
-    try {
-      const res = await appApi.adminOpsRollback();
-      setProfileState(res.state);
-      setCanaryEnabled(false);
-      setCanaryBaseline(0);
-      setCanarySafe(0);
-      setStatusText("已执行一键回滚（baseline）");
-    } catch (e) {
-      await handleApiError(e, "回滚失败");
-    }
-  };
-
   const exportAuditReportMd = async () => {
     try {
       const text = await appApi.adminOpsExportAuditReportMd({ hours: opsHours });
@@ -157,11 +100,8 @@ export function createOpsActions(params: AdminActionsParams, errorHandler: Error
     loadOps,
     loadRagOps,
     exportOpsCsv,
-    setRetrievalProfile,
-    saveCanary,
     runBenchmark,
     reloadConfig,
-    rollbackRuntime,
     exportAuditReportMd,
   };
 }

@@ -14,7 +14,7 @@ __all__ = ["SUPPORTED_SYSTEMS", "SimpleRetriever", "create_api_retriever"]
 
 logger = logging.getLogger(__name__)
 
-SUPPORTED_SYSTEMS = ("vector_only", "hybrid", "rerank")
+SUPPORTED_SYSTEMS = ("vector_only", "hybrid")
 
 
 class SimpleRetriever:
@@ -41,14 +41,6 @@ class SimpleRetriever:
                 results, _ = hybrid_search_with_diagnostics(
                     query=query,
                     allowed_sources=None,
-                    retrieval_strategy="baseline",
-                )
-                retrieved_docs = [doc.get("source", "") for doc in results]
-            elif self.system_name == "rerank":
-                results, _ = hybrid_search_with_diagnostics(
-                    query=query,
-                    allowed_sources=None,
-                    retrieval_strategy="advanced",
                 )
                 retrieved_docs = [doc.get("source", "") for doc in results]
             else:

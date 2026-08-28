@@ -1,13 +1,6 @@
 import type React from "react";
 import { useTranslation } from "react-i18next";
 import { QuickActions } from "@/pages/chat/components/QuickActions";
-import { SelectControl } from "@/pages/chat/components/SelectControl";
-import { ToggleControl } from "@/pages/chat/components/ToggleControl";
-import {
-  profileCapabilities,
-  profileModeHint,
-} from "@/pages/chat/components/profileCapabilities";
-import type { PipelineProfile } from "@/types/api";
 import { AnimatedButtonLite as AnimatedButton } from "@/components/animations/AnimatedButtonLite";
 
 type Props = {
@@ -19,47 +12,17 @@ type Props = {
   quickPrompts: string[];
   runStatus: string;
   error: string;
-  useWeb: boolean;
-  useReasoning: boolean;
-  agentClassHint: string;
-  retrievalStrategy: string;
-  pipelineProfile: PipelineProfile;
   onQuestionChange: (value: string) => void;
   onAsk: () => Promise<void>;
   onStop: () => void;
   onClearQuestion: () => void;
   onPromptPick: (prompt: string) => void;
-  onUseWebChange: (next: boolean) => void;
-  onUseReasoningChange: (next: boolean) => void;
-  onAgentClassHintChange: (value: string) => void;
-  onRetrievalStrategyChange: (value: string) => void;
-  onPipelineProfileChange: (value: string) => void;
   onComposerDragEnter: (evt: React.DragEvent<HTMLElement>) => void;
   onComposerDragOver: (evt: React.DragEvent<HTMLElement>) => void;
   onComposerDragLeave: (evt: React.DragEvent<HTMLElement>) => void;
   onComposerDrop: (evt: React.DragEvent<HTMLElement>) => Promise<void>;
   onChatUploadChange: (evt: React.ChangeEvent<HTMLInputElement>) => Promise<void>;
 };
-
-const RETRIEVAL_OPTIONS = [
-  { value: "advanced", label: "advanced" },
-  { value: "baseline", label: "baseline" },
-  { value: "safe", label: "safe" },
-];
-
-const AGENT_OPTIONS = [
-  { value: "", label: "auto" },
-  { value: "cybersecurity", label: "cybersecurity" },
-  { value: "artificial_intelligence", label: "artificial_intelligence" },
-  { value: "pdf_text", label: "pdf_text" },
-  { value: "general", label: "general" },
-];
-
-const PROFILE_OPTIONS = [
-  { value: "standard", label: "standard" },
-  { value: "strict_quality", label: "strict_quality" },
-  { value: "advanced", label: "advanced" },
-];
 
 export function ChatComposer({
   composerDropActive,
@@ -70,21 +33,11 @@ export function ChatComposer({
   quickPrompts,
   runStatus,
   // error, // Now shown via Toast instead of inline
-  useWeb,
-  useReasoning,
-  agentClassHint,
-  retrievalStrategy,
-  pipelineProfile,
   onQuestionChange,
   onAsk,
   onStop,
   onClearQuestion,
   onPromptPick,
-  onUseWebChange,
-  onUseReasoningChange,
-  onAgentClassHintChange,
-  onRetrievalStrategyChange,
-  onPipelineProfileChange,
   onComposerDragEnter,
   onComposerDragOver,
   onComposerDragLeave,
@@ -92,12 +45,7 @@ export function ChatComposer({
   onChatUploadChange,
 }: Props) {
   const { t } = useTranslation();
-  const strategy = t(`components.chat.strategy.${retrievalStrategy || "advanced"}`);
-  const capabilities = profileCapabilities(pipelineProfile);
-  const modeHint = t(
-    `components.chat.modeHint.${profileModeHint(pipelineProfile, { useWeb, useReasoning })}`,
-    { strategy },
-  );
+  const modeHint = t("components.chat.modeHint.advancedReasoning");
 
   return (
     <section
@@ -152,52 +100,6 @@ export function ChatComposer({
       </div>
 
       <div className="composer-controls">
-        <div className="composer-options">
-          {capabilities.web && (
-            <ToggleControl
-              label={t("components.chat.webSearch")}
-              active={useWeb}
-              onChange={onUseWebChange}
-              ariaLabel={t("components.chat.webSearchAria")}
-              title={t("components.chat.webSearchTitle")}
-            />
-          )}
-          {capabilities.reasoning && (
-            <ToggleControl
-              label={t("components.chat.reasoning")}
-              active={useReasoning}
-              onChange={onUseReasoningChange}
-              ariaLabel={t("components.chat.reasoningAria")}
-              title={t("components.chat.reasoningTitle")}
-            />
-          )}
-          {capabilities.retrieval && (
-            <SelectControl
-              label={t("components.chat.retrievalStrategy")}
-              value={retrievalStrategy}
-              options={RETRIEVAL_OPTIONS}
-              onChange={onRetrievalStrategyChange}
-              ariaLabel={t("components.chat.retrievalStrategyAria")}
-            />
-          )}
-          <SelectControl
-            label={t("components.chat.profile")}
-            value={pipelineProfile}
-            options={PROFILE_OPTIONS.map((option) => ({ ...option, label: t(`components.chat.profileOptions.${option.value}`) }))}
-            onChange={onPipelineProfileChange}
-            ariaLabel={t("components.chat.profileAria")}
-          />
-          {capabilities.agent && (
-            <SelectControl
-              label="Agent"
-              value={agentClassHint}
-              options={AGENT_OPTIONS}
-              onChange={onAgentClassHintChange}
-              ariaLabel={t("components.chat.agentTypeAria")}
-            />
-          )}
-        </div>
-
         <AnimatedButton
           onClick={onAsk}
           state={isSending ? 'loading' : 'idle'}

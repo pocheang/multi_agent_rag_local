@@ -40,7 +40,6 @@ export type GraphResult = {
 export type ChatMetadata = {
   route: string;
   execution_route?: string;
-  retrieval_strategy?: string;
   agent_class: string;
   web_used: boolean;
   latency_ms?: number;

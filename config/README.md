@@ -4,8 +4,10 @@
 
 - `env/` contains shared, development, test, production, and frontend environment templates.
 - `profiles/` contains mutually exclusive runtime strategy overlays: `fast`, `balanced`, and `deep`.
-- `application/` contains application JSON configuration and calibration data.
+- `application/` contains application JSON configuration (currently: `web_activity_config.json`).
 - `observability/` contains Prometheus, Grafana, and Alertmanager configuration.
+- `router_calibration.json` (top-level, not under `application/`) is the router confidence
+  calibration file — the path is hardcoded in `app/agents/router/calibration.py`.
 
 Runtime configuration is generated into `.runtime/` and is never committed. The merge order is:
 

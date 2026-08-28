@@ -8,7 +8,7 @@
 3. [执行跟踪连接被中止修复](EXECUTION_TRACE_ABORT_FIX.md)
 
 ### 🏗️ 架构清理（全天）
-4. [完整的架构清理工作日志](ARCHITECTURE_CLEANUP_DAILY_LOG.md) - **主日志**
+4. 完整的架构清理工作日志（原 ARCHITECTURE_CLEANUP_DAILY_LOG.md，已在文档清理中误删且未纳入版本控制，无法恢复）
 
 ---
 
@@ -42,14 +42,10 @@
 ## 📚 相关文档
 
 ### 架构文档（位于 docs/architecture/）
-1. COMPLETE_AGENTS_STRUCTURE.md
-2. AGENT_CLEANUP_SUMMARY.md
-3. LANGGRAPH_EVALUATION.md
-4. CLEANUP_WORK_SUMMARY_2026-08-18.md
-5. GRAPH_CLEANUP_SUMMARY.md
-6. FRONTEND_CODE_ANALYSIS.md
-7. FRONTEND_BACKEND_API_CONTRACT.md
-8. FINAL_CLEANUP_SUMMARY_2026-08-18.md
+1. LANGGRAPH_EVALUATION.md
+2. FRONTEND_BACKEND_API_CONTRACT.md
+
+（其余当日生成的完成总结类文档已在后续文档清理中移除）
 
 ### 代码文档
 9. app/graph/README.md

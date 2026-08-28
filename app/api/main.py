@@ -37,7 +37,6 @@ from app.api.utils import (
     auth_helpers,
     document_helpers,
     memory_helpers,
-    query_helpers,
     session_helpers,
 )  # noqa: F401 - these names remain part of the historical facade.
 

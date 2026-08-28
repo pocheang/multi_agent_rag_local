@@ -168,7 +168,6 @@ class Settings(BaseSettings):
     slo_p95_latency_ms_threshold: int = Field(default=3000, alias="SLO_P95_LATENCY_MS_THRESHOLD")
     slo_error_rate_percent_threshold: float = Field(default=5.0, alias="SLO_ERROR_RATE_PERCENT_THRESHOLD")
     slo_grounding_support_ratio_threshold: float = Field(default=0.6, alias="SLO_GROUNDING_SUPPORT_RATIO_THRESHOLD")
-    retrieval_profile: str = Field(default="advanced", alias="RETRIEVAL_PROFILE")  # baseline|advanced|safe
     consistency_guard_enabled: bool = Field(default=True, alias="CONSISTENCY_GUARD_ENABLED")
     consistency_guard_similarity_threshold: float = Field(default=0.55, alias="CONSISTENCY_GUARD_SIMILARITY_THRESHOLD")
     web_domain_allowlist: str = Field(

@@ -19,7 +19,6 @@ interface UseChatHelpersParams {
   promptTitle: string;
   promptContent: string;
   editingPromptId: string | null;
-  useReasoning: boolean;
   setSidebarOpen: (open: boolean) => void;
   setAgentClassHint: (hint: AgentClassHint) => void;
   setQuestion: (question: string) => void;
@@ -34,7 +33,6 @@ export function useChatHelpers({
   promptTitle,
   promptContent,
   editingPromptId,
-  useReasoning,
   setSidebarOpen,
   setAgentClassHint,
   setQuestion,
@@ -93,8 +91,8 @@ export function useChatHelpers({
   }, [actions, promptTitle, promptContent, editingPromptId]);
 
   const checkPrompt = useCallback(async () => {
-    await actions.checkPrompt(promptTitle, promptContent, useReasoning);
-  }, [actions, promptTitle, promptContent, useReasoning]);
+    await actions.checkPrompt(promptTitle, promptContent, true);
+  }, [actions, promptTitle, promptContent]);
 
   const deletePrompt = useCallback(
     async (item: PromptTemplate) => {

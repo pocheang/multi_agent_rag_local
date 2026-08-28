@@ -74,7 +74,6 @@ async def run_rag_query(
     profile: PipelineProfile,
     allowed_sources: Sequence[str] | None = None,
     agent_class_hint: str | None = None,
-    retrieval_strategy: str | None = None,
     conversation: Sequence[MCPConversationMessage] | None = None,
     use_reasoning: bool = False,
     use_web_fallback: bool = False,
@@ -93,7 +92,6 @@ async def run_rag_query(
         profile=profile,
         conversation=_conversation_messages(conversation),
         source_scope=_source_scope(allowed_sources, agent_class_hint),
-        retrieval_strategy=retrieval_strategy,
         use_reasoning=use_reasoning,
         use_web_fallback=use_web_fallback,
         enable_decomposition=enable_decomposition,
@@ -110,55 +108,10 @@ def list_rag_agents() -> tuple[MCPAgentDescriptor, ...]:
     return AGENT_CATALOG
 
 
-@mcp.tool(name="querymind_rag_query_standard")
-async def query_standard_rag(
-    question: str,
-    allowed_sources: list[str] | None = None,
-    agent_class_hint: str | None = None,
-    retrieval_strategy: str | None = None,
-    conversation: tuple[MCPConversationMessage, ...] = (),
-    use_reasoning: bool = False,
-    use_web_fallback: bool = False,
-    force_language: str = "",
-) -> MCPRagResponse:
-    """Query the standard RAG profile with optional source and reasoning controls."""
-    return await run_rag_query(
-        question=question,
-        profile=PipelineProfile.STANDARD,
-        allowed_sources=allowed_sources,
-        agent_class_hint=agent_class_hint,
-        retrieval_strategy=retrieval_strategy,
-        conversation=conversation,
-        use_reasoning=use_reasoning,
-        use_web_fallback=use_web_fallback,
-        force_language=force_language,
-    )
-
-
-@mcp.tool(name="querymind_rag_query_strict_quality")
-async def query_strict_quality_rag(
-    question: str,
-    allowed_sources: list[str] | None = None,
-    agent_class_hint: str | None = None,
-    retrieval_strategy: str | None = None,
-    conversation: tuple[MCPConversationMessage, ...] = (),
-) -> MCPRagResponse:
-    """Query the strict-quality profile with route, retrieval, and answer validation."""
-    return await run_rag_query(
-        question=question,
-        profile=PipelineProfile.STRICT_QUALITY,
-        allowed_sources=allowed_sources,
-        agent_class_hint=agent_class_hint,
-        retrieval_strategy=retrieval_strategy,
-        conversation=conversation,
-    )
-
-
 @mcp.tool(name="querymind_rag_query_advanced")
 async def query_advanced_rag(
     question: str,
     allowed_sources: list[str] | None = None,
-    retrieval_strategy: str | None = None,
     enable_decomposition: bool = False,
     enable_self_rag: bool = False,
 ) -> MCPRagResponse:
@@ -167,7 +120,6 @@ async def query_advanced_rag(
         question=question,
         profile=PipelineProfile.ADVANCED,
         allowed_sources=allowed_sources,
-        retrieval_strategy=retrieval_strategy,
         enable_decomposition=enable_decomposition,
         enable_self_rag=enable_self_rag,
     )

@@ -1,4 +1,4 @@
-.PHONY: install up ingest api cli test fe-install fe-dev fe-build quality-gate benchmark refactor-inventory apply-rollback config-check config-render deploy deploy-dev deploy-monitoring
+.PHONY: install up api fe-install fe-dev fe-build config-check config-render deploy deploy-dev deploy-monitoring
 
 install:
 	python -m venv .venv && . .venv/bin/activate && pip install -U pip && pip install -e .
@@ -6,17 +6,8 @@ install:
 up:
 	docker compose up -d neo4j
 
-ingest:
-	python scripts/ingest.py
-
 api:
 	uvicorn app.api.main:app --host 0.0.0.0 --port 8000 --reload --reload-dir app --reload-include "*.py" --reload-exclude "data/*" --reload-exclude "artifacts/*" --reload-exclude "frontend/*"
-
-cli:
-	python scripts/query_cli.py "???????"
-
-test:
-	pytest -q
 
 fe-install:
 	cd frontend && npm install
@@ -27,17 +18,8 @@ fe-dev:
 fe-build:
 	cd frontend && npm run build
 
-quality-gate:
-	python scripts/ci_quality_gate.py --dataset data/eval/retrieval_eval.jsonl --min-recall 0.35 --report-md artifacts/quality-report.md
-
-benchmark:
-	python scripts/benchmark_pipeline.py --queries data/eval/benchmark_queries.txt
-
-refactor-inventory:
-	conda run -n rag-local python scripts/inventory_refactor_targets.py --json audit_output/refactor-inventory.json
-
-apply-rollback:
-	python scripts/apply_rollback_profile.py --profile artifacts/rollback.env --env-file .env
+# ingest/cli/test/quality-gate/benchmark/refactor-inventory/apply-rollback targets removed
+# 2026-08-28: relied on scripts/ and tests/, both cleared ahead of the v0.7 rewrite.
 
 ENV ?= production
 PROFILE ?= balanced

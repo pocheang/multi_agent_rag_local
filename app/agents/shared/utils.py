@@ -101,11 +101,9 @@ class CacheKeyGenerator:
         )
 
     @staticmethod
-    def generate_vector_key(query: str, retrieval_strategy: str | None, allowed_sources: list[str] | None) -> str:
+    def generate_vector_key(query: str, allowed_sources: list[str] | None) -> str:
         sources_key = ",".join(sorted(allowed_sources)) if allowed_sources else "all"
-        return CacheKeyGenerator.generate_key(
-            query=query, strategy=retrieval_strategy or "default", sources=sources_key
-        )
+        return CacheKeyGenerator.generate_key(query=query, sources=sources_key)
 
 
 class TextProcessor:

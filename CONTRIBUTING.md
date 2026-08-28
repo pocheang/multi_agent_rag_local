@@ -12,9 +12,10 @@
 
 ## 代码规范
 
-- Python: Black + Pylint + MyPy
+- Python: Ruff（lint + format，见 `pyproject.toml`）
 - TypeScript: ESLint + Prettier
-- 测试覆盖率 ≥ 80%
+
+测试套件已在 v0.7 重构前清空，将针对新架构重建（见 [CLAUDE.md](CLAUDE.md)）。
 
 ## 提交信息格式
 

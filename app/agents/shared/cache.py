@@ -60,7 +60,7 @@ def cached_vector_search(func: Callable) -> Callable:
 
     def wrapper(question: str, *args, **kwargs):
         # Create cache key
-        cache_key = _make_cache_key("vector", question, kwargs.get("allowed_sources"), kwargs.get("retrieval_strategy"))
+        cache_key = _make_cache_key("vector", question, kwargs.get("allowed_sources"))
 
         # Try cache first
         import asyncio

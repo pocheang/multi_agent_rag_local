@@ -205,9 +205,9 @@ async def run_with_timeout(
         raise StageExecutionError(stage, exc) from exc
 
 
-# Profile-specific timeout configurations
+# Timeout configuration for the advanced pipeline profile
 
-STANDARD_TIMEOUT = TimeoutConfig(
+ADVANCED_TIMEOUT = TimeoutConfig(
     total_timeout_ms=30000,
     route_timeout_ms=2000,
     plan_timeout_ms=2000,
@@ -218,44 +218,15 @@ STANDARD_TIMEOUT = TimeoutConfig(
     overhead_buffer_ms=1000,
 )
 
-STRICT_QUALITY_TIMEOUT = TimeoutConfig(
-    total_timeout_ms=60000,  # Allow more time for quality checks
-    route_timeout_ms=3000,
-    plan_timeout_ms=3000,
-    retrieval_timeout_ms=20000,  # More time for thorough retrieval
-    tool_timeout_ms=15000,
-    synthesis_timeout_ms=10000,
-    finalization_timeout_ms=7000,  # More time for validation
-    overhead_buffer_ms=2000,
-)
-
-FAST_TIMEOUT = TimeoutConfig(
-    total_timeout_ms=15000,  # Fast responses
-    route_timeout_ms=1000,
-    plan_timeout_ms=1000,
-    retrieval_timeout_ms=5000,
-    tool_timeout_ms=3000,
-    synthesis_timeout_ms=3000,
-    finalization_timeout_ms=1000,
-    overhead_buffer_ms=1000,
-)
-
-# Validate all configurations at module load time
-STANDARD_TIMEOUT.validate()
-STRICT_QUALITY_TIMEOUT.validate()
-FAST_TIMEOUT.validate()
+# Validate at module load time
+ADVANCED_TIMEOUT.validate()
 
 
 def get_timeout_config(profile: str) -> TimeoutConfig:
-    """Get timeout configuration for execution profile.
+    """Get the timeout configuration for the given execution profile.
 
-    All configurations are pre-validated at module load time,
-    so this function never raises validation errors.
+    Only one profile is currently supported; unrecognized values also fall
+    back to it rather than raising, since the config is pre-validated.
     """
-    configs = {
-        "standard": STANDARD_TIMEOUT,
-        "strict_quality": STRICT_QUALITY_TIMEOUT,
-        "advanced": STANDARD_TIMEOUT,
-        "fast": FAST_TIMEOUT,
-    }
-    return configs.get(profile, STANDARD_TIMEOUT)
+    del profile
+    return ADVANCED_TIMEOUT

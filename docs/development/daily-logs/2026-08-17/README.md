@@ -10,11 +10,10 @@
 
 | 文档 | 说明 | 大小 |
 |------|------|------|
-| [QUICK_REFERENCE.md](./QUICK_REFERENCE.md) | 📌 快速参考卡片 | 5分钟阅读 |
 | [implementation.md](./implementation.md) | 📘 完整实现方案 | 30分钟阅读 |
 | [dynamic-rounds.md](./dynamic-rounds.md) | 📗 动态轮次详解 | 15分钟阅读 |
 | [decisions.md](./decisions.md) | 📙 技术决策记录 | 10分钟阅读 |
-| [IMPLEMENTATION_COMPLETE.md](./IMPLEMENTATION_COMPLETE.md) | 📕 完成总结 | 10分钟阅读 |
+| [summary.md](./summary.md) | 📕 完成总结 | 10分钟阅读 |
 
 ---
 
@@ -133,11 +132,10 @@ multi_agent_rag_local_v4/
         └── daily-logs/
             └── 2026-08-17/
                 ├── README.md               📖 本文档
-                ├── QUICK_REFERENCE.md      📌 快速参考
                 ├── implementation.md       📘 完整方案
                 ├── dynamic-rounds.md       📗 动态轮次
                 ├── decisions.md            📙 技术决策
-                └── IMPLEMENTATION_COMPLETE.md 📕 完成总结
+                └── summary.md              📕 完成总结
 ```
 
 ---
@@ -328,7 +326,6 @@ if clarification_context.clarification_round >= clarification_context.max_rounds
 ## 📚 相关资源
 
 ### 内部文档
-- [QUICK_REFERENCE.md](./QUICK_REFERENCE.md) - 快速参考卡片
 - [implementation.md](./implementation.md) - 完整实现方案
 - [dynamic-rounds.md](./dynamic-rounds.md) - 动态轮次机制详解
 - [decisions.md](./decisions.md) - 技术决策记录
@@ -349,7 +346,7 @@ if clarification_context.clarification_round >= clarification_context.max_rounds
 ## 🎓 学习路径
 
 ### 新手入门 (30分钟)
-1. 阅读 [QUICK_REFERENCE.md](./QUICK_REFERENCE.md) (5分钟)
+1. 阅读 [summary.md](./summary.md) (5分钟)
 2. 运行 `python scripts/test_clarification_flow.py` (10分钟)
 3. 查看代码示例 (15分钟)
 

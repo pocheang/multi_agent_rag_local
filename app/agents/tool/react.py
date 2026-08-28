@@ -146,7 +146,6 @@ class ReActAgent:
         question: str,
         memory_context: str = "",
         allowed_sources: list[str] | None = None,
-        retrieval_strategy: str | None = None,
         force_language: str = "",
         session_id: str = "",
         agent_class: str | None = None,
@@ -158,7 +157,6 @@ class ReActAgent:
             question: User question
             memory_context: Session memory context
             allowed_sources: Allowed document sources
-            retrieval_strategy: Retrieval strategy for vector search
 
         Returns:
             Dictionary with answer and metadata
@@ -196,7 +194,6 @@ class ReActAgent:
                 thought.action,
                 thought.action_input,
                 allowed_sources,
-                retrieval_strategy,
             )
 
             step.observation = observation
@@ -273,7 +270,6 @@ class ReActAgent:
         action: str,
         action_input: str,
         allowed_sources: list[str] | None,
-        retrieval_strategy: str | None,
     ) -> ReActObservation:
         """
         Execute the chosen action.
@@ -282,7 +278,6 @@ class ReActAgent:
             action: Tool name
             action_input: Input for the tool
             allowed_sources: Allowed sources for vector search
-            retrieval_strategy: Retrieval strategy
 
         Returns:
             ReActObservation with results
@@ -304,7 +299,6 @@ class ReActAgent:
             result, metadata = tool_map[action](
                 action_input,
                 allowed_sources,
-                retrieval_strategy,
             )
             return ReActObservation(
                 tool=action,
@@ -323,13 +317,11 @@ class ReActAgent:
         self,
         query: str,
         allowed_sources: list[str] | None,
-        retrieval_strategy: str | None,
     ) -> tuple[str, dict[str, Any]]:
         """Execute vector search tool (reuses vector_rag_agent)."""
         kwargs: dict[str, Any] = {
             "question": query,
             "allowed_sources": allowed_sources,
-            "retrieval_strategy": retrieval_strategy,
         }
         if self.agent_class:
             kwargs["agent_class"] = self.agent_class
@@ -356,7 +348,6 @@ class ReActAgent:
         self,
         query: str,
         allowed_sources: list[str] | None,
-        retrieval_strategy: str | None,
     ) -> tuple[str, dict[str, Any]]:
         """Execute graph query tool (reuses graph_rag_agent)."""
         kwargs: dict[str, Any] = {"allowed_sources": allowed_sources}
@@ -387,7 +378,6 @@ class ReActAgent:
         self,
         query: str,
         allowed_sources: list[str] | None,
-        retrieval_strategy: str | None,
     ) -> tuple[str, dict[str, Any]]:
         """Execute web search tool (reuses web_research_agent)."""
         result = run_web_research(query)
@@ -501,7 +491,6 @@ def run_react_agent(
     question: str,
     memory_context: str = "",
     allowed_sources: list[str] | None = None,
-    retrieval_strategy: str | None = None,
     use_reasoning: bool = False,
     max_iterations: int = 5,
     force_language: str = "",
@@ -515,7 +504,6 @@ def run_react_agent(
         question: User question
         memory_context: Session memory context
         allowed_sources: Allowed document sources
-        retrieval_strategy: Retrieval strategy
         use_reasoning: Use reasoning model
         max_iterations: Maximum iterations
 
@@ -531,7 +519,6 @@ def run_react_agent(
         question=question,
         memory_context=memory_context,
         allowed_sources=allowed_sources,
-        retrieval_strategy=retrieval_strategy,
         force_language=force_language,
         session_id=session_id,
         agent_class=agent_class,

@@ -18,15 +18,14 @@ from app.services.query_rewrite import build_rewrite_queries
 def hybrid_search_with_diagnostics(
     query: str,
     allowed_sources: list[str] | None = None,
-    retrieval_strategy: str | None = None,
     dynamic_top_k: int | None = None,
     dynamic_vector_weight: float | None = None,
     dynamic_bm25_weight: float | None = None,
 ) -> tuple[list[dict], dict]:
     """Perform hybrid search with full diagnostics."""
-    with traced_span("retrieval.hybrid_search", {"strategy": str(retrieval_strategy or "advanced")}):
+    with traced_span("retrieval.hybrid_search", {}):
         settings = get_settings()
-        flags = strategy_flags(retrieval_strategy)
+        flags = strategy_flags()
         strict_threshold = float(getattr(settings, "vector_similarity_threshold", 0.2) or 0.2)
         relaxed_threshold = float(getattr(settings, "vector_similarity_relaxed_threshold", 0.05) or 0.05)
         degraded = False
@@ -39,7 +38,6 @@ def hybrid_search_with_diagnostics(
                 "relaxed": relaxed_threshold,
                 "rrf": getattr(settings, "hybrid_rrf_k", 60),
                 "rerank_n": getattr(settings, "reranker_top_n", 5),
-                "strategy": retrieval_strategy or "advanced",
                 "dynamic_top_k": dynamic_top_k,
                 "dynamic_vector_weight": dynamic_vector_weight,
                 "dynamic_bm25_weight": dynamic_bm25_weight,
@@ -52,13 +50,12 @@ def hybrid_search_with_diagnostics(
         if cached:
             return cached
 
-        with traced_span("retrieval.collect_candidates", {"strategy": str(retrieval_strategy or "advanced")}):
+        with traced_span("retrieval.collect_candidates", {}):
             fused, diag = _collect_candidates_for_current_module(
                 query,
                 allowed_sources=allowed_sources,
                 vector_threshold=strict_threshold,
                 settings=settings,
-                retrieval_strategy=retrieval_strategy,
                 dynamic_top_k=dynamic_top_k,
                 dynamic_vector_weight=dynamic_vector_weight,
                 dynamic_bm25_weight=dynamic_bm25_weight,
@@ -67,7 +64,7 @@ def hybrid_search_with_diagnostics(
         raw_vector_cache: dict[str, list] = {}
         if not fused and relaxed_threshold < strict_threshold:
             with traced_span("retrieval.degraded_retry", {"relaxed_threshold": relaxed_threshold}):
-                flags = strategy_flags(retrieval_strategy)
+                flags = strategy_flags()
                 vector_top_k = int(getattr(settings, "vector_top_k", 6) or 6)
                 variants = build_rewrite_queries(
                     query,
@@ -93,7 +90,6 @@ def hybrid_search_with_diagnostics(
                     allowed_sources=allowed_sources,
                     vector_threshold=relaxed_threshold,
                     settings=settings,
-                    retrieval_strategy=retrieval_strategy,
                     precomputed_raw_vector_results=raw_vector_cache,
                     dynamic_top_k=dynamic_top_k,
                     dynamic_vector_weight=dynamic_vector_weight,
@@ -123,13 +119,9 @@ def hybrid_search_with_diagnostics(
         return expanded, diagnostics
 
 
-def hybrid_search(
-    query: str, allowed_sources: list[str] | None = None, retrieval_strategy: str | None = None
-) -> list[dict]:
+def hybrid_search(query: str, allowed_sources: list[str] | None = None) -> list[dict]:
     """Perform hybrid search and return results only."""
-    results, _ = hybrid_search_with_diagnostics(
-        query, allowed_sources=allowed_sources, retrieval_strategy=retrieval_strategy
-    )
+    results, _ = hybrid_search_with_diagnostics(query, allowed_sources=allowed_sources)
     return results
 
 
@@ -162,7 +154,6 @@ def _collect_candidates_for_current_module(
     allowed_sources: list[str] | None,
     vector_threshold: float,
     settings,
-    retrieval_strategy: str | None = None,
     precomputed_raw_vector_results: dict[str, list] | None = None,
     dynamic_top_k: int | None = None,
     dynamic_vector_weight: float | None = None,
@@ -181,7 +172,6 @@ def _collect_candidates_for_current_module(
             allowed_sources=allowed_sources,
             vector_threshold=vector_threshold,
             settings=settings,
-            retrieval_strategy=retrieval_strategy,
             precomputed_raw_vector_results=precomputed_raw_vector_results,
             dynamic_top_k=dynamic_top_k,
             dynamic_vector_weight=dynamic_vector_weight,
@@ -197,7 +187,6 @@ def _collect_candidates(
     query: str,
     allowed_sources: list[str] | None = None,
     vector_threshold: float | None = None,
-    retrieval_strategy: str | None = None,
 ) -> tuple[list[dict], dict]:
     """Backward-compatible wrapper for pre-refactor tests and scripts."""
     settings = get_settings()
@@ -211,7 +200,6 @@ def _collect_candidates(
         allowed_sources=allowed_sources,
         vector_threshold=threshold,
         settings=settings,
-        retrieval_strategy=retrieval_strategy,
     )
 
 

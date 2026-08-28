@@ -31,7 +31,6 @@ from app.services.input_normalizer import (
     normalize_user_question,
 )
 from app.services.query_intent import is_casual_chat_query
-from app.services.retrieval.profiles import normalize_retrieval_profile
 
 router = APIRouter(prefix="/sessions", tags=["sessions"])
 
@@ -65,44 +64,6 @@ def get_session(session_id: str, request: Request, user: dict[str, Any] = Depend
     if data is None:
         raise not_found("Session")
     return data
-
-
-@router.get("/{session_id}/strategy-lock")
-def get_session_strategy_lock(session_id: str, request: Request, user: dict[str, Any] = Depends(_require_user)):
-    session_id = _require_valid_session_id(session_id)
-    _require_permission(user, "session:read", request, "session", resource_id=session_id)
-    store = _history_store_for_user(user)
-    data = store.get_session(session_id)
-    if data is None:
-        raise not_found("Session")
-    return {"session_id": session_id, "strategy_lock": store.get_session_strategy_lock(session_id)}
-
-
-@router.post("/{session_id}/strategy-lock")
-def set_session_strategy_lock(
-    session_id: str,
-    payload: dict[str, Any],
-    request: Request,
-    user: dict[str, Any] = Depends(_require_user),
-):
-    session_id = _require_valid_session_id(session_id)
-    _require_permission(user, "session:lock_strategy", request, "session", resource_id=session_id)
-    strategy_raw = payload.get("strategy_lock")
-    strategy = normalize_retrieval_profile(str(strategy_raw)) if strategy_raw else None
-    store = _history_store_for_user(user)
-    updated = store.set_session_strategy_lock(session_id, strategy)
-    if updated is None:
-        raise not_found("Session")
-    _audit(
-        request,
-        action="session.strategy_lock.set",
-        resource_type="session",
-        result="success",
-        user=user,
-        resource_id=session_id,
-        detail=f"strategy_lock={strategy or 'none'}",
-    )
-    return {"session_id": session_id, "strategy_lock": strategy}
 
 
 @router.delete("/{session_id}")
@@ -212,8 +173,6 @@ def update_session_message(
     request: Request,
     req: MessageUpdateRequest,
     rerun: bool = False,
-    use_web_fallback: bool = False,
-    use_reasoning: bool = False,
     user: dict[str, Any] = Depends(_require_user),
 ):
     session_id = _require_valid_session_id(session_id)
@@ -243,8 +202,8 @@ def update_session_message(
         with _reserve_chat_credit(request, user, "message_rerun") as credit:
             result = execute_standard_compatibility(
                 question=effective_question,
-                use_web_fallback=use_web_fallback,
-                use_reasoning=use_reasoning,
+                use_web_fallback=False,
+                use_reasoning=True,
                 memory_context=memory_context,
                 allowed_sources=_allowed_sources_for_user(user),
                 user=PipelineUser(

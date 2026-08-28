@@ -128,8 +128,6 @@ from app.orchestration.engine import OrchestrationEngine
 
 ## 🔗 相关文档
 
-- [完整智能体结构](../../docs/architecture/COMPLETE_AGENTS_STRUCTURE.md)
-- [LangGraph 评估报告](../../docs/architecture/LANGGRAPH_EVALUATION.md)
 - [架构说明](../../CLAUDE.md)
 
 ---

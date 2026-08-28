@@ -41,7 +41,6 @@ class VectorRAGResult(AgentResult):
     )
     original_query: str | None = Field(None, description="Original query before expansion")
     expanded_query: str | None = Field(None, description="Expanded query with synonyms")
-    retrieval_strategy: str | None = Field(None, description="Retrieval strategy used: hybrid, dense, bm25, rerank")
 
 
 class GraphRAGResult(AgentResult):

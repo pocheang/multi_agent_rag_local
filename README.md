@@ -23,7 +23,7 @@ Canonical configuration lives in config/ and generated runtime files live in .ru
 
 ### 本地开发
 
-项目使用 Conda 环境 `rag-local`。完整安装、配置和验证步骤见[本地安装](docs/getting-started/setup.md)。
+项目使用 Conda 环境 `rag-local`。
 
 ```bash
 conda activate rag-local
@@ -49,26 +49,13 @@ npm run dev
 
 ## 文档入口
 
-从[文档中心](docs/README.md)开始。按使用场景查看：
-
-- [快速开始](docs/getting-started/README.md)
-- [用户指南](docs/user-guide/README.md)
-- [系统架构](docs/architecture/README.md)
-- [功能说明](docs/features/README.md)
-- [开发指南](docs/development/README.md)
-- [部署与运维](docs/operations/README.md)
-- [API、配置与 FAQ](docs/reference/README.md)
-- [版本发布记录](docs/releases/README.md)
-- [中文文档](docs/zh-CN/README.md)
-
-文档规则和归档策略见[文档治理政策](docs/DOCUMENTATION_POLICY.md)。
+从[文档中心](docs/README.md)开始。描述"系统当前如何工作"的文档（架构、功能、参考、运维等）
+已在 v0.7 重构前清理，待重构完成后重新生成；[版本发布记录](docs/releases/README.md)和
+[开发日志](docs/development/daily-logs/README.md)作为历史记录保留。
 
 ## 常用命令
 
 ```bash
-# 后端测试
-pytest tests/ -v
-
 # 静态检查
 ruff check .
 ruff format .
@@ -76,12 +63,6 @@ ruff format .
 # 前端生产构建
 cd frontend
 npm run build
-```
-
-文档完整性检查：
-
-```bash
-conda run -n rag-local python scripts/check_docs.py
 ```
 
 ## 项目协作

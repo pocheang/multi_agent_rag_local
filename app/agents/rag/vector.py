@@ -81,7 +81,6 @@ class UnifiedVectorRAGAgent(BaseAgent):
         self,
         query: str,
         allowed_sources: list[str] | None = None,
-        retrieval_strategy: str | None = None,
         agent_class: str | None = None,
         enable_evaluation: bool | None = None,
         **kwargs,
@@ -92,7 +91,6 @@ class UnifiedVectorRAGAgent(BaseAgent):
         Args:
             query: User query
             allowed_sources: Optional list of allowed document sources
-            retrieval_strategy: Retrieval strategy (hybrid/dense/bm25/rerank)
             agent_class: Agent class for automatic document filtering
             enable_evaluation: Whether to enable Self-RAG evaluation
             **kwargs: Additional parameters
@@ -100,10 +98,6 @@ class UnifiedVectorRAGAgent(BaseAgent):
         Returns:
             Dictionary with retrieval results
         """
-        # Use config defaults if not specified
-        if retrieval_strategy is None:
-            retrieval_strategy = self.vector_config.retrieval_strategy
-
         if enable_evaluation is None:
             enable_evaluation = self.vector_config.enable_evaluation
 
@@ -117,9 +111,7 @@ class UnifiedVectorRAGAgent(BaseAgent):
         filtered_sources = self._apply_agent_filtering(allowed_sources, agent_class)
 
         # Step 4: Execute retrieval
-        results, diagnostics = self._execute_retrieval(
-            search_query, filtered_sources, retrieval_strategy, dynamic_params
-        )
+        results, diagnostics = self._execute_retrieval(search_query, filtered_sources, dynamic_params)
 
         # Step 5: Process results
         citations = self._build_citations(results)
@@ -140,7 +132,6 @@ class UnifiedVectorRAGAgent(BaseAgent):
             diagnostics=diagnostics,
             query=query,
             search_query=search_query,
-            strategy=retrieval_strategy,
             evaluation=evaluation_result,
             dynamic_params=dynamic_params,
         )
@@ -195,27 +186,16 @@ class UnifiedVectorRAGAgent(BaseAgent):
         return allowed_sources
 
     def _execute_retrieval(
-        self, query: str, allowed_sources: list[str] | None, strategy: str | None, dynamic_params: dict[str, Any]
+        self, query: str, allowed_sources: list[str] | None, dynamic_params: dict[str, Any]
     ) -> tuple:
         """Execute hybrid retrieval with diagnostics."""
-        try:
-            results, diagnostics = self._hybrid_search(
-                query,
-                allowed_sources=allowed_sources,
-                retrieval_strategy=strategy,
-                dynamic_top_k=dynamic_params.get("top_k"),
-                dynamic_vector_weight=dynamic_params.get("vector_weight"),
-                dynamic_bm25_weight=dynamic_params.get("bm25_weight"),
-            )
-            return results, diagnostics
-        except TypeError:
-            # Backward-compatible fallback
-            logger.warning("Using legacy retrieval signature")
-            results, diagnostics = self._hybrid_search(
-                query,
-                allowed_sources=allowed_sources,
-            )
-            return results, diagnostics
+        return self._hybrid_search(
+            query,
+            allowed_sources=allowed_sources,
+            dynamic_top_k=dynamic_params.get("top_k"),
+            dynamic_vector_weight=dynamic_params.get("vector_weight"),
+            dynamic_bm25_weight=dynamic_params.get("bm25_weight"),
+        )
 
     def _build_citations(self, results: list[dict[str, Any]]) -> list[dict[str, Any]]:
         """Build legacy-compatible citation records from unified results."""
@@ -302,7 +282,6 @@ class UnifiedVectorRAGAgent(BaseAgent):
         diagnostics: dict[str, Any],
         query: str,
         search_query: str,
-        strategy: str | None,
         evaluation: dict[str, Any] | None,
         dynamic_params: dict[str, Any],
     ) -> dict[str, Any]:
@@ -330,7 +309,6 @@ class UnifiedVectorRAGAgent(BaseAgent):
             "retrieved_count": retrieved_count,
             "effective_hit_count": effective_hit_count,
             "retrieval_diagnostics": diagnostics,
-            "retrieval_strategy": strategy,
         }
 
         # Add evaluation results if available
@@ -344,7 +322,6 @@ class UnifiedVectorRAGAgent(BaseAgent):
 def run_vector_rag(
     question: str,
     allowed_sources: list[str] | None = None,
-    retrieval_strategy: str | None = None,
     agent_class: str | None = None,
 ) -> dict[str, Any]:
     """
@@ -356,16 +333,13 @@ def run_vector_rag(
     Args:
         question: User query
         allowed_sources: Optional list of allowed sources
-        retrieval_strategy: Retrieval strategy
         agent_class: Agent class for filtering
 
     Returns:
         Dictionary with retrieval results
     """
     agent = UnifiedVectorRAGAgent()
-    result = agent.run(
-        query=question, allowed_sources=allowed_sources, retrieval_strategy=retrieval_strategy, agent_class=agent_class
-    )
+    result = agent.run(query=question, allowed_sources=allowed_sources, agent_class=agent_class)
 
     # Extract core result (remove BaseAgent wrapper fields for compatibility)
     return {

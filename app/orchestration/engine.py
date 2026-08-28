@@ -22,11 +22,6 @@ from app.orchestration.langgraph.checkpoint import checkpoint_config
 from app.orchestration.langgraph.workflow import build_workflow
 from app.orchestration.policies import ExecutionPolicy
 from app.orchestration.request import OrchestrationRequest
-from app.orchestration.standard_request_policy import (
-    PreparedStandardRequest,
-    bind_standard_runtime_context,
-    prepare_standard_request,
-)
 from app.orchestration.timeout_control import (
     ExecutionBudget,
     TimeoutConfig,
@@ -162,42 +157,6 @@ class OrchestrationEngine:
             if checkpointer is not None
             else None
         )
-
-    def prepare_standard_request(self, request: OrchestrationRequest) -> PreparedStandardRequest:
-        """Retain the request preparation seam without selecting a workflow."""
-        return prepare_standard_request(request)
-
-    def bind_standard_runtime_context(
-        self, prepared: PreparedStandardRequest, **runtime_ports: Any
-    ) -> PreparedStandardRequest:
-        return bind_standard_runtime_context(prepared, **runtime_ports)
-
-    async def execute_prepared_standard(self, prepared: PreparedStandardRequest) -> FinalAnswer:
-        request = prepared.request
-        if prepared.early_response is not None:
-            return FinalAnswer(
-                answer=prepared.early_response.answer,
-                route=RouteDecision(
-                    route=prepared.early_response.route,
-                    reason=prepared.early_response.reason,
-                    confidence=1.0,
-                    requires_plan=False,
-                    allowed_capabilities=frozenset({"rag"}),
-                ),
-            )
-        return await self.execute(request)
-
-    async def execute_prepared_standard_stream(
-        self,
-        prepared: PreparedStandardRequest,
-        *,
-        execution_id: str,
-        result_postprocessor: object | None = None,
-    ) -> AsyncIterator[dict[str, Any]]:
-        del result_postprocessor
-        request = prepared.request.model_copy(update={"execution_id": execution_id})
-        async for event in self.execute_stream(request):
-            yield event
 
     async def execute(self, request: OrchestrationRequest) -> FinalAnswer:
         from app.services.runtime.retry_policy import retry_budget_scope

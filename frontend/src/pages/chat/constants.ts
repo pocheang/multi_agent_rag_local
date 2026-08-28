@@ -12,7 +12,6 @@ export const SUPPORTED_CHAT_RE = /\.(pdf|png|jpe?g|bmp|tiff?|webp)$/i;
 export const PDF_FILE_RE = /\.(pdf|png|jpe?g|bmp|tiff?|webp)$/i;
 
 export type AgentClassHint = "" | "general" | "cybersecurity" | "artificial_intelligence" | "pdf_text";
-export type RetrievalStrategy = "baseline" | "advanced" | "safe";
 
 export const AGENT_MODES: Array<{
   key: AgentClassHint;
@@ -29,7 +28,6 @@ export const AGENT_MODES: Array<{
 export const EMPTY_METADATA: ChatMetadata = {
   route: "",
   execution_route: "",
-  retrieval_strategy: "",
   agent_class: "",
   web_used: false,
   latency_ms: 0,

@@ -307,17 +307,12 @@ def _refine_answer(
     return prev
 
 
-def _self_review_enabled(profile: str, enable_self_review: bool | None) -> bool:
-    """Return whether the optional strict-quality review policy is enabled.
+def _self_review_enabled(enable_self_review: bool | None) -> bool:
+    """Return whether the optional LLM self-review pass is enabled.
 
-    Existing callers that do not know about profiles remain on the standard
-    path. This deliberately prevents an implicit review model call for the
-    public standard endpoint while retaining the legacy review capability for
-    an explicit ``strict_quality`` request.
+    Self-review is explicit-opt-in only; there is no profile-based default.
     """
-    if enable_self_review is not None:
-        return enable_self_review
-    return str(profile or "standard").strip().lower() == "strict_quality"
+    return bool(enable_self_review)
 
 
 def synthesize_answer(
@@ -331,7 +326,6 @@ def synthesize_answer(
     force_language: str = "",
     session_id: str = "",
     enable_fact_verification: bool = True,
-    profile: str = "standard",
     enable_self_review: bool | None = None,
 ) -> dict:
     """
@@ -348,10 +342,8 @@ def synthesize_answer(
         force_language: Force specific language ('zh' or 'en'), empty string for auto-detect
         session_id: Session identifier for analytics
         enable_fact_verification: Enable post-generation fact verification (Task 14)
-        profile: Compatibility profile; only ``strict_quality`` enables a
-            default LLM self-review.
-        enable_self_review: Explicit review-policy override. When enabled,
-            the review is capped at one round.
+        enable_self_review: Explicit review-policy override; self-review is
+            opt-in only and capped at one round.
 
     Returns:
         dict with 'answer', 'detected_language', and optional 'verification' keys
@@ -398,7 +390,7 @@ def synthesize_answer(
                 "detected_language": detected_language,
             }
         final_answer = initial
-        if _self_review_enabled(profile, enable_self_review):
+        if _self_review_enabled(enable_self_review):
             final_answer = _refine_answer(
                 question=question,
                 initial_answer=initial,
@@ -494,7 +486,6 @@ def stream_synthesize_answer(
     use_reasoning: bool = False,
     force_language: str = "",
     session_id: str = "",
-    profile: str = "standard",
     enable_self_review: bool | None = None,
 ) -> Iterable[dict[str, str] | str]:
     """
@@ -510,8 +501,7 @@ def stream_synthesize_answer(
         use_reasoning: Whether to use reasoning model
         force_language: Force specific language ('zh' or 'en'), empty string for auto-detect
         session_id: Session identifier for analytics
-        profile: Compatibility profile; self-review is off for standard.
-        enable_self_review: Explicit strict-quality review-policy override.
+        enable_self_review: Explicit self-review-policy override.
 
     Yields:
         Text chunks or dict with metadata
@@ -587,7 +577,7 @@ def stream_synthesize_answer(
             return
 
         final = initial
-        if _self_review_enabled(profile, enable_self_review):
+        if _self_review_enabled(enable_self_review):
             final = _refine_answer(
                 question=question,
                 initial_answer=initial,

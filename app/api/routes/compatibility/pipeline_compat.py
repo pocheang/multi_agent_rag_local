@@ -29,7 +29,6 @@ from app.pipeline.rag_pipeline import RAGPipeline
 def execute_standard_compatibility(
     *,
     question: str,
-    retrieval_strategy: str | None = None,
     use_web_fallback: bool = False,
     use_reasoning: bool = False,
     memory_context: str = "",
@@ -44,7 +43,6 @@ def execute_standard_compatibility(
 
     Args:
         question: User's question to answer
-        retrieval_strategy: Retrieval strategy to use (e.g. "hybrid", "vector")
         use_web_fallback: Enable web search fallback if local results insufficient
         use_reasoning: Enable reasoning mode for complex queries
         memory_context: Conversation context/history as string
@@ -59,14 +57,13 @@ def execute_standard_compatibility(
     pipeline_result = RAGPipeline().execute_sync(
         PipelineRequest(
             question=question,
-            profile=PipelineProfile.STANDARD,
+            profile=PipelineProfile.ADVANCED,
             session_id=session_id,
             conversation=conversation,
             user=user,
             source_scope=SourceScope(
                 allowed_sources=frozenset(allowed_sources) if allowed_sources is not None else None
             ),
-            retrieval_strategy=retrieval_strategy,
             use_web_fallback=use_web_fallback,
             use_reasoning=use_reasoning,
         )

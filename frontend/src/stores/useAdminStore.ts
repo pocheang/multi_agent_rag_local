@@ -5,7 +5,6 @@ import type {
   AuditLogEntry,
   BenchmarkTrendItem,
   OpsOverview,
-  RetrievalProfileState,
   SystemLogEntry,
 } from "@/types/api";
 
@@ -27,7 +26,6 @@ export interface AdminState {
   logs: AuditLogEntry[];
   systemLogs: SystemLogEntry[];
   ops: OpsOverview | null;
-  profileState: RetrievalProfileState | null;
   benchmarkTrends: BenchmarkTrendItem[];
   modelSettings: AdminModelSettingsView | null;
 
@@ -67,11 +65,6 @@ export interface AdminState {
   opsActionKeyword: string;
   opsAutoRefresh: boolean;
 
-  canaryEnabled: boolean;
-  canaryBaseline: number;
-  canarySafe: number;
-  canarySeed: string;
-
   modelApiKey: string;
   modelTestResult: { type: "success" | "error"; message: string } | null;
 
@@ -95,7 +88,6 @@ export interface AdminState {
   setLogs: (val: AuditLogEntry[] | ((prev: AuditLogEntry[]) => AuditLogEntry[])) => void;
   setSystemLogs: (val: SystemLogEntry[] | ((prev: SystemLogEntry[]) => SystemLogEntry[])) => void;
   setOps: (val: OpsOverview | null | ((prev: OpsOverview | null) => OpsOverview | null)) => void;
-  setProfileState: (val: RetrievalProfileState | null | ((prev: RetrievalProfileState | null) => RetrievalProfileState | null)) => void;
   setBenchmarkTrends: (val: BenchmarkTrendItem[] | ((prev: BenchmarkTrendItem[]) => BenchmarkTrendItem[])) => void;
   setModelSettings: (val: AdminModelSettingsView | null | ((prev: AdminModelSettingsView | null) => AdminModelSettingsView | null)) => void;
 
@@ -135,11 +127,6 @@ export interface AdminState {
   setOpsActionKeyword: (val: string | ((prev: string) => string)) => void;
   setOpsAutoRefresh: (val: boolean | ((prev: boolean) => boolean)) => void;
 
-  setCanaryEnabled: (val: boolean | ((prev: boolean) => boolean)) => void;
-  setCanaryBaseline: (val: number | ((prev: number) => number)) => void;
-  setCanarySafe: (val: number | ((prev: number) => number)) => void;
-  setCanarySeed: (val: string | ((prev: string) => string)) => void;
-
   setModelApiKey: (val: string | ((prev: string) => string)) => void;
   setModelTestResult: (val: { type: "success" | "error"; message: string } | null | ((prev: { type: "success" | "error"; message: string } | null) => { type: "success" | "error"; message: string } | null)) => void;
 
@@ -168,7 +155,6 @@ export const useAdminStore = create<AdminState>((set) => ({
   logs: [],
   systemLogs: [],
   ops: null,
-  profileState: null,
   benchmarkTrends: [],
   modelSettings: null,
 
@@ -208,11 +194,6 @@ export const useAdminStore = create<AdminState>((set) => ({
   opsActionKeyword: "",
   opsAutoRefresh: true,
 
-  canaryEnabled: false,
-  canaryBaseline: 0,
-  canarySafe: 0,
-  canarySeed: "default",
-
   modelApiKey: "",
   modelTestResult: null,
 
@@ -235,7 +216,6 @@ export const useAdminStore = create<AdminState>((set) => ({
   setLogs: (val) => set((s) => ({ logs: updateValue(val, s.logs) })),
   setSystemLogs: (val) => set((s) => ({ systemLogs: updateValue(val, s.systemLogs) })),
   setOps: (val) => set((s) => ({ ops: updateValue(val, s.ops) })),
-  setProfileState: (val) => set((s) => ({ profileState: updateValue(val, s.profileState) })),
   setBenchmarkTrends: (val) => set((s) => ({ benchmarkTrends: updateValue(val, s.benchmarkTrends) })),
   setModelSettings: (val) => set((s) => ({ modelSettings: updateValue(val, s.modelSettings) })),
 
@@ -274,11 +254,6 @@ export const useAdminStore = create<AdminState>((set) => ({
   setOpsActorUserId: (val) => set((s) => ({ opsActorUserId: updateValue(val, s.opsActorUserId) })),
   setOpsActionKeyword: (val) => set((s) => ({ opsActionKeyword: updateValue(val, s.opsActionKeyword) })),
   setOpsAutoRefresh: (val) => set((s) => ({ opsAutoRefresh: updateValue(val, s.opsAutoRefresh) })),
-
-  setCanaryEnabled: (val) => set((s) => ({ canaryEnabled: updateValue(val, s.canaryEnabled) })),
-  setCanaryBaseline: (val) => set((s) => ({ canaryBaseline: updateValue(val, s.canaryBaseline) })),
-  setCanarySafe: (val) => set((s) => ({ canarySafe: updateValue(val, s.canarySafe) })),
-  setCanarySeed: (val) => set((s) => ({ canarySeed: updateValue(val, s.canarySeed) })),
 
   setModelApiKey: (val) => set((s) => ({ modelApiKey: updateValue(val, s.modelApiKey) })),
   setModelTestResult: (val) => set((s) => ({ modelTestResult: updateValue(val, s.modelTestResult) })),
