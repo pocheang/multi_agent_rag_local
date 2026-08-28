@@ -2,21 +2,16 @@ import type React from "react";
 import { useTranslation } from "react-i18next";
 import { QuickActions } from "@/pages/chat/components/QuickActions";
 import { AnimatedButtonLite as AnimatedButton } from "@/components/animations/AnimatedButtonLite";
+import { useChatStore } from "@/stores/useChatStore";
+import { useTextareaAutoResize } from "@/pages/chat/hooks/useTextareaAutoResize";
 
 type Props = {
-  composerDropActive: boolean;
-  question: string;
   questionRef: React.MutableRefObject<HTMLTextAreaElement | null>;
   chatUploadInputRef: React.MutableRefObject<HTMLInputElement | null>;
   isSending: boolean;
   quickPrompts: string[];
-  runStatus: string;
-  error: string;
-  onQuestionChange: (value: string) => void;
   onAsk: () => Promise<void>;
   onStop: () => void;
-  onClearQuestion: () => void;
-  onPromptPick: (prompt: string) => void;
   onComposerDragEnter: (evt: React.DragEvent<HTMLElement>) => void;
   onComposerDragOver: (evt: React.DragEvent<HTMLElement>) => void;
   onComposerDragLeave: (evt: React.DragEvent<HTMLElement>) => void;
@@ -25,19 +20,12 @@ type Props = {
 };
 
 export function ChatComposer({
-  composerDropActive,
-  question,
   questionRef,
   chatUploadInputRef,
   isSending,
   quickPrompts,
-  runStatus,
-  // error, // Now shown via Toast instead of inline
-  onQuestionChange,
   onAsk,
   onStop,
-  onClearQuestion,
-  onPromptPick,
   onComposerDragEnter,
   onComposerDragOver,
   onComposerDragLeave,
@@ -45,6 +33,11 @@ export function ChatComposer({
   onChatUploadChange,
 }: Props) {
   const { t } = useTranslation();
+  const question = useChatStore((s) => s.question);
+  const setQuestion = useChatStore((s) => s.setQuestion);
+  const runStatus = useChatStore((s) => s.runStatus);
+  const composerDropActive = useChatStore((s) => s.composerDropActive);
+  useTextareaAutoResize({ ref: questionRef, value: question });
   const modeHint = t("components.chat.modeHint.advancedReasoning");
 
   return (
@@ -65,7 +58,7 @@ export function ChatComposer({
           <textarea
             ref={questionRef}
             value={question}
-            onChange={(event) => onQuestionChange(event.target.value)}
+            onChange={(event) => setQuestion(event.target.value)}
             placeholder={t("components.chat.composerPlaceholder")}
             rows={3}
             aria-label={t("components.chat.questionInput")}
@@ -121,13 +114,12 @@ export function ChatComposer({
         quickPrompts={quickPrompts}
         question={question}
         isSending={isSending}
-        onPromptPick={onPromptPick}
+        onPromptPick={setQuestion}
         onStop={onStop}
-        onClearQuestion={onClearQuestion}
+        onClearQuestion={() => setQuestion("")}
       />
 
       {runStatus && <div className="status">{runStatus}</div>}
-      {/* Error now shown via Toast in top-right corner */}
     </section>
   );
 }
