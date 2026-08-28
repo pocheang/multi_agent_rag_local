@@ -4,6 +4,7 @@ import {
   type AgentClassHint,
 } from "@/pages/chat/constants";
 import type { Props } from "@/pages/chat/types";
+import { useChatStore } from "@/stores/useChatStore";
 import { ChatTopbar } from "@/pages/chat/components/ChatTopbar";
 import { ChatMessages } from "@/pages/chat/components/ChatMessages";
 import { ChatComposer } from "@/pages/chat/components/ChatComposer";
@@ -11,6 +12,7 @@ import { ClarificationPrompt } from "@/pages/chat/components/ClarificationPrompt
 import { ToastStack } from "@/pages/chat/components/ToastStack";
 import { ChatSidebar } from "@/pages/chat/components/ChatSidebar";
 import { ApiSettings } from "@/components/ApiSettings";
+import { SessionManagementModal } from "@/components/SessionManagementModal";
 import { useChatActions } from "@/pages/chat/hooks/useChatActions";
 import { useFileUpload } from "@/pages/chat/hooks/useFileUpload";
 import { useMessageActions } from "@/pages/chat/hooks/useMessageActions";
@@ -21,9 +23,7 @@ import { useChatHelpers } from "@/pages/chat/hooks/useChatHelpers";
 import { useClarification } from "@/pages/chat/hooks/useClarification";
 import { useSettingsPolling } from "@/pages/chat/hooks/useSettingsPolling";
 import { useAutoRefresh } from "@/pages/chat/hooks/useAutoRefresh";
-import { useTextareaAutoResize } from "@/pages/chat/hooks/useTextareaAutoResize";
 import { useAutoScroll } from "@/pages/chat/hooks/useAutoScroll";
-import { useDragDropPrevention } from "@/pages/chat/hooks/useDragDropPrevention";
 import { KeyboardHelp } from "@/components/KeyboardHelp";
 import { generateSmartPrompts } from "@/pages/chat/utils/smartPrompts";
 import type { UserIdentity } from "@/types/auth";
@@ -36,6 +36,7 @@ import "@/styles/pages/chat-entry.css";
 
 export function ChatPage({ user, onLogout, onUserRefresh }: Props) {
   const [executionId, setExecutionId] = useState<string | null>(null);
+  const [sessionManagementOpen, setSessionManagementOpen] = useState(false);
   const permissionUser: UserIdentity | null = user;
   const { sectionsHidden, toggleSections } = useSectionToggle();
   const { topbarHidden, toggleTopbar } = useTopbarToggle();
@@ -44,33 +45,33 @@ export function ChatPage({ user, onLogout, onUserRefresh }: Props) {
     sidebarOpen, setSidebarOpen,
     sidebarCollapsed, setSidebarCollapsed,
     sessions, setSessions,
-    sessionLoading, setSessionLoading,
+    setSessionLoading,
     currentSessionId, setCurrentSessionId,
     messages, setMessages,
-    busySessionId, setBusySessionId,
-    isCreatingSession, setIsCreatingSession,
-    question, setQuestion,
+    setBusySessionId,
+    setIsCreatingSession,
+    setQuestion,
     isSending, setIsSending,
-    runStatus, setRunStatus,
-    agentClassHint, setAgentClassHint,
+    setRunStatus,
+    setAgentClassHint,
     pdfTargetFile, setPdfTargetFile,
     documents, setDocuments,
-    docsLoading, setDocsLoading,
-    uploading, setUploading,
-    uploadInfo, setUploadInfo,
-    uploadProgress, setUploadProgress,
-    uploadProgressText, setUploadProgressText,
+    setDocsLoading,
+    setUploading,
+    setUploadInfo,
+    setUploadProgress,
+    setUploadProgressText,
     uploadVisibility, setUploadVisibility,
-    docDropActive, setDocDropActive,
-    composerDropActive, setComposerDropActive,
-    prompts, setPrompts,
-    promptsLoading, setPromptsLoading,
-    promptTitle, setPromptTitle,
-    promptContent, setPromptContent,
-    editingPromptId, setEditingPromptId,
-    promptCheckInfo, setPromptCheckInfo,
+    setDocDropActive,
+    setComposerDropActive,
+    setPrompts,
+    setPromptsLoading,
+    setPromptTitle,
+    setPromptContent,
+    setEditingPromptId,
+    setPromptCheckInfo,
     toasts, setToasts,
-    error, setError,
+    setError,
     settingsOpen, setSettingsOpen,
     fileInputRef,
     chatUploadInputRef,
@@ -129,9 +130,6 @@ export function ChatPage({ user, onLogout, onUserRefresh }: Props) {
     canUploadAndManageDocs,
     pdfDocuments,
     pdfTargetFile,
-    promptTitle,
-    promptContent,
-    editingPromptId,
     setSidebarOpen,
     setAgentClassHint,
     setQuestion,
@@ -205,9 +203,11 @@ export function ChatPage({ user, onLogout, onUserRefresh }: Props) {
         sessionId,
       });
     } catch (error: unknown) {
-      // Auth errors are already handled by checkAndInitiateClarification
-      if ((error as { response?: { status?: number } })?.response?.status === 403 ||
-          (error as { response?: { status?: number } })?.response?.status === 401) {
+      // Auth errors are already handled (and notified) by checkAndInitiateClarification,
+      // which re-throws ApiError (status only, never .response.status) for 401/403.
+      const apiError = error as { response?: { status?: number }; status?: number };
+      const status = apiError?.response?.status ?? apiError?.status;
+      if (status === 403 || status === 401) {
         setIsSending(false);
         setRunStatus("");
         return;
@@ -245,7 +245,6 @@ export function ChatPage({ user, onLogout, onUserRefresh }: Props) {
   }, []);
 
   // Custom hooks for side effects
-  useTextareaAutoResize({ ref: questionRef, value: question });
   useAutoScroll({ ref: chatScrollRef, messages });
   useAutoRefresh({
     refreshSessions: actions.refreshSessions,
@@ -253,7 +252,6 @@ export function ChatPage({ user, onLogout, onUserRefresh }: Props) {
     refreshPrompts: actions.refreshPrompts,
   });
   useSettingsPolling({ onNotify: actions.notify });
-  useDragDropPrevention();
 
   const handleSidebarToggle = () => {
     if (window.innerWidth <= 1080) {
@@ -277,42 +275,20 @@ export function ChatPage({ user, onLogout, onUserRefresh }: Props) {
         sectionsHidden={sectionsHidden}
         onToggleSidebar={handleSidebarToggle}
         onOpenSettings={() => setSettingsOpen(true)}
+        onOpenSessionManagement={() => setSessionManagementOpen(true)}
         onToggleTopbar={toggleTopbar}
         onToggleSections={toggleSections}
       />
 
       <div className={`page-shell ${sidebarCollapsed ? "sidebar-collapsed" : ""}`}>
         <ChatSidebar
-          sidebarOpen={sidebarOpen}
-          sidebarCollapsed={sidebarCollapsed}
-          sessions={sessions}
-          sessionLoading={sessionLoading}
-          currentSessionId={currentSessionId}
-          busySessionId={busySessionId}
-          isCreatingSession={isCreatingSession}
-          agentClassHint={agentClassHint}
           agentModes={AGENT_MODES}
           agentDistribution={agentDistribution}
           pdfDocuments={pdfDocuments}
           pdfNeedingReindex={pdfNeedingReindex}
-          pdfTargetFile={pdfTargetFile}
-          documents={documents}
-          docsLoading={docsLoading}
-          uploading={uploading}
-          uploadInfo={uploadInfo}
-          uploadProgress={uploadProgress}
-          uploadProgressText={uploadProgressText}
-          uploadVisibility={uploadVisibility}
-          docDropActive={docDropActive}
           canUploadAndManageDocs={canUploadAndManageDocs}
           isAdmin={isAdmin}
           user={permissionUser}
-          prompts={prompts}
-          promptsLoading={promptsLoading}
-          promptTitle={promptTitle}
-          promptContent={promptContent}
-          editingPromptId={editingPromptId}
-          promptCheckInfo={promptCheckInfo}
           fileInputRef={fileInputRef}
           onToggleSidebarCollapsed={handleSidebarToggle}
           onCreateSession={async () => { await actions.createSession(); }}
@@ -375,22 +351,15 @@ export function ChatPage({ user, onLogout, onUserRefresh }: Props) {
           )}
 
           <ChatComposer
-            composerDropActive={composerDropActive}
-            question={question}
             questionRef={questionRef}
             chatUploadInputRef={chatUploadInputRef}
             isSending={isSending || !!clarification}
             quickPrompts={smartQuickPrompts}
-            runStatus={runStatus}
-            error={error}
-            onQuestionChange={setQuestion}
             onAsk={async () => {
               if (clarification) return;
-              await handleSendWithClarification(question);
+              await handleSendWithClarification(useChatStore.getState().question);
             }}
             onStop={() => messageActions.stopCurrentRun(isSending)}
-            onClearQuestion={() => setQuestion("")}
-            onPromptPick={setQuestion}
             onComposerDragEnter={dragHandlers.onComposerDragEnter}
             onComposerDragOver={dragHandlers.onComposerDragOver}
             onComposerDragLeave={dragHandlers.onComposerDragLeave}
@@ -405,6 +374,13 @@ export function ChatPage({ user, onLogout, onUserRefresh }: Props) {
         />
         <SectionToggleButton sectionsHidden={sectionsHidden} onToggle={toggleSections} />
         <ApiSettings isOpen={settingsOpen} onClose={() => setSettingsOpen(false)} />
+        <SessionManagementModal
+          isOpen={sessionManagementOpen}
+          onClose={() => setSessionManagementOpen(false)}
+          currentSessionId={currentSessionId}
+          messages={messages}
+          onSelectSession={(sessionId) => void actions.loadSession(sessionId)}
+        />
         <KeyboardHelp />
       </div>
     </>
