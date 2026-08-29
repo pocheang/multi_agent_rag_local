@@ -17,6 +17,8 @@ import { useAdminActions } from "@/pages/admin/useAdminActions";
 import { useAdminState } from "@/pages/admin/useAdminState";
 import { formatAuditTime } from "@/pages/admin/utils";
 import { ROLE_OPTIONS, STATUS_OPTIONS, ACTION_KEYWORD_OPTIONS } from "@/pages/admin/constants";
+import { PromptDialog } from "@/components/PromptDialog";
+import { usePromptDialog } from "@/hooks/usePromptDialog";
 
 // Route-specific CSS (code-split by Vite)
 import "@/styles/pages/admin-entry.css";
@@ -31,6 +33,7 @@ export function AdminPage({ user, onLogout }: Props) {
   const navigate = useNavigate();
   const state = useAdminState();
   const isAdmin = useMemo(() => (user?.role || "").toLowerCase() === "admin", [user?.role]);
+  const promptDialog = usePromptDialog();
   // Pagination state for audit logs
   const [auditPage, setAuditPage] = useState(1);
   const [auditPageSize, setAuditPageSize] = useState(20);
@@ -43,6 +46,7 @@ export function AdminPage({ user, onLogout }: Props) {
     ...state,
     isAdmin,
     onLogout,
+    promptInput: promptDialog.promptInput,
   });
 
   const actionMax = useMemo(() => Math.max(1, ...(state.ops?.top_actions || []).map((x) => x.count)), [state.ops]);
@@ -102,6 +106,15 @@ export function AdminPage({ user, onLogout }: Props) {
 
   return (
     <div className="admin-shell">
+      <PromptDialog
+        isOpen={promptDialog.isOpen}
+        title={promptDialog.options?.title || ""}
+        message={promptDialog.options?.message || ""}
+        defaultValue={promptDialog.options?.defaultValue}
+        inputType={promptDialog.options?.inputType}
+        onConfirm={promptDialog.handleConfirm}
+        onCancel={promptDialog.handleCancel}
+      />
       <header className="topbar">
         <div>
           <h2>{t("pages.admin.console")}</h2>

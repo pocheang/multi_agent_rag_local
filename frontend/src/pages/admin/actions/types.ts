@@ -31,6 +31,7 @@ export interface AdminActionsParams {
   editScope: string;
   isAdmin: boolean;
   onLogout: () => Promise<void>;
+  promptInput: (opts: { message: string; title?: string; defaultValue?: string; inputType?: "text" | "password" }) => Promise<string | null>;
   setUsers: (users: AdminUserSummary[] | ((prev: AdminUserSummary[]) => AdminUserSummary[])) => void;
   setLogs: (logs: AuditLogEntry[]) => void;
   setSystemLogs: (logs: SystemLogEntry[]) => void;

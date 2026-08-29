@@ -1,6 +1,9 @@
+import i18n from "@/i18n/config";
 import { appApi } from "@/lib/api";
 import type { AdminUserSummary } from "@/types/api";
 import type { AdminActionsParams, ErrorHandler } from "./types";
+
+const t = i18n.t.bind(i18n);
 
 export function createUserActions(params: AdminActionsParams, errorHandler: ErrorHandler) {
   const {
@@ -17,6 +20,7 @@ export function createUserActions(params: AdminActionsParams, errorHandler: Erro
     editDept,
     editType,
     editScope,
+    promptInput,
     setUsers,
     setError,
     setStatusText,
@@ -42,7 +46,7 @@ export function createUserActions(params: AdminActionsParams, errorHandler: Erro
     try {
       setUsers(await appApi.adminUsers());
     } catch (e) {
-      await handleApiError(e, "加载用户失败");
+      await handleApiError(e, t("admin.actions.loadUsersFailed"));
     } finally {
       setLoadingUsers(false);
     }
@@ -50,13 +54,14 @@ export function createUserActions(params: AdminActionsParams, errorHandler: Erro
 
   const createAdmin = async () => {
     const username = adminUsername.trim();
-    if (!username) return setError("管理员用户名不能为空");
-    if (!adminPassword || adminPassword.length < 12) return setError("密码长度至少 12 位，需含大小写、数字和特殊字符");
-    if (adminPassword !== adminPassword2) return setError("两次密码不一致");
-    if (!adminApprovalToken.trim()) return setError("审批令牌不能为空");
-    if (!newAdminApprovalToken.trim() || newAdminApprovalToken.trim().length < 12) return setError("新管理员令牌至少 12 位");
-    if (!adminTicketId.trim()) return setError("工单号不能为空");
-    if (!adminReason.trim() || adminReason.trim().length < 5) return setError("原因至少 5 个字符");
+    if (!username) return setError(t("admin.actions.adminUsernameRequired"));
+    if (!adminPassword || adminPassword.length < 12) return setError(t("admin.actions.passwordRequirements"));
+    if (adminPassword !== adminPassword2) return setError(t("admin.actions.passwordMismatch"));
+    if (!adminApprovalToken.trim()) return setError(t("admin.actions.approvalTokenRequired"));
+    if (!newAdminApprovalToken.trim() || newAdminApprovalToken.trim().length < 12)
+      return setError(t("admin.actions.newAdminTokenRequirements"));
+    if (!adminTicketId.trim()) return setError(t("admin.actions.ticketIdRequired"));
+    if (!adminReason.trim() || adminReason.trim().length < 5) return setError(t("admin.actions.reasonRequirements"));
     setCreatingAdmin(true);
     try {
       const created = await appApi.adminCreateAdmin({
@@ -75,10 +80,10 @@ export function createUserActions(params: AdminActionsParams, errorHandler: Erro
       setNewAdminApprovalToken("");
       setAdminTicketId("");
       setAdminReason("");
-      setStatusText(`管理员已创建：${created.username}（ID: ${created.user_id}）`);
+      setStatusText(t("admin.actions.adminCreated", { username: created.username, userId: created.user_id }));
       setError("");
     } catch (e) {
-      await handleApiError(e, "创建管理员失败");
+      await handleApiError(e, t("admin.actions.createAdminFailed"));
     } finally {
       setCreatingAdmin(false);
     }
@@ -90,7 +95,7 @@ export function createUserActions(params: AdminActionsParams, errorHandler: Erro
       const updated = await appApi.adminUpdateRole(target.user_id, role);
       setUsers((prev) => prev.map((x) => (x.user_id === updated.user_id ? updated : x)));
     } catch (e) {
-      await handleApiError(e, "角色更新失败");
+      await handleApiError(e, t("admin.actions.updateRoleFailed"));
     }
   };
 
@@ -100,26 +105,32 @@ export function createUserActions(params: AdminActionsParams, errorHandler: Erro
       const updated = await appApi.adminUpdateStatus(target.user_id, statusValue);
       setUsers((prev) => prev.map((x) => (x.user_id === updated.user_id ? updated : x)));
     } catch (e) {
-      await handleApiError(e, "状态更新失败");
+      await handleApiError(e, t("admin.actions.updateStatusFailed"));
     }
   };
 
   const addUserCredits = async (target: AdminUserSummary) => {
     if ((target.role || "").toLowerCase() === "admin") return;
-    const rawAmount = (window.prompt(`请输入要为 ${target.username} 增加的额度（正整数）`) || "").trim();
+    const raw = await promptInput({
+      title: t("admin.ui.addCredits"),
+      message: t("admin.actions.creditsPrompt", { username: target.username }),
+    });
+    const rawAmount = (raw || "").trim();
     if (!rawAmount) return;
-    if (!/^\d+$/.test(rawAmount)) return setError("额度必须是正整数");
+    if (!/^\d+$/.test(rawAmount)) return setError(t("admin.actions.creditsInvalidInteger"));
     const amount = Number(rawAmount);
     if (!Number.isSafeInteger(amount) || amount < 1 || amount > 1_000_000) {
-      return setError("单次增加额度必须在 1 到 1000000 之间");
+      return setError(t("admin.actions.creditsRange"));
     }
     try {
       const updated = await appApi.adminAddCredits(target.user_id, amount);
       setUsers((prev) => prev.map((x) => (x.user_id === updated.user_id ? updated : x)));
-      setStatusText(`已为 ${updated.username} 增加 ${amount} 点，当前余额 ${updated.credit_balance} 点`);
+      setStatusText(
+        t("admin.actions.creditsAdded", { username: updated.username, amount, balance: updated.credit_balance }),
+      );
       setError("");
     } catch (e) {
-      await handleApiError(e, "增加额度失败");
+      await handleApiError(e, t("admin.actions.addCreditsFailed"));
     }
   };
 
@@ -135,9 +146,9 @@ export function createUserActions(params: AdminActionsParams, errorHandler: Erro
       });
       setUsers((prev) => prev.map((x) => (x.user_id === updated.user_id ? updated : x)));
       setEditingUser(null);
-      setStatusText("用户分类已保存");
+      setStatusText(t("admin.actions.classificationSaved"));
     } catch (e) {
-      await handleApiError(e, "分类更新失败");
+      await handleApiError(e, t("admin.actions.updateClassificationFailed"));
     } finally {
       setSavingClass(false);
     }
@@ -145,12 +156,24 @@ export function createUserActions(params: AdminActionsParams, errorHandler: Erro
 
   const resetAdminApprovalToken = async (target: AdminUserSummary) => {
     if ((target.role || "").toLowerCase() !== "admin") return;
-    const newToken = (window.prompt(`请输入 ${target.username} 的新管理员令牌（至少12位）`) || "").trim();
-    if (!newToken || newToken.length < 12) return setError("新管理员令牌至少 12 位");
-    const approvalToken = (window.prompt("请输入你的审批令牌") || "").trim();
-    const ticketId = (window.prompt("请输入工单号") || "").trim();
-    const reason = (window.prompt("请输入原因（至少5个字符）") || "").trim();
-    if (!approvalToken || !ticketId || reason.length < 5) return setError("审批令牌/工单号/原因不完整");
+    const newTokenRaw = await promptInput({
+      title: t("admin.ui.resetToken"),
+      message: t("admin.actions.resetAdminTokenPrompt", { username: target.username }),
+      inputType: "password",
+    });
+    const newToken = (newTokenRaw || "").trim();
+    if (!newToken || newToken.length < 12) return setError(t("admin.actions.newAdminTokenRequirements"));
+    const approvalTokenRaw = await promptInput({
+      title: t("admin.ui.resetToken"),
+      message: t("admin.actions.yourApprovalTokenPrompt"),
+      inputType: "password",
+    });
+    const approvalToken = (approvalTokenRaw || "").trim();
+    const ticketIdRaw = await promptInput({ title: t("admin.ui.resetToken"), message: t("admin.actions.ticketIdPrompt") });
+    const ticketId = (ticketIdRaw || "").trim();
+    const reasonRaw = await promptInput({ title: t("admin.ui.resetToken"), message: t("admin.actions.reasonPrompt") });
+    const reason = (reasonRaw || "").trim();
+    if (!approvalToken || !ticketId || reason.length < 5) return setError(t("admin.actions.incompleteApprovalFields"));
     try {
       const updated = await appApi.adminResetApprovalToken({
         userId: target.user_id,
@@ -160,19 +183,31 @@ export function createUserActions(params: AdminActionsParams, errorHandler: Erro
         newAdminApprovalToken: newToken,
       });
       setUsers((prev) => prev.map((x) => (x.user_id === updated.user_id ? updated : x)));
-      setStatusText(`管理员令牌已重置：${updated.username}`);
+      setStatusText(t("admin.actions.adminTokenReset", { username: updated.username }));
     } catch (e) {
-      await handleApiError(e, "重置管理员令牌失败");
+      await handleApiError(e, t("admin.actions.resetAdminTokenFailed"));
     }
   };
 
   const resetUserPassword = async (target: AdminUserSummary) => {
-    const newPassword = (window.prompt(`请输入 ${target.username} 的新密码（至少12位，含大小写、数字和特殊字符）`) || "").trim();
+    const newPasswordRaw = await promptInput({
+      title: t("admin.ui.resetPassword"),
+      message: t("admin.actions.resetPasswordPrompt", { username: target.username }),
+      inputType: "password",
+    });
+    const newPassword = (newPasswordRaw || "").trim();
     if (!newPassword) return;
-    const approvalToken = (window.prompt("请输入你的审批令牌") || "").trim();
-    const ticketId = (window.prompt("请输入工单号") || "").trim();
-    const reason = (window.prompt("请输入重置原因（至少5个字符）") || "").trim();
-    if (!approvalToken || !ticketId || reason.length < 5) return setError("审批令牌/工单号/原因不完整");
+    const approvalTokenRaw = await promptInput({
+      title: t("admin.ui.resetPassword"),
+      message: t("admin.actions.yourApprovalTokenPrompt"),
+      inputType: "password",
+    });
+    const approvalToken = (approvalTokenRaw || "").trim();
+    const ticketIdRaw = await promptInput({ title: t("admin.ui.resetPassword"), message: t("admin.actions.ticketIdPrompt") });
+    const ticketId = (ticketIdRaw || "").trim();
+    const reasonRaw = await promptInput({ title: t("admin.ui.resetPassword"), message: t("admin.actions.resetReasonPrompt") });
+    const reason = (reasonRaw || "").trim();
+    if (!approvalToken || !ticketId || reason.length < 5) return setError(t("admin.actions.incompleteApprovalFields"));
     try {
       const updated = await appApi.adminResetPassword({
         userId: target.user_id,
@@ -182,9 +217,9 @@ export function createUserActions(params: AdminActionsParams, errorHandler: Erro
         newPassword,
       });
       setUsers((prev) => prev.map((x) => (x.user_id === updated.user_id ? updated : x)));
-      setStatusText(`用户密码已重置：${updated.username}`);
+      setStatusText(t("admin.actions.passwordReset", { username: updated.username }));
     } catch (e) {
-      await handleApiError(e, "重置密码失败");
+      await handleApiError(e, t("admin.actions.resetPasswordFailed"));
     }
   };
 
