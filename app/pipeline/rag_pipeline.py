@@ -19,7 +19,7 @@ from app.pipeline.contracts import (
     PipelineRoute,
     to_orchestration_request,
 )
-from app.pipeline.profiles import PipelineProfile, get_profile_definition
+from app.pipeline.profiles import PipelineProfile
 
 
 def _parse_citation_label(label: str) -> PipelineCitation:
@@ -110,7 +110,6 @@ class RAGPipeline:
         selected = request.profile if profile is None else PipelineProfile(profile)
         if selected != request.profile:
             raise ValueError("Pipeline profile must match PipelineRequest.profile")
-        get_profile_definition(selected)
         orchestration_request = to_orchestration_request(request)
         answer = await self._engine_for(selected).execute(orchestration_request)
         return self._result_from_final_answer(selected, answer)
@@ -127,7 +126,6 @@ class RAGPipeline:
     ) -> AsyncIterator[dict[str, Any]]:
         del result_postprocessor
         selected = request.profile
-        get_profile_definition(selected)
         orchestration_request = to_orchestration_request(request).model_copy(update={"execution_id": execution_id})
         async for event in self._engine_for(selected).execute_stream(orchestration_request):
             yield event

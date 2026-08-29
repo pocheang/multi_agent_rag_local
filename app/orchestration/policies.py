@@ -17,8 +17,6 @@ class ExecutionPolicy:
     """One policy object selects profile behavior on the shared Engine."""
 
     profile: PipelineProfile = PipelineProfile.ADVANCED
-    enable_route_validation: bool = True
-    enable_retrieval_quality: bool = False
     require_answer_validation: bool = False
     require_quality_report: bool = False
     allow_planning: bool = True
@@ -29,7 +27,6 @@ class ExecutionPolicy:
         selected = PipelineProfile(profile)
         return cls(
             profile=selected,
-            enable_retrieval_quality=True,
             require_answer_validation=True,
             require_quality_report=True,
             allow_planning=True,
