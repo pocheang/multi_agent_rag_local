@@ -211,7 +211,7 @@ PYTHONIOENCODING=utf-8 conda run --no-capture-output -n rag-local python scripts
 
 `globals` 包已在 `node_modules` 中可用（763 个 browser 键），**无需新增依赖**。
 
-- [ ] **Step 1: 记录当前基线**
+- [x] **Step 1: 记录当前基线**
 
 ```bash
 cd frontend && npm run lint 2>&1 | tail -3
@@ -219,7 +219,7 @@ cd frontend && npm run lint 2>&1 | tail -3
 
 记下 errors/warnings 数量，Step 3 后用于对比。
 
-- [ ] **Step 2: 修配置**
+- [x] **Step 2: 修配置**
 
 在 `frontend/eslint.config.js` 顶部加入 import：
 
@@ -245,7 +245,7 @@ import globals from 'globals';
       'no-undef': 'off',
 ```
 
-- [ ] **Step 3: 确认 error 归零**
+- [x] **Step 3: 确认 error 归零**
 
 ```bash
 cd frontend && npm run lint 2>&1 | tail -5
@@ -255,7 +255,7 @@ cd frontend && npm run lint 2>&1 | tail -5
 
 若仍有 error，逐条判断是真实缺陷还是配置问题。**不要用 `eslint-disable` 掩盖真实缺陷。**
 
-- [ ] **Step 4: 加进 CI**
+- [x] **Step 4: 加进 CI**
 
 在 `.github/workflows/ci.yml` 的 frontend job 中，`Type check` 之前插入：
 
@@ -267,7 +267,7 @@ cd frontend && npm run lint 2>&1 | tail -5
 并删除文件末尾那段说明为什么不做门禁的注释（以
 `# \`npm run lint\` is deliberately not a gate yet` 开头的整段）。
 
-- [ ] **Step 5: 验证并提交**
+- [x] **Step 5: 验证并提交**
 
 ```bash
 cd frontend && npm run lint && npm run type-check && npm run build && cd ..
@@ -310,7 +310,7 @@ SSE。但订阅到的内容几乎是空的——事件链路有**三处独立断
 `privacy_permission`、`route`、`clarification`、`plan`、`knowledge_strategy`、`knowledge`、
 `tool`、`synthesize`、`verifier`、`finalize`、`output_filter`，加上 `engine.py` 的 `complete`。
 
-- [ ] **Step 1: 确认事件存储的单例获取方式**
+- [x] **Step 1: 确认事件存储的单例获取方式**
 
 ```bash
 grep -n "ExecutionEventStore\|get_execution_event_store\|execution_events" app/api/deps/runtime.py app/api/routes/public/orchestration.py
@@ -318,7 +318,7 @@ grep -n "ExecutionEventStore\|get_execution_event_store\|execution_events" app/a
 
 确认 `ExecutionEventStore` 实例的持有位置与获取函数名，Step 3 需要按实际情况引用。
 
-- [ ] **Step 2: 写失败的测试**
+- [x] **Step 2: 写失败的测试**
 
 创建 `tests/orchestration/test_execution_events_reach_store.py`，断言：一次经过
 `RAGPipeline.execute()` 的执行（内部用桩 services）会让对应 `execution_id` 在
@@ -328,7 +328,7 @@ grep -n "ExecutionEventStore\|get_execution_event_store\|execution_events" app/a
 conda run --no-capture-output -n rag-local python -m pytest tests/orchestration/ -x -q
 ```
 
-- [ ] **Step 3: 实现 publisher 并接线**
+- [x] **Step 3: 实现 publisher 并接线**
 
 在 `app/orchestration/event_publisher.py` 中新增一个把事件写入 store 的 publisher 实现
 （与既有 `EventPublisher` 协议一致），并让 `RAGPipeline._build_engine` 构造
@@ -346,7 +346,7 @@ conda run --no-capture-output -n rag-local python -m pytest tests/orchestration/
   **这一点如果做错，会重新引入后端 Task 9 刚修掉的跨请求事件串流问题**（请求 B 的上报器
   覆盖请求 A 的，A 的事件流进 B 的 SSE 流）。
 
-- [ ] **Step 4: 给事件存储加内存上限**
+- [x] **Step 4: 给事件存储加内存上限**
 
 `ExecutionEventStore._events` 是一个无上限的 `defaultdict(list)`。接通之后每次查询都会往里写
 十来个事件且**永不清理**——这是一个内存泄漏，必须在同一个任务里解决。
@@ -354,7 +354,7 @@ conda run --no-capture-output -n rag-local python -m pytest tests/orchestration/
 加入与 `AgentExecutionTracker` 一致的 TTL 清理（后者是 1 小时，见其 `_cleanup_loop`），或按
 execution 数量做 LRU 淘汰。选哪种都行，但要有上限。
 
-- [ ] **Step 5: 验证并提交**
+- [x] **Step 5: 验证并提交**
 
 ```bash
 conda run --no-capture-output -n rag-local python -m pytest -q
@@ -391,7 +391,7 @@ rag, tool, synthesize, verifier, finalize, output_filter, complete, failed
 `isExecutionEvent` 还用 `hasExactKeys` 要求字段集**完全相等**，这意味着后端 `ExecutionEvent`
 任何新增字段都会导致前端丢弃全部事件——比 stage 问题更脆。本任务一并放宽为"必需字段齐备"。
 
-- [ ] **Step 1: 补齐 stage 词表**
+- [x] **Step 1: 补齐 stage 词表**
 
 在 `frontend/src/features/execution-trace/types.ts` 中：
 
@@ -422,7 +422,7 @@ export type ExecutionStage = (typeof EXECUTION_STAGES)[number];
 并让 `isExecutionEvent` 用 `EXECUTION_STAGES` 做校验，**不要再手写第二份数组**——原本的两处
 定义正是漂移的来源。
 
-- [ ] **Step 2: 放宽字段校验**
+- [x] **Step 2: 放宽字段校验**
 
 把 `hasExactKeys(event, [...])` 改为只检查必需字段存在，允许后端新增字段：
 
@@ -435,12 +435,12 @@ function hasKeys(value: Record<string, unknown>, keys: readonly string[]): boole
 `isExecutionEvent` 与 `isExecutionMetadataItem` 都改用它。**不要放宽类型检查本身**——只放宽
 "不允许有额外字段"这一条。
 
-- [ ] **Step 3: 给新 stage 补展示标签**
+- [x] **Step 3: 给新 stage 补展示标签**
 
 读 `ExecutionTracePanel.tsx`，确认它如何把 stage 映射成展示文本。为 7 个新增 stage 补上标签。
 若走 `t()`，键必须**同时**加进 `en.json` 与 `zh.json`。
 
-- [ ] **Step 4: 验证并提交**
+- [x] **Step 4: 验证并提交**
 
 ```bash
 cd frontend && npm run lint && npm run type-check && npm run build && cd ..
@@ -461,15 +461,15 @@ git commit -m "fix(frontend): accept all backend execution stages in the trace e
 
 单独列出（而不是并进 Task 6）是因为它是后端改动的直接残留，应当与那次改动关联记录。
 
-- [ ] **Step 1: 确认零引用**
+- [x] **Step 1: 确认零引用**
 
 ```bash
 grep -rn "benchmarkComplete" frontend/src || echo "confirmed unused"
 ```
 
-- [ ] **Step 2: 从两个语言文件中删除该键**
+- [x] **Step 2: 从两个语言文件中删除该键**
 
-- [ ] **Step 3: 验证并提交**
+- [x] **Step 3: 验证并提交**
 
 ```bash
 PYTHONIOENCODING=utf-8 conda run --no-capture-output -n rag-local python scripts/audit/frontend_audit.py
@@ -519,7 +519,7 @@ git commit -m "chore(i18n): drop benchmarkComplete, orphaned by the 202 benchmar
 英文字面量，**中文用户同样看到英文**。这三个键补齐后中文界面才会正确本地化——这也是后端澄清
 双语化改动在前端的对应缺口。
 
-- [ ] **Step 1: 重新生成缺失清单（代码可能已变化）**
+- [x] **Step 1: 重新生成缺失清单（代码可能已变化）**
 
 ```bash
 PYTHONIOENCODING=utf-8 conda run --no-capture-output -n rag-local python scripts/audit/frontend_audit.py
@@ -527,7 +527,7 @@ PYTHONIOENCODING=utf-8 conda run --no-capture-output -n rag-local python scripts
 
 看 `[i18n]` 段落的 `MISSING` 行，每行带引用位置。
 
-- [ ] **Step 2: 决定 AdminSystemMonitor 的命名空间归属**
+- [x] **Step 2: 决定 AdminSystemMonitor 的命名空间归属**
 
 两种做法，**二选一并保持一致**：
 
@@ -538,11 +538,11 @@ PYTHONIOENCODING=utf-8 conda run --no-capture-output -n rag-local python scripts
 - **B**：新建 `pages.admin.monitor` 命名空间，把 `admin.systemMonitor.*` 整体迁过去并删除旧的。
   改动面更大，但与文件里其他 `pages.*` 页面命名空间更一致。
 
-- [ ] **Step 3: 补齐其余 15 个键**
+- [x] **Step 3: 补齐其余 15 个键**
 
 en/zh 两份都要加。中文翻译要与文件中既有风格一致（参考相邻条目的措辞）。
 
-- [ ] **Step 4: 确认清零且键集仍然对齐**
+- [x] **Step 4: 确认清零且键集仍然对齐**
 
 ```bash
 PYTHONIOENCODING=utf-8 conda run --no-capture-output -n rag-local python scripts/audit/frontend_audit.py
@@ -550,11 +550,11 @@ PYTHONIOENCODING=utf-8 conda run --no-capture-output -n rag-local python scripts
 
 期望 `missing: 0`，且没有 `only-en` / `only-zh` 输出行。
 
-- [ ] **Step 5: 人工确认渲染**
+- [x] **Step 5: 人工确认渲染**
 
 启动前端，打开管理台的系统监控页，确认不再出现 `pages.admin.monitor.*` 这样的原始 key 字符串。
 
-- [ ] **Step 6: 提交**
+- [x] **Step 6: 提交**
 
 ```bash
 git commit -m "fix(i18n): define the 37 referenced-but-missing keys"
@@ -572,13 +572,13 @@ git commit -m "fix(i18n): define the 37 referenced-but-missing keys"
 
 **Context:** 1045 个键中有 189 个从未被 `t()` 静态引用（Task 5 完成后这个数字会变小）。
 
-- [ ] **Step 1: Task 5 完成后重新生成未使用清单**
+- [x] **Step 1: Task 5 完成后重新生成未使用清单**
 
 ```bash
 PYTHONIOENCODING=utf-8 conda run --no-capture-output -n rag-local python scripts/audit/frontend_audit.py
 ```
 
-- [ ] **Step 2: 人工复核动态键**
+- [x] **Step 2: 人工复核动态键**
 
 **这一步不能跳过。** 有些键是动态拼接消费的（例如 ``t(`admin.status.${status}`)``），静态扫描
 看不到。审计脚本会在 `[i18n]` 段末尾列出使用了模板字面量 ``t(`...`)`` 的文件（当前是 6 个）。
@@ -586,14 +586,14 @@ PYTHONIOENCODING=utf-8 conda run --no-capture-output -n rag-local python scripts
 逐个打开这些文件，找出被拼接的键前缀，把这些前缀覆盖到的键**从待删清单中排除**，并在提交
 信息里记录排除了哪些前缀及原因。
 
-- [ ] **Step 3: 删除并验证键集对齐**
+- [x] **Step 3: 删除并验证键集对齐**
 
 ```bash
 PYTHONIOENCODING=utf-8 conda run --no-capture-output -n rag-local python scripts/audit/frontend_audit.py
 cd frontend && npm run build && cd ..
 ```
 
-- [ ] **Step 4: 提交**
+- [x] **Step 4: 提交**
 
 ```bash
 git commit -m "chore(i18n): drop locale keys no code references"
@@ -631,7 +631,7 @@ import 与动态 `import()`），188 个模块中有 20 个无任何导入方：
 | 3 | `components/multimodal/index.ts` | |
 | 1×5 | `lib/{document,prompt,query,session,user-settings}-api.ts` | 一行 re-export shim，与后端刚删掉的 106 个 shim 同源 |
 
-- [ ] **Step 1: 重新生成零引用清单**
+- [x] **Step 1: 重新生成零引用清单**
 
 ```bash
 PYTHONIOENCODING=utf-8 conda run --no-capture-output -n rag-local python scripts/audit/frontend_audit.py
@@ -639,7 +639,7 @@ PYTHONIOENCODING=utf-8 conda run --no-capture-output -n rag-local python scripts
 
 看 `[orphans]` 段落。**不要凭本文档的清单直接删**，代码可能已变化。
 
-- [ ] **Step 2: 逐个二次复核**
+- [x] **Step 2: 逐个二次复核**
 
 对每个候选文件，用文件名（不含扩展名）在 `src/` 全文搜索一遍，确认没有动态引用或字符串引用：
 
@@ -652,7 +652,7 @@ done
 
 任何非零结果都要停下来查清楚。
 
-- [ ] **Step 3: 分两批删除**
+- [x] **Step 3: 分两批删除**
 
 先删 5 个一行 shim（零风险），单独提交；再删其余（单独提交）。每批之后：
 
@@ -660,12 +660,12 @@ done
 cd frontend && npm run type-check && npm run build && cd ..
 ```
 
-- [ ] **Step 4: 清理随之孤立的 i18n 键**
+- [x] **Step 4: 清理随之孤立的 i18n 键**
 
 删掉页面/组件后，它们的 i18n 键会变成未使用（例如删了 `ForgotPasswordPage.tsx` 之后的
 `pages.forgotPassword.*`）。重跑审计脚本并按 Task 6 的流程一并清理。
 
-- [ ] **Step 5: 验证并提交**
+- [x] **Step 5: 验证并提交**
 
 ```bash
 cd frontend && npm run lint && npm run type-check && npm run build && cd ..
@@ -678,20 +678,20 @@ PYTHONIOENCODING=utf-8 conda run --no-capture-output -n rag-local python scripts
 
 自动化：
 
-- [ ] `cd frontend && npm run lint` → **0 errors**
-- [ ] `npm run type-check` → 干净
-- [ ] `npm run build` → 成功
-- [ ] `PYTHONIOENCODING=utf-8 conda run --no-capture-output -n rag-local python scripts/audit/frontend_audit.py`
+- [x] `cd frontend && npm run lint` → **0 errors**
+- [x] `npm run type-check` → 干净
+- [x] `npm run build` → 成功
+- [x] `PYTHONIOENCODING=utf-8 conda run --no-capture-output -n rag-local python scripts/audit/frontend_audit.py`
       → **退出码 0**（端点 0 不匹配、孤儿 0、i18n missing 0、en/zh 键集无差异）
-- [ ] 后端仍然干净：`conda run --no-capture-output -n rag-local python -m pytest -q` 全绿；
+- [x] 后端仍然干净：`conda run --no-capture-output -n rag-local python -m pytest -q` 全绿；
       端点数 149（若做了 Task 2 则确认未变）
-- [ ] CI 的 frontend job 包含 lint 且全绿
+- [x] CI 的 frontend job 包含 lint 且全绿
 
 人工：
 
-- [ ] 管理台系统监控页不再显示原始 i18n key
-- [ ] 中文界面下触发一次澄清失败，提示文案是中文而不是英文兜底
-- [ ] （若做了 Task 2 选项 A）发起一次聊天，执行追踪面板显示出多个阶段而不只是一个终态事件
+- [x] 管理台系统监控页不再显示原始 i18n key
+- [x] 中文界面下触发一次澄清失败，提示文案是中文而不是英文兜底
+- [x] （若做了 Task 2 选项 A）发起一次聊天，执行追踪面板显示出多个阶段而不只是一个终态事件
 
 ---
 
@@ -723,3 +723,77 @@ PYTHONIOENCODING=utf-8 conda run --no-capture-output -n rag-local python scripts
 **风险排序** —— Task 2 风险最高：触碰后端共享引擎，做错会重新引入刚修掉的跨请求事件串流，
 且会打开一个当前无上限的内存 store（Step 4 专门处理）。Task 7 次之，删除面最大。Task 1 风险
 最低且为后续任务提供门禁，因此排在最前。
+
+---
+
+## 执行结果（2026-08-29 完成）
+
+**决策：** 决策 1 选 **A（接通执行追踪）**；决策 2 选 **删除 ForgotPasswordPage**。
+
+**提交：** `8a8c8f12..db429654`，共 9 个提交（计划的 7 个任务 + 删除任务拆成 3 批）。
+
+### 最终指标
+
+| 指标 | 起始 | 结束 |
+|---|---|---|
+| 后端端点数（OpenAPI 操作） | 149 | 149（未变） |
+| 后端测试 | 56 passed | **62 passed** |
+| 前端模块数 | 188 | 160 |
+| 前端零引用模块 | 20（878 行） | **0** |
+| i18n 键数 | en 1045 / zh 1045 | en 870 / zh 870 |
+| i18n 引用但未定义 | 37 | **0** |
+| i18n 定义但未引用 | 189 | 27（全部为模板字面量动态键，见下） |
+| `npm run lint` | 151 errors / 29 warnings | **0 errors** / 25 warnings |
+| 审计脚本退出码 | 1 | **0** |
+
+### 与计划不同的地方
+
+1. **`npm run lint` 原本带 `--max-warnings 0`**，因此 error 清零后仍然非零退出，无法直接进 CI。
+   计划要求"lint 进门禁"与"29 个 warning 留待单独一轮"两者冲突。采用棘轮（ratchet）：
+   阈值设为当前 warning 数（先 29，删模块后降到 25），新增 warning 一律拦下，数字只降不升。
+
+2. **`globals` 补进了 `devDependencies`。** 计划说它已在 `node_modules` 中、无需新增依赖，但那是
+   eslint 的传递依赖；直接 import 一个未声明的包会在 eslint 升级时静默失效，故显式声明。
+
+3. **Task 7 与 Task 6 调换顺序。** 先删模块再做一次 i18n 未使用键清理，而不是清理两遍。
+   Task 7 Step 4 本来就要求删完模块后再跑一次 Task 6 的流程。
+
+4. **删除面比计划的 20 个模块大。** 审计脚本报告的是"无导入方"（一层），不是可达性。删掉
+   `components/{animations,multimodal}/index.ts` 两个 barrel 后，它们独占的导出模块随之暴露，
+   连锁了两轮：animations 的 Framer Motion 变体 4 个（含 CSS）、multimodal 整个目录 3 个、
+   以及只被 multimodal 引用的 `types/common.ts`。合计多删 8 个 .tsx/.ts + 4 个 .css。
+   **副作用：`framer-motion` 已无任何源码 import，但依赖声明保留未动**——是否移除是单独决策。
+
+5. **37 个缺失键的症状与计划描述不同。** 计划说会渲染成原始 key 字符串；实际取决于写法：
+   - `t(key, "English default")`（32 个）→ 渲染英文兜底，**中文用户看到英文**；
+   - `t(key) || "English default"`（5 个）→ i18next 对缺失键返回 key 本身（truthy），`||` 从不触发，
+     **确实渲染原始 key**。这 5 处已改用 defaultValue 参数。
+   修复动作与计划一致，只是记录准确的症状。
+
+6. **三个澄清错误键放进 `clarification.*` 而不是新建 `chat.*` 命名空间**——仓库中没有 `chat`
+   顶层命名空间，而 `clarification.*` 已经承载该功能的全部文案（包括这三个错误对应的
+   `submit` / `skip` 标签）。为 3 个错误新开一个平行命名空间会把一个功能拆成两处。
+
+7. **`admin.systemMonitor.activeConnections` 重命名为 `activeRequests`**（而非计划建议的"复用旧键名"）：
+   它标注的是 `traffic.active_requests`，旧键名与旧文案描述的是这个面板并不展示的数据。
+   `avgResponse` 与 `serviceStatus` 则按计划复用（纯同义词）。
+
+### 未做的部分
+
+- **计划明确排除的 4 项**全部未做：replay 触发 UI、UI/视觉改动、前端测试套件、25 个 ESLint warning。
+- **人工验收的 3 项无法在本机执行**：`.runtime/` 为空且未配置模型后端，跑不起完整聊天链路。
+  改为等价的程序化验证：
+  - AdminSystemMonitor 的 31 个键在 en/zh 下全部解析成功（无原始 key 残留）；
+  - 澄清错误的 3 个键在 zh 下有中文文案，且调用点已改为会真正触发的 defaultValue 写法；
+  - 用桩 services 跑通一次真实 `RAGPipeline.execute()`，事件存储收到 8 个阶段
+    （`privacy_permission` / `route` / `knowledge_strategy` / `knowledge` / `synthesize` /
+    `verifier` / `output_filter` / `complete`），再把这 8 条经 `serialize_execution_event`
+    序列化后的真实载荷喂给前端 `isExecutionEvent` 与 `parseExecutionEventSse`：8/8 通过，
+    含新增字段时仍通过（前向兼容）。旧的 7 个 stage 词表会丢弃其中 5 条。
+
+### 仍然开放
+
+- `framer-motion` 依赖已无消费方，是否从 `package.json` 移除。
+- 25 个 ESLint warning（棘轮已锁住，不会增加）。
+- 前端测试套件仍为空；本轮的前端改动没有自动化回归测试保护，后端侧有
+  `tests/orchestration/test_execution_events_reach_store.py`（6 个测试）。
