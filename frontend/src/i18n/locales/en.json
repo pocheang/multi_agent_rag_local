@@ -401,7 +401,6 @@
       "exportFailed": "Export failed",
       "opsExported": "Operations report exported successfully",
       "runBenchmarkFailed": "Failed to run benchmark",
-      "benchmarkComplete": "Benchmark complete, trends updated",
       "benchmarkQueued": "Benchmark queued; refresh trends shortly to see the result",
       "reloadConfigFailed": "Failed to hot-reload config",
       "configReloaded": "Config hot-reloaded successfully",
