@@ -35,9 +35,15 @@ ruff check .                        # Lint check
 ruff format .                       # Format code
 ```
 
-Note (2026-08-28): `tests/` and `scripts/` were cleared ahead of the v0.7 rewrite — both
-will be rebuilt against the new architecture rather than patched. There is currently no
-test suite and no `scripts/init_db.py`.
+Note (2026-08-28): `tests/` and `scripts/` were cleared ahead of the v0.7 rewrite. `scripts/`
+is still empty (no `scripts/init_db.py`); `tests/` is being rebuilt incrementally alongside
+bug fixes — see Testing Strategy below.
+
+**Tests and lint**
+```bash
+make test                           # pytest -q
+make lint                           # ruff check . && ruff format --check .
+```
 
 Note (2026-08-29): A backend agent audit found several components documented above
 that no longer matched the running code — an orphaned router/clarification rewrite
@@ -46,6 +52,14 @@ an orphaned RAG fusion/vector duplicate (`app/agents/rag/{fusion.py::fuse_eviden
 an orphaned second quality-scoring engine (`app/agents/validation/quality_orchestrator.py`),
 and an unreachable ReAct tool loop (`app/agents/tool/react.py`). All were deleted; the
 claims above were corrected to describe what actually runs today.
+
+Note (2026-08-29, second pass): A full-backend audit found the chat path was not
+persisting messages, conversation context was filled but never read, the query
+endpoint never returned its execution_id, the `graph` route never queried the
+graph, and 184 modules (~13,000 lines) had zero importers. All were fixed or
+deleted; `app/` went from 583 to 371 Python files and Settings from 261 to 216
+fields. See `docs/superpowers/plans/2026-08-29-backend-full-audit-remediation.md`
+for the plan, what was deliberately left dormant, and what remains open.
 
 ### Frontend
 
@@ -106,9 +120,12 @@ The system has **3 primary components** and **3 optional components**:
 
 ### Pipeline Profile
 
-The system currently runs a single profile:
-
-- **advanced**: Multi-hop reasoning, web research, and full quality validation
+The system runs a single profile, **advanced** (web research and full quality
+validation). `ExecutionPolicy.for_profile` in `app/orchestration/policies.py` is the
+only place that decides what a profile enables. A parallel set of descriptors in
+`app/pipeline/profiles.py` (`ProfileCapabilities`, `CapabilityBudget`,
+`PROFILE_DEFINITIONS`) had no readers and had drifted into contradicting the policy;
+it was deleted on 2026-08-29, leaving only the `PipelineProfile` enum.
 
 ### Execution Flow
 
@@ -133,22 +150,44 @@ PipelineResult → returned to caller
 
 **Validation layers** (applied based on profile):
 1. **Route confidence checks**: Threshold-based validation
-2. **Retrieval quality scoring**: `app/agents/rag/relevance.py` implements a local-LLM (Ollama) batch relevance scorer, but it currently has no callers anywhere in the request pipeline — retrieval results are not quality-scored in production today.
+2. **Retrieval quality scoring**: none. A local-LLM (Ollama) batch relevance scorer existed in `app/agents/rag/relevance.py` with no callers anywhere in the request pipeline; it was deleted on 2026-08-29. Retrieval results are not quality-scored.
 3. **Answer validation**: Citation completeness, hallucination detection, NLI checks
-4. **Safety checks**: Regex-based PII/secret redaction (API keys, private keys, SSNs, credit card numbers, passwords, emails, phone numbers) via `app/services/answer_safety.py` and `app/agents/validation/rules.py`. There is no content-moderation/toxicity filter and no bias-detection implementation.
+4. **Safety checks**: Two independent regex redaction paths, with different pattern sets.
+   `app/services/answer_safety.py` runs on every finalized answer and covers OpenAI-style
+   keys, AWS access key ids, private-key headers, and `password=`/`token=` assignments;
+   it is gated by `ANSWER_SAFETY_SCAN_ENABLED`. `app/agents/validation/rules.py`
+   additionally matches SSN, credit-card, email and phone patterns, and runs inside the
+   validation cascade reached through the verifier. There is no content-moderation/toxicity
+   filter and no bias-detection implementation.
 
 **Citation-First Principle**: Factual claims must include inline citations `[doc_id:page]` during generation.
 
-**Note**: Quality validation is adjustable via profile settings within the `advanced` profile.
+**Dormant by design (2026-08-29)**: the following exist and are reachable but are
+switched off on the live request path. Turning any of them on is a cost/latency
+decision, not a bug fix — do not "fix" them by flipping the flag.
+
+- **Fact verification and self-review**: `app/agents/synthesizer/service.py` calls
+  `synthesize_answer(..., enable_fact_verification=False, enable_self_review=False)`.
+- **KnowledgeOrchestrator as top-level retrieval assembler**:
+  `KNOWLEDGE_ORCHESTRATOR_ENABLED` defaults to false, so retrieval goes through
+  `RAGAgentService`, which delegates to the same orchestrator internally.
+- **Router confidence calibration**: `ENABLE_CALIBRATION` defaults to false, so
+  `config/router_calibration.json` is not read.
+- **Clarification round caps**: hardcoded per intent in
+  `app/agents/clarification/rules.py::_MAX_ROUNDS`; there is no env override.
+
+**Note**: Quality validation is controlled by `ExecutionPolicy`, not by per-profile
+settings — see Pipeline Profile above.
 
 ### Retrieval Strategy
 
-**Hybrid Retrieval** ([app/retrievers/hybrid_retriever.py](app/retrievers/hybrid_retriever.py)):
+**Hybrid Retrieval** ([app/retrievers/hybrid/retriever.py](app/retrievers/hybrid/retriever.py)):
 - **Vector search**: Sentence-Transformers BGE-M3 embeddings → ChromaDB
 - **BM25 search**: Jieba tokenization → Rank-BM25
 - **Fusion**: Reciprocal Rank Fusion (RRF)
+- **Graph retrieval**: runs for both the `graph` and `hybrid` routes (fixed 2026-08-29; `graph` previously degraded silently to vector+BM25)
 - **Reranking**: BGE-Reranker-V2-M3 (top 5 results)
-- **Dynamic Top-K**: A complexity-adaptive calculator exists (`app/retrievers/hybrid/adaptive_params.py`, effective range ~6-16 results) but is only wired into the ReAct tool-search path and the offline `candidate_collection.py` pipeline. The default knowledge-node retrieval path used for ordinary chat queries currently retrieves a fixed `k=6` per source.
+- **Dynamic Top-K**: A complexity-adaptive calculator exists (`app/retrievers/hybrid/adaptive_params.py`, effective range ~6-16 results) but applies only inside `candidate_collection.py`. The knowledge-node path used for ordinary chat queries hardcodes `top_k=6` per source (`app/agents/rag/service.py`), so `DYNAMIC_RETRIEVAL_ENABLED` and the `DYNAMIC_*_CAP` settings do not affect it.
 
 ### Configuration System
 
@@ -161,6 +200,11 @@ PipelineResult → returned to caller
 `RUNTIME_ENV_FILE`). Setting values in a root `.env` has no effect; export real environment
 variables or run the render step first.
 
+`.runtime/` starts empty. Until `make config-render ENV=development` is run,
+`Settings` falls back to its hardcoded defaults for every field — including
+`MODEL_BACKEND=local`. Run the render step (or export real environment variables)
+before treating any configured value as active.
+
 **Additional config**: [app/agents/shared/config.py](app/agents/shared/config.py) contains component-specific settings (currently undergoing simplification - many constants are legacy tuning parameters that will be consolidated or removed)
 
 ### Technology Stack
@@ -168,7 +212,13 @@ variables or run the render step first.
 **Backend**: FastAPI + LangChain
 **Vector Store**: ChromaDB (local, persistent)
 **Graph Store**: Neo4j (optional)
-**Database**: SQLite (default, `DATABASE_URL`), with PostgreSQL (`asyncpg`) supported for production
+**Database**: SQLite only. Each store opens its own `sqlite3` connection
+(`app/services/auth/auth_service.py`, `app/services/sessions/history.py`,
+`app/services/sessions/metadata_db.py`, `app/services/prompts/store.py`,
+`app/wiki/store.py`, `app/retrievers/stores/vector.py`). There is no shared connection
+pool and no PostgreSQL support: an async SQLAlchemy pool existed but was never used by
+any business code and was removed on 2026-08-29, along with the `asyncpg`/`aiosqlite`
+dependencies and `DATABASE_URL`.
 **Frontend**: React 18 + TypeScript + Vite + Zustand (state) + i18next (i18n)
 **Models**: OpenAI GPT-5.5 (primary, `OPENAI_CHAT_MODEL`), Claude Haiku (multimodal image description/OCR triage in `app/services/multimodal/image_processor.py`; not used for retrieval-quality batch scoring, see Quality Assurance section), Sentence-Transformers (embeddings)
 **Deployment**: Docker Compose with deployment scripts in `deploy/scripts/`
@@ -214,21 +264,22 @@ Monitor these when modifying retrieval or synthesis:
   - `app/api/routes/public/` - Public-facing endpoints
   - `app/api/routes/admin/` - Admin-only endpoints
   - `app/api/routes/operations/` - Operational/health endpoints
-  - `app/api/routes/compatibility/` - Internal shared utilities (see below)
+  - `app/api/routes/internal/` - Contracts shared between route modules, never registered as routers
 - `app/retrievers/` - Retrieval implementations (vector, BM25, hybrid)
 - `app/core/` - Core configuration and utilities
 
 **Internal APIs**:
 
-The `app/api/routes/compatibility/` directory contains **internal shared utilities**, 
-not deprecated backward-compatibility code. Key modules:
+`app/api/routes/internal/pipeline_contract.py` exposes the standard RAG pipeline
+execution contract used by:
 
-- `pipeline_compat.py` - Standard RAG pipeline contract used by:
-  - `admin/ops.py` - Performance profiling and benchmarking
-  - `public/sessions.py` - Message rerun functionality
-  
-Despite the directory name, these are **active internal APIs** providing standardized 
-interfaces for RAG pipeline execution across different services.
+- `admin/ops.py` - Performance profiling and benchmarking
+- `public/sessions.py` - Message rerun functionality
+
+Note (2026-08-29): this module and the live chat/SSE routes previously lived in
+`app/api/routes/compatibility/`, whose name implied deprecated code and repeatedly
+misled readers. The chat endpoint moved to `public/query.py`, the SSE endpoint to
+`public/orchestration.py`, and this contract to `internal/`. No HTTP path changed.
 
 **Frontend Structure**:
 - `frontend/src/pages/` - Page components (ChatPage, LoginPage)
@@ -241,8 +292,20 @@ interfaces for RAG pipeline execution across different services.
 
 ### Testing Strategy
 
-No test suite currently exists (`tests/` was cleared ahead of the v0.7 rewrite). It will be
-rebuilt against the new architecture rather than patched onto the old one.
+`tests/` was cleared ahead of the v0.7 rewrite and is being rebuilt incrementally: each bug
+fix lands with the regression test that would have caught it, rather than as a separate
+back-filling effort. As of 2026-08-29 there are 56 tests covering the chat round trip,
+conversation context, graph routing, clarification, the async load guard, engine reuse,
+answer safety, retrieval module-global isolation, and a guard that every Settings field has
+a reader.
+
+`pytest` is configured in `pyproject.toml` (`testpaths = ["tests"]`, strict asyncio mode).
+CI runs it on every push and pull request (`.github/workflows/ci.yml`), together with ruff
+and an OpenAPI endpoint census that fails if a refactor silently drops routers.
+
+Note: do not use `len(app.routes)` to count endpoints. FastAPI 0.138+ stores an
+`_IncludedRouter` wrapper in `app.routes` instead of flattening child routes, so that number
+varies by version. Count OpenAPI operations instead; the current baseline is 149.
 
 ## Important Notes
 
@@ -250,11 +313,14 @@ rebuilt against the new architecture rather than patched onto the old one.
 - **Do not commit** files in `.gitignore`: `internal_docs/`, `.env`, `data/chroma/`, logs
 - **Document organization**: Use `docs/development/daily-logs/YYYY-MM-DD/` for daily work logs (create manually).
 - **Bilingual system**: UI and responses support Chinese/English. Language detection is automatic via `language_analytics.py` (100% Chinese or 100% English, no mixing)
-- **SSE streaming**: Real-time status updates use Server-Sent Events (see `app/api/routes/enhanced_query.py`)
+- **SSE streaming**: Execution-trace events are served by `app/api/routes/public/orchestration.py`
+  (`GET /api/v1/orchestration/executions/{execution_id}/events`). The query endpoint returns
+  `metadata.execution_id`, which the client uses to subscribe. The stream replays a finished
+  run's stage events; it is not a token-level answer stream.
 - **Retry logic**: Retrieval retries retain their existing fallback policy; answer regeneration is capped at one retry per request
 - **Circuit breaker**: Opens after 5 consecutive failures, closes after 60s cooldown
 - **Session management**: Frontend supports session rename and pin features (added 2026-08-16). See `docs/development/daily-logs/2026-08-16/` for implementation details.
-- **Clarification System** (added 2026-08-17, revised 2026-08-29): Dynamic clarification based on intent complexity, capped at 0-7 rounds depending on intent (`rag_design`: 7, `document_comparison`: 5, others: 5, already-complete: 0). Key services: `app/agents/clarification/service.py` and `rules.py`, wired as both the LangGraph `clarification` node and the resumable `/api/v1/clarification/check` HTTP endpoint (`app/api/routes/public/clarification.py`) — the two share one implementation. See daily logs for details.
+- **Clarification System** (added 2026-08-17, revised 2026-08-29): Dynamic clarification based on intent complexity, capped at 0-7 rounds depending on intent (`rag_design`: 7, `document_comparison`: 5, others: 5, already-complete: 0). Key services: `app/agents/clarification/service.py` and `rules.py`, wired as both the LangGraph `clarification` node and the resumable `/api/v1/clarification/check` HTTP endpoint (`app/api/routes/public/clarification.py`) — the two share one implementation. Questions exist in Chinese and English (`_QUESTIONS_ZH` / `_QUESTIONS_EN`), selected from `force_language` or the query's script. Inside the pipeline the clarifier has no collected context and therefore always asks; the node logs that and continues with the original query rather than failing the request — interactive clarification belongs to the HTTP endpoint.
 - **State management**: Frontend uses Zustand for global state, not Redux or Context API
 
 ## Common Issues
