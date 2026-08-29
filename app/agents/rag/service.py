@@ -303,7 +303,7 @@ class RAGAgentService:
             ("vector", self._vector),
             ("bm25", self._bm25),
         ]
-        if route.intent == "hybrid":
+        if route.effective_route in {"graph", "hybrid"}:
             enabled.append(("graph", self._graph))
         if "web" in route.allowed_capabilities:
             enabled.append(("web", self._web))
