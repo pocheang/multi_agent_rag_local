@@ -143,8 +143,6 @@ class RAGDegradationPolicy:
     This policy determines when partial retrieval failures are acceptable
     versus when the entire RAG operation should fail.
 
-    Note: This is distinct from OrchestrationDegradationPolicy in
-    app/orchestration/error_handling.py, which handles orchestration-level degradation.
     """
 
     def is_acceptable(
