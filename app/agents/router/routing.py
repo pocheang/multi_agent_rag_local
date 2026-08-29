@@ -143,7 +143,7 @@ Suggested skill: {skill}"""
 
         # Extract confidence from reasoning model
         reasoning_confidence = route_data.get("confidence")
-        if reasoning_confidence is not None and isinstance(reasoning_confidence, (int, float)):
+        if reasoning_confidence is not None and isinstance(reasoning_confidence, int | float):
             confidence = float(reasoning_confidence)
             confidence = max(0.0, min(1.0, confidence))
         else:
@@ -275,7 +275,7 @@ Suggested skill: {skill}"""
 
         # Extract LLM confidence if provided (for route decision confidence)
         llm_confidence = route_data.get("confidence")
-        if llm_confidence is not None and isinstance(llm_confidence, (int, float)):
+        if llm_confidence is not None and isinstance(llm_confidence, int | float):
             route_confidence = float(llm_confidence)
             # Clamp to valid range
             route_confidence = max(0.0, min(1.0, route_confidence))
