@@ -73,6 +73,9 @@ class PipelineRequest(_ImmutableContract):
     enable_context_tracking: bool = True
     force_language: str = ""
     request_id: str | None = None
+    # Ties the stage events this run emits to the trace the caller already
+    # opened, so GET /api/v1/orchestration/executions/{id}/events finds them.
+    execution_id: str | None = None
     runtime_context: Any | None = Field(default=None, exclude=True)
 
     @property
@@ -131,6 +134,7 @@ def to_orchestration_request(request: PipelineRequest) -> OrchestrationRequest:
         enable_context_tracking=request.enable_context_tracking,
         force_language=request.force_language,
         request_id=request.request_id,
+        execution_id=request.execution_id,
         runtime_context=request.runtime_context,
     )
 

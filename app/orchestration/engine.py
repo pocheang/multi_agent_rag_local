@@ -19,6 +19,7 @@ from app.domain.workflow import (
     VerificationDecision,
 )
 from app.orchestration.event_publisher import EventPublisher, NullEventPublisher
+from app.orchestration.execution_events import current_execution_id
 from app.orchestration.langgraph.checkpoint import checkpoint_config
 from app.orchestration.langgraph.workflow import build_workflow
 from app.orchestration.policies import ExecutionPolicy
@@ -217,6 +218,21 @@ class OrchestrationEngine:
         timeout_config = self._timeout_config or get_timeout_config(request.profile)
         budget = ExecutionBudget(timeout_config)
         self._services.bind_event_reporter(reporter)
+        # Tell the publisher which execution these events belong to.  Scoped to
+        # this task's context, and reset below, so a shared engine never files
+        # one request's events under another request's id.
+        execution_token = current_execution_id.set(request.execution_id)
+        try:
+            return await self._run_workflow(request, reporter, budget)
+        finally:
+            current_execution_id.reset(execution_token)
+
+    async def _run_workflow(
+        self,
+        request: OrchestrationRequest,
+        reporter: Callable[[ExecutionEvent], Awaitable[None]],
+        budget: ExecutionBudget,
+    ) -> FinalAnswer:
         persistence_config = checkpoint_config(request)
         workflow = self._workflow
         invoke_config: dict[str, Any] = {"recursion_limit": self._recursion_limit}

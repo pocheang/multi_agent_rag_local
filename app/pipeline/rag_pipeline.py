@@ -9,6 +9,8 @@ from typing import Any, Protocol
 from app.domain.contracts import FinalAnswer
 from app.orchestration.capabilities import CoreCapabilities
 from app.orchestration.engine import OrchestrationEngine
+from app.orchestration.event_publisher import ExecutionStoreEventPublisher
+from app.orchestration.execution_events import get_default_execution_event_store
 from app.orchestration.policies import ExecutionPolicy
 from app.pipeline.contracts import (
     DegradationEvent,
@@ -82,8 +84,12 @@ class RAGPipeline:
         return engine
 
     def _build_engine(self, profile: PipelineProfile) -> PipelineExecutionEngine:
+        # Without a publisher the engine falls back to NullEventPublisher and
+        # every stage event the pipeline reports is discarded, leaving the SSE
+        # trace endpoint with nothing but the tracker's terminal event.
         return OrchestrationEngine(
             services=self.capabilities.orchestration_services(),
+            publisher=ExecutionStoreEventPublisher(get_default_execution_event_store()),
             policy=ExecutionPolicy.for_profile(profile),
         )
 

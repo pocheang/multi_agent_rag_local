@@ -255,6 +255,7 @@ async def _process_advanced_rag_query_impl(
             source_scope=SourceScope(allowed_sources=frozenset(allowed_sources)),
             enable_decomposition=request_data.enable_decomposition,
             enable_self_rag=request_data.enable_self_rag,
+            execution_id=execution_id,
         )
         pipeline_result = await RAGPipeline().execute(pipeline_request)
         plan_data = pipeline_result.execution_metadata.get("plan")

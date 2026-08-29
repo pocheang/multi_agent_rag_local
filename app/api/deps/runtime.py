@@ -20,7 +20,7 @@ from app.mcp.authorization import AuthorizationPolicy
 from app.mcp.contracts import ToolCall, ToolDefinition
 from app.mcp.gateway import MCPGateway
 from app.mcp.registry import ToolRegistry
-from app.orchestration.execution_events import ExecutionEventStore
+from app.orchestration.execution_events import ExecutionEventStore, get_default_execution_event_store
 from app.orchestration.request import RequestActor
 from app.services.connectors.management import ConnectorManagementService, probe_http_connector
 from app.services.connectors.metadata_repository import ConnectorMetadataRepository
@@ -43,7 +43,9 @@ class AppServices:
 def build_app_services() -> AppServices:
     """Build governed tools and connector services around shared application state."""
     approvals = ApprovalStore()
-    execution_events = ExecutionEventStore()
+    # The same process-wide store RAGPipeline publishes into; a private
+    # instance here would leave the SSE endpoint blind to pipeline events.
+    execution_events = get_default_execution_event_store()
     registry = ToolRegistry(authorization=AuthorizationPolicy(), approvals=approvals, execution_events=execution_events)
     seed = str(settings.api_settings_encryption_key or "").strip()
     if not seed:
