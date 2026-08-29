@@ -14,10 +14,10 @@ from app.api.routes.admin import ops as admin_ops
 from app.api.routes.admin import settings as admin_settings
 from app.api.routes.admin import users as admin_users
 from app.api.routes.admin import web_activity as web_activity_admin
-from app.api.routes.compatibility import advanced_rag, orchestration
 from app.api.routes.operations import agent_health, agent_tracking, analytics, evaluation, health
 from app.api.routes.optimization import performance as optimization_performance
-from app.api.routes.public import auth, clarification, connectors, documents, prompts
+from app.api.routes.public import auth, clarification, connectors, documents, orchestration, prompts
+from app.api.routes.public import query as advanced_rag
 from app.api.routes.public import sessions as public_sessions
 
 # These modules are the sole source of router objects; this registry adds no

@@ -3,8 +3,7 @@
 ⚠️ INTERNAL API - Not for external use
 
 This module provides the canonical RAG pipeline execution interface used
-internally by multiple services. Despite being in the 'compatibility' directory,
-this is NOT deprecated code - it's an active internal API.
+internally by multiple services.
 
 Purpose:
     Standardized RAG pipeline execution with consistent parameters and return

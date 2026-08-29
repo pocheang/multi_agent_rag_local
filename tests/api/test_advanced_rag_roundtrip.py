@@ -14,7 +14,7 @@ from typing import Any
 
 import pytest
 
-from app.api.routes.compatibility import advanced_rag
+from app.api.routes.public import query as advanced_rag
 from app.pipeline.contracts import PipelineResult, PipelineRoute
 from app.services.sessions.history import HistoryStore
 

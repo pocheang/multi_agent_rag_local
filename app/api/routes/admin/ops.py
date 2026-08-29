@@ -28,7 +28,7 @@ from app.api.dependencies import (
     runtime_metrics,
     settings,
 )
-from app.api.routes.compatibility.pipeline_compat import execute_standard_compatibility
+from app.api.routes.internal.pipeline_contract import execute_standard_compatibility
 from app.api.transport.errors import bad_request, service_unavailable
 from app.api.transport.middleware import get_request_metrics
 from app.services.models.config_store import get_global_model_settings, public_global_model_settings

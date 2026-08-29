@@ -16,7 +16,7 @@ from app.api.dependencies import (
     _require_valid_session_id,
     _reserve_chat_credit,
 )
-from app.api.routes.compatibility.pipeline_compat import execute_standard_compatibility
+from app.api.routes.internal.pipeline_contract import execute_standard_compatibility
 from app.api.schemas import (
     LongTermMemoryItem,
     MessageUpdateRequest,
