@@ -6,6 +6,7 @@ import re
 import time
 from functools import lru_cache
 from types import SimpleNamespace
+from typing import Any
 
 from app.core.config import get_settings
 from app.domain.text import normalize_string
@@ -57,6 +58,25 @@ def _anthropic_relay_base_url(base_url: str) -> str:
 _TOKEN_RE = re.compile(r"[A-Za-z0-9_\-]{2,}|[\u4e00-\u9fff]")
 
 
+def _normalize_messages(messages: Any) -> list[tuple[str, str]]:
+    """Normalize a LangChain-style ``.invoke()``/``.ainvoke()`` argument into
+    ``(role, content)`` pairs. A bare string (the standard shorthand for a single
+    human message, and what non-app-internal callers like SelfRAGEvaluator and
+    QueryDecomposer pass) is treated as one human message rather than iterated
+    character by character."""
+    if isinstance(messages, str):
+        return [("human", messages)]
+    pairs: list[tuple[str, str]] = []
+    for item in messages or []:
+        if isinstance(item, tuple) and len(item) >= 2:
+            pairs.append((str(item[0]).lower(), str(item[1] or "")))
+        else:
+            role = str(getattr(item, "type", getattr(item, "role", "")) or "").lower()
+            content = str(getattr(item, "content", item) or "")
+            pairs.append((role, content))
+    return pairs
+
+
 class LocalHashEmbeddings:
     """Deterministic local embeddings for offline/dev RAG smoke use."""
 
@@ -94,13 +114,7 @@ class LocalEvidenceChatModel:
     def _message_text(self, messages) -> tuple[str, str]:
         system_parts: list[str] = []
         human_parts: list[str] = []
-        for item in messages or []:
-            if isinstance(item, tuple) and len(item) >= 2:
-                role = str(item[0]).lower()
-                content = str(item[1] or "")
-            else:
-                role = str(getattr(item, "type", getattr(item, "role", "")) or "").lower()
-                content = str(getattr(item, "content", item) or "")
+        for role, content in _normalize_messages(messages):
             if role in {"system", "ai", "assistant"}:
                 system_parts.append(content)
             else:
@@ -164,7 +178,23 @@ class LocalEvidenceChatModel:
             return SimpleNamespace(
                 content='{"is_correct":true,"issues":[],"improved_answer":"","analysis":"local_review_skipped"}'
             )
+        if "query decomposition expert" in human_text.lower():
+            return SimpleNamespace(content=self._decomposition_echo(human_text))
         return SimpleNamespace(content=self._answer(human_text))
+
+    def _decomposition_echo(self, prompt_text: str) -> str:
+        """This offline backend can't actually decompose a query; echo it back as a
+        single sub-query so callers (QueryDecomposer) fall back to the original
+        question instead of receiving unrelated placeholder text as a "sub-query"."""
+        match = re.search(r"Query:\s*(.+)", prompt_text)
+        query = match.group(1).strip() if match else prompt_text.strip()
+        return f"1. {query}"
+
+    async def ainvoke(self, messages):
+        """Async form of invoke(); this backend is pure local computation (no I/O),
+        so no actual awaiting is needed, only interface parity with the other
+        chat model wrappers below that callers rely on for `.ainvoke()`."""
+        return self.invoke(messages)
 
     def stream(self, messages):
         """Stream response with simulated typing effect for better UX."""
@@ -220,13 +250,7 @@ class AnthropicRelayChatModel:
     def _message_payload(self, messages) -> dict:
         system_parts: list[str] = []
         out_messages: list[dict[str, str]] = []
-        for item in messages or []:
-            if isinstance(item, tuple) and len(item) >= 2:
-                role = str(item[0]).lower()
-                content = str(item[1] or "")
-            else:
-                role = str(getattr(item, "type", getattr(item, "role", "")) or "").lower()
-                content = str(getattr(item, "content", item) or "")
+        for role, content in _normalize_messages(messages):
             if role == "system":
                 if content:
                     system_parts.append(content)

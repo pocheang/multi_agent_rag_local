@@ -15,6 +15,8 @@ export function usePerformanceMonitoring(enabled: boolean = true) {
   useEffect(() => {
     if (!enabled || typeof window === "undefined") return;
 
+    const observers: PerformanceObserver[] = [];
+
     // Report metrics to console (can be sent to analytics service)
     const reportMetric = (metric: WebVitalsMetric) => {
       console.log(`[Performance] ${metric.name}:`, metric.value.toFixed(2), "ms");
@@ -45,6 +47,7 @@ export function usePerformanceMonitoring(enabled: boolean = true) {
           }
         });
         observer.observe({ entryTypes: ["largest-contentful-paint"] });
+        observers.push(observer);
       } catch (e) {
         console.warn("LCP observation failed:", e);
       }
@@ -68,6 +71,7 @@ export function usePerformanceMonitoring(enabled: boolean = true) {
           });
         });
         observer.observe({ entryTypes: ["first-input"] });
+        observers.push(observer);
       } catch (e) {
         console.warn("FID observation failed:", e);
       }
@@ -93,6 +97,7 @@ export function usePerformanceMonitoring(enabled: boolean = true) {
           });
         });
         observer.observe({ entryTypes: ["layout-shift"] });
+        observers.push(observer);
       } catch (e) {
         console.warn("CLS observation failed:", e);
       }
@@ -103,13 +108,19 @@ export function usePerformanceMonitoring(enabled: boolean = true) {
     observeCLS();
 
     // Measure page load time
-    window.addEventListener("load", () => {
+    const reportPageLoad = () => {
       if (window.performance && window.performance.timing) {
         const timing = window.performance.timing;
         const loadTime = timing.loadEventEnd - timing.navigationStart;
         console.log(`[Performance] Page Load Time: ${loadTime}ms`);
       }
-    });
+    };
+    window.addEventListener("load", reportPageLoad);
+
+    return () => {
+      observers.forEach((observer) => observer.disconnect());
+      window.removeEventListener("load", reportPageLoad);
+    };
   }, [enabled]);
 }
 

@@ -402,7 +402,10 @@ def run_benchmark(
         queries: list[str] = []
     else:
         queries = [line.strip() for line in query_path.read_text(encoding="utf-8").splitlines() if line.strip()]
-    queries = queries[: max(1, min(int(max_queries), 100))]
+    # Capped well below the historical 100: each query is a full synchronous pipeline
+    # round trip run serially inside one FastAPI threadpool worker, so a large batch
+    # can block that worker for minutes.
+    queries = queries[: max(1, min(int(max_queries), 30))]
     if not queries:
         raise ValueError("benchmark query set is empty")
 
@@ -448,7 +451,9 @@ class _HistoryStore(Protocol):
 
 def _collect_replay_questions(*, history_store: _HistoryStore, max_questions: int) -> list[str]:
     """Collect bounded historical user questions in their persisted order."""
-    max_questions = max(1, min(int(max_questions or 30), 200))
+    # Capped well below the historical 200 for the same reason as run_benchmark: this
+    # runs serially inside one synchronous FastAPI threadpool worker.
+    max_questions = max(1, min(int(max_questions or 30), 50))
     questions: list[str] = []
     for session in history_store.list_sessions():
         session_id = str(session.get("session_id", "") or "")

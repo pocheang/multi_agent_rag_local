@@ -8,6 +8,7 @@ type Props = {
   sectionsHidden: boolean;
   onToggleSidebar: () => void;
   onOpenSettings: () => void;
+  onOpenSessionManagement: () => void;
   onToggleTopbar: () => void;
   onToggleSections: () => void;
 };
@@ -17,6 +18,7 @@ export function ChatTopbar({
   topbarHidden,
   sectionsHidden,
   onOpenSettings,
+  onOpenSessionManagement,
   onToggleTopbar,
   onToggleSections,
 }: Props) {
@@ -56,6 +58,7 @@ export function ChatTopbar({
           onToggleTopbar={onToggleTopbar}
           onToggleSections={onToggleSections}
           onOpenSettings={onOpenSettings}
+          onOpenSessionManagement={onOpenSessionManagement}
         />
       </div>
     </header>

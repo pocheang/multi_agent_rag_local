@@ -37,23 +37,6 @@ class ConversationTurn(ImmutableContract):
     content: str
 
 
-class RetryBudget(ImmutableContract):
-    """Request-owned retry budget shared by every orchestration stage."""
-
-    max_attempts: int = Field(default=2, ge=0)
-    consumed: int = Field(default=0, ge=0)
-
-    def consume(self) -> RetryBudget:
-        """Return a new budget after one attempt, or fail closed when empty."""
-        if self.consumed >= self.max_attempts:
-            raise RuntimeError("retry budget exhausted")
-        return self.model_copy(update={"consumed": self.consumed + 1})
-
-    @property
-    def remaining(self) -> int:
-        return max(0, self.max_attempts - self.consumed)
-
-
 class OrchestrationRequest(ImmutableContract):
     """All typed request data available to orchestration stages."""
 
@@ -72,7 +55,6 @@ class OrchestrationRequest(ImmutableContract):
     force_language: str = ""
     request_id: str | None = None
     execution_id: str | None = None
-    retry_budget: RetryBudget = Field(default_factory=RetryBudget)
     runtime_context: Any | None = Field(default=None, exclude=True)
 
     @property

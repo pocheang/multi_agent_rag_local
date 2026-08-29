@@ -277,6 +277,14 @@ class Settings(BaseSettings):
     alert_webhook_url: str = Field(default="", alias="ALERT_WEBHOOK_URL")
     alert_webhook_allowlist: str = Field(default="", alias="ALERT_WEBHOOK_ALLOWLIST")  # csv domains
     alert_min_interval_seconds: int = Field(default=60, alias="ALERT_MIN_INTERVAL_SECONDS")
+    alert_slack_webhook_url: str = Field(default="", alias="ALERT_SLACK_WEBHOOK_URL")
+    alert_email_smtp_host: str = Field(default="", alias="ALERT_EMAIL_SMTP_HOST")
+    alert_email_smtp_port: int = Field(default=587, alias="ALERT_EMAIL_SMTP_PORT")
+    alert_email_smtp_username: str = Field(default="", alias="ALERT_EMAIL_SMTP_USERNAME")
+    alert_email_smtp_password: str = Field(default="", alias="ALERT_EMAIL_SMTP_PASSWORD")
+    alert_email_use_tls: bool = Field(default=True, alias="ALERT_EMAIL_USE_TLS")
+    alert_email_from: str = Field(default="", alias="ALERT_EMAIL_FROM")
+    alert_email_to: str = Field(default="", alias="ALERT_EMAIL_TO")  # csv recipients
     response_signing_enabled: bool = Field(default=True, alias="RESPONSE_SIGNING_ENABLED")
     response_signing_secret: str = Field(default="", alias="RESPONSE_SIGNING_SECRET")
     response_signing_active_kid: str = Field(default="v1", alias="RESPONSE_SIGNING_ACTIVE_KID")

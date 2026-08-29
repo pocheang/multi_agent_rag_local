@@ -153,6 +153,7 @@ class RAGPipeline:
             for item in answer.evidence.items
         )
         quality = answer.quality_report.model_dump(mode="json") if answer.quality_report is not None else {}
+        plan = answer.evidence.plan
         metadata = {
             **dict(answer.execution_metadata),
             "profile": profile.value,
@@ -161,6 +162,17 @@ class RAGPipeline:
             "validation": answer.validation.model_dump(mode="json"),
             "grounding": dict(answer.grounding),
             "safety": dict(answer.safety),
+            "plan": (
+                None
+                if plan is None
+                else {
+                    "tasks": [
+                        {"task_id": task.task_id, "prompt": task.prompt, "depends_on": list(task.depends_on)}
+                        for task in plan.tasks
+                    ],
+                    "fallback_reason": plan.plan_fallback_reason,
+                }
+            ),
         }
         degradations = (
             ()

@@ -196,4 +196,19 @@ def _retrieval_budget(route: RouteDecision) -> int:
     return budget
 
 
-__all__ = ["PlanLimitError", "PlannerAgentService", "PlannerLimits"]
+async def default_llm_decompose(question: str) -> tuple[str, ...]:
+    """Decompose a complex query into sub-queries with the real LLM-backed decomposer.
+
+    Only reached when a request explicitly sets ``enable_decomposition=True`` (opt-in
+    on ``OrchestrationRequest``); every other request keeps going through
+    ``_direct_plan``/``_comparison_plan`` unaffected.
+    """
+    from app.services.models.runtime import get_reasoning_model
+    from app.services.query.decomposer import QueryDecomposer
+
+    decomposer = QueryDecomposer(get_reasoning_model(temperature=0.3))
+    result = await decomposer.decompose(question)
+    return tuple(result.sub_queries)
+
+
+__all__ = ["PlanLimitError", "PlannerAgentService", "PlannerLimits", "default_llm_decompose"]

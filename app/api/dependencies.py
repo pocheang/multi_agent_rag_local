@@ -9,6 +9,7 @@ import logging
 import re
 import threading
 import uuid
+from contextlib import contextmanager
 from dataclasses import dataclass
 from typing import Any
 
@@ -22,7 +23,7 @@ from app.api.deps.sessions import (
     _history_store_for_user,
 )
 from app.api.schemas import AdminModelSettingsResponse, UserApiSettings, UserApiSettingsView
-from app.api.transport.errors import bad_request, forbidden
+from app.api.transport.errors import bad_request, forbidden, rate_limited, service_unavailable
 from app.api.utils.auth_helpers import (
     _audit,
 )
@@ -36,6 +37,7 @@ from app.services.auth.user_manager import InsufficientCreditsError
 from app.services.auto_ingest_watcher import AutoIngestWatcher
 from app.services.models.config_store import get_global_model_settings, public_global_model_settings
 from app.services.prompts.store import PromptStore
+from app.services.query.guard import QueryOverloadedError, QueryRateLimitedError
 from app.services.query_guard import QueryLoadGuard
 from app.services.runtime.background_queue import BackgroundTaskQueue
 from app.services.runtime.query_result_cache import QueryResultCache
@@ -48,10 +50,31 @@ settings = get_settings()
 logger = logging.getLogger(__name__)
 
 
+@contextmanager
 def _reserve_chat_credit(request: Request, user: dict[str, Any], resource_type: str):
-    """Reserve one chat credit or return a stable quota error to the client."""
+    """Acquire the query load guard, then reserve one chat credit.
+
+    Composes both gates every query entry point needs: per-user rate limiting
+    plus bounded server-wide concurrency (``QueryLoadGuard``), and the
+    existing per-user credit balance check.
+    """
+    user_key = str(user.get("user_id", "") or "") or "anonymous"
     try:
-        return auth_service.chat_credit_reservation(str(user.get("user_id", "")))
+        with get_query_runtime().query_guard.acquire(user_key):
+            with auth_service.chat_credit_reservation(str(user.get("user_id", ""))) as credit:
+                yield credit
+    except (QueryRateLimitedError, QueryOverloadedError) as exc:
+        _audit(
+            request,
+            action="query.load_guard",
+            resource_type=resource_type,
+            result="blocked",
+            user=user,
+            detail=str(exc),
+        )
+        if isinstance(exc, QueryRateLimitedError):
+            raise rate_limited(str(exc)) from exc
+        raise service_unavailable(str(exc)) from exc
     except InsufficientCreditsError as exc:
         _audit(
             request,

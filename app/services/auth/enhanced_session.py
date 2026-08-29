@@ -9,6 +9,7 @@ Provides secure session management with:
 """
 
 import json
+import logging
 import secrets
 import time
 from datetime import datetime
@@ -21,6 +22,8 @@ try:
     REDIS_AVAILABLE = True
 except ImportError:
     REDIS_AVAILABLE = False
+
+logger = logging.getLogger(__name__)
 
 
 class SessionStore:
@@ -40,14 +43,14 @@ class SessionStore:
                 self.redis_client = redis.from_url(redis_url, decode_responses=True)
                 self.redis_client.ping()
                 self.use_redis = True
-                print(f"✓ SessionStore: Using Redis at {redis_url}")
+                logger.info(f"SessionStore: Using Redis at {redis_url}")
             except Exception as e:
-                print(f"⚠ SessionStore: Redis unavailable ({e}), falling back to file storage")
+                logger.warning(f"SessionStore: Redis unavailable ({e}), falling back to file storage")
                 self.redis_client = None
 
         if not self.use_redis:
             self.fallback_path.parent.mkdir(parents=True, exist_ok=True)
-            print(f"✓ SessionStore: Using file storage at {self.fallback_path}")
+            logger.info(f"SessionStore: Using file storage at {self.fallback_path}")
 
     def set(self, key: str, value: dict[str, Any], ttl_seconds: int = 86400):
         """Store session data with TTL."""
@@ -56,7 +59,7 @@ class SessionStore:
                 self.redis_client.setex(f"session:{key}", ttl_seconds, json.dumps(value))
                 return True
             except Exception as e:
-                print(f"⚠ Redis set failed: {e}, falling back to file")
+                logger.warning(f"Redis set failed: {e}, falling back to file")
                 self.use_redis = False
 
         # File fallback
@@ -72,7 +75,7 @@ class SessionStore:
                 data = self.redis_client.get(f"session:{key}")
                 return json.loads(data) if data else None
             except Exception as e:
-                print(f"⚠ Redis get failed: {e}, falling back to file")
+                logger.warning(f"Redis get failed: {e}, falling back to file")
                 self.use_redis = False
 
         # File fallback
@@ -114,7 +117,7 @@ class SessionStore:
             for key in expired:
                 del sessions[key]
             self._save_file_sessions(sessions)
-            print(f"✓ Cleaned up {len(expired)} expired sessions")
+            logger.info(f"Cleaned up {len(expired)} expired sessions")
 
     def _load_file_sessions(self) -> dict[str, dict]:
         """Load sessions from file."""
@@ -132,7 +135,7 @@ class SessionStore:
             with open(self.fallback_path, "w") as f:
                 json.dump(sessions, f, indent=2)
         except Exception as e:
-            print(f"⚠ Failed to save sessions: {e}")
+            logger.error(f"Failed to save sessions: {e}")
 
 
 class EnhancedSessionManager:

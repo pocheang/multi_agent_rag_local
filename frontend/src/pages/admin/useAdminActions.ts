@@ -1,4 +1,5 @@
-import { ApiError } from "@/lib/api";
+import { useTranslation } from "react-i18next";
+import { createApiErrorHandler } from "@/lib/api-error-handler";
 import type { AdminActionsParams } from "./actions/types";
 import { createUserActions } from "./actions/userActions";
 import { createModelActions } from "./actions/modelActions";
@@ -7,12 +8,14 @@ import { createSystemLogActions } from "./actions/systemLogActions";
 import { createOpsActions } from "./actions/opsActions";
 
 export function useAdminActions(params: AdminActionsParams) {
+  const { t } = useTranslation();
   const { onLogout, setError } = params;
 
-  const handleApiError = async (e: unknown, fallback: string) => {
-    if (e instanceof ApiError && e.status === 401) return onLogout();
-    setError(e instanceof Error ? e.message : fallback);
-  };
+  const handleApiError = createApiErrorHandler({
+    onLogout,
+    onError: setError,
+    sessionExpiredMessage: t("common.sessionExpired"),
+  });
 
   const errorHandler = { handleApiError };
 

@@ -7,7 +7,7 @@ from typing import Any
 
 from app.agents.clarification.service import ClarificationAgentService
 from app.agents.knowledge.service import KnowledgeAgentService
-from app.agents.planner.service import PlannerAgentService
+from app.agents.planner.service import PlannerAgentService, default_llm_decompose
 from app.agents.rag.service import RAGAgentService
 from app.agents.router.service import RouterAgentService
 from app.agents.synthesizer.service import SynthesizerAgentService
@@ -28,7 +28,9 @@ class CoreCapabilities:
     typed_router: RouterAgentService = field(default_factory=RouterAgentService)
     typed_clarifier: ClarificationAgentService = field(default_factory=ClarificationAgentService)
     typed_knowledge: KnowledgeAgentService = field(default_factory=KnowledgeAgentService)
-    typed_planner: PlannerAgentService = field(default_factory=PlannerAgentService)
+    typed_planner: PlannerAgentService = field(
+        default_factory=lambda: PlannerAgentService(decompose=default_llm_decompose)
+    )
     typed_rag: RAGAgentService = field(default_factory=RAGAgentService)
     typed_knowledge_orchestrator: KnowledgeOrchestrator = field(default_factory=KnowledgeOrchestrator)
     typed_tools: ToolAgentService = field(default_factory=ToolAgentService)

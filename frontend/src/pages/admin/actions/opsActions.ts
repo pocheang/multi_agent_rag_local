@@ -1,7 +1,10 @@
+import i18n from "@/i18n/config";
 import { appApi } from "@/lib/api";
 import type { AdminActionsParams, ErrorHandler } from "./types";
 import { resolveUserIdFromInput } from "../utils";
 import { downloadFile, generateTimestampedFilename } from "@/lib/file-utils";
+
+const t = i18n.t.bind(i18n);
 
 export function createOpsActions(params: AdminActionsParams, errorHandler: ErrorHandler) {
   const {
@@ -31,7 +34,7 @@ export function createOpsActions(params: AdminActionsParams, errorHandler: Error
       }));
       setError("");
     } catch (e) {
-      await handleApiError(e, "加载运维指标失败");
+      await handleApiError(e, t("admin.actions.loadOpsFailed"));
     } finally {
       setLoadingOps(false);
     }
@@ -44,7 +47,7 @@ export function createOpsActions(params: AdminActionsParams, errorHandler: Error
       setBenchmarkTrends(trends.items || []);
       setError("");
     } catch (e) {
-      await handleApiError(e, "加载 RAG 运维配置失败");
+      await handleApiError(e, t("admin.actions.loadRagOpsFailed"));
     }
   };
 
@@ -56,9 +59,9 @@ export function createOpsActions(params: AdminActionsParams, errorHandler: Error
         actionKeyword: opsActionKeyword.trim() || undefined,
       });
       downloadFile(csv, generateTimestampedFilename("ops_report", "csv"), "text/csv");
-      setStatusText("运维报表导出成功");
+      setStatusText(t("admin.actions.opsExported"));
     } catch (e) {
-      await handleApiError(e, "导出失败");
+      await handleApiError(e, t("admin.actions.exportFailed"));
     }
   };
 
@@ -68,9 +71,9 @@ export function createOpsActions(params: AdminActionsParams, errorHandler: Error
       await appApi.adminRunBenchmark({ maxQueries: 20 });
       const trends = await appApi.adminBenchmarkTrends({ limit: 30 });
       setBenchmarkTrends(trends.items || []);
-      setStatusText("基准任务完成，趋势已更新");
+      setStatusText(t("admin.actions.benchmarkComplete"));
     } catch (e) {
-      await handleApiError(e, "运行基准失败");
+      await handleApiError(e, t("admin.actions.runBenchmarkFailed"));
     } finally {
       setBenchmarkRunning(false);
     }
@@ -80,9 +83,9 @@ export function createOpsActions(params: AdminActionsParams, errorHandler: Error
     try {
       await appApi.adminReloadConfig();
       await loadRagOps();
-      setStatusText("配置热加载成功");
+      setStatusText(t("admin.actions.configReloaded"));
     } catch (e) {
-      await handleApiError(e, "配置热加载失败");
+      await handleApiError(e, t("admin.actions.reloadConfigFailed"));
     }
   };
 
@@ -90,9 +93,9 @@ export function createOpsActions(params: AdminActionsParams, errorHandler: Error
     try {
       const text = await appApi.adminOpsExportAuditReportMd({ hours: opsHours });
       downloadFile(text, generateTimestampedFilename("ops_audit_report", "md"), "text/markdown");
-      setStatusText("审计 Markdown 报告导出成功");
+      setStatusText(t("admin.actions.auditReportExported"));
     } catch (e) {
-      await handleApiError(e, "导出审计报告失败");
+      await handleApiError(e, t("admin.actions.exportAuditReportFailed"));
     }
   };
 

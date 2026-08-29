@@ -117,17 +117,18 @@ class QueryDecomposer:
         prompt = self.decomposition_prompt.format(query=query, strategy=strategy)
 
         try:
-            response = await self.llm.generate(prompt=prompt, max_tokens=300, temperature=0.3)
+            response = await self.llm.ainvoke(prompt)
+            response_text = response.content if hasattr(response, "content") else str(response)
 
             # Parse sub-queries from response
-            sub_queries = self._parse_sub_queries(response)
+            sub_queries = self._parse_sub_queries(response_text)
 
             # Limit to max sub-queries
             sub_queries = sub_queries[: self.max_sub_queries]
 
             # If parsing failed or no sub-queries, return original query
             if not sub_queries:
-                logger.warning(f"Failed to parse sub-queries from LLM response: {response}")
+                logger.warning(f"Failed to parse sub-queries from LLM response: {response_text}")
                 return [query]
 
             logger.info(f"Decomposed into {len(sub_queries)} sub-queries: {sub_queries}")

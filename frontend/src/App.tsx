@@ -5,6 +5,8 @@ import type { AuthUser } from "@/types/api";
 import { ToastProvider } from "@/components/animations/AnimatedToastLite";
 import { getPermissionCheck } from "@/hooks/usePermissions";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
+import { ChatErrorBoundary } from "@/components/ChatErrorBoundary";
+import { AdminErrorBoundary } from "@/components/AdminErrorBoundary";
 import { usePerformanceMonitoring } from "@/hooks/usePerformanceMonitoring";
 
 const LoginPage = lazy(() => import("@/pages/LoginPage").then(({ LoginPage }) => ({ default: LoginPage })));
@@ -110,12 +112,18 @@ export function App() {
           />
           <Route
             path="/app"
-            element={renderProtected(<ChatPage user={user} onLogout={logout} onUserRefresh={refreshUser} />)}
+            element={renderProtected(
+              <ChatErrorBoundary>
+                <ChatPage user={user} onLogout={logout} onUserRefresh={refreshUser} />
+              </ChatErrorBoundary>,
+            )}
           />
           <Route
             path="/app/admin"
             element={renderProtected(
-              <AdminPage user={user} onLogout={logout} />,
+              <AdminErrorBoundary>
+                <AdminPage user={user} onLogout={logout} />
+              </AdminErrorBoundary>,
               permissions.canAccessAdmin,
             )}
           />

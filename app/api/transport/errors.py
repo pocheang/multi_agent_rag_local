@@ -43,6 +43,11 @@ def rate_limited(detail: str = "Too many requests, retry later") -> HTTPExceptio
     return HTTPException(status_code=429, detail=detail)
 
 
+def service_unavailable(detail: str = "Service temporarily overloaded, retry later") -> HTTPException:
+    """Return a 503 Service Unavailable error."""
+    return HTTPException(status_code=503, detail=detail)
+
+
 def not_implemented(detail: str = "Not implemented") -> HTTPException:
     """Return a 501 Not Implemented error."""
     return HTTPException(status_code=501, detail=detail)

@@ -8,6 +8,7 @@ import concurrent.futures
 import logging
 import threading
 from collections.abc import Awaitable, Callable
+from contextvars import ContextVar
 
 from app.agents.rag.evidence_builder import (
     bundle_from_bm25_records,
@@ -26,6 +27,14 @@ logger = logging.getLogger(__name__)
 
 TypedRetriever = Callable[[OrchestrationRequest, RouteDecision, TaskPlan | None], Awaitable[EvidenceBundle]]
 DegradationReporter = Callable[[ExecutionEvent], Awaitable[None]]
+
+# Per-request degradation reporter, installed by the orchestration engine for the
+# current async task. A ContextVar (not instance state) so RAGAgentService stays
+# stateless and safe to share across concurrent requests: each request's task sees
+# only the reporter it installed, never another request's.
+_current_degradation_reporter: ContextVar[DegradationReporter | None] = ContextVar(
+    "rag_current_degradation_reporter", default=None
+)
 
 # Default timeout for individual retriever operations (seconds)
 DEFAULT_RETRIEVER_TIMEOUT = 30.0
@@ -259,20 +268,23 @@ class RAGAgentService:
         self._bm25 = _bm25_retrieve if bm25 is None else bm25
         self._graph = _graph_retrieve if graph is None else graph
         self._web = _web_retrieve if web is None else web
-        self._report_degradation = _discard_event if report_degradation is None else report_degradation
+        # Fallback used only when no per-request reporter was installed via
+        # set_degradation_reporter (e.g. direct construction in a test/script).
+        # Fixed at construction time, never mutated -- see _current_degradation_reporter
+        # for the actual per-request path, which is what the engine uses in production.
+        self._default_report_degradation = _discard_event if report_degradation is None else report_degradation
         self._retriever_timeout = retriever_timeout
         self._degradation_policy = RequireAtLeastOnePolicy() if degradation_policy is None else degradation_policy
-        self._reporter_lock = threading.Lock()
 
     def set_degradation_reporter(self, reporter: DegradationReporter) -> None:
-        """Bind the engine publisher after typed services are assembled.
+        """Install the degradation reporter for the current request.
 
-        WARNING: This method should only be called during initialization.
-        Thread-safe via lock, but concurrent calls during active retrieve()
-        operations may cause inconsistent event reporting.
+        Stores the reporter in a ContextVar scoped to the current async task rather
+        than on `self`, so this RAGAgentService instance stays stateless and safe to
+        share across concurrent requests -- each request's task sees only the
+        reporter it installed here, never one from a different request.
         """
-        with self._reporter_lock:
-            self._report_degradation = reporter
+        _current_degradation_reporter.set(reporter)
 
     async def retrieve(
         self,
@@ -326,10 +338,11 @@ class RAGAgentService:
             rerank=len(selected) > 1,
             rationale="legacy RAG compatibility proxy",
         )
+        reporter = _current_degradation_reporter.get() or self._default_report_degradation
         context = await KnowledgeOrchestrator(adapters=adapters).retrieve(
             strategy,
             _compatibility_scope(request),
-            self._report_degradation,
+            reporter,
         )
         status = dict(context.diagnostics.get("source_status", {}))
         failed = {str(name) for name, value in status.items() if value != "completed"}

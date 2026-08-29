@@ -376,7 +376,7 @@ def admin_ops_replay_run(
     user: dict[str, Any] = Depends(_require_user),
 ):
     _require_permission(user, "admin:ops_manage", request, "admin")
-    max_questions = max(1, min(int(payload.get("max_questions", 30) or 30), 200))
+    max_questions = max(1, min(int(payload.get("max_questions", 30) or 30), 50))
     history_store = _history_store_for_user(user)
     try:
         summary = run_replay(

@@ -12,8 +12,8 @@ from app.api.dependencies import _require_permission, _require_user, _reserve_ch
 from app.api.deps.auth import require_admin
 from app.api.deps.documents import _allowed_sources_for_user
 from app.api.transport.errors import internal_error
-from app.domain.advanced_rag import AdvancedRAGResult
-from app.pipeline.contracts import PipelineRequest, PipelineUser, SourceScope
+from app.domain.advanced_rag import AdvancedRAGResult, AnswerQuality, DecomposedQuery, SubQueryResult
+from app.pipeline.contracts import PipelineContext, PipelineRequest, PipelineResult, PipelineUser, SourceScope
 from app.pipeline.profiles import PipelineProfile
 from app.pipeline.rag_pipeline import RAGPipeline
 from app.services.observability.agent_execution_tracker import AgentExecutionTracker
@@ -53,6 +53,82 @@ def _resolve_advanced_allowed_sources(
     if not requested:
         return []
     return [source for source in visible_sources if source in requested]
+
+
+def _decomposed_query_from_plan(query: str, plan_data: dict[str, Any] | None) -> DecomposedQuery | None:
+    """Build a DecomposedQuery from the plan the pipeline actually ran, or None if it
+    never decomposed (a single-task plan means decomposition didn't fire for this query)."""
+    tasks = (plan_data or {}).get("tasks") or []
+    sub_queries = [str(task.get("prompt", "")).strip() for task in tasks if str(task.get("prompt", "")).strip()]
+    if len(sub_queries) <= 1:
+        return None
+    strategy = "sequential" if any(task.get("depends_on") for task in tasks) else "parallel"
+    return DecomposedQuery(original_query=query, sub_queries=sub_queries[:4], decomposition_strategy=strategy)
+
+
+def _context_docs(contexts: tuple[PipelineContext, ...]) -> list[dict[str, Any]]:
+    return [
+        {"id": ctx.document_id or ctx.chunk_id or ctx.source or "unknown", "content": ctx.content} for ctx in contexts
+    ]
+
+
+async def _run_self_rag_evaluation(
+    *,
+    query: str,
+    pipeline_result: PipelineResult,
+    plan_data: dict[str, Any] | None,
+) -> tuple[AnswerQuality | None, list[SubQueryResult]]:
+    """Evaluate retrieval relevance and answer quality with the real SelfRAGEvaluator.
+
+    Degrades to (None, []) on any failure so an evaluation problem never breaks the
+    primary answer already produced by the pipeline.
+    """
+    try:
+        from app.services.models.runtime import get_reasoning_model
+        from app.services.retrieval.self_rag_evaluator import SelfRAGEvaluator
+
+        docs = _context_docs(pipeline_result.contexts)
+        llm_client = get_reasoning_model(temperature=0.0)
+        evaluator = SelfRAGEvaluator(llm_client)
+
+        relevance_scores = await evaluator.evaluate_retrieval_relevance(query, docs)
+        answer_quality = await evaluator.evaluate_answer_quality(query, pipeline_result.answer, docs)
+
+        sub_query_results: list[SubQueryResult] = []
+        tasks = (plan_data or {}).get("tasks") or []
+        if len(tasks) > 1:
+            # Sub-queries share the evidence pool already retrieved for the primary
+            # answer (no extra retrieval); relevance scores are reused across all of
+            # them since evidence isn't tagged per-task by the retriever today.
+            evidence_text = (
+                "\n\n".join(f"[{doc['id']}] {doc['content'][:500]}" for doc in docs) or "(no evidence retrieved)"
+            )
+            for task in tasks:
+                prompt = str(task.get("prompt", "")).strip()
+                if not prompt:
+                    continue
+                try:
+                    response = await llm_client.ainvoke(
+                        "Answer this question using only the evidence below. If the evidence "
+                        "does not cover it, say so briefly.\n\n"
+                        f"Question: {prompt}\n\nEvidence:\n{evidence_text}"
+                    )
+                    answer_text = response.content if hasattr(response, "content") else str(response)
+                except Exception:
+                    logger.exception("Sub-query answer generation failed for task %s", task.get("task_id"))
+                    answer_text = ""
+                sub_query_results.append(
+                    SubQueryResult(
+                        sub_query=prompt,
+                        documents=docs,
+                        answer=answer_text,
+                        relevance_scores=relevance_scores or None,
+                    )
+                )
+        return answer_quality, sub_query_results
+    except Exception:
+        logger.exception("Self-RAG evaluation failed; returning primary answer without quality data")
+        return None, []
 
 
 async def _process_advanced_rag_query_impl(
@@ -96,12 +172,27 @@ async def _process_advanced_rag_query_impl(
             enable_self_rag=request_data.enable_self_rag,
         )
         pipeline_result = await RAGPipeline().execute(pipeline_request)
+        plan_data = pipeline_result.execution_metadata.get("plan")
+
+        decomposed_query = (
+            _decomposed_query_from_plan(request_data.query, plan_data) if request_data.enable_decomposition else None
+        )
+
+        answer_quality = None
+        sub_query_results: list[SubQueryResult] = []
+        if request_data.enable_self_rag:
+            answer_quality, sub_query_results = await _run_self_rag_evaluation(
+                query=request_data.query,
+                pipeline_result=pipeline_result,
+                plan_data=plan_data,
+            )
+
         result = AdvancedRAGResult(
             query=request_data.query,
-            decomposed_query=None,
-            sub_query_results=[],
+            decomposed_query=decomposed_query,
+            sub_query_results=sub_query_results,
             final_answer=pipeline_result.answer,
-            answer_quality=None,
+            answer_quality=answer_quality,
             metadata={
                 "route": pipeline_result.route.route,
                 "citations": [citation.model_dump(mode="json") for citation in pipeline_result.citations],

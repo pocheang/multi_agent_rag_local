@@ -268,22 +268,47 @@ class WebActivityAlertSystem:
         log_func(f"[ALERT] {alert.rule_name}: {alert.message}")
 
     def _send_email_alert(self, alert: Alert):
-        """通过Email发送告警"""
-        # TODO: 实现Email发送
-        # 需要配置SMTP服务器
-        logger.debug(f"Email alert: {alert.message}")
+        """通过Email发送告警，复用 app.services.observability.alerting.send_email_alert
+        的 SMTP 发送和限流逻辑，避免重复实现。"""
+        from app.services.observability.alerting import send_email_alert
+
+        sent = send_email_alert(
+            f"web_activity.{alert.rule_name}",
+            f"[{alert.level.value.upper()}] {alert.rule_name}",
+            alert.message,
+        )
+        if not sent:
+            logger.debug(f"Email alert not sent (disabled, unconfigured, or rate-limited): {alert.message}")
 
     def _send_webhook_alert(self, alert: Alert):
-        """通过Webhook发送告警"""
-        # TODO: 实现Webhook发送
-        # POST告警数据到配置的URL
-        logger.debug(f"Webhook alert: {alert.message}")
+        """通过Webhook发送告警，复用 app.services.observability.alerting.emit_alert 的
+        SSRF 白名单校验和限流逻辑，避免重复实现。"""
+        from app.services.observability.alerting import emit_alert
+
+        sent = emit_alert(
+            f"web_activity.{alert.rule_name}",
+            {
+                "level": alert.level.value,
+                "message": alert.message,
+                "metric_value": alert.metric_value,
+                "threshold": alert.threshold,
+                "metadata": alert.metadata or {},
+            },
+        )
+        if not sent:
+            logger.debug(f"Webhook alert not sent (disabled, unconfigured, or rate-limited): {alert.message}")
 
     def _send_slack_alert(self, alert: Alert):
-        """通过Slack发送告警"""
-        # TODO: 实现Slack通知
-        # 使用Slack Webhook
-        logger.debug(f"Slack alert: {alert.message}")
+        """通过Slack发送告警，复用 app.services.observability.alerting.send_slack_alert
+        的 SSRF 白名单校验和限流逻辑，避免重复实现。"""
+        from app.services.observability.alerting import send_slack_alert
+
+        sent = send_slack_alert(
+            f"web_activity.{alert.rule_name}",
+            f"*[{alert.level.value.upper()}] {alert.rule_name}*\n{alert.message}",
+        )
+        if not sent:
+            logger.debug(f"Slack alert not sent (disabled, unconfigured, or rate-limited): {alert.message}")
 
     def get_recent_alerts(self, hours: int = 24, level: AlertLevel | None = None) -> list[Alert]:
         """

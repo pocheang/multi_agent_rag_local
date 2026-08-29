@@ -160,21 +160,47 @@ def _extract_rag_fields(text: str) -> dict[str, str]:
     scale = re.search(r"\b\d+(?:\.\d+)?\s*(?:kb|mb|gb|tb|万条|千条|条)\b", lowered)
     if scale:
         extracted["scale"] = scale.group(0)
-    performance = re.search(r"(?:响应|延迟|latency)[^，。;\n]{0,20}|(?:<|≤)\s*\d+(?:\.\d+)?\s*(?:ms|毫秒|s|秒)", lowered)
+    performance = re.search(
+        r"(?:响应|延迟|latency)[^，。;\n]{0,20}|(?:<|≤)\s*\d+(?:\.\d+)?\s*(?:ms|毫秒|s|秒)", lowered
+    )
     if performance:
         extracted["performance_requirement"] = performance.group(0).strip()
     return extracted
 
 
+_COMPARISON_TARGET_SUFFIX_RE = re.compile(r"的?(?:区别|差异|对比|优劣|异同)$")
+_COMPARISON_TARGET_NOISE_RE = re.compile(
+    r"请|请问|帮我|麻烦|比较|对比|说明|分析|以及|还有|另外|compare|difference|versus", re.IGNORECASE
+)
+
+
+def _clean_comparison_target(raw: str) -> str | None:
+    """Reject a captured `versus` group that is really a leftover instruction
+    fragment (e.g. a truncated verb phrase from a narrative sentence) rather than
+    an actual entity name, and strip a common trailing "的区别/差异" clause so plain
+    "A和B的区别" style inputs still extract cleanly."""
+    cleaned = _COMPARISON_TARGET_SUFFIX_RE.sub("", raw.strip()).strip()
+    if not cleaned or _COMPARISON_TARGET_NOISE_RE.search(cleaned):
+        return None
+    return cleaned
+
+
 def _extract_comparison_fields(text: str) -> dict[str, str]:
     extracted: dict[str, str] = {}
     quoted = re.findall(r"[\"“‘']([^\"”’']{1,80})[\"”’']", text)
-    versus = re.search(r"([\w.\-/\u4e00-\u9fff]{2,60})\s*(?:与|和|及|vs\.?|versus)\s*([\w.\-/\u4e00-\u9fff]{2,60})", text, re.IGNORECASE)
+    versus = re.search(
+        r"([\w.\-/一-鿿]{2,60})\s*(?:与|和|及|vs\.?|versus)\s*([\w.\-/一-鿿]{2,60})", text, re.IGNORECASE
+    )
     if len(quoted) >= 2:
         extracted["doc_ids"] = "、".join(quoted[:5])
     elif versus:
-        extracted["doc_ids"] = f"{versus.group(1)}、{versus.group(2)}"
-    aspect = re.search(r"功能|性能|成本|价格|时间|版本|安全|准确率|召回率|feature|performance|cost|security", text, re.IGNORECASE)
+        left = _clean_comparison_target(versus.group(1))
+        right = _clean_comparison_target(versus.group(2))
+        if left and right:
+            extracted["doc_ids"] = f"{left}、{right}"
+    aspect = re.search(
+        r"功能|性能|成本|价格|时间|版本|安全|准确率|召回率|feature|performance|cost|security", text, re.IGNORECASE
+    )
     if aspect:
         extracted["comparison_aspect"] = aspect.group(0)
     output_format = re.search(r"表格|报告|总结|table|report|summary", text, re.IGNORECASE)

@@ -159,10 +159,7 @@ class OrchestrationEngine:
         )
 
     async def execute(self, request: OrchestrationRequest) -> FinalAnswer:
-        from app.services.runtime.retry_policy import retry_budget_scope
-
-        with retry_budget_scope(request.retry_budget):
-            return await self._execute(request)
+        return await self._execute(request)
 
     async def execute_stream(self, request: OrchestrationRequest, **_: Any) -> AsyncIterator[dict[str, Any]]:
         """Adapt the same typed execution into transport-neutral event dictionaries."""
@@ -174,10 +171,7 @@ class OrchestrationEngine:
 
         async def run() -> None:
             try:
-                from app.services.runtime.retry_policy import retry_budget_scope
-
-                with retry_budget_scope(request.retry_budget):
-                    answer = await self._execute(request, publish=publish)
+                answer = await self._execute(request, publish=publish)
                 await queue.put(answer)
             except Exception as exc:
                 await queue.put(exc)

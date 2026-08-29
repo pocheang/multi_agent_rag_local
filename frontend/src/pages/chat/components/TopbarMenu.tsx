@@ -12,11 +12,13 @@ type Props = {
   onToggleTopbar?: () => void;  // Optional - reserved for future use
   onToggleSections?: () => void;  // Optional - reserved for future use
   onOpenSettings: () => void;
+  onOpenSessionManagement: () => void;
 };
 
 export function TopbarMenu({
   user,
   onOpenSettings,
+  onOpenSessionManagement,
 }: Props) {
   const { t } = useTranslation();
   const [menuOpen, setMenuOpen] = useState(false);
@@ -95,6 +97,21 @@ export function TopbarMenu({
             >
               <span className="menu-item-icon">⚙</span>
               <span className="menu-item-label">{t("components.chat.settings")}</span>
+            </button>
+          )}
+
+          {/* Session management */}
+          {user && (
+            <button
+              type="button"
+              className="topbar-menu-item"
+              onClick={() => {
+                onOpenSessionManagement();
+                setMenuOpen(false);
+              }}
+            >
+              <span className="menu-item-icon">🗂</span>
+              <span className="menu-item-label">{t("components.chat.sessionManagementMenu")}</span>
             </button>
           )}
 
