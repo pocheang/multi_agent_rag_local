@@ -5,10 +5,7 @@
   },
   "nav": {
     "home": "Home",
-    "query": "Query",
     "dataFlow": "Data Flow",
-    "settings": "Settings",
-    "admin": "Admin",
     "logout": "Logout"
   },
   "auth": {
@@ -21,20 +18,13 @@
     "registerButton": "Create Account",
     "switchToRegister": "Don't have an account? Register",
     "switchToLogin": "Already have an account? Login",
-    "loginSuccess": "Login successful",
     "loginFailed": "Login failed",
     "registerSuccess": "Registration successful",
     "registerFailed": "Registration failed",
     "invalidRedirect": "Invalid redirect URL"
   },
   "query": {
-    "title": "Query Interface",
-    "placeholder": "Enter your question...",
-    "submit": "Submit",
-    "clear": "Clear",
     "searching": "Searching...",
-    "noResults": "No results found",
-    "error": "An error occurred",
     "mode": {
       "fast": "Fast",
       "balanced": "Balanced",
@@ -43,56 +33,11 @@
   },
   "dataFlow": {
     "title": "System Data Flow",
-    "description": "Visualize the multi-agent RAG architecture",
-    "layers": {
-      "browser": "Browser UI",
-      "auth": "Authentication Layer",
-      "query": "Query Entry",
-      "security": "Security Check",
-      "rateLimit": "Rate Limit",
-      "nlp": "Chinese NLP Processing",
-      "advancedRAG": "Advanced RAG Processing",
-      "router": "Router Agent",
-      "vectorRAG": "Vector RAG Agent",
-      "graphRAG": "Graph RAG Agent",
-      "webResearch": "Web Research Agent",
-      "synthesis": "Synthesis Agent",
-      "chromaDB": "ChromaDB",
-      "bm25": "BM25 + JSONL",
-      "neo4j": "Neo4j Graph Database",
-      "docProcessing": "Document Processing",
-      "streaming": "SSE Streaming Response",
-      "persistence": "SQLite Persistence",
-      "sessionHistory": "Session History",
-      "fileStorage": "File Storage",
-      "monitoring": "Operations Monitoring",
-      "promptManagement": "Prompt Management",
-      "circuitBreaker": "Circuit Breaker",
-      "loadDegradation": "Load Degradation",
-      "memoryCache": "Memory Cache",
-      "apiEncryption": "API Key Encryption",
-      "cicd": "CI/CD Quality Gate",
-      "chartExtraction": "Batch Chart Extraction"
-    }
-  },
-  "settings": {
-    "title": "Settings",
-    "apiSettings": "API Settings",
-    "provider": "Provider",
-    "model": "Model",
-    "temperature": "Temperature",
-    "maxTokens": "Max Tokens",
-    "save": "Save",
-    "cancel": "Cancel",
-    "saved": "Settings saved successfully",
-    "failed": "Failed to save settings"
+    "description": "Visualize the multi-agent RAG architecture"
   },
   "admin": {
-    "title": "Admin Panel",
     "userManagement": "User Management",
-    "systemConfig": "System Configuration",
     "auditLog": "Audit Log",
-    "statistics": "Statistics",
     "webActivity": {
       "title": "Web Search Activity",
       "totalSearches": "Total Searches",
@@ -106,7 +51,6 @@
       "topUsers": "Top Active Users",
       "websiteDetails": "Website Access Details",
       "securityAlerts": "Security Alerts (24h)",
-      "rank": "Rank",
       "userId": "User ID",
       "searchCount": "Search Count",
       "activity": "Activity",
@@ -123,8 +67,7 @@
       "refresh": "Refresh",
       "retry": "Retry",
       "authRequired": "Authentication required. Please log in again.",
-      "loadingError": "Failed to fetch data.",
-      "noData": "No data available"
+      "loadingError": "Failed to fetch data."
     },
     "agentQuality": {
       "title": "Agent Quality Monitor",
@@ -153,19 +96,11 @@
     },
     "systemMonitor": {
       "title": "System Monitor",
-      "updateInterval": "Updates every 5s",
       "serviceStatus": "Service Status",
-      "backend": "Backend",
-      "database": "Database",
-      "vectorDb": "Vector DB",
-      "externalApi": "External API",
-      "usage": "Usage",
       "memory": "Memory",
       "disk": "Disk",
       "avgResponse": "Avg Response",
       "errorRate": "Error Rate",
-      "cpuMemory": "CPU & Memory Usage",
-      "qpsResponse": "QPS & Response Time",
       "totalRequests": "Total Requests",
       "autoRefresh": "Auto-refresh (3s)",
       "systemStatus": "System Status",
@@ -230,30 +165,11 @@
       "testing": "Testing...",
       "saveConfig": "Save Config",
       "saving": "Saving...",
-      "modelConfigHint": "Priority: user model settings, then this global config, then backend .env. Rebuild indexes after embedding model changes to avoid vector dimension mismatch.",
-      "globalOverride": "Global override",
-      "enabled": "Enabled",
-      "disabled": "Disabled",
-      "backend": "Backend",
       "chatModel": "Chat model",
       "embeddingModel": "Embedding",
-      "useEnv": "Use .env",
-      "runtimeSwitch": "Runtime switch",
       "enableGlobalModelOverride": "Enable global model override",
       "backendType": "Backend type",
-      "apiKeySaved": "Saved: {{value}}",
-      "ollamaBlank": "Ollama usually stays blank",
-      "encryptedSave": "Encrypted local storage after input",
       "reasoningModel": "Reasoning model",
-      "anthropicEmbeddingHint": "Anthropic has no embedding model. Leave empty to use .env",
-      "generationParams": "Generation params",
-      "securityBoundary": "Current security boundary",
-      "keyEcho": "Key echo",
-      "keyEchoDesc": "Masked only, plaintext is never returned",
-      "privateUrl": "Private URL",
-      "privateUrlDesc": "Blocked by default; local Ollama is allowed",
-      "personalSettings": "Personal settings",
-      "personalSettingsDesc": "User-saved model config takes priority over global config",
       "usersHint": "Filter by user ID / username and directly perform role, status, and security actions.",
       "search": "Search",
       "userSearchPlaceholder": "Search username / user ID / classification fields",
@@ -272,19 +188,15 @@
       "userType": "User type",
       "dataScope": "Data scope",
       "saveClassification": "Save classification",
-      "userId": "User ID",
       "username": "Username",
       "active10m": "10 min",
       "type": "Type",
-      "scope": "Scope",
       "createdBy": "Created by",
-      "ticket": "Ticket",
       "token": "Token",
       "operation": "Operation",
       "credits": "Credits",
       "addCredits": "Add credits",
       "unlimited": "Unlimited",
-      "active": "Active",
       "tokenSet": "Set",
       "tokenUnset": "Not set",
       "classify": "Classify",
@@ -307,8 +219,6 @@
       "noFailedRequests": "No failed requests",
       "recentCriticalErrors": "Recent critical errors",
       "noCriticalErrors": "No critical errors",
-      "slowRequests": "Slow requests",
-      "slowRequestsHint": "Shows high-latency API requests in the current time window for performance troubleshooting. Time is server-recorded and duration is in ms.",
       "failureByStatus": "Failures by Status Code",
       "failureTimeline": "Failure Timeline",
       "errorByLogger": "Errors by Logger",
@@ -327,7 +237,6 @@
       "successRate": "Success Rate",
       "failureCount": "Failures",
       "detailedLogs": "Detailed Audit Logs",
-      "method": "Method",
       "ragOps": "RAG / Agent Strategy Ops",
       "hotReloadConfig": "Hot reload config",
       "exportAuditReport": "Export audit report (MD)",
@@ -449,19 +358,12 @@
     "save": "Save",
     "cancel": "Cancel",
     "delete": "Delete",
-    "edit": "Edit",
     "confirm": "Confirm",
     "close": "Close",
-    "back": "Back",
     "next": "Next",
     "previous": "Previous",
     "search": "Search",
-    "filter": "Filter",
-    "export": "Export",
-    "import": "Import",
     "refresh": "Refresh",
-    "reset": "Reset",
-    "apply": "Apply",
     "yes": "Yes",
     "no": "No",
     "searching": "Searching",
@@ -554,14 +456,10 @@
   },
   "pages": {
     "landing": {
-      "heroTitle": "QueryMind",
       "heroSubtitle": "Enterprise-grade, local-first intelligent Q&A engine with multi-agent orchestration, hybrid retrieval, graph enhancement, and streaming chat.",
       "enterApp": "Enter Console",
-      "login": "Log In",
       "register": "Register",
-      "architecture": "System Architecture",
       "learnMore": "Learn More",
-      "featuresTitle": "Key Capabilities",
       "featuresSubtitle": "A look at the production-ready components that power our enterprise intelligent search engine.",
       "feature1Title": "Multi-Agent Orchestration",
       "feature1Desc": "Built on LangGraph. Intelligently routes queries across Router, Vector RAG, Graph RAG, Web Research, and Synthesis agents for precise answers.",
@@ -589,56 +487,8 @@
       "passwordValid": "Meets requirements",
       "weakPassword": "Weak password",
       "rememberMe": "Remember me",
-      "forgotPassword": "Forgot password?",
       "socialDivider": "or use social login",
-      "googleLogin": "Login with Google",
-      "githubLogin": "Login with GitHub",
-      "githubUnavailable": "GitHub OAuth will be enabled after configuration",
-      "googleUnavailable": "Google OAuth will be enabled after configuration (see GOOGLE_OAUTH_SETUP.md)"
-    },
-    "forgotPassword": {
-      "badge": "Password Reset",
-      "sentBadge": "Email sent",
-      "title": "Forgot password?",
-      "description": "Enter your username or email and we will send a secure reset email to help you restore access.",
-      "securityTitle": "Security notes",
-      "tips": [
-        "Reset links expire after 24 hours",
-        "Each reset link can only be used once",
-        "The system will not reveal whether the account exists"
-      ],
-      "formTitle": "Reset password",
-      "formSubtitle": "Enter the username or email address used at registration",
-      "identifier": "Username or email",
-      "identifierPlaceholder": "Enter username or email",
-      "identifierHint": "Enter the username or email used during registration",
-      "identifierReady": "Information is filled in and ready to send",
-      "required": "Enter username or email",
-      "processing": "Processing...",
-      "success": "If the account exists, we have sent a password reset link to the email address.",
-      "failed": "Request failed. Please try again later.",
-      "send": "Send reset link",
-      "sending": "Sending...",
-      "cancel": "Cancel",
-      "remembered": "Remembered your password?",
-      "backToLogin": "Back to login",
-      "sentTitle": "Check your inbox",
-      "sentDescription": "If the account exists, we have sent a reset link to the matching email address. Continue verification from the email.",
-      "nextTitle": "Next steps",
-      "nextSteps": [
-        "Open your inbox or spam folder",
-        "Click the password reset link in the email",
-        "Set a new secure password",
-        "Sign in again with the new password"
-      ],
-      "notReceived": "Still not received?",
-      "notReceivedText": "You can resend the email or contact an administrator for help.",
-      "resendTitle": "Resend email",
-      "resendText": "If the email address was mistyped or delivery is delayed, submit another recovery request.",
-      "resend": "Resend",
-      "contactTitle": "Contact system administrator",
-      "contactText": "If you still cannot recover the account, ask an administrator to confirm account status or reset credentials manually.",
-      "loginPage": "Login page"
+      "githubUnavailable": "GitHub OAuth will be enabled after configuration"
     },
     "changePassword": {
       "badge": "Security Settings",
@@ -751,11 +601,7 @@
     },
     "codeBlock": {
       "copied": "Copied",
-      "copy": "Copy",
-      "copiedAria": "Copied",
-      "copyAria": "Copy code",
-      "copiedTitle": "Copied to clipboard",
-      "copyTitle": "Copy to clipboard"
+      "copy": "Copy"
     },
     "keyboard": {
       "title": "Keyboard shortcuts",
@@ -880,11 +726,8 @@
       "userMessage": "User message",
       "assistant": "Assistant",
       "you": "You",
-      "editMessage": "Edit this message",
       "edit": "Edit",
-      "deleteMessage": "Delete this message",
       "delete": "Delete",
-      "deleteConfirm": "Delete this message? This action cannot be undone.",
       "deleteUserConfirm": "Are you sure you want to delete your message? This action cannot be undone.",
       "deleteAssistantConfirm": "Are you sure you want to delete the assistant's reply? This action cannot be undone.",
       "execution": "Execution process",
@@ -939,22 +782,15 @@
       "stable": "Stable",
       "balanced": "Balanced",
       "creative": "Creative",
-      "adminOnlyMessage": "Admin-only feature",
-      "adminOnlyDetails": "Model configuration is restricted to administrators. Please contact your system admin to modify model settings.",
       "globalOverrideNotice": "Global Model Override Enabled",
       "globalOverrideDesc": "Administrator has configured global model: {{provider}} / {{model}}",
       "globalOverrideHint": "Your personal settings will be ignored until the administrator disables the global configuration.",
       "globalOverrideDisabledNotice": "Global configuration disabled. Your personal model settings are restored."
     },
     "chat": {
-      "menu": "Menu",
-      "expandSidebar": "Expand sidebar",
-      "openSidebar": "Open sidebar",
-      "openSettings": "Open settings",
       "settings": "Settings",
       "architecture": "Architecture",
       "viewArchitecture": "View system architecture",
-      "brandSubtitle": "AI Knowledge Operations",
       "railLabel": "Collapsed sidebar",
       "expandRail": "Expand sidebar",
       "newSessionFromRail": "Expand and create session",
@@ -972,8 +808,6 @@
       "untitledSession": "Untitled session",
       "recent": "Recent",
       "sessionOptions": "Session options {{title}}",
-      "delete": "Delete",
-      "deleteSessionConfirm": "Are you sure you want to delete \\\"{{title}}\\\"? This action cannot be undone.",
       "sessionDeleted": "Session deleted successfully",
       "sessionCreated": "New session created",
       "emptyChatNotice": "Current chat is empty. Continue here instead of creating new chat.",
@@ -984,8 +818,6 @@
       "sessionRenamed": "Session renamed successfully",
       "sessionPinned": "Session pinned",
       "sessionUnpinned": "Session unpinned",
-      "renameSessionTitle": "Rename Session",
-      "renameSessionPlaceholder": "Enter new session name...",
       "deleteSessionTitle": "Delete Session",
       "deleteSessionMessage": "Are you sure you want to delete \"{{title}}\"? This action cannot be undone.",
       "profile": "Profile",
@@ -1017,25 +849,16 @@
       "questionInput": "Question input",
       "uploadFiles": "Upload PDF or image",
       "uploadFilesAria": "Upload PDF or image files",
-      "processingQuestion": "Processing question",
-      "startAnalysisAria": "Start analyzing question",
       "analyzing": "Analyzing...",
       "startAnalysis": "Start analysis",
       "modeHint": {
         "advancedReasoning": "Advanced RAG reasoning with query decomposition and Self-RAG."
       },
       "stop": "Stop",
-      "stopAria": "Stop current processing",
       "clear": "Clear",
-      "clearAria": "Clear input",
       "showSections": "Show Input Area",
       "hideSections": "Hide Input Area",
-      "showTopbar": "Show Topbar",
-      "hideTopbar": "Hide Topbar",
-      "showInputArea": "Show Input Area",
-      "hideInputArea": "Hide Input Area",
       "moreOptions": "More Options",
-      "rename": "Rename",
       "sessionManagementMenu": "Session Management"
     }
   },
@@ -1132,79 +955,10 @@
         "Responsive Design: Mobile adaptation"
       ]
     },
-    "clarificationError": "Failed to submit clarification. Please try again.",
-    "skipClarificationError": "Failed to skip clarification. Please try again.",
-    "clarificationAuthError": "Authentication required for advanced features. Please login.",
     "apiEndpoints": "# Authentication\nPOST /auth/register\nPOST /auth/login\nPOST /auth/logout\nGET  /auth/me\nPUT  /auth/profile\nPOST /auth/change-password\nGET  /auth/google/login\n\n# Query profiles\nPOST /query\nPOST /query/stream\nPOST /api/v1/enhanced/query\nPOST /api/advanced-rag/query\n\n# Sessions\nGET, POST /sessions\nGET, DELETE /sessions/{session_id}\nGET, POST /sessions/{session_id}/strategy-lock\nGET /sessions/{session_id}/memories/long\nDELETE /sessions/{session_id}/memories/long/{memory_id}\nPATCH, DELETE /sessions/{session_id}/messages/{message_id}\n\n# Documents and prompts\nGET /documents\nPOST /upload\nPOST /documents/{filename}/reindex\nDELETE /documents/{filename}\nGET, POST /prompts\nPOST /prompts/check\nPATCH, DELETE /prompts/{prompt_id}\n\n# Admin operations and settings\nGET /admin/ops/runtime\nGET /admin/ops/overview\nGET, POST /admin/ops/retrieval-profile\nPOST /admin/ops/canary\nPOST /admin/ops/benchmark/run\nGET /admin/model-settings\nPOST /admin/model-settings\nGET, POST /user/api-settings\n\n# Evaluation and tracking\nGET /api/evaluation/queries\nPOST /api/evaluation/run\nGET /api/evaluation/results/{run_id}\nPOST /api/evaluation/compare\nGET /api/evaluation/systems\nGET /agent-tracking/trace/{execution_id}\nGET /agent-tracking/stream/{execution_id}\nGET /agent-tracking/history\n\n# Health\nGET /health\nGET /ready\nGET /metrics"
   },
   "toast": {
-    "close": "Close notification",
-    "demo": {
-      "title": "Toast Notification System Demo",
-      "subtitle": "Click buttons to test different types of toast notifications",
-      "info": {
-        "title": "Info Notification",
-        "desc": "For general information",
-        "button": "Show Info",
-        "message": "This is an information message"
-      },
-      "success": {
-        "title": "Success Notification",
-        "desc": "For operation success feedback",
-        "button": "Show Success",
-        "message": "Operation successful!"
-      },
-      "warning": {
-        "title": "Warning Notification",
-        "desc": "For warning messages",
-        "button": "Show Warning",
-        "message": "Please note: This is a warning message"
-      },
-      "error": {
-        "title": "Error Notification",
-        "desc": "For error messages",
-        "button": "Show Error",
-        "message": "Operation failed, please try again"
-      },
-      "longText": {
-        "title": "Long Text Test",
-        "desc": "Test long message display",
-        "button": "Show Long Text",
-        "message": "This is a very long message to test the Toast component's layout and line wrapping when displaying long text. The message content should wrap correctly and maintain good readability."
-      },
-      "customDuration": {
-        "title": "Custom Duration",
-        "desc": "Auto-close after 10 seconds",
-        "button": "10s Duration",
-        "message": "This message will close in 10 seconds"
-      },
-      "stacking": {
-        "title": "Stacking Test",
-        "desc": "Quickly show multiple toasts",
-        "button": "Show Stacking",
-        "message1": "First message",
-        "message2": "Second message",
-        "message3": "Third message",
-        "message4": "Fourth message"
-      },
-      "shortDuration": {
-        "title": "Short Duration Test",
-        "desc": "Quick close after 1 second",
-        "button": "1s Duration",
-        "message": "Quick disappear!"
-      },
-      "tips": {
-        "title": "💡 Usage Tips",
-        "items": [
-          "Toasts automatically appear in the top right corner",
-          "Hover over a toast to pause auto-close",
-          "Click toast or close button to manually dismiss",
-          "Multiple toasts stack automatically",
-          "Uses a consistent light interface",
-          "On mobile, adapts to full width display"
-        ]
-      }
-    }
+    "close": "Close notification"
   },
   "clarification": {
     "title": "Need More Information",
@@ -1218,25 +972,6 @@
     "submitError": "Failed to submit clarification",
     "skipError": "Failed to skip clarification",
     "authError": "Authentication required for advanced features"
-  },
-  "queryOptimization": {
-    "title": "💡 Query Optimization Suggestions",
-    "suggestClarify": "Suggest clarifying:",
-    "examples": "Optimized examples:",
-    "qualityScore": "Quality Score"
-  },
-  "contextResolution": {
-    "title": "🔗 Context Resolution",
-    "originalQuery": "Original Query",
-    "resolvedTo": "Resolved to",
-    "entitiesResolved": "Entities Resolved",
-    "topicSwitch": "Topic Switch Detected",
-    "needsClarification": "Needs further clarification",
-    "confidence": {
-      "high": "High Confidence",
-      "medium": "Medium Confidence",
-      "low": "Low Confidence"
-    }
   },
   "sessionManagement": {
     "editMetadata": "Edit Session Metadata",

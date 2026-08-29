@@ -68,7 +68,7 @@ jobs:
         run: npm ci
 
       # Gates on errors. The threshold is a ratchet at the current warning
-      # count (29: react-refresh, exhaustive-deps, unused-vars, explicit-any),
+      # count (25: react-refresh, exhaustive-deps, unused-vars, explicit-any),
       # so no new warning can land while those are worked through separately.
       # Lower it as they are fixed; never raise it.
       - name: Lint

@@ -5,10 +5,7 @@
   },
   "nav": {
     "home": "首页",
-    "query": "查询",
     "dataFlow": "数据流",
-    "settings": "设置",
-    "admin": "管理",
     "logout": "登出"
   },
   "auth": {
@@ -21,20 +18,13 @@
     "registerButton": "创建账户",
     "switchToRegister": "没有账户？立即注册",
     "switchToLogin": "已有账户？立即登录",
-    "loginSuccess": "登录成功",
     "loginFailed": "登录失败",
     "registerSuccess": "注册成功",
     "registerFailed": "注册失败",
     "invalidRedirect": "无效的重定向地址"
   },
   "query": {
-    "title": "查询界面",
-    "placeholder": "请输入您的问题...",
-    "submit": "提交",
-    "clear": "清除",
     "searching": "搜索中...",
-    "noResults": "未找到结果",
-    "error": "发生错误",
     "mode": {
       "fast": "快速模式",
       "balanced": "平衡模式",
@@ -43,56 +33,11 @@
   },
   "dataFlow": {
     "title": "系统数据流",
-    "description": "可视化多智能体RAG架构",
-    "layers": {
-      "browser": "浏览器用户界面",
-      "auth": "认证层",
-      "query": "查询入口",
-      "security": "安全检查",
-      "rateLimit": "速率限制",
-      "nlp": "中文NLP预处理",
-      "advancedRAG": "高级RAG处理",
-      "router": "路由代理",
-      "vectorRAG": "向量RAG代理",
-      "graphRAG": "图谱RAG代理",
-      "webResearch": "网络研究代理",
-      "synthesis": "合成代理",
-      "chromaDB": "ChromaDB向量数据库",
-      "bm25": "BM25稀疏检索",
-      "neo4j": "Neo4j图数据库",
-      "docProcessing": "文档处理",
-      "streaming": "流式返回",
-      "persistence": "SQLite持久化",
-      "sessionHistory": "会话历史",
-      "fileStorage": "文件存储",
-      "monitoring": "运维监控",
-      "promptManagement": "提示词管理",
-      "circuitBreaker": "熔断器",
-      "loadDegradation": "负载降级",
-      "memoryCache": "内存缓存",
-      "apiEncryption": "API密钥加密",
-      "cicd": "CI/CD质量门",
-      "chartExtraction": "批量图表提取"
-    }
-  },
-  "settings": {
-    "title": "设置",
-    "apiSettings": "API设置",
-    "provider": "提供商",
-    "model": "模型",
-    "temperature": "温度",
-    "maxTokens": "最大令牌数",
-    "save": "保存",
-    "cancel": "取消",
-    "saved": "设置保存成功",
-    "failed": "保存设置失败"
+    "description": "可视化多智能体RAG架构"
   },
   "admin": {
-    "title": "管理面板",
     "userManagement": "用户管理",
-    "systemConfig": "系统配置",
     "auditLog": "审计日志",
-    "statistics": "统计信息",
     "webActivity": {
       "title": "网页搜索活动",
       "totalSearches": "总搜索次数",
@@ -106,7 +51,6 @@
       "topUsers": "最活跃用户",
       "websiteDetails": "网站访问详情",
       "securityAlerts": "安全告警 (24小时)",
-      "rank": "排名",
       "userId": "用户ID",
       "searchCount": "搜索次数",
       "activity": "活动状态",
@@ -123,8 +67,7 @@
       "refresh": "刷新",
       "retry": "重试",
       "authRequired": "需要身份验证，请重新登录。",
-      "loadingError": "获取数据失败。",
-      "noData": "暂无数据"
+      "loadingError": "获取数据失败。"
     },
     "agentQuality": {
       "title": "Agent质量监控",
@@ -153,19 +96,11 @@
     },
     "systemMonitor": {
       "title": "系统监控",
-      "updateInterval": "每5秒更新",
       "serviceStatus": "服务状态",
-      "backend": "后端服务",
-      "database": "数据库",
-      "vectorDb": "向量数据库",
-      "externalApi": "外部API",
-      "usage": "使用率",
       "memory": "内存",
       "disk": "磁盘",
       "avgResponse": "平均响应",
       "errorRate": "错误率",
-      "cpuMemory": "CPU与内存使用率",
-      "qpsResponse": "QPS与响应时间",
       "totalRequests": "总请求数",
       "autoRefresh": "自动刷新（3 秒）",
       "systemStatus": "系统状态",
@@ -230,30 +165,11 @@
       "testing": "测试中...",
       "saveConfig": "保存配置",
       "saving": "保存中...",
-      "modelConfigHint": "生效顺序：用户个人模型设置优先，其次使用这里的全局配置，最后回退到后端 .env。Embedding 模型变更后需要重建索引，避免新旧向量维度不一致。",
-      "globalOverride": "全局覆盖",
-      "enabled": "启用",
-      "disabled": "停用",
-      "backend": "后端",
       "chatModel": "聊天模型",
       "embeddingModel": "Embedding",
-      "useEnv": "沿用 .env",
-      "runtimeSwitch": "运行开关",
       "enableGlobalModelOverride": "启用全局模型覆盖",
       "backendType": "后端类型",
-      "apiKeySaved": "已保存：{{value}}",
-      "ollamaBlank": "Ollama 通常留空",
-      "encryptedSave": "输入后本地加密保存",
       "reasoningModel": "推理模型",
-      "anthropicEmbeddingHint": "Anthropic 不提供 Embedding，留空沿用 .env",
-      "generationParams": "生成参数",
-      "securityBoundary": "当前安全边界",
-      "keyEcho": "密钥回显",
-      "keyEchoDesc": "仅显示掩码，不返回明文",
-      "privateUrl": "私网 URL",
-      "privateUrlDesc": "默认拦截；Ollama 本地地址例外",
-      "personalSettings": "个人设置",
-      "personalSettingsDesc": "用户保存的模型配置优先于全局配置",
       "usersHint": "可按用户 ID / 用户名筛选，并直接执行角色、状态和安全操作。",
       "search": "搜索",
       "userSearchPlaceholder": "搜索用户名 / 用户 ID / 分类字段",
@@ -272,19 +188,15 @@
       "userType": "用户类型",
       "dataScope": "数据范围",
       "saveClassification": "保存分类",
-      "userId": "用户 ID",
       "username": "用户名",
       "active10m": "10 分钟",
       "type": "类型",
-      "scope": "范围",
       "createdBy": "创建人",
-      "ticket": "工单",
       "token": "令牌",
       "operation": "操作",
       "credits": "剩余额度",
       "addCredits": "增加额度",
       "unlimited": "不限",
-      "active": "活跃",
       "tokenSet": "已设置",
       "tokenUnset": "未设置",
       "classify": "分类",
@@ -307,8 +219,6 @@
       "noFailedRequests": "暂无失败请求",
       "recentCriticalErrors": "最近严重错误",
       "noCriticalErrors": "暂无严重错误",
-      "slowRequests": "慢请求列表",
-      "slowRequestsHint": "展示当前时间窗口内耗时较高的接口请求，用于排查性能瓶颈。时间为服务器记录时间，耗时单位为毫秒（ms）。",
       "failureByStatus": "按状态码分组的失败请求",
       "failureTimeline": "失败时间线",
       "errorByLogger": "按日志器分组的错误",
@@ -327,7 +237,6 @@
       "successRate": "成功率",
       "failureCount": "失败数",
       "detailedLogs": "详细审计日志",
-      "method": "方法",
       "ragOps": "RAG / Agent 策略运营",
       "hotReloadConfig": "热加载配置",
       "exportAuditReport": "导出审计报告 (MD)",
@@ -449,19 +358,12 @@
     "save": "保存",
     "cancel": "取消",
     "delete": "删除",
-    "edit": "编辑",
     "confirm": "确认",
     "close": "关闭",
-    "back": "返回",
     "next": "下一页",
     "previous": "上一页",
     "search": "搜索",
-    "filter": "筛选",
-    "export": "导出",
-    "import": "导入",
     "refresh": "刷新",
-    "reset": "重置",
-    "apply": "应用",
     "yes": "是",
     "no": "否",
     "searching": "搜索中",
@@ -554,14 +456,10 @@
   },
   "pages": {
     "landing": {
-      "heroTitle": "智询 QueryMind",
       "heroSubtitle": "企业级、本地优先的智能问答引擎，支持多智能体编排、混合检索、图谱增强与流式对话",
       "enterApp": "进入控制台",
-      "login": "登录系统",
       "register": "注册账户",
-      "architecture": "查看系统架构",
       "learnMore": "了解更多",
-      "featuresTitle": "核心功能特性",
       "featuresSubtitle": "深度解析赋能企业级智能检索引擎的生产级核心组件",
       "feature1Title": "多智能体编排",
       "feature1Desc": "基于 LangGraph 工作流编排。在路由、向量检索、图谱检索、网络研究与合成代理间智能分发，实现精准答复。",
@@ -589,56 +487,8 @@
       "passwordValid": "符合要求",
       "weakPassword": "密码强度不足",
       "rememberMe": "记住我",
-      "forgotPassword": "忘记密码？",
       "socialDivider": "或使用第三方登录",
-      "googleLogin": "使用 Google 登录",
-      "githubLogin": "使用 GitHub 登录",
-      "githubUnavailable": "GitHub OAuth 待配置后启用",
-      "googleUnavailable": "Google OAuth 待配置后启用（请参考 GOOGLE_OAUTH_SETUP.md）"
-    },
-    "forgotPassword": {
-      "badge": "密码重置",
-      "sentBadge": "邮件已发送",
-      "title": "忘记密码？",
-      "description": "输入您的用户名或邮箱，我们会发送一封安全重置邮件，帮助您快速恢复访问。",
-      "securityTitle": "安全提示",
-      "tips": [
-        "重置链接会在 24 小时后失效",
-        "每个重置链接只能使用一次",
-        "系统不会透露账号是否真实存在"
-      ],
-      "formTitle": "重置密码",
-      "formSubtitle": "输入注册时使用的用户名或邮箱地址",
-      "identifier": "用户名或邮箱",
-      "identifierPlaceholder": "请输入用户名或邮箱",
-      "identifierHint": "请填写您注册时使用的用户名或邮箱",
-      "identifierReady": "信息已填写，可发送重置链接",
-      "required": "请输入用户名或邮箱",
-      "processing": "正在处理...",
-      "success": "如果该账户存在，我们已将密码重置链接发送到您的邮箱。",
-      "failed": "请求失败，请稍后重试",
-      "send": "发送重置链接",
-      "sending": "发送中...",
-      "cancel": "取消",
-      "remembered": "想起密码了？",
-      "backToLogin": "返回登录",
-      "sentTitle": "检查您的邮箱",
-      "sentDescription": "如果账户存在，我们已经向对应邮箱发送了重置链接。请在邮件中继续完成后续验证。",
-      "nextTitle": "接下来这样做",
-      "nextSteps": [
-        "打开收件箱或垃圾邮件文件夹",
-        "点击邮件中的密码重置链接",
-        "设置新的安全密码",
-        "使用新密码重新登录"
-      ],
-      "notReceived": "仍然没有收到？",
-      "notReceivedText": "您可以重新发送邮件，或联系管理员协助处理。",
-      "resendTitle": "重新发送邮件",
-      "resendText": "如果刚才输错了邮箱，或者邮件稍有延迟，可以重新提交一次找回请求。",
-      "resend": "重新发送",
-      "contactTitle": "联系系统管理员",
-      "contactText": "如仍无法找回账户，请联系管理员确认账号状态或手动重置登录凭证。",
-      "loginPage": "返回登录页"
+      "githubUnavailable": "GitHub OAuth 待配置后启用"
     },
     "changePassword": {
       "badge": "安全设置",
@@ -751,11 +601,7 @@
     },
     "codeBlock": {
       "copied": "已复制",
-      "copy": "复制",
-      "copiedAria": "已复制",
-      "copyAria": "复制代码",
-      "copiedTitle": "已复制到剪贴板",
-      "copyTitle": "复制到剪贴板"
+      "copy": "复制"
     },
     "keyboard": {
       "title": "键盘快捷键",
@@ -880,11 +726,8 @@
       "userMessage": "用户消息",
       "assistant": "助手",
       "you": "你",
-      "editMessage": "修改此消息",
       "edit": "修改",
-      "deleteMessage": "删除此消息",
       "delete": "删除",
-      "deleteConfirm": "确定删除这条消息吗？此操作无法撤销。",
       "deleteUserConfirm": "确定要删除您的消息吗？此操作无法撤销。",
       "deleteAssistantConfirm": "确定要删除助手的回复吗？此操作无法撤销。",
       "execution": "执行过程",
@@ -939,22 +782,15 @@
       "stable": "稳定",
       "balanced": "均衡",
       "creative": "创意",
-      "adminOnlyMessage": "仅管理员可配置模型",
-      "adminOnlyDetails": "模型配置功能仅对管理员开放。如需修改模型设置，请联系系统管理员。",
       "globalOverrideNotice": "全局模型配置已启用",
       "globalOverrideDesc": "管理员已配置全局模型：{{provider}} / {{model}}",
       "globalOverrideHint": "您的个人设置将被忽略，直到管理员禁用全局配置。",
       "globalOverrideDisabledNotice": "全局配置已禁用，已恢复您的个人模型设置"
     },
     "chat": {
-      "menu": "菜单",
-      "expandSidebar": "展开侧边栏",
-      "openSidebar": "打开侧边栏",
-      "openSettings": "打开设置",
       "settings": "设置",
       "architecture": "架构",
       "viewArchitecture": "查看系统架构",
-      "brandSubtitle": "AI 知识运营",
       "railLabel": "收起后的侧边栏",
       "expandRail": "展开侧栏",
       "newSessionFromRail": "展开并新建会话",
@@ -972,8 +808,6 @@
       "untitledSession": "未命名会话",
       "recent": "最近",
       "sessionOptions": "会话选项 {{title}}",
-      "delete": "删除",
-      "deleteSessionConfirm": "确定要删除\"{{title}}\"吗？此操作无法撤销。",
       "sessionDeleted": "会话已删除",
       "sessionCreated": "已创建新会话",
       "emptyChatNotice": "当前聊天为空，将继续在此聊天而不创建新会话。",
@@ -984,8 +818,6 @@
       "sessionRenamed": "会话已重命名",
       "sessionPinned": "会话已置顶",
       "sessionUnpinned": "已取消置顶",
-      "renameSessionTitle": "重命名会话",
-      "renameSessionPlaceholder": "输入新的会话名称...",
       "deleteSessionTitle": "删除会话",
       "deleteSessionMessage": "确定要删除 \"{{title}}\" 吗？此操作无法撤销。",
       "profile": "资料",
@@ -1017,25 +849,16 @@
       "questionInput": "输入问题",
       "uploadFiles": "上传 PDF 或图片",
       "uploadFilesAria": "上传 PDF 或图片文件",
-      "processingQuestion": "正在处理问题",
-      "startAnalysisAria": "开始分析问题",
       "analyzing": "分析中...",
       "startAnalysis": "开始分析",
       "modeHint": {
         "advancedReasoning": "高级 RAG 推理已开启，查询分解与 Self-RAG。"
       },
       "stop": "停止",
-      "stopAria": "停止当前处理",
       "clear": "清空",
-      "clearAria": "清空输入框",
       "showSections": "显示输入区域",
       "hideSections": "隐藏输入区域",
-      "showTopbar": "显示顶部栏",
-      "hideTopbar": "隐藏顶部栏",
-      "showInputArea": "显示输入区域",
-      "hideInputArea": "隐藏输入区域",
       "moreOptions": "更多选项",
-      "rename": "重命名",
       "sessionManagementMenu": "会话管理"
     }
   },
@@ -1132,79 +955,10 @@
         "响应式设计：移动端适配"
       ]
     },
-    "clarificationError": "提交澄清失败，请重试。",
-    "skipClarificationError": "跳过澄清失败，请重试。",
-    "clarificationAuthError": "需要登录才能使用高级功能。",
     "apiEndpoints": "# 认证\nPOST /auth/register\nPOST /auth/login\nPOST /auth/logout\nGET  /auth/me\nPUT  /auth/profile\nPOST /auth/change-password\nGET  /auth/google/login\n\n# 查询 Profile\nPOST /query\nPOST /query/stream\nPOST /api/v1/enhanced/query\nPOST /api/advanced-rag/query\n\n# 会话\nGET, POST /sessions\nGET, DELETE /sessions/{session_id}\nGET, POST /sessions/{session_id}/strategy-lock\nGET /sessions/{session_id}/memories/long\nDELETE /sessions/{session_id}/memories/long/{memory_id}\nPATCH, DELETE /sessions/{session_id}/messages/{message_id}\n\n# 文档与 Prompt\nGET /documents\nPOST /upload\nPOST /documents/{filename}/reindex\nDELETE /documents/{filename}\nGET, POST /prompts\nPOST /prompts/check\nPATCH, DELETE /prompts/{prompt_id}\n\n# 管理运维与设置\nGET /admin/ops/runtime\nGET /admin/ops/overview\nGET, POST /admin/ops/retrieval-profile\nPOST /admin/ops/canary\nPOST /admin/ops/benchmark/run\nGET /admin/model-settings\nPOST /admin/model-settings\nGET, POST /user/api-settings\n\n# 评估与追踪\nGET /api/evaluation/queries\nPOST /api/evaluation/run\nGET /api/evaluation/results/{run_id}\nPOST /api/evaluation/compare\nGET /api/evaluation/systems\nGET /agent-tracking/trace/{execution_id}\nGET /agent-tracking/stream/{execution_id}\nGET /agent-tracking/history\n\n# 健康检查\nGET /health\nGET /ready\nGET /metrics"
   },
   "toast": {
-    "close": "关闭通知",
-    "demo": {
-      "title": "Toast通知系统演示",
-      "subtitle": "点击按钮测试不同类型的Toast通知",
-      "info": {
-        "title": "Info 信息提示",
-        "desc": "用于一般信息通知",
-        "button": "显示Info",
-        "message": "这是一条信息提示"
-      },
-      "success": {
-        "title": "Success 成功提示",
-        "desc": "用于操作成功反馈",
-        "button": "显示Success",
-        "message": "操作成功！"
-      },
-      "warning": {
-        "title": "Warning 警告提示",
-        "desc": "用于警告信息",
-        "button": "显示Warning",
-        "message": "请注意：这是一条警告信息"
-      },
-      "error": {
-        "title": "Error 错误提示",
-        "desc": "用于错误信息",
-        "button": "显示Error",
-        "message": "操作失败，请重试"
-      },
-      "longText": {
-        "title": "长文本测试",
-        "desc": "测试长消息的显示",
-        "button": "显示长文本",
-        "message": "这是一条非常长的消息，用于测试Toast组件在显示长文本时的布局和换行效果。消息内容应该能够正确换行并保持良好的可读性。"
-      },
-      "customDuration": {
-        "title": "自定义时长",
-        "desc": "10秒后自动关闭",
-        "button": "10秒持续",
-        "message": "这条消息将在10秒后关闭"
-      },
-      "stacking": {
-        "title": "堆叠测试",
-        "desc": "快速显示多条Toast",
-        "button": "显示堆叠",
-        "message1": "第一条消息",
-        "message2": "第二条消息",
-        "message3": "第三条消息",
-        "message4": "第四条消息"
-      },
-      "shortDuration": {
-        "title": "短时长测试",
-        "desc": "1秒后快速关闭",
-        "button": "1秒持续",
-        "message": "快速消失！"
-      },
-      "tips": {
-        "title": "💡 使用提示",
-        "items": [
-          "Toast会自动在右上角显示",
-          "Hover到Toast上会暂停自动关闭",
-          "点击Toast或关闭按钮可以手动关闭",
-          "多个Toast会自动堆叠显示",
-          "采用统一亮色界面",
-          "在手机上会自适应为全宽显示"
-        ]
-      }
-    }
+    "close": "关闭通知"
   },
   "clarification": {
     "title": "需要更多信息",
@@ -1218,25 +972,6 @@
     "submitError": "提交澄清失败",
     "skipError": "跳过澄清失败",
     "authError": "使用高级功能需要先登录"
-  },
-  "queryOptimization": {
-    "title": "💡 查询优化建议",
-    "suggestClarify": "建议明确：",
-    "examples": "优化示例：",
-    "qualityScore": "质量评分"
-  },
-  "contextResolution": {
-    "title": "🔗 上下文解析",
-    "originalQuery": "原始查询",
-    "resolvedTo": "解析为",
-    "entitiesResolved": "已解析实体",
-    "topicSwitch": "话题切换",
-    "needsClarification": "需要进一步明确",
-    "confidence": {
-      "high": "高置信度",
-      "medium": "中等置信度",
-      "low": "低置信度"
-    }
   },
   "sessionManagement": {
     "editMetadata": "编辑会话元数据",
