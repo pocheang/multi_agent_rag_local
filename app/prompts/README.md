@@ -20,9 +20,11 @@ Prompts owned by a single agent live next to that agent, not here:
 |---|---|
 | Answer templates, chain-of-thought | `app/agents/synthesizer/templates.py` |
 | Router few-shot examples | `app/agents/router/examples.py` |
-| Planner decomposition | `app/agents/planner/prompts.py` |
-| Knowledge strategy | `app/agents/knowledge/prompts.py` |
 | Clarification questions | `app/agents/clarification/rules.py` |
+
+The planner and knowledge agents are deterministic and carry no prompts; the
+`PLANNER_SYSTEM_PROMPT` / `KNOWLEDGE_STRATEGY_SYSTEM_PROMPT` constants written
+for "optional LLM adapters" had no callers and were deleted on 2026-08-29.
 
 ## History
 
