@@ -111,12 +111,6 @@ class Settings(BaseSettings):
     memory_stable_fact_ttl_days: int = Field(default=365, ge=1, le=3650, alias="MEMORY_STABLE_FACT_TTL_DAYS")
 
     # Query Analysis & Clarification
-    # Query Analysis & Clarification
-    query_analysis_min_confidence: float = Field(default=0.7, alias="QUERY_ANALYSIS_MIN_CONFIDENCE")
-    query_complexity_simple_threshold: int = Field(default=10, alias="QUERY_COMPLEXITY_SIMPLE_THRESHOLD")
-    query_complexity_complex_threshold: int = Field(default=30, alias="QUERY_COMPLEXITY_COMPLEX_THRESHOLD")
-    clarification_max_rounds: int = Field(default=10, alias="CLARIFICATION_MAX_ROUNDS")
-    clarification_min_confidence: float = Field(default=0.85, alias="CLARIFICATION_MIN_CONFIDENCE")
 
     # Multi-modal Processing
     enable_image_processing: bool = Field(default=True, alias="ENABLE_IMAGE_PROCESSING")
@@ -129,7 +123,6 @@ class Settings(BaseSettings):
     multimodal_fusion_method: str = Field(default="rrf", alias="MULTIMODAL_FUSION_METHOD")  # rrf|weighted
     visual_embedding_enabled: bool = Field(default=False, alias="VISUAL_EMBEDDING_ENABLED")
     visual_embedding_backend: str = Field(default="colpali", alias="VISUAL_EMBEDDING_BACKEND")
-    colpali_model: str = Field(default="vidore/colpali-v1.3", alias="COLPALI_MODEL")
     image_weight: float = Field(default=0.3, alias="IMAGE_WEIGHT")
     table_weight: float = Field(default=0.3, alias="TABLE_WEIGHT")
     text_weight: float = Field(default=0.4, alias="TEXT_WEIGHT")
@@ -140,21 +133,12 @@ class Settings(BaseSettings):
     cache_l1_ttl: int = Field(default=300, alias="CACHE_L1_TTL")  # 5 minutes
     cache_l2_ttl: int = Field(default=3600, alias="CACHE_L2_TTL")  # 1 hour
     semantic_cache_enabled: bool = Field(default=True, alias="SEMANTIC_CACHE_ENABLED")
-    semantic_cache_threshold: float = Field(default=0.95, alias="SEMANTIC_CACHE_THRESHOLD")
 
     # Performance Optimization - Database
-    db_pool_size: int = Field(default=20, alias="DB_POOL_SIZE")
-    db_max_overflow: int = Field(default=10, alias="DB_MAX_OVERFLOW")
-    db_pool_timeout: int = Field(default=30, alias="DB_POOL_TIMEOUT")
-    db_pool_recycle: int = Field(default=3600, alias="DB_POOL_RECYCLE")
 
     # Performance Optimization - Retrieval
-    retrieval_batch_size: int = Field(default=10, alias="RETRIEVAL_BATCH_SIZE")
-    retrieval_max_concurrent: int = Field(default=5, alias="RETRIEVAL_MAX_CONCURRENT")
 
     # Advanced Reasoning - Tool Runner
-    tool_runner_max_iterations: int = Field(default=5, alias="TOOL_RUNNER_MAX_ITERATIONS")
-    tavily_api_key: str | None = Field(default=None, alias="TAVILY_API_KEY")
 
     database_url: str = Field(default="sqlite:///./data/querymind.db", alias="DATABASE_URL")
     sqlite_busy_timeout_seconds: float = Field(
@@ -169,7 +153,6 @@ class Settings(BaseSettings):
     slo_error_rate_percent_threshold: float = Field(default=5.0, alias="SLO_ERROR_RATE_PERCENT_THRESHOLD")
     slo_grounding_support_ratio_threshold: float = Field(default=0.6, alias="SLO_GROUNDING_SUPPORT_RATIO_THRESHOLD")
     consistency_guard_enabled: bool = Field(default=True, alias="CONSISTENCY_GUARD_ENABLED")
-    consistency_guard_similarity_threshold: float = Field(default=0.55, alias="CONSISTENCY_GUARD_SIMILARITY_THRESHOLD")
     web_domain_allowlist: str = Field(
         default="gov.cn,gov,edu,org,nist.gov,cisa.gov,mitre.org,wikipedia.org,owasp.org,microsoft.com,openai.com",
         alias="WEB_DOMAIN_ALLOWLIST",
@@ -182,8 +165,6 @@ class Settings(BaseSettings):
     reranker_top_n: int = Field(default=5, alias="RERANKER_TOP_N")
 
     # LLM-powered features
-    enable_llm_intent_classification: bool = Field(default=True, alias="ENABLE_LLM_INTENT_CLASSIFICATION")
-    enable_query_rewrite: bool = Field(default=True, alias="ENABLE_QUERY_REWRITE")
     query_rewrite_max_variants: int = Field(default=3, alias="QUERY_REWRITE_MAX_VARIANTS")
 
     graph_extraction_mode: str = Field(default="llm", alias="GRAPH_EXTRACTION_MODE")
@@ -209,8 +190,6 @@ class Settings(BaseSettings):
     pdf_enable_formula_enrichment: bool = Field(
         default=False, alias="PDF_ENABLE_FORMULA_ENRICHMENT"
     )  # Formula semantics
-    pdf_enable_caching: bool = Field(default=True, alias="PDF_ENABLE_CACHING")  # Cache processing results
-    pdf_parallel_workers: int = Field(default=4, alias="PDF_PARALLEL_WORKERS")  # Parallel processing workers
 
     sessions_dir: str = Field(default="./data/sessions", alias="SESSIONS_DIR")
     uploads_dir: str = Field(default="./data/uploads", alias="UPLOADS_DIR")
@@ -243,23 +222,16 @@ class Settings(BaseSettings):
     query_rate_limit_max_attempts: int = Field(default=30, alias="QUERY_RATE_LIMIT_MAX_ATTEMPTS")
     query_rate_limit_window_seconds: int = Field(default=60, alias="QUERY_RATE_LIMIT_WINDOW_SECONDS")
     # Role-based rate limiting (v0.4.5+)
-    query_rate_limit_admin: int = Field(default=100, alias="QUERY_RATE_LIMIT_ADMIN")
-    query_rate_limit_premium: int = Field(default=60, alias="QUERY_RATE_LIMIT_PREMIUM")
-    query_rate_limit_user: int = Field(default=30, alias="QUERY_RATE_LIMIT_USER")
     query_guard_backend: str = Field(default="auto", alias="QUERY_GUARD_BACKEND")  # auto|memory|redis
     query_max_concurrent: int = Field(default=24, alias="QUERY_MAX_CONCURRENT")
     query_max_waiting: int = Field(default=120, alias="QUERY_MAX_WAITING")
     query_acquire_timeout_ms: int = Field(default=3000, alias="QUERY_ACQUIRE_TIMEOUT_MS")
-    query_request_timeout_ms: int = Field(default=20000, alias="QUERY_REQUEST_TIMEOUT_MS")
-    query_overload_inflight_threshold: int = Field(default=20, alias="QUERY_OVERLOAD_INFLIGHT_THRESHOLD")
-    query_overload_waiting_threshold: int = Field(default=60, alias="QUERY_OVERLOAD_WAITING_THRESHOLD")
     query_result_cache_backend: str = Field(default="auto", alias="QUERY_RESULT_CACHE_BACKEND")  # auto|memory|redis|off
     query_result_cache_ttl_seconds: int = Field(default=45, alias="QUERY_RESULT_CACHE_TTL_SECONDS")
     query_result_cache_max_items: int = Field(default=512, alias="QUERY_RESULT_CACHE_MAX_ITEMS")
     query_result_session_ttl_seconds: int = Field(default=300, alias="QUERY_RESULT_SESSION_TTL_SECONDS")
     stream_replay_cache_ttl_seconds: int = Field(default=600, alias="STREAM_REPLAY_CACHE_TTL_SECONDS")
     stream_replay_cache_max_events: int = Field(default=1200, alias="STREAM_REPLAY_CACHE_MAX_EVENTS")
-    stream_heartbeat_seconds: float = Field(default=8.0, alias="STREAM_HEARTBEAT_SECONDS")
     shadow_queue_workers: int = Field(default=2, alias="SHADOW_QUEUE_WORKERS")
     shadow_queue_maxsize: int = Field(default=200, alias="SHADOW_QUEUE_MAXSIZE")
     synthesis_refine_max_rounds: int = Field(default=5, alias="SYNTHESIS_REFINE_MAX_ROUNDS")
@@ -303,9 +275,6 @@ class Settings(BaseSettings):
     quota_mode: str = Field(default="user", alias="QUOTA_MODE")  # user|business_unit
     feature_flags: str = Field(default="", alias="FEATURE_FLAGS")  # name=on|off|pct:10
     feature_flag_seed: str = Field(default="feature", alias="FEATURE_FLAG_SEED")
-    query_retry_enabled: bool = Field(default=True, alias="QUERY_RETRY_ENABLED")
-    query_retry_max_attempts: int = Field(default=2, alias="QUERY_RETRY_MAX_ATTEMPTS")
-    query_retry_base_delay_ms: int = Field(default=120, alias="QUERY_RETRY_BASE_DELAY_MS")
     verifier_max_retries: int = Field(default=1, ge=0, le=1, alias="VERIFIER_MAX_RETRIES")
     langgraph_recursion_limit: int = Field(default=20, ge=12, le=100, alias="LANGGRAPH_RECURSION_LIMIT")
     planner_max_tasks: int = Field(default=8, ge=1, le=32, alias="PLANNER_MAX_TASKS")
@@ -327,9 +296,9 @@ class Settings(BaseSettings):
         le=120_000,
         alias="KNOWLEDGE_RERANKER_TIMEOUT_MS",
     )
-    perf_gate_max_p95_ms: int = Field(default=4000, alias="PERF_GATE_MAX_P95_MS")
-    perf_gate_max_error_rate_percent: float = Field(default=5.0, alias="PERF_GATE_MAX_ERROR_RATE_PERCENT")
-    admin_create_approval_token: str = Field(default="", alias="ADMIN_CREATE_APPROVAL_TOKEN")
+    # Only the hash. ADMIN_CREATE_APPROVAL_TOKEN is a render-time input to
+    # deploy/scripts/config.py, which derives this hash into .runtime/*.env; the
+    # plaintext deliberately never reaches the application.
     admin_create_approval_token_hash: str = Field(default="", alias="ADMIN_CREATE_APPROVAL_TOKEN_HASH")
 
     upload_max_files: int = Field(default=20, alias="UPLOAD_MAX_FILES")
