@@ -21,6 +21,7 @@ import { addCsrfHeader } from "@/lib/csrf";
 
 type AdvancedQueryInput = {
   query: string;
+  sessionId?: string;
   enableDecomposition: boolean;
   enableSelfRag: boolean;
   signal?: AbortSignal;
@@ -52,6 +53,7 @@ export const queryApi = {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         query: input.query,
+        ...(input.sessionId ? { session_id: input.sessionId } : {}),
         enable_decomposition: input.enableDecomposition,
         enable_self_rag: input.enableSelfRag,
       }),
@@ -62,6 +64,7 @@ export const queryApi = {
       answer: typeof payload.final_answer === "string" ? payload.final_answer : "",
       citations: citationList(metadata.citations),
       route: typeof metadata.route === "string" ? metadata.route : undefined,
+      executionId: typeof metadata.execution_id === "string" ? metadata.execution_id : undefined,
       qualityReport: recordOrUndefined(payload.answer_quality),
       executionMetadata: metadata,
     };

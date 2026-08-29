@@ -133,11 +133,13 @@ export function useMessageActions({
     try {
       const result = await appApi.advanced({
         query: q,
+        sessionId: sid,
         enableDecomposition: true,
         enableSelfRag: true,
         signal: runAbort.signal,
       });
       if (!isRunActive()) return;
+      if (result.executionId) onExecutionId?.(result.executionId);
       setMessages((prev) => prev.map((message) => (
         message.message_id === "local-assistant-stream"
           ? {
@@ -152,6 +154,9 @@ export function useMessageActions({
             }
           : message
       )));
+      // The backend now persists both turns; reconcile the optimistic local
+      // messages with what actually landed in the session history.
+      await actions.refreshSessions(true, true);
       await onCreditsChanged?.();
     } catch (e) {
       if (!isRunActive()) return;

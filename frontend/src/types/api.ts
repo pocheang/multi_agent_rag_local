@@ -38,6 +38,7 @@ export type NormalizedQueryResult = {
   answer: string;
   citations: Citation[];
   route?: string;
+  executionId?: string;
   qualityReport?: Record<string, unknown>;
   executionMetadata?: Record<string, unknown>;
 };
