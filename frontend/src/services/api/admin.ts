@@ -124,8 +124,13 @@ export const adminOpsApi = {
       limit: input.limit ?? 30,
     });
   },
+  /**
+   * Queues a benchmark run. The backend answers 202 immediately and executes
+   * the (multi-minute) run in its background queue; poll adminBenchmarkTrends
+   * afterwards to see the result.
+   */
   adminRunBenchmark(input: { maxQueries?: number } = {}) {
-    return buildPostRequest<{ ok: boolean; result: BenchmarkTrendItem }>("/admin/ops/benchmark/run", {
+    return buildPostRequest<{ ok: boolean; status: string; max_queries: number }>("/admin/ops/benchmark/run", {
       max_queries: input.maxQueries ?? 20,
     });
   },

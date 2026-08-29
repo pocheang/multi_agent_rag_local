@@ -402,6 +402,7 @@
       "opsExported": "运维报表导出成功",
       "runBenchmarkFailed": "运行基准失败",
       "benchmarkComplete": "基准任务完成，趋势已更新",
+      "benchmarkQueued": "基准任务已排队，稍后刷新趋势查看结果",
       "reloadConfigFailed": "配置热加载失败",
       "configReloaded": "配置热加载成功",
       "exportAuditReportFailed": "导出审计报告失败",

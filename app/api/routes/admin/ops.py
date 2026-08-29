@@ -11,6 +11,7 @@ from typing import Any
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import Response
 
+from app.api import dependencies as api_dependencies
 from app.api.dependencies import (
     _audit,
     _check_chroma_ready,
@@ -28,7 +29,7 @@ from app.api.dependencies import (
     settings,
 )
 from app.api.routes.compatibility.pipeline_compat import execute_standard_compatibility
-from app.api.transport.errors import bad_request
+from app.api.transport.errors import bad_request, service_unavailable
 from app.api.transport.middleware import get_request_metrics
 from app.services.models.config_store import get_global_model_settings, public_global_model_settings
 from app.services.observability.log_buffer import list_log_levels, reset_logger_levels, set_logger_level
@@ -260,26 +261,35 @@ def admin_ops_benchmark_trends(
     return {"items": rows, "count": len(rows)}
 
 
-@router.post("/benchmark/run")
+@router.post("/benchmark/run", status_code=202)
 def admin_ops_benchmark_run(
     request: Request,
     max_queries: int = 20,
     user: dict[str, Any] = Depends(_require_user),
 ):
+    """Accept a benchmark run and execute it off the request path.
+
+    A run executes up to ``max_queries`` full RAG queries; doing that inline kept
+    one HTTP request open for minutes (well past any reverse-proxy timeout) and
+    occupied a threadpool worker the whole time.  Results land in the existing
+    benchmark history, readable via ``GET /admin/ops/benchmark/trends``.
+    """
     _require_permission(user, "admin:ops_manage", request, "admin")
-    try:
-        entry = run_benchmark(max_queries=max_queries, execute_query=_execute_standard_profile)
-    except ValueError as exc:
-        raise bad_request(str(exc))
+    if max_queries < 1:
+        raise bad_request("max_queries must be >= 1")
+    queue = api_dependencies.get_query_runtime().shadow_queue
+    accepted = queue.submit(run_benchmark, max_queries=max_queries, execute_query=_execute_standard_profile)
+    if not accepted:
+        raise service_unavailable("background queue is full; retry shortly")
     _audit(
         request,
         action="admin.ops.benchmark.run",
         resource_type="admin",
-        result="success",
+        result="accepted",
         user=user,
-        detail=f"queries={entry['num_queries']}",
+        detail=f"queries={max_queries}",
     )
-    return {"ok": True, "result": entry}
+    return {"ok": True, "status": "accepted", "max_queries": max_queries}
 
 
 @router.get("/audit-report.md")
@@ -369,27 +379,38 @@ def admin_ops_autotune(payload: dict[str, Any], request: Request, user: dict[str
     return {"ok": True, "latest": latest, "applied_patch": patch}
 
 
-@router.post("/replay/run")
+@router.post("/replay/run", status_code=202)
 def admin_ops_replay_run(
     payload: dict[str, Any],
     request: Request,
     user: dict[str, Any] = Depends(_require_user),
 ):
+    """Accept a replay run and execute it off the request path.
+
+    Same reasoning as the benchmark endpoint: up to 50 full RAG queries is
+    minutes of work, not an HTTP request.
+    """
     _require_permission(user, "admin:ops_manage", request, "admin")
     max_questions = max(1, min(int(payload.get("max_questions", 30) or 30), 50))
     history_store = _history_store_for_user(user)
-    try:
-        summary = run_replay(
-            history_store=history_store,
-            max_questions=max_questions,
-            execute_query=_execute_standard_profile,
-        )
-    except ValueError as exc:
-        raise bad_request(str(exc))
-    return {
-        "ok": True,
-        "summary": summary,
-    }
+    queue = api_dependencies.get_query_runtime().shadow_queue
+    accepted = queue.submit(
+        run_replay,
+        history_store=history_store,
+        max_questions=max_questions,
+        execute_query=_execute_standard_profile,
+    )
+    if not accepted:
+        raise service_unavailable("background queue is full; retry shortly")
+    _audit(
+        request,
+        action="admin.ops.replay.run",
+        resource_type="admin",
+        result="accepted",
+        user=user,
+        detail=f"questions={max_questions}",
+    )
+    return {"ok": True, "status": "accepted", "max_questions": max_questions}
 
 
 # ============================================================================

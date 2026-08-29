@@ -68,10 +68,13 @@ export function createOpsActions(params: AdminActionsParams, errorHandler: Error
   const runBenchmark = async () => {
     setBenchmarkRunning(true);
     try {
+      // The backend answers 202 and runs the benchmark in its background queue,
+      // so the trends below are the *previous* results; refresh again later to
+      // see this run.
       await appApi.adminRunBenchmark({ maxQueries: 20 });
       const trends = await appApi.adminBenchmarkTrends({ limit: 30 });
       setBenchmarkTrends(trends.items || []);
-      setStatusText(t("admin.actions.benchmarkComplete"));
+      setStatusText(t("admin.actions.benchmarkQueued"));
     } catch (e) {
       await handleApiError(e, t("admin.actions.runBenchmarkFailed"));
     } finally {
