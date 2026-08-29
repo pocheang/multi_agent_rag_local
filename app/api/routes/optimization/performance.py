@@ -2,11 +2,9 @@
 
 import logging
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException
 
 from app.api.deps.auth import require_admin
-from app.database.connection_pool import get_connection_pool
-from app.database.query_optimizer import QueryOptimizer, optimize_database
 from app.services.caching import get_cache_manager
 from app.services.optimization.memory_manager import MemoryManager, optimize_memory
 from app.services.performance.monitor import get_monitor
@@ -25,12 +23,10 @@ async def get_performance_stats():
     """Get comprehensive performance statistics."""
     monitor = get_monitor()
     cache_manager = get_cache_manager()
-    connection_pool = get_connection_pool()
 
     stats = {
         "metrics": monitor.get_all_stats(),
         "cache": cache_manager.get_stats() if cache_manager else None,
-        "database": connection_pool.get_pool_stats(),
         "memory": MemoryManager.get_memory_usage(),
     }
 
@@ -73,63 +69,6 @@ async def clear_cache(prefix: str | None = None):
     else:
         await cache_manager.clear()
         return {"success": True, "message": "All caches cleared"}
-
-
-@router.get("/database/stats")
-async def get_database_stats():
-    """Get database statistics."""
-    connection_pool = get_connection_pool()
-    return {"success": True, "data": connection_pool.get_pool_stats()}
-
-
-@router.post("/database/optimize")
-async def optimize_database_tables(tables: list[str] | None = None):
-    """Optimize database tables.
-
-    Args:
-        tables: List of table names to optimize (default: common tables)
-    """
-    if tables is None:
-        tables = ["session_metadata"]
-
-    pool = get_connection_pool()
-
-    try:
-        async with pool.session() as session:
-            results = await optimize_database(session, tables)
-
-        return {"success": True, "data": results}
-    except Exception:
-        logger.exception("Database optimization failed")
-        raise HTTPException(status_code=500, detail="Database optimization failed")
-
-
-@router.get("/database/slow-queries")
-async def get_slow_queries(
-    min_duration_ms: int = Query(default=1000, ge=0),
-    limit: int = Query(default=10, ge=1, le=100),
-):
-    """Get slow database queries.
-
-    Args:
-        min_duration_ms: Minimum query duration in milliseconds
-        limit: Maximum number of queries to return
-    """
-    pool = get_connection_pool()
-    optimizer = QueryOptimizer()
-
-    try:
-        async with pool.session() as session:
-            slow_queries = await optimizer.get_slow_queries(
-                session,
-                min_duration_ms=min_duration_ms,
-                limit=limit,
-            )
-
-        return {"success": True, "data": slow_queries}
-    except Exception:
-        logger.exception("Failed to fetch slow database queries")
-        raise HTTPException(status_code=500, detail="Failed to fetch slow queries")
 
 
 @router.get("/memory/stats")

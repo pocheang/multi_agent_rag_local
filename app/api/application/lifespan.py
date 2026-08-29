@@ -25,7 +25,6 @@ logger = logging.getLogger(__name__)
 _auto_ingest_thread: threading.Thread | None = None
 
 # Performance optimization imports
-_pool_initialized = False
 _cache_initialized = False
 
 
@@ -86,16 +85,7 @@ async def lifespan(app: FastAPI):
     await tracker.start_periodic_cleanup(interval_seconds=300)
 
     # Initialize performance optimization services
-    global _pool_initialized, _cache_initialized
-
-    try:
-        from app.database.connection_pool import initialize_pool
-
-        await initialize_pool()
-        _pool_initialized = True
-        logger.info("✓ Database connection pool initialized (size=%d)", settings.db_pool_size)
-    except Exception as e:
-        logger.warning(f"Database pool initialization failed (non-critical): {e}")
+    global _cache_initialized
 
     try:
         from app.services.caching import initialize_cache_manager
@@ -148,15 +138,6 @@ async def lifespan(app: FastAPI):
         Neo4jClient.close_shared_driver()
 
         # Shutdown performance optimization services
-        if _pool_initialized:
-            try:
-                from app.database.connection_pool import close_pool
-
-                await close_pool()
-                logger.info("Database connection pool closed")
-            except Exception as e:
-                logger.warning(f"Database pool shutdown failed: {e}")
-
         if _cache_initialized:
             try:
                 from app.services.caching import close_cache_manager
