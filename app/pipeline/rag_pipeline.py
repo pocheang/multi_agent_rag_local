@@ -42,6 +42,14 @@ class PipelineExecutionEngine(Protocol):
     def execute_stream(self, request: Any, **kwargs: Any) -> AsyncIterator[dict[str, Any]]: ...
 
 
+# One compiled LangGraph workflow per profile.  Building it costs ~20ms of
+# synchronous CPU work, which would otherwise run on the event loop for every
+# request.  Safe to share only because OrchestrationServices scopes its event
+# reporter with a ContextVar (see app/orchestration/engine.py); without that,
+# concurrent requests would overwrite each other's event stream.
+_ENGINE_CACHE: dict[PipelineProfile, PipelineExecutionEngine] = {}
+
+
 class RAGPipeline:
     """Translate public requests into one typed Engine and normalize its final answer."""
 
@@ -56,6 +64,7 @@ class RAGPipeline:
         # Deprecated injection names are intentionally ignored.  They remain
         # accepted briefly so a stale caller cannot reactivate a legacy workflow.
         del deprecated
+        self._uses_default_capabilities = capabilities is None and tool_agent is None
         if capabilities is None:
             capabilities = CoreCapabilities()
         if tool_agent is not None:
@@ -66,6 +75,17 @@ class RAGPipeline:
     def _engine_for(self, profile: PipelineProfile) -> PipelineExecutionEngine:
         if self._injected_engine is not None:
             return self._injected_engine
+        if not self._uses_default_capabilities:
+            # Custom capabilities must not be served from (or poison) the shared
+            # cache; build a private engine instead.
+            return self._build_engine(profile)
+        engine = _ENGINE_CACHE.get(profile)
+        if engine is None:
+            engine = self._build_engine(profile)
+            _ENGINE_CACHE[profile] = engine
+        return engine
+
+    def _build_engine(self, profile: PipelineProfile) -> PipelineExecutionEngine:
         return OrchestrationEngine(
             services=self.capabilities.orchestration_services(),
             policy=ExecutionPolicy.for_profile(profile),

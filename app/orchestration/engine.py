@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import AsyncIterator, Awaitable, Callable
+from contextvars import ContextVar
 from typing import Any, Protocol
 
 from app.core.config import get_settings
@@ -60,6 +61,16 @@ KnowledgeOrchestrator = Callable[
 ]
 
 
+# Per-request event reporter, installed by the engine for the current async task.
+# A ContextVar (not instance state) so one OrchestrationServices object can be
+# shared across concurrent requests without one request's execution events
+# leaking into another request's stream.  Mirrors the pattern already used by
+# RAGAgentService for degradation reporting.
+_current_event_reporter: ContextVar[Callable[[ExecutionEvent], Awaitable[None]] | None] = ContextVar(
+    "orchestration_current_event_reporter", default=None
+)
+
+
 class CompatibilityStreamExecutor(Protocol):
     """Deprecated protocol retained only for import compatibility."""
 
@@ -103,15 +114,16 @@ class OrchestrationServices:
         self.access_scope_resolver = access_scope_resolver or AccessScopeResolver()
         self.context = context
         self._event_reporter_binder = event_reporter_binder
-        self._event_reporter: Callable[[ExecutionEvent], Awaitable[None]] = _discard_event
 
     def bind_event_reporter(self, reporter: Callable[[ExecutionEvent], Awaitable[None]]) -> None:
-        self._event_reporter = reporter
+        """Install this request's reporter for the current async task only."""
+        _current_event_reporter.set(reporter)
         if self._event_reporter_binder is not None:
             self._event_reporter_binder(reporter)
 
     async def report_event(self, event: ExecutionEvent) -> None:
-        await self._event_reporter(event)
+        reporter = _current_event_reporter.get() or _discard_event
+        await reporter(event)
 
 
 class OrchestrationEngine:
