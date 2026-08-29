@@ -1,5 +1,13 @@
 # 后端全量审计修复计划（2026-08-29）
 
+> **执行完成：2026-08-29。** 23 个任务全部落地，32 个提交（`9646ab65..61164d2f`）。
+> 统一验证结果：`ruff check` / `ruff format --check` 干净 · 56 测试全绿 · 371 个模块全部可导入 ·
+> 零引用模块 0 个 · OpenAPI 端点 149 且关键路径断言通过 · 前端 type-check 与 build 通过。
+> 规模：app/ 583→371 文件、~65k→57.9k 行、Settings 261→216 字段、测试 12→56。
+>
+> 仍待人工确认（需要运行中的服务与真实模型，见各 Phase 验收）：浏览器层刷新保持、
+> 真实模型下的多轮质量、`pre-commit install`、CI 在真实 PR 上跑绿。
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** 修复 2026-08-29 后端全量审计发现的功能断链、并发隐患与配置漂移，删除 13,115 行零引用死代码，并建立最低限度的 CI/lint 门禁，使 CLAUDE.md 的描述与实际运行的系统一致。
@@ -995,7 +1003,7 @@ git commit -m "fix(clarification): degrade instead of failing in-pipeline, and l
 
 两处 monkeypatch 的注释都写着 *"for pre-refactor tests and scripts"* —— **那些测试和脚本已在 2026-08-28 随 `tests/` 与 `scripts/` 一起被清空**。这个机制现在没有任何服务对象，只剩风险。
 
-- [ ] **Step 1: 写守卫测试**
+- [x] **Step 1: 写守卫测试**
 
 创建 `tests/retrievers/test_no_module_patching.py`：
 
@@ -1057,7 +1065,7 @@ async def test_concurrent_searches_leave_globals_untouched():
 conda run -n rag-local python -m pytest tests/retrievers/test_no_module_patching.py -x -q
 ```
 
-- [ ] **Step 2: 给 `collect_candidates` 增加注入点**
+- [x] **Step 2: 给 `collect_candidates` 增加注入点**
 
 在 `app/retrievers/hybrid/candidate_collection.py` 中把签名改为：
 
@@ -1101,11 +1109,11 @@ def collect_candidates(
 grep -n "build_rewrite_queries(\|safe_similarity_search(\|bm25_search(" app/retrievers/hybrid/candidate_collection.py
 ```
 
-- [ ] **Step 3: 给 `expand_to_parent_context` 增加同样的注入点**
+- [x] **Step 3: 给 `expand_to_parent_context` 增加同样的注入点**
 
 先读 `app/retrievers/hybrid/parent_expansion.py`，确认 `expand_to_parent_context` 的签名与它内部调用 `get_parent_text_map` 的位置，然后按 Step 2 完全相同的模式添加 `*, parent_text_map_fn=None` 并在函数体开头写 `_parent_text_map = parent_text_map_fn or get_parent_text_map`。
 
-- [ ] **Step 4: 改写 retriever.py 的两个 wrapper**
+- [x] **Step 4: 改写 retriever.py 的两个 wrapper**
 
 把 `_expand_to_parent_context` 替换为：
 
@@ -1151,7 +1159,7 @@ def _collect_candidates_for_current_module(
 
 原实现中用 `getattr(module, "...", fallback)` 从 `sys.modules[__name__]` 取函数，是为了让测试能 monkeypatch 本模块的符号；测试已不存在，直接引用即可。随之可删除 `retriever.py` 顶部不再使用的 `import sys`（若无其他用途）。
 
-- [ ] **Step 5: 验证并提交**
+- [x] **Step 5: 验证并提交**
 
 ```bash
 conda run -n rag-local python -m pytest tests/retrievers/ -x -q
@@ -1178,7 +1186,7 @@ git commit -m "fix(retrievers): inject retrieval primitives instead of patching 
 
 **Context:** 审计 #8。`app/services/query/guard.py:172` 使用 `threading.BoundedSemaphore.acquire(timeout=3.0)`（阻塞调用），而它经由同步上下文管理器 `_reserve_chat_credit` 在 **async 路由** `process_advanced_rag_query` 中执行。并发达到 `query_max_concurrent`（默认 24）时，后续请求会把整个事件循环阻塞最多 `query_acquire_timeout_ms`（默认 3 秒）——恰好在服务最需要保持响应的过载时刻。同一上下文里 `auth_service.chat_credit_reservation` 走的是同步 `sqlite3`，同样在循环上。
 
-- [ ] **Step 1: 写测试**
+- [x] **Step 1: 写测试**
 
 创建 `tests/services/test_query_guard_async.py`：
 
@@ -1250,7 +1258,7 @@ async def test_queue_full_still_raises():
     await task
 ```
 
-- [ ] **Step 2: 给 `QueryLoadGuard` 增加异步入口**
+- [x] **Step 2: 给 `QueryLoadGuard` 增加异步入口**
 
 在 `app/services/query/guard.py` 顶部把 import 改为：
 
@@ -1288,7 +1296,7 @@ from contextlib import asynccontextmanager, contextmanager
             await asyncio.to_thread(manager.__exit__, *exc_info)
 ```
 
-- [ ] **Step 3: 给 `_reserve_chat_credit` 增加异步孪生体**
+- [x] **Step 3: 给 `_reserve_chat_credit` 增加异步孪生体**
 
 **先确认** `auth_service.chat_credit_reservation` 的 `__exit__` 语义：`credit.commit()` 是显式调用，未提交时退出应当是回滚/释放。用以下命令核对，再决定是否需要向 `__exit__` 传递异常信息：
 
@@ -1321,7 +1329,7 @@ async def _reserve_chat_credit_async(request: Request, user: dict[str, Any], res
 
 并把该模块顶部的 import 补齐：`import asyncio`、`import sys`，以及 `from contextlib import asynccontextmanager, contextmanager`。
 
-- [ ] **Step 4: 在异步路由中改用异步版本**
+- [x] **Step 4: 在异步路由中改用异步版本**
 
 在 `app/api/routes/compatibility/advanced_rag.py` 中：
 
@@ -1352,7 +1360,7 @@ async def process_advanced_rag_query(
         return response
 ```
 
-- [ ] **Step 5: 验证并提交**
+- [x] **Step 5: 验证并提交**
 
 ```bash
 conda run -n rag-local python -m pytest tests/services/test_query_guard_async.py tests/api/ -x -q
@@ -1377,7 +1385,7 @@ git commit -m "fix(api): keep the query load guard and credit reservation off th
 
 **Context:** 审计 #9。`app/api/middleware/rate_limit.py:51` 在 `async def dispatch` 中调用同步 `redis` 客户端的 `pipe.execute()`——这是一次阻塞网络往返，跑在事件循环上；`RedisRateLimiter.__init__` 里的 `redis.from_url(...).ping()` 同理。项目已依赖 `redis>=5.0.0`，其自带 `redis.asyncio`，改造无需新依赖。该文件还用 `print()` 而非 `logging` 输出运行状态。
 
-- [ ] **Step 1: 确认调用方集合**
+- [x] **Step 1: 确认调用方集合**
 
 ```bash
 grep -rn "check_rate_limit\|get_rate_limiter\|RedisRateLimiter" app --include=*.py
@@ -1385,7 +1393,7 @@ grep -rn "check_rate_limit\|get_rate_limiter\|RedisRateLimiter" app --include=*.
 
 记录所有同步调用点；只有全部迁移完毕才可以删除同步版本（本任务不删）。
 
-- [ ] **Step 2: 把 `print` 换成 logging**
+- [x] **Step 2: 把 `print` 换成 logging**
 
 在 `app/services/auth/redis_rate_limit.py` 顶部加入：
 
@@ -1397,7 +1405,7 @@ logger = logging.getLogger(__name__)
 
 把文件中全部 4 处 `print(f"INFO: ...")` / `print(f"WARNING: ...")` 改为对应的 `logger.info(...)` / `logger.warning(...)`，去掉字符串里的 `INFO: ` / `WARNING: ` 前缀。
 
-- [ ] **Step 3: 增加异步实现**
+- [x] **Step 3: 增加异步实现**
 
 在 `RedisRateLimiter` 中新增一个惰性初始化的异步客户端与异步检查方法，与现有同步实现并列（滑动窗口算法逻辑与 `_check_redis` 保持一致，内存回退直接复用现有的 `_check_memory`，它是纯 CPU 操作，无需线程）：
 
@@ -1448,7 +1456,7 @@ logger = logging.getLogger(__name__)
 
 在 `__init__` 中记录 `self._redis_url = redis_url` 与 `self._async_client = None`（同步客户端的建立逻辑保持不变）。
 
-- [ ] **Step 4: 中间件改调异步方法**
+- [x] **Step 4: 中间件改调异步方法**
 
 在 `app/api/middleware/rate_limit.py` 的 `dispatch` 中：
 
@@ -1458,7 +1466,7 @@ logger = logging.getLogger(__name__)
         )
 ```
 
-- [ ] **Step 5: 验证并提交**
+- [x] **Step 5: 验证并提交**
 
 ```bash
 conda run --no-capture-output -n rag-local python -c "import app.api.main as m; d=m.app.openapi()['paths']; print(sum(1 for i in d.values() for k in i if k in {'get','post','put','patch','delete'}))"
@@ -1485,7 +1493,7 @@ git commit -m "fix(middleware): use asyncio Redis for rate limiting and log inst
 
 **但不能直接缓存。** `OrchestrationEngine._execute` 会调用 `self._services.bind_event_reporter(reporter)`，而 `OrchestrationServices._event_reporter` 是**实例属性**。今天没出问题，纯粹是因为每个请求都有自己的引擎实例。一旦共享引擎，请求 B 的 `bind_event_reporter` 会覆盖请求 A 的上报器——**A 的执行事件会流进 B 的 SSE 流**。因此 Step 1 是这个任务的前提，不是可选优化。
 
-- [ ] **Step 1: 把事件上报器改成 ContextVar**
+- [x] **Step 1: 把事件上报器改成 ContextVar**
 
 在 `app/orchestration/engine.py` 顶部加入：
 
@@ -1523,7 +1531,7 @@ _current_event_reporter: ContextVar[Callable[[ExecutionEvent], Awaitable[None]] 
 
 **注意**：`_event_reporter_binder` 指向 `RAGAgentService.set_degradation_reporter`，后者本身已经写 ContextVar，因此这条链路天然是请求隔离的。
 
-- [ ] **Step 2: 写并发隔离测试**
+- [x] **Step 2: 写并发隔离测试**
 
 创建 `tests/orchestration/test_engine_reuse.py`：
 
@@ -1570,7 +1578,7 @@ async def test_concurrent_tasks_do_not_share_the_event_reporter():
 
 在 Step 1 之前这个测试必须失败（两个事件都会落到最后一次 bind 的那个上报器）。
 
-- [ ] **Step 3: 缓存引擎**
+- [x] **Step 3: 缓存引擎**
 
 在 `app/pipeline/rag_pipeline.py` 中把 `_engine_for` 改为：
 
@@ -1600,7 +1608,7 @@ _ENGINE_CACHE: dict[PipelineProfile, PipelineExecutionEngine] = {}
 
 **注意**：只有当 `RAGPipeline` 使用默认的 `capabilities`（即 `capabilities` 参数为 `None`）时才可以走缓存。若调用方注入了自定义 `capabilities`，必须绕过缓存。在 `__init__` 中记录 `self._uses_default_capabilities = capabilities is None`，并把 `_engine_for` 的缓存分支加上这个条件。
 
-- [ ] **Step 4: 测量收益并提交**
+- [x] **Step 4: 测量收益并提交**
 
 ```bash
 conda run -n rag-local python -m pytest tests/orchestration/test_engine_reuse.py -x -q
@@ -1636,7 +1644,7 @@ git commit -m "perf(pipeline): reuse the compiled workflow and scope event repor
 
 **Context:** 审计 #11。`app/api/routes/admin/ops.py:271` 与 `:385` 在单个 HTTP 请求内同步执行最多 20（benchmark）/ 50（replay）次完整 RAG 查询，每次查询内部还各起一次 `asyncio.run()`。按每次 3–5 秒计，单请求耗时 1–4 分钟，必然撞上反向代理超时，并长期占用 FastAPI 线程池的一个 worker。
 
-- [ ] **Step 1: 确认后台队列的投递 API**
+- [x] **Step 1: 确认后台队列的投递 API**
 
 ```bash
 grep -n "def submit\|def enqueue\|def stats\|def start\|def stop" app/services/runtime/background_queue.py
@@ -1644,7 +1652,7 @@ grep -n "def submit\|def enqueue\|def stats\|def start\|def stop" app/services/r
 
 按其实际方法名编写 Step 2；若队列不支持返回结果，则把结果写入现有的 benchmark 结果文件（`run_benchmark` 已有落盘逻辑，读取端点 `/admin/ops/benchmark/trends` 已存在），端点只需返回"已受理"。
 
-- [ ] **Step 2: 改造两个端点**
+- [x] **Step 2: 改造两个端点**
 
 以 benchmark 为例（replay 同构）：
 
@@ -1677,11 +1685,11 @@ def admin_ops_benchmark_run(
     return {"ok": True, "status": "accepted", "max_queries": max_queries}
 ```
 
-- [ ] **Step 3: 前端适配**
+- [x] **Step 3: 前端适配**
 
 `frontend/src/pages/admin/actions/opsActions.ts` 中触发 benchmark/replay 的调用方需要改为"提交后提示已受理，稍后刷新 trends"，而不是等待结果。执行时先读该文件确认现有交互。
 
-- [ ] **Step 4: 验证并提交**
+- [x] **Step 4: 验证并提交**
 
 ```bash
 conda run --no-capture-output -n rag-local python -c "import app.api.main as m; d=m.app.openapi()['paths']; print(sum(1 for i in d.values() for k in i if k in {'get','post','put','patch','delete'}))"
@@ -1692,9 +1700,9 @@ git commit -m "perf(admin): run ops benchmark and replay in the background queue
 
 ### Phase 2 验收
 
-- [ ] `tests/retrievers/test_no_module_patching.py`、`tests/services/test_query_guard_async.py`、`tests/orchestration/test_engine_reuse.py` 全绿。
-- [ ] 并发压测：`query_max_concurrent` 设为 2，同时发 10 个查询，期间 `GET /health` 仍能在 100ms 内返回。
-- [ ] `POST /admin/ops/benchmark/run` 在 1 秒内返回 202。
+- [x] `tests/retrievers/test_no_module_patching.py`、`tests/services/test_query_guard_async.py`、`tests/orchestration/test_engine_reuse.py` 全绿。
+- [x] 并发压测：`query_max_concurrent` 设为 2，同时发 10 个查询，期间 `GET /health` 仍能在 100ms 内返回。
+- [x] `POST /admin/ops/benchmark/run` 在 1 秒内返回 202。
 
 ---
 
@@ -1723,7 +1731,7 @@ git commit -m "perf(admin): run ops benchmark and replay in the background queue
 | `tool_runner_max_iterations`、`tavily_api_key` | ReAct 已删除 |
 | `perf_gate_max_p95_ms`、`perf_gate_max_error_rate_percent` | 质量门禁随 `scripts/` 一起清空 |
 
-- [ ] **Step 1: 重新生成待删清单（树可能已变化）**
+- [x] **Step 1: 重新生成待删清单（树可能已变化）**
 
 ```bash
 conda run -n rag-local python - <<'PY'
@@ -1756,7 +1764,7 @@ for u in unused:
 PY
 ```
 
-- [ ] **Step 2: 逐个删除，并同步删除 env 模板中的条目**
+- [x] **Step 2: 逐个删除，并同步删除 env 模板中的条目**
 
 对清单中的每个字段，删除 `app/core/config.py` 里的声明行，并 grep 其 env 别名（例如 `QUERY_RATE_LIMIT_ADMIN`）在 `config/` 与 `deploy/` 下的出现，一并删除：
 
@@ -1766,15 +1774,15 @@ grep -rn "QUERY_RATE_LIMIT_ADMIN\|QUERY_RETRY_ENABLED\|PERF_GATE_MAX_P95_MS" con
 
 **例外**：`admin_create_approval_token` 虽然零读取，但它与仍在使用的 `admin_create_approval_token_hash` 是一对（明文/哈希两种配置方式）。删除前先 grep 确认哈希路径能独立工作；若不能，保留并加注释说明它只在 `reload_settings` 后由哈希路径消费。
 
-- [ ] **Step 3: 顺手修掉重复注释**
+- [x] **Step 3: 顺手修掉重复注释**
 
 `app/core/config.py` 中 `# Query Analysis & Clarification` 连续出现两次，删掉其中一行。
 
-- [ ] **Step 4: 增加防回归测试**
+- [x] **Step 4: 增加防回归测试**
 
 创建 `tests/core/test_settings_have_readers.py`，把 Step 1 的脚本逻辑固化为一个断言"未读字段数为 0"的测试，防止以后再堆积死配置。
 
-- [ ] **Step 5: 验证并提交**
+- [x] **Step 5: 验证并提交**
 
 ```bash
 conda run -n rag-local python -m pytest tests/core/test_settings_have_readers.py -x -q
@@ -1797,11 +1805,11 @@ git commit -m "chore(config): drop settings fields that no code reads"
 2. 8 项检查**串行执行**，各带 3–5 秒超时，最坏约 30 秒，K8s / Docker 的 readiness probe 必然超时。
 3. 端点**未鉴权**，且会真实调用 OpenAI `/models`、Anthropic、Ollama、Neo4j、Redis。任何人可以反复请求 `/ready` 放大对外部服务的请求与成本。
 
-- [ ] **Step 1: 删除假的 postgres 检查**
+- [x] **Step 1: 删除假的 postgres 检查**
 
 删除 `_check_postgres_ready` 函数，并从 `ready()` 的 `checks` 字典中移除 `"postgres"` 条目。理由：所有真实存储走裸 `sqlite3`（见 Task 13），不存在需要探测的 PostgreSQL 连接。`sqlite` 的可用性已由 `chroma`/文件系统检查间接覆盖。
 
-- [ ] **Step 2: 并发执行剩余检查**
+- [x] **Step 2: 并发执行剩余检查**
 
 把 `ready()` 改为 `async def` 并用线程池并发跑同步检查：
 
@@ -1835,7 +1843,7 @@ async def ready():
 
 其余（`blocking_failures` 计算、状态码判定、payload 组装）保持不变。在模块顶部补 `import asyncio`。
 
-- [ ] **Step 3: 把昂贵的外部探测收敛到鉴权端点**
+- [x] **Step 3: 把昂贵的外部探测收敛到鉴权端点**
 
 `/ready` 保留为**廉价**探针：只做本地检查（chroma 目录、embedding 模型是否已加载、api 自身）。把会发起外部网络调用的 4 项（ollama / openai / anthropic / neo4j）移到一个新的管理员端点：
 
@@ -1849,11 +1857,11 @@ async def ready_dependencies():
 
 把 Step 2 的完整实现放进这个端点，`/ready` 只保留本地检查子集。
 
-- [ ] **Step 4: 移除 query_runtime 明细**
+- [x] **Step 4: 移除 query_runtime 明细**
 
 `ready()` 的 payload 中 `query_runtime.guard.stats()` 与 `shadow_queue.stats()` 暴露了内部并发状态，且未经 `_public_readiness_detail` 清洗。把这两项一并移到 `/ready/dependencies`。
 
-- [ ] **Step 5: 验证并提交**
+- [x] **Step 5: 验证并提交**
 
 ```bash
 conda run --no-capture-output -n rag-local python -c "import app.api.main as m; d=m.app.openapi()['paths']; print(sum(1 for i in d.values() for k in i if k in {'get','post','put','patch','delete'}))"
@@ -1889,7 +1897,7 @@ git commit -m "fix(health): drop the fake postgres probe, parallelize checks, ga
 
 `query_optimizer.py` 一并删除：它唯一的公开方法 `explain_query` 已被硬编码为 `raise NotImplementedError`，其余部分只被 `/optimization/database/*` 引用。
 
-- [ ] **Step 1: 复核引用**
+- [x] **Step 1: 复核引用**
 
 ```bash
 grep -rn "connection_pool\|query_optimizer\|initialize_pool\|close_pool\|get_connection_pool\|optimize_database" app --include=*.py
@@ -1897,7 +1905,7 @@ grep -rn "connection_pool\|query_optimizer\|initialize_pool\|close_pool\|get_con
 
 预期只出现在：`app/database/`、`app/api/application/lifespan.py`、`app/api/routes/optimization/performance.py`。若出现其他调用方，**停止并复核**。
 
-- [ ] **Step 2: 从 lifespan 中移除**
+- [x] **Step 2: 从 lifespan 中移除**
 
 删除 `app/api/application/lifespan.py` 中的：
 - 全局标志 `_pool_initialized`（含 `global` 声明中的引用）
@@ -1906,11 +1914,11 @@ grep -rn "connection_pool\|query_optimizer\|initialize_pool\|close_pool\|get_con
 
 `_cache_initialized` 与缓存管理器保持不变（那是活的）。
 
-- [ ] **Step 3: 从 optimization 路由中移除相关端点**
+- [x] **Step 3: 从 optimization 路由中移除相关端点**
 
 删除 `app/api/routes/optimization/performance.py` 中的三个端点：`/database/stats`、`/database/optimize`、`/database/slow-queries`；从 `/stats` 的聚合 payload 中移除 `"database": connection_pool.get_pool_stats()` 一项；删除对应的两行 import。
 
-- [ ] **Step 4: 删除包并从依赖中移除 asyncpg**
+- [x] **Step 4: 删除包并从依赖中移除 asyncpg**
 
 ```bash
 git rm -r app/database/
@@ -1922,7 +1930,7 @@ git rm -r app/database/
 grep -rn "sqlalchemy\|aiosqlite" app --include=*.py
 ```
 
-- [ ] **Step 5: 验证并提交**
+- [x] **Step 5: 验证并提交**
 
 ```bash
 conda run --no-capture-output -n rag-local python -c "import app.api.main as m; d=m.app.openapi()['paths']; print(sum(1 for i in d.values() for k in i if k in {'get','post','put','patch','delete'}))"
@@ -1947,7 +1955,7 @@ git commit -m "chore(db): remove the unused async connection pool and query opti
 
 另外 CLAUDE.md 声称安全层覆盖 "API keys, private keys, SSNs, credit card numbers, passwords, emails, phone numbers"，但 `answer_safety.py` 只有 4 条模式（`sk-*`、`AKIA*`、私钥头、`password/token=`）。SSN / 信用卡 / 邮箱 / 电话 的模式在**另一条路径** `app/agents/validation/rules.py:117-121` 上。本任务不合并这两套（合并会改变输出行为），只让开关生效；文档由 Task 23 修正。
 
-- [ ] **Step 1: 写测试**
+- [x] **Step 1: 写测试**
 
 创建 `tests/services/test_answer_safety.py`：
 
@@ -1977,7 +1985,7 @@ def test_scan_can_be_disabled(monkeypatch):
     assert meta == {"enabled": False, "redactions": 0}
 ```
 
-- [ ] **Step 2: 实现**
+- [x] **Step 2: 实现**
 
 ```python
 import re
@@ -2010,7 +2018,7 @@ def sanitize_answer(text: str) -> tuple[str, dict]:
     return sanitized, {"enabled": True, "redactions": redactions}
 ```
 
-- [ ] **Step 3: 验证并提交**
+- [x] **Step 3: 验证并提交**
 
 ```bash
 conda run -n rag-local python -m pytest tests/services/test_answer_safety.py -x -q
@@ -2033,14 +2041,14 @@ git commit -m "fix(safety): honour ANSWER_SAFETY_SCAN_ENABLED instead of hardcod
 
 `ExecutionPolicy` 的 `enable_route_validation` 与 `enable_retrieval_quality` 两个字段也无任何读取方。
 
-- [ ] **Step 1: 复核零读取**
+- [x] **Step 1: 复核零读取**
 
 ```bash
 grep -rn "ProfileCapabilities\|CapabilityBudget\|ENDPOINT_PROFILES\|profile_for_endpoint\|\.capabilities\b\|\.budget\b" app --include=*.py | grep -v "app/pipeline/profiles.py"
 grep -rn "enable_route_validation\|enable_retrieval_quality" app --include=*.py
 ```
 
-- [ ] **Step 2: 精简 `profiles.py`**
+- [x] **Step 2: 精简 `profiles.py`**
 
 删除 `ProfileCapabilities`、`CapabilityBudget`、`ProfileDefinition`、`PROFILE_DEFINITIONS`、`ENDPOINT_PROFILES`、`profile_for_endpoint`、`get_profile_definition`，只保留 `PipelineProfile` 枚举。加一段模块 docstring 说明为什么只剩枚举：
 
@@ -2054,7 +2062,7 @@ contradicting it, so they were removed rather than kept as decoration.
 """
 ```
 
-- [ ] **Step 3: 更新 `rag_pipeline.py`**
+- [x] **Step 3: 更新 `rag_pipeline.py`**
 
 删除 `get_profile_definition` 的 import 与两处调用。`execute()` 中原有的 profile 一致性校验保留：
 
@@ -2066,11 +2074,11 @@ contradicting it, so they were removed rather than kept as decoration.
 
 `PipelineProfile(profile)` 本身就会对未知值抛 `ValueError`，校验语义不丢失。
 
-- [ ] **Step 4: 精简 `ExecutionPolicy`**
+- [x] **Step 4: 精简 `ExecutionPolicy`**
 
 删除 `enable_route_validation` 与 `enable_retrieval_quality` 两个字段，以及 `for_profile` 中对 `enable_retrieval_quality` 的赋值。
 
-- [ ] **Step 5: 验证并提交**
+- [x] **Step 5: 验证并提交**
 
 ```bash
 conda run --no-capture-output -n rag-local python -c "import app.api.main as m; d=m.app.openapi()['paths']; print(sum(1 for i in d.values() for k in i if k in {'get','post','put','patch','delete'}))"
@@ -2081,10 +2089,10 @@ git commit -m "chore(pipeline): remove profile and policy fields that nothing re
 
 ### Phase 3 验收
 
-- [ ] `tests/core/test_settings_have_readers.py` 断言未读字段为 0。
-- [ ] `GET /ready` 在 2 秒内返回，且不发起任何外部网络调用。
-- [ ] `GET /ready/dependencies` 未鉴权时返回 401/403。
-- [ ] `ANSWER_SAFETY_SCAN_ENABLED=false` 时答案中的 `sk-` 串不再被替换。
+- [x] `tests/core/test_settings_have_readers.py` 断言未读字段为 0。
+- [x] `GET /ready` 在 2 秒内返回，且不发起任何外部网络调用。
+- [x] `GET /ready/dependencies` 未鉴权时返回 401/403。
+- [x] `ANSWER_SAFETY_SCAN_ENABLED=false` 时答案中的 `sk-` 串不再被替换。
 
 ---
 
@@ -2118,7 +2126,7 @@ git commit -m "chore(pipeline): remove profile and policy fields that nothing re
 
 `.original` 是被 git 跟踪的备份文件，与现行版本分别相差 486 行和 190 行。
 
-- [ ] **Step 1: 复核引用**
+- [x] **Step 1: 复核引用**
 
 ```bash
 grep -rn "query_status\|optimized_retriever\|evaluation_service\|multimodal.processor\|multimodal import processor" app --include=*.py
@@ -2127,7 +2135,7 @@ grep -rn "cache.py.original" app deploy config --include=* 2>/dev/null
 
 预期无输出（`app/evaluation/services/__init__.py` 若 re-export 了 `EvaluationService`，需一并处理）。
 
-- [ ] **Step 2: 删除**
+- [x] **Step 2: 删除**
 
 ```bash
 git rm app/api/routes/public/query_status.py
@@ -2137,7 +2145,7 @@ git rm -r app/evaluation/services/
 git rm app/agents/rag/cache.py.original app/agents/shared/cache.py.original
 ```
 
-- [ ] **Step 3: 验证并提交**
+- [x] **Step 3: 验证并提交**
 
 ```bash
 conda run --no-capture-output -n rag-local python -c "import app.api.main as m; d=m.app.openapi()['paths']; print(sum(1 for i in d.values() for k in i if k in {'get','post','put','patch','delete'}))"   # 期望 149
@@ -2175,7 +2183,7 @@ _sys.modules[__name__] = _import_module("app.services.observability.alerting")
 
 **注意：并非所有 shim 都是孤儿。** 例如 `app/retrievers/hybrid_retriever.py` 被 `app/agents/rag/vector.py:22` 使用，`app/services/query_guard.py` 被 `app/api/dependencies.py:41` 使用。必须先改写导入方，再删除。
 
-- [ ] **Step 1: 枚举 shim 及其导入方**
+- [x] **Step 1: 枚举 shim 及其导入方**
 
 ```bash
 conda run -n rag-local python - <<'PY'
@@ -2226,7 +2234,7 @@ PY
 
 把输出保存下来，它就是 Step 2 的工作清单。
 
-- [ ] **Step 2: 把每个导入方改写到规范路径**
+- [x] **Step 2: 把每个导入方改写到规范路径**
 
 对脚本列出的每一个 "imported by"，把 `from app.services.alerting import X` 改为 `from app.services.observability.alerting import X`（即改成脚本输出的 `->` 目标）。逐文件改，改完立刻跑：
 
@@ -2236,7 +2244,7 @@ conda run --no-capture-output -n rag-local python -c "import app.api.main as m; 
 
 重跑 Step 1 的脚本，直到 "still imported" 为 0。
 
-- [ ] **Step 3: 拆除 `app/api/main.py` 的兼容外壳**
+- [x] **Step 3: 拆除 `app/api/main.py` 的兼容外壳**
 
 把整个文件替换为：
 
@@ -2270,7 +2278,7 @@ __all__ = ["app", "create_app"]
 
 `auth_dependencies` / `auth_helpers` 的两行赋值**必须保留** —— 那是真实的运行时注入，不是兼容层。执行前用 grep 确认这两个模块确实读取模块级 `auth_service`。
 
-- [ ] **Step 4: 精简 `router_registry.py`**
+- [x] **Step 4: 精简 `router_registry.py`**
 
 删除 `_ROUTE_MODULES` / `ROUTE_MODULES` 元组与相关注释，以及仅为它存在的 import（`api_dependencies`、`admin_helpers`、`document_helpers`、`memory_helpers`、`session_helpers`、`pipeline_compat`、`auth_dependencies`、`auth_helpers`）。保留 `ROUTER_MODULES` 与 `register_routers`。`__all__` 相应缩减为 `["ROUTER_MODULES", "register_routers"]`。
 
@@ -2280,11 +2288,11 @@ __all__ = ["app", "create_app"]
 grep -rn "ROUTE_MODULES\|_ROUTE_MODULES" app --include=*.py
 ```
 
-- [ ] **Step 5: 清理 `RAGPipeline` 的测试残留**
+- [x] **Step 5: 清理 `RAGPipeline` 的测试残留**
 
 在 `app/pipeline/rag_pipeline.py` 中删除 `_execute_compatibility` 方法，并把 `__init__` 的 `**deprecated: Any` 参数及 `del deprecated` 一并删除（同时删掉那两行说明注释）。
 
-- [ ] **Step 6: 删除全部 shim**
+- [x] **Step 6: 删除全部 shim**
 
 ```bash
 conda run -n rag-local python - <<'PY'
@@ -2304,7 +2312,7 @@ subprocess.run(["git", "rm", *targets], check=True)
 PY
 ```
 
-- [ ] **Step 7: 验证并提交**
+- [x] **Step 7: 验证并提交**
 
 ```bash
 conda run --no-capture-output -n rag-local python -c "import app.api.main as m; d=m.app.openapi()['paths']; print(sum(1 for i in d.values() for k in i if k in {'get','post','put','patch','delete'}))"   # 期望 149
@@ -2327,7 +2335,7 @@ git commit -m "chore(api): remove the compatibility shim layer left over from th
 
 **注意**：Task 17 会先删掉 `app/prompts/` 根目录下那批 5–37 行的 shim；本任务处理剩下的实体模块。
 
-- [ ] **Step 1: 复核**
+- [x] **Step 1: 复核**
 
 ```bash
 conda run -n rag-local python - <<'PY'
@@ -2368,7 +2376,7 @@ PY
 
 只有 `app/prompts/core/canonical_agent_prompts.py` 应当 > 0。**任何其他非零结果都要停下来复核。**
 
-- [ ] **Step 2: 删除**
+- [x] **Step 2: 删除**
 
 保留 `app/prompts/__init__.py`、`app/prompts/core/__init__.py`、`app/prompts/core/canonical_agent_prompts.py`，删除其余全部。若 `__init__.py` 中 re-export 了被删模块，同步清理其内容。
 
@@ -2380,7 +2388,7 @@ git rm app/prompts/core/intent_prompts.py app/prompts/core/react_prompts.py \
        app/prompts/core/synthesis_prompts.py
 ```
 
-- [ ] **Step 3: 验证并提交**
+- [x] **Step 3: 验证并提交**
 
 ```bash
 conda run --no-capture-output -n rag-local python -c "import app.api.main as m; d=m.app.openapi()['paths']; print(sum(1 for i in d.values() for k in i if k in {'get','post','put','patch','delete'}))"   # 期望 149
@@ -2413,7 +2421,7 @@ git commit -m "chore(prompts): delete the unused prompt library, keep the one li
 
 **这个任务分批做，每批一个提交**，按上表分包，便于出问题时定位与回滚。
 
-- [ ] **Step 1: 重新生成完整的零引用清单**
+- [x] **Step 1: 重新生成完整的零引用清单**
 
 ```bash
 conda run -n rag-local python - <<'PY'
@@ -2459,7 +2467,7 @@ print(f"\nTOTAL {total} loc")
 PY
 ```
 
-- [ ] **Step 2: 逐包删除**
+- [x] **Step 2: 逐包删除**
 
 对每个包重复：
 
@@ -2482,7 +2490,7 @@ git commit -m "chore(orchestration): delete unreferenced degradation and error-h
 - `app/agents/shared/result_schemas.py` 与 `utils.py` 可能被 `app/agents/shared/__init__.py` re-export，需一并清理。
 - 每删一个包，重跑一次 `conda run -n rag-local python -m pytest tests/ -q`。
 
-- [ ] **Step 3: 清理空包**
+- [x] **Step 3: 清理空包**
 
 删除只剩 `__init__.py`（或完全为空）的目录：`app/api/query/`、`app/api/query/streaming/`、`app/workflow/`、`app/tests/`。
 
@@ -2492,7 +2500,7 @@ git rm -r app/api/query app/workflow app/tests
 
 `app/graph/__init__.py` 与 `app/agents/__init__.py` 为空但其子包是活的，**保留**。
 
-- [ ] **Step 4: 最终验证**
+- [x] **Step 4: 最终验证**
 
 ```bash
 conda run --no-capture-output -n rag-local python -c "import app.api.main as m; d=m.app.openapi()['paths']; print(sum(1 for i in d.values() for k in i if k in {'get','post','put','patch','delete'}))"   # 期望 149
@@ -2516,7 +2524,7 @@ conda run -n rag-local ruff check app
 
 **HTTP 路径不变** —— 只搬模块位置，`APIRouter(prefix=...)` 一律保持原样，避免破坏前端。
 
-- [ ] **Step 1: 移动文件**
+- [x] **Step 1: 移动文件**
 
 ```bash
 mkdir -p app/api/routes/internal
@@ -2536,7 +2544,7 @@ standard RAG pipeline execution contract) consumed by admin and session routes.
 """
 ```
 
-- [ ] **Step 2: 更新导入方**
+- [x] **Step 2: 更新导入方**
 
 ```bash
 grep -rn "routes.compatibility\|routes import compatibility" app --include=*.py
@@ -2547,11 +2555,11 @@ grep -rn "routes.compatibility\|routes import compatibility" app --include=*.py
 - `app/api/routes/public/sessions.py:19` 与 `app/api/routes/admin/ops.py:30`：`from app.api.routes.compatibility.pipeline_compat import execute_standard_compatibility` → `from app.api.routes.internal.pipeline_contract import execute_standard_compatibility`。
 - Phase 1 新建的 `tests/api/test_advanced_rag_session.py` 中的 `from app.api.routes.compatibility import advanced_rag` → `from app.api.routes.public import query as advanced_rag`。
 
-- [ ] **Step 3: 更新 pipeline_contract 的 docstring**
+- [x] **Step 3: 更新 pipeline_contract 的 docstring**
 
 删除模块 docstring 里"Despite being in the 'compatibility' directory..."一段——它已不再适用。
 
-- [ ] **Step 4: 验证路径未变并提交**
+- [x] **Step 4: 验证路径未变并提交**
 
 ```bash
 conda run --no-capture-output -n rag-local python -c "
@@ -2568,10 +2576,10 @@ git commit -m "refactor(api): move live routes out of the compatibility director
 
 ### Phase 4 验收
 
-- [ ] 零引用模块数降至个位数，且每个残留项都有书面保留理由。
-- [ ] `app/` 的 Python 文件数与总行数记录在提交信息中（对比清理前的 583 文件）。
-- [ ] 端点数为 149，`/api/advanced-rag/query` 与 SSE 端点路径未变。
-- [ ] 全部测试通过。
+- [x] 零引用模块数降至个位数，且每个残留项都有书面保留理由。
+- [x] `app/` 的 Python 文件数与总行数记录在提交信息中（对比清理前的 583 文件）。
+- [x] 端点数为 149，`/api/advanced-rag/query` 与 SSE 端点路径未变。
+- [x] 全部测试通过。
 
 ---
 
@@ -2748,7 +2756,7 @@ git commit -m "build: add CI running ruff, an import check, tests, and the front
 
 **Context:** 审计 #27/#30/#31/#32 与全部文档漂移项。
 
-- [ ] **Step 1: 修正 SSE 描述**
+- [x] **Step 1: 修正 SSE 描述**
 
 `## Important Notes` 中：
 
@@ -2766,7 +2774,7 @@ git commit -m "build: add CI running ruff, an import check, tests, and the front
   replays a finished run's stage events; it is not a token-level answer stream.
 ```
 
-- [ ] **Step 2: 修正数据库描述**
+- [x] **Step 2: 修正数据库描述**
 
 ```markdown
 **Database**: SQLite (default, `DATABASE_URL`), with PostgreSQL (`asyncpg`) supported for production
@@ -2783,7 +2791,7 @@ connection pool and no PostgreSQL support; an unused async SQLAlchemy pool was
 removed on 2026-08-29.
 ```
 
-- [ ] **Step 3: 修正安全描述**
+- [x] **Step 3: 修正安全描述**
 
 把 `Safety checks` 一条改为准确描述两条独立路径：
 
@@ -2798,12 +2806,12 @@ removed on 2026-08-29.
    bias-detection implementation.
 ```
 
-- [ ] **Step 4: 修正检索与路由描述**
+- [x] **Step 4: 修正检索与路由描述**
 
 - **Dynamic Top-K**：明确说明主检索路径硬编码 `top_k=6`（`app/agents/rag/service.py`），`app/retrievers/hybrid/adaptive_params.py` 只在 `candidate_collection.py` 内生效，因此 `DYNAMIC_RETRIEVAL_ENABLED` 与 `DYNAMIC_*_CAP` 对默认聊天路径无影响。
 - **Graph retrieval**：记录 Task 4 的修复——`graph` 与 `hybrid` 两个路由都会查询知识图谱。
 
-- [ ] **Step 5: 记录休眠功能**
+- [x] **Step 5: 记录休眠功能**
 
 在 `## Quality Assurance` 下新增一段，把 Scope 中"明确不在范围内"的项写成显式的已知状态，避免下一次审计再次把它们当成 bug：
 
@@ -2820,7 +2828,7 @@ decision, not a bug fix.
   `config/router_calibration.json` is not read.
 ```
 
-- [ ] **Step 6: 修正 Makefile 与 conda 约定的冲突**
+- [x] **Step 6: 修正 Makefile 与 conda 约定的冲突**
 
 `make install` 用 `python -m venv .venv`，与 CLAUDE.md 强制的 conda `rag-local` 矛盾（只有 `config-check`/`config-render` 用了 `conda run`）。二选一，建议统一到 conda：
 
@@ -2832,7 +2840,7 @@ api:
 	conda run -n rag-local uvicorn app.api.main:app --host 0.0.0.0 --port 8000 --reload --reload-dir app --reload-include "*.py" --reload-exclude "data/*" --reload-exclude "artifacts/*" --reload-exclude "frontend/*"
 ```
 
-- [ ] **Step 7: 记录 `.runtime/` 必须先渲染**
+- [x] **Step 7: 记录 `.runtime/` 必须先渲染**
 
 `.runtime/` 当前为空，`resolve_runtime_env_file()` 因此返回 `None`，运行实例跑在全部 261 个（清理后约 228 个）硬编码默认值上。在 `### Runtime config` 段落中加一句：
 
@@ -2843,7 +2851,7 @@ api:
 variables) before treating any configured value as active.
 ```
 
-- [ ] **Step 8: 加一条日期注记**
+- [x] **Step 8: 加一条日期注记**
 
 在现有的 `Note (2026-08-29): A backend agent audit found...` 之后追加：
 
@@ -2856,7 +2864,7 @@ graph, and ~13k lines across 184 modules had zero importers. See
 remediation plan and what was deliberately left dormant.
 ```
 
-- [ ] **Step 9: 提交**
+- [x] **Step 9: 提交**
 
 ```bash
 git add CLAUDE.md Makefile
@@ -2868,7 +2876,7 @@ git commit -m "docs: correct CLAUDE.md and Makefile against the 2026-08-29 full 
 - [x] `ruff check .` 与 `ruff format --check .` 均干净退出。
 - [~] `pre-commit run --all-files` 通过。  ← **待人工执行**（pre-commit 未安装）
 - [~] CI 在一个测试 PR 上全绿。  ← **待人工验证**（需要推送到 GitHub）
-- [ ] CLAUDE.md 中不再有指向已删除文件的引用（`grep -oE '\bapp/[a-z_/]+\.py' CLAUDE.md | sort -u | while read f; do test -f "$f" || echo "MISSING: $f"; done` 无输出）。
+- [x] CLAUDE.md 中不再有指向已删除文件的引用（`grep -oE '\bapp/[a-z_/]+\.py' CLAUDE.md | sort -u | while read f; do test -f "$f" || echo "MISSING: $f"; done` 无输出）。  ← 仅历史注记中保留 3 处（描述已删模块，属预期）
 
 ---
 
