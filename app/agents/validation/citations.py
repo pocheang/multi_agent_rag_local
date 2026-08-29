@@ -40,7 +40,7 @@ class CitationValidator:
         issues: list[RuleBasisIssue] = []
         if not request.citations:
             factual = bool(extract_numbers(request.answer) or extract_dates(request.answer))
-            has_inline_marker = bool(re.findall(r"\[(\d+)\]", request.answer))
+            has_inline_marker = bool(re.findall(r"\[E\d+\]", request.answer))
             if factual and not has_inline_marker:
                 issues.append(
                     RuleBasisIssue(
