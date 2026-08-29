@@ -1,5 +1,6 @@
 """Health check and metrics routes for the QueryMind API."""
 
+import asyncio
 import os
 import socket
 import sys
@@ -127,27 +128,11 @@ def _check_redis_ready() -> dict[str, Any]:
         return {"ok": False, "required": required, "latency_ms": latency, "error": str(e)}
 
 
-def _check_postgres_ready() -> dict[str, Any]:
-    """Check PostgreSQL database connection."""
-    start = time.perf_counter()
-    try:
-        # Try to import database module
-        try:
-            from app.core.database import get_db_session
-        except ImportError:
-            # Database module not configured - this is OK for now
-            return {"ok": True, "required": False, "latency_ms": 0, "status": "not_configured"}
-
-        # Try to get a database session and execute a simple query
-        with get_db_session() as session:
-            session.execute("SELECT 1")
-
-        latency = int((time.perf_counter() - start) * 1000)
-        return {"ok": True, "required": False, "latency_ms": latency}
-    except Exception as e:
-        latency = int((time.perf_counter() - start) * 1000)
-        # PostgreSQL is optional for now - don't fail readiness
-        return {"ok": False, "required": False, "latency_ms": latency, "error": str(e)}
+# _check_postgres_ready was removed on 2026-08-29: it imported
+# app.core.database, a module that does not exist, so it always returned
+# {"ok": True, "status": "not_configured"} -- a health check that could never
+# fail. Every store in this system opens its own sqlite3 connection; there is no
+# PostgreSQL connection to probe.
 
 
 def _check_openai_api_ready() -> dict[str, Any]:
@@ -301,48 +286,88 @@ def metrics():
     return Response(content=runtime_metrics.render_prometheus(), media_type="text/plain; version=0.0.4")
 
 
-@router.get("/ready")
-def ready():
-    """
-    Readiness probe - comprehensive check of all dependencies.
-    Returns 200 if all required services are healthy, 503 if any required service fails.
-    """
-    checks = {
-        "api": {"ok": True, "required": True, "latency_ms": 0},
-        "postgres": _check_postgres_ready(),
-        "redis": _check_redis_ready(),
-        "ollama": _check_ollama_ready(),
-        "openai": _check_openai_api_ready(),
-        "anthropic": _check_anthropic_api_ready(),
-        "neo4j": _check_neo4j_ready(),
-        "chroma": _check_chroma_ready(),
-        "embedding_model": _check_embedding_model_ready(),
-    }
-
-    # Identify blocking failures (required services that are not OK)
+def _readiness_payload(checks: dict[str, dict[str, Any]]) -> tuple[dict[str, Any], int]:
+    """Score a set of dependency checks into a probe payload and status code."""
     blocking_failures = [name for name, detail in checks.items() if detail.get("required") and not detail.get("ok")]
+    required_count = len([s for s in checks.values() if s.get("required")])
 
-    # Determine overall status
     if not blocking_failures:
-        status_text = "healthy"
-        code = 200
-    elif len(blocking_failures) < len([s for s in checks.values() if s.get("required")]):
-        status_text = "degraded"
-        code = 200  # Partially healthy - can still serve requests
+        status_text, code = "healthy", 200
+    elif len(blocking_failures) < required_count:
+        status_text, code = "degraded", 200  # Partially healthy - can still serve requests
     else:
-        status_text = "unhealthy"
-        code = 503
+        status_text, code = "unhealthy", 503
 
-    query_runtime = api_dependencies.get_query_runtime()
     payload = {
         "status": status_text,
         "blocking_failures": blocking_failures,
         "services": {name: _public_readiness_detail(detail) for name, detail in checks.items()},
-        "query_runtime": {
-            "guard": query_runtime.query_guard.stats(),
-            "shadow_queue": query_runtime.shadow_queue.stats(),
-        },
         "timestamp": time.time(),
+    }
+    return payload, code
+
+
+async def _gather_checks(named_checks: tuple[tuple[str, Any], ...]) -> dict[str, dict[str, Any]]:
+    """Run blocking dependency checks concurrently in worker threads.
+
+    Serially, eight checks at 3-5s each meant a worst case around 30s -- longer
+    than a typical readiness-probe deadline.
+    """
+    results = await asyncio.gather(*(asyncio.to_thread(fn) for _name, fn in named_checks), return_exceptions=True)
+    return {
+        name: (
+            {"ok": False, "required": False, "latency_ms": 0, "error": "dependency check failed"}
+            if isinstance(result, BaseException)
+            else result
+        )
+        for (name, _fn), result in zip(named_checks, results, strict=True)
+    }
+
+
+@router.get("/ready")
+async def ready():
+    """Readiness probe - local checks only.
+
+    Deliberately cheap and side-effect free: this endpoint is unauthenticated,
+    so it must not be usable to drive traffic to (or bill) external providers.
+    The full external-dependency probe lives at /ready/dependencies.
+    """
+    checks = await _gather_checks(
+        (
+            ("chroma", _check_chroma_ready),
+            ("embedding_model", _check_embedding_model_ready),
+        )
+    )
+    checks = {"api": {"ok": True, "required": True, "latency_ms": 0}, **checks}
+    payload, code = _readiness_payload(checks)
+    return JSONResponse(content=payload, status_code=code)
+
+
+@router.get("/ready/dependencies", dependencies=[Depends(require_admin)])
+async def ready_dependencies():
+    """Full external-dependency probe.
+
+    Admin-only: it makes real outbound calls to the configured model providers
+    (OpenAI, Anthropic, Ollama), Neo4j and Redis, so an unauthenticated caller
+    must not be able to trigger it repeatedly.
+    """
+    checks = await _gather_checks(
+        (
+            ("redis", _check_redis_ready),
+            ("ollama", _check_ollama_ready),
+            ("openai", _check_openai_api_ready),
+            ("anthropic", _check_anthropic_api_ready),
+            ("neo4j", _check_neo4j_ready),
+            ("chroma", _check_chroma_ready),
+            ("embedding_model", _check_embedding_model_ready),
+        )
+    )
+    checks = {"api": {"ok": True, "required": True, "latency_ms": 0}, **checks}
+    payload, code = _readiness_payload(checks)
+    query_runtime = api_dependencies.get_query_runtime()
+    payload["query_runtime"] = {
+        "guard": query_runtime.query_guard.stats(),
+        "shadow_queue": query_runtime.shadow_queue.stats(),
     }
     return JSONResponse(content=payload, status_code=code)
 
