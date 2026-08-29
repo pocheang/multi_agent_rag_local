@@ -46,6 +46,7 @@ class SynthesizerAgentService:
             self._generate,
             request.question,
             "answer_with_citations",
+            memory_context=_render_conversation(request.conversation),
             vector_context=generation_context,
             force_language=request.force_language,
             session_id=request.session_id or "",
@@ -116,6 +117,26 @@ class SynthesizerAgentService:
         from app.agents.synthesizer.generation import synthesize_answer
 
         return synthesize_answer(*args, **kwargs)
+
+
+def _render_conversation(turns: tuple, *, max_turns: int = 12, max_chars: int = 4000) -> str:
+    """Render recent conversation turns into the generator's memory_context slot.
+
+    Bounded on both axes so a long session cannot crowd retrieved evidence out
+    of the model's context window.  The newest turns are the ones kept.
+    """
+    if not turns:
+        return ""
+    recent = list(turns)[-max_turns:]
+    lines = [
+        f"{str(turn.role).strip() or 'user'}: {str(turn.content).strip()}"
+        for turn in recent
+        if str(getattr(turn, "content", "") or "").strip()
+    ]
+    if not lines:
+        return ""
+    rendered = "\n".join(lines)
+    return rendered[-max_chars:] if len(rendered) > max_chars else rendered
 
 
 def _answer_text(generated: object) -> str:
