@@ -1883,7 +1883,9 @@ git commit -m "fix(health): drop the fake postgres probe, parallelize checks, ga
 
 更关键的是：**这个 async 引擎从未被任何业务代码使用过**。全仓库对它的引用只有 lifespan 的初始化/关闭，以及 `/optimization/*` 读取它的统计。真实存储全部走裸 `sqlite3.connect()`：`app/services/auth/auth_service.py:116`、`app/services/sessions/history.py:487`、`app/services/sessions/metadata_db.py:113`、`app/services/prompts/store.py:24`、`app/wiki/store.py:33`、`app/retrievers/stores/vector.py:24`。
 
-因此 CLAUDE.md 声称的 "PostgreSQL (`asyncpg`) supported for production" **不成立**。本任务的选择是**删除误导性的死代码**，而不是把 6 个存储迁移到 async SQLAlchemy —— 后者是独立的存储层重构，已在 Scope 中明确排除。
+因此 CLAUDE.md 声称的 "PostgreSQL (`asyncpg`) supported for production" **不成立**。
+
+**2026-08-29 执行 Task 21 时取得的佐证**：`aiosqlite` 与 `asyncpg` 虽然写在 `pyproject.toml` 的**硬依赖**里，但在 `rag-local` 环境中**根本没有安装**，而应用一切正常。也就是说 `initialize_pool()` 每次启动都以 `ModuleNotFoundError` 失败，被 lifespan 的 `except Exception: logger.warning(... non-critical)` 吞掉——没有任何人注意到，因为没有任何东西使用这个池。删除时记得一并从 `dependencies` 中移除这两个包。本任务的选择是**删除误导性的死代码**，而不是把 6 个存储迁移到 async SQLAlchemy —— 后者是独立的存储层重构，已在 Scope 中明确排除。
 
 `query_optimizer.py` 一并删除：它唯一的公开方法 `explain_query` 已被硬编码为 `raise NotImplementedError`，其余部分只被 `/optimization/database/*` 引用。
 
