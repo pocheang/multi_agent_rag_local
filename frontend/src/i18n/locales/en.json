@@ -166,8 +166,23 @@
       "errorRate": "Error Rate",
       "cpuMemory": "CPU & Memory Usage",
       "qpsResponse": "QPS & Response Time",
-      "activeConnections": "Active Connections",
-      "totalRequests": "Total Requests"
+      "totalRequests": "Total Requests",
+      "autoRefresh": "Auto-refresh (3s)",
+      "systemStatus": "System Status",
+      "cpu": "CPU",
+      "last": "Last",
+      "activeRequests": "Active Requests",
+      "resources": "System Resources",
+      "trafficMetrics": "Traffic Metrics",
+      "serviceLatency": "Service Latency",
+      "responseTime": "Response Time",
+      "model": "Model Configuration",
+      "enabled": "Enabled",
+      "provider": "Provider",
+      "chatModel": "Chat Model",
+      "reasoningModel": "Reasoning Model",
+      "embeddingModel": "Embedding Model",
+      "baseUrl": "Base URL"
     },
     "ui": {
       "createAdmin": "Create Admin",
@@ -363,7 +378,11 @@
       "showPerPage": "Show",
       "items": "items",
       "totalItems": "Total {{count}} items",
-      "goToPage": "Go to page {{page}}"
+      "goToPage": "Go to page {{page}}",
+      "pagination": "Pagination",
+      "itemsPerPage": "Items per page",
+      "catalogFallback": "Using verified fallback catalog",
+      "noServiceData": "No service data available"
     },
     "actions": {
       "loadUsersFailed": "Failed to load users",
@@ -419,6 +438,10 @@
       "connectionFailedDefault": "Connection failed.",
       "loadAuditLogsFailed": "Failed to load audit logs",
       "loadSystemLogsFailed": "Failed to load system logs"
+    },
+    "export": {
+      "csv": "Export as CSV",
+      "json": "Export as JSON"
     }
   },
   "common": {
@@ -450,7 +473,11 @@
     "descending": "Descending",
     "pageOf": "Page {{current}} of {{total}}",
     "updated": "Updated",
-    "sessionExpired": "Session expired. Please log in again."
+    "sessionExpired": "Session expired. Please log in again.",
+    "retry": "Retry",
+    "noData": "No data available",
+    "required": "Required",
+    "optional": "Optional"
   },
   "language": {
     "en": "English",
@@ -708,7 +735,8 @@
         "admins": "Create Admin",
         "users": "User Management",
         "audit": "Audit Logs",
-        "syslog": "System Logs"
+        "syslog": "System Logs",
+        "monitor": "Runtime Monitor"
       }
     }
   },
@@ -1186,7 +1214,10 @@
     "skip": "Skip Remaining Questions",
     "submit": "Submit",
     "submitting": "Submitting...",
-    "collectedInfo": "Information Collected"
+    "collectedInfo": "Information Collected",
+    "submitError": "Failed to submit clarification",
+    "skipError": "Failed to skip clarification",
+    "authError": "Authentication required for advanced features"
   },
   "queryOptimization": {
     "title": "💡 Query Optimization Suggestions",

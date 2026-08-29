@@ -166,8 +166,23 @@
       "errorRate": "错误率",
       "cpuMemory": "CPU与内存使用率",
       "qpsResponse": "QPS与响应时间",
-      "activeConnections": "活跃连接数",
-      "totalRequests": "总请求数"
+      "totalRequests": "总请求数",
+      "autoRefresh": "自动刷新（3 秒）",
+      "systemStatus": "系统状态",
+      "cpu": "CPU",
+      "last": "最近",
+      "activeRequests": "活跃请求",
+      "resources": "系统资源",
+      "trafficMetrics": "流量指标",
+      "serviceLatency": "服务延迟",
+      "responseTime": "响应时间",
+      "model": "模型配置",
+      "enabled": "已启用",
+      "provider": "提供方",
+      "chatModel": "对话模型",
+      "reasoningModel": "推理模型",
+      "embeddingModel": "嵌入模型",
+      "baseUrl": "服务地址"
     },
     "ui": {
       "createAdmin": "创建管理员",
@@ -363,7 +378,11 @@
       "showPerPage": "每页显示",
       "items": "条",
       "totalItems": "共 {{count}} 条记录",
-      "goToPage": "转到第 {{page}} 页"
+      "goToPage": "转到第 {{page}} 页",
+      "pagination": "分页",
+      "itemsPerPage": "每页条数",
+      "catalogFallback": "正在使用已验证的备用目录",
+      "noServiceData": "暂无服务数据"
     },
     "actions": {
       "loadUsersFailed": "加载用户失败",
@@ -419,6 +438,10 @@
       "connectionFailedDefault": "连接失败。",
       "loadAuditLogsFailed": "加载审计日志失败",
       "loadSystemLogsFailed": "加载系统日志失败"
+    },
+    "export": {
+      "csv": "导出为 CSV",
+      "json": "导出为 JSON"
     }
   },
   "common": {
@@ -450,7 +473,11 @@
     "descending": "降序",
     "pageOf": "第 {{current}} 页，共 {{total}} 页",
     "updated": "更新时间",
-    "sessionExpired": "登录已过期，请重新登录。"
+    "sessionExpired": "登录已过期，请重新登录。",
+    "retry": "重试",
+    "noData": "暂无数据",
+    "required": "必需",
+    "optional": "可选"
   },
   "language": {
     "en": "English",
@@ -708,7 +735,8 @@
         "admins": "创建管理员",
         "users": "用户管理",
         "audit": "审计日志",
-        "syslog": "系统日志"
+        "syslog": "系统日志",
+        "monitor": "运行监控"
       }
     }
   },
@@ -1186,7 +1214,10 @@
     "skip": "跳过剩余问题",
     "submit": "提交",
     "submitting": "提交中...",
-    "collectedInfo": "已收集信息"
+    "collectedInfo": "已收集信息",
+    "submitError": "提交澄清失败",
+    "skipError": "跳过澄清失败",
+    "authError": "使用高级功能需要先登录"
   },
   "queryOptimization": {
     "title": "💡 查询优化建议",

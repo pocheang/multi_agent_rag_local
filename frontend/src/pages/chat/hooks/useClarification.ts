@@ -46,7 +46,7 @@ export function useClarification({
       }
     } catch (error) {
       console.error("Clarification answer failed:", error);
-      onNotify(t("chat.clarificationError") || "Failed to submit clarification", "error");
+      onNotify(t("clarification.submitError", "Failed to submit clarification"), "error");
     } finally {
       setIsClarifying(false);
     }
@@ -62,7 +62,7 @@ export function useClarification({
       await onClarificationComplete(originalQuestion);
     } catch (error) {
       console.error("Skip clarification failed:", error);
-      onNotify(t("chat.skipClarificationError") || "Failed to skip clarification", "error");
+      onNotify(t("clarification.skipError", "Failed to skip clarification"), "error");
     }
   };
 
@@ -90,7 +90,7 @@ export function useClarification({
 
       if (status === 403 || status === 401) {
         onNotify(
-          t("chat.clarificationAuthError") || "Authentication required for advanced features",
+          t("clarification.authError", "Authentication required for advanced features"),
           "error"
         );
         throw error; // Re-throw auth errors
