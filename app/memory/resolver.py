@@ -19,7 +19,9 @@ _PROMOTION_RULES: tuple[tuple[MemoryKind, re.Pattern[str]], ...] = (
     ("explicit_remember", re.compile(r"(?:请|帮我)?记住|remember(?:\s+that)?", re.IGNORECASE)),
     (
         "preference",
-        re.compile(r"我(?:现在|目前|更)?(?:喜欢|偏好|习惯)|i\s+(?:now\s+)?(?:prefer|like)|my\s+preference", re.IGNORECASE),
+        re.compile(
+            r"我(?:现在|目前|更)?(?:喜欢|偏好|习惯)|i\s+(?:now\s+)?(?:prefer|like)|my\s+preference", re.IGNORECASE
+        ),
     ),
     ("task", re.compile(r"提醒我|待办|需要完成|todo|remind\s+me", re.IGNORECASE)),
     ("stable_fact", re.compile(r"(?:^|[，,。.]\s*)我是|我的.{1,24}是|\bi\s+am\b|\bmy\s+.{1,24}\s+is\b", re.IGNORECASE)),

@@ -171,4 +171,3 @@ class ValidationDegradationError(RuntimeError):
     def __init__(self, message: str, validation_issues: tuple[str, ...]):
         super().__init__(message)
         self.validation_issues = validation_issues
-

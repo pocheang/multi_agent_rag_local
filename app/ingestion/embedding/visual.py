@@ -110,7 +110,9 @@ def build_visual_embedding_provider(
             return colpali_factory()
         except Exception as exc:
             return DescriptionEmbeddingFallback(reason=f"colpali_factory_failed:{type(exc).__name__}")
-    reason = "colpali_provider_not_configured" if active.visual_embedding_backend == "colpali" else "visual_backend_unknown"
+    reason = (
+        "colpali_provider_not_configured" if active.visual_embedding_backend == "colpali" else "visual_backend_unknown"
+    )
     return DescriptionEmbeddingFallback(reason=reason)
 
 

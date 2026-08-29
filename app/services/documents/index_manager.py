@@ -98,11 +98,7 @@ def list_indexed_files() -> list[dict[str, Any]]:
                 "tenant_id": str(meta.get("tenant_id", "") or ""),
                 "document_id": str(meta.get("document_id", "") or ""),
                 "version": _record_version(row),
-                "acl_tags": tuple(
-                    tag.strip()
-                    for tag in str(meta.get("acl_tags", "") or "").split(",")
-                    if tag.strip()
-                ),
+                "acl_tags": tuple(tag.strip() for tag in str(meta.get("acl_tags", "") or "").split(",") if tag.strip()),
                 "visibility": str(meta.get("visibility", "private") or "private"),
                 "agent_class": str(meta.get("agent_class", "general") or "general"),
                 "in_uploads": False,

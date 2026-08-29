@@ -56,14 +56,14 @@ def _require_existing_session_for_query(user: dict[str, Any], session_id: str | 
         try:
             created = history_store.create_session(session_id=normalized)
             import logging
+
             logger = logging.getLogger(__name__)
-            logger.info(
-                f"Auto-created session {normalized[:8]}... for user {user.get('user_id', 'unknown')[:8]}..."
-            )
+            logger.info(f"Auto-created session {normalized[:8]}... for user {user.get('user_id', 'unknown')[:8]}...")
             return created["session_id"]
         except Exception as e:
             # 创建失败时才报错
             import logging
+
             logger = logging.getLogger(__name__)
             logger.warning(f"Failed to auto-create session: {e}")
             raise bad_request(f"Failed to create session: {str(e)}")

@@ -68,8 +68,10 @@ def _resolve_conflicts(items: tuple[EvidenceItem, ...]) -> tuple[tuple[EvidenceI
             without_group.append(item)
             continue
         current = winners.get(item.conflict_group)
-        if current is None or _priority(item) < _priority(current) or (
-            _priority(item) == _priority(current) and _score(item) > _score(current)
+        if (
+            current is None
+            or _priority(item) < _priority(current)
+            or (_priority(item) == _priority(current) and _score(item) > _score(current))
         ):
             if current is not None:
                 notes.append(_conflict_note(item.conflict_group, item, current))
@@ -82,10 +84,7 @@ def _resolve_conflicts(items: tuple[EvidenceItem, ...]) -> tuple[tuple[EvidenceI
 
 
 def _conflict_note(group: str, winner: EvidenceItem, loser: EvidenceItem) -> str:
-    return (
-        f"{group}: {winner.layer}:{winner.document_id} overrides "
-        f"{loser.layer}:{loser.document_id}"
-    )
+    return f"{group}: {winner.layer}:{winner.document_id} overrides {loser.layer}:{loser.document_id}"
 
 
 def _truncate(items: tuple[EvidenceItem, ...], token_budget: int) -> tuple[tuple[EvidenceItem, ...], bool]:

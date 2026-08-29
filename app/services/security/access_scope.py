@@ -118,9 +118,7 @@ class AccessScopeResolver:
             scoped_rows.append(row)
 
         visible_sources = frozenset(
-            str(row.get("source", "") or "").strip()
-            for row in scoped_rows
-            if str(row.get("source", "") or "").strip()
+            str(row.get("source", "") or "").strip() for row in scoped_rows if str(row.get("source", "") or "").strip()
         )
         visible_document_ids = frozenset(
             str(row.get("document_id", "") or "").strip()

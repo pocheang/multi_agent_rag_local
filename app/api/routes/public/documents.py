@@ -264,7 +264,9 @@ async def upload_files(
         if exc.total_size and exc.max_total_size:
             error_details["total_size_mb"] = round(exc.total_size / (1024 * 1024), 2)
             error_details["max_total_size_mb"] = round(exc.max_total_size / (1024 * 1024), 2)
-            error_details["suggestion"] = f"本次上传总大小 {error_details['total_size_mb']}MB 超过限制 {error_details['max_total_size_mb']}MB，请分批上传"
+            error_details["suggestion"] = (
+                f"本次上传总大小 {error_details['total_size_mb']}MB 超过限制 {error_details['max_total_size_mb']}MB，请分批上传"
+            )
 
         if exc.filename:
             error_details["filename"] = exc.filename

@@ -45,9 +45,7 @@ def get_query_status(
     if isinstance(cached, dict) and cached:
         try:
             # 找到结果，返回完整响应
-            cached_payload = ensure_trackable_execution_result(
-                cached, question="", user=user
-            )
+            cached_payload = ensure_trackable_execution_result(cached, question="", user=user)
             return parse_query_response(cached_payload)
         except (ValueError, TypeError):
             # 缓存损坏，返回404
@@ -66,7 +64,7 @@ def get_query_status(
                 "message": "您的查询正在后台处理中",
                 "trace_id": _trace_id(request),
                 "suggestion": "请在几秒后重试此端点",
-            }
+            },
         )
 
     # 既不在缓存也不在处理中，可能已过期或无效

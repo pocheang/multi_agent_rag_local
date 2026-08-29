@@ -13,4 +13,5 @@ def __getattr__(name: str) -> Any:
         return GBrainLongTermMemory
     raise AttributeError(name)
 
+
 __all__ = ["GBrainLongTermMemory", "MemoryResolution", "MemoryResolver", "SessionMemory"]

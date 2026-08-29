@@ -34,9 +34,7 @@ class GBrainLongTermMemory:
         current = self._resolver.propose(query)
         resolution = self._resolver.resolve((current,) if current else (), items)
         active_ids = {
-            item.memory_id
-            for item in resolution.items
-            if current is None or item.memory_id != current.memory_id
+            item.memory_id for item in resolution.items if current is None or item.memory_id != current.memory_id
         }
         eligible_rows = [row for row in rows if str(row.get("candidate_id")) in active_ids]
         selected = retrieve_relevant_long_term_memories(
@@ -45,11 +43,7 @@ class GBrainLongTermMemory:
             top_k=max(1, top_k),
             fallback_k=min(2, max(1, top_k)),
         )
-        return tuple(
-            item
-            for row in selected
-            if (item := memory_item_from_row(row)) is not None
-        )[: max(1, top_k)]
+        return tuple(item for row in selected if (item := memory_item_from_row(row)) is not None)[: max(1, top_k)]
 
     async def upsert(self, item: MemoryItem, scope: AccessScope) -> MemoryItem:
         return await asyncio.to_thread(self._store(scope).upsert_memory, item)
@@ -58,9 +52,7 @@ class GBrainLongTermMemory:
         return await asyncio.to_thread(self._store(scope).expire_memory, memory_id)
 
     def _store(self, scope: AccessScope) -> MemoryStore:
-        return MemoryStore(
-            base_dir=memory_base_dir(self._base_root, tenant_id=scope.tenant_id, user_id=scope.user_id)
-        )
+        return MemoryStore(base_dir=memory_base_dir(self._base_root, tenant_id=scope.tenant_id, user_id=scope.user_id))
 
 
 def memory_base_dir(base_root: Path, *, tenant_id: str, user_id: str) -> Path:

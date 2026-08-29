@@ -16,7 +16,9 @@ class ManifestStore:
         self.artifacts = artifacts or ArtifactStore()
 
     def save(self, manifest: EvidenceManifest) -> ArtifactRecord:
-        target = self.artifacts.version_path(manifest.tenant_id, manifest.document_id, manifest.version) / "manifest.json"
+        target = (
+            self.artifacts.version_path(manifest.tenant_id, manifest.document_id, manifest.version) / "manifest.json"
+        )
         if target.exists():
             raise FileExistsError(f"manifest already exists for {manifest.document_id} v{manifest.version}")
         return self.artifacts.put_json(

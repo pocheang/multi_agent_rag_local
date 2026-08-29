@@ -73,7 +73,13 @@ def parsed_to_documents(parsed: ParsedDocument) -> list[Document]:
     documents = [
         Document(
             page_content=block.text,
-            metadata={**base, "page": block.page, "sheet": block.sheet or "", "block_id": block.block_id, "modality": "text"},
+            metadata={
+                **base,
+                "page": block.page,
+                "sheet": block.sheet or "",
+                "block_id": block.block_id,
+                "modality": "text",
+            },
         )
         for block in parsed.text_blocks
         if block.text.strip()
@@ -81,7 +87,13 @@ def parsed_to_documents(parsed: ParsedDocument) -> list[Document]:
     documents.extend(
         Document(
             page_content=table.markdown,
-            metadata={**base, "page": table.page, "sheet": table.sheet or "", "table_id": table.table_id, "modality": "table"},
+            metadata={
+                **base,
+                "page": table.page,
+                "sheet": table.sheet or "",
+                "table_id": table.table_id,
+                "modality": "table",
+            },
         )
         for table in parsed.tables
         if table.markdown.strip()
@@ -129,7 +141,9 @@ def _xlsx_rows(path: Path) -> list[tuple[str, list[list[object]]]]:
         raise RuntimeError("XLSX ingestion requires the 'office' dependency extra") from exc
     workbook = load_workbook(path, read_only=True, data_only=True)
     try:
-        return [(sheet.title, [list(row) for row in sheet.iter_rows(values_only=True)]) for sheet in workbook.worksheets]
+        return [
+            (sheet.title, [list(row) for row in sheet.iter_rows(values_only=True)]) for sheet in workbook.worksheets
+        ]
     finally:
         workbook.close()
 
@@ -190,9 +204,7 @@ def _archive_images(path: Path, document: EvidenceDocument) -> tuple[ImageBlock,
 def _ppt_image_pages(archive: zipfile.ZipFile) -> dict[str, int]:
     pages: dict[str, int] = {}
     relationship_names = sorted(
-        name
-        for name in archive.namelist()
-        if name.startswith("ppt/slides/_rels/slide") and name.endswith(".xml.rels")
+        name for name in archive.namelist() if name.startswith("ppt/slides/_rels/slide") and name.endswith(".xml.rels")
     )
     for relationship_name in relationship_names:
         match = re.search(r"slide(\d+)\.xml\.rels$", relationship_name)

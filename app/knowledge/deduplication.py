@@ -39,10 +39,7 @@ def deduplicate_evidence(items: Iterable[EvidenceItem]) -> tuple[EvidenceItem, .
         if current is None or _score(item) > _score(current):
             winners[key] = item
 
-    merged = [
-        item.model_copy(update={"retriever": "+".join(sorted(labels[key]))})
-        for key, item in winners.items()
-    ]
+    merged = [item.model_copy(update={"retriever": "+".join(sorted(labels[key]))}) for key, item in winners.items()]
     return tuple(sorted(merged, key=_score, reverse=True))
 
 

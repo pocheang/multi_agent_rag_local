@@ -43,6 +43,7 @@ def _make_document_hash(document: dict[str, Any]) -> str:
     serialized = json.dumps(payload, ensure_ascii=False, sort_keys=True, default=str, separators=(",", ":"))
     return hashlib.sha256(serialized.encode("utf-8")).hexdigest()
 
+
 # 全局缓存实例
 _pdf_quality_cache = LRUMemoryCache(max_size=500, default_ttl=3600)
 _entity_extraction_cache = LRUMemoryCache(max_size=500, default_ttl=3600)

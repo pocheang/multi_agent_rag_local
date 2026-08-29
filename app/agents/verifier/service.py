@@ -112,9 +112,7 @@ class VerifierAgentService:
             )
 
         action = str(getattr(result, "action", "regenerate") or "regenerate")
-        needs_retrieval = bool(
-            action == "regenerate" or unsupported_tuple or citation_tuple or missing_tuple
-        )
+        needs_retrieval = bool(action == "regenerate" or unsupported_tuple or citation_tuple or missing_tuple)
         if needs_retrieval and retry_count < self._max_retries:
             return VerificationDecision(
                 status="retry_retrieval",
@@ -167,10 +165,7 @@ async def _validate(
 
 
 def _citation_errors(refs: tuple[EvidenceRef, ...], context: ContextBundle) -> list[str]:
-    valid = {
-        (item.document_id, item.version, item.page, item.chunk_id, item.image_id)
-        for item in context.evidence
-    }
+    valid = {(item.document_id, item.version, item.page, item.chunk_id, item.image_id) for item in context.evidence}
     return [
         f"citation target not found:{ref.document_id}:v{ref.version}"
         for ref in refs

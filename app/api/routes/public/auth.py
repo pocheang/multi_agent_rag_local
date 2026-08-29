@@ -107,9 +107,7 @@ def login(req: AuthCredentials, request: Request, response: Response):
         }
 
         raise HTTPException(
-            status_code=429,
-            detail=error_detail,
-            headers={"Retry-After": str(limit_info["retry_after"])}
+            status_code=429, detail=error_detail, headers={"Retry-After": str(limit_info["retry_after"])}
         )
     try:
         payload = auth_service.login(req.username, req.password)
@@ -303,7 +301,9 @@ async def google_callback(request: Request) -> RedirectResponse:
             result="blocked",
             detail=f"ip_mismatch: {stored_ip} != {current_ip}",
         )
-        return RedirectResponse(url="/login?error=security_check_failed&hint=ip_mismatch&message=网络环境发生变化，请重新登录")
+        return RedirectResponse(
+            url="/login?error=security_check_failed&hint=ip_mismatch&message=网络环境发生变化，请重新登录"
+        )
 
     try:
         token = await oauth.google.authorize_access_token(request)
@@ -316,7 +316,9 @@ async def google_callback(request: Request) -> RedirectResponse:
                 result="failed",
                 detail="no_email_in_response",
             )
-            return RedirectResponse(url="/login?error=no_email&hint=missing_email&message=Google账号未关联邮箱，请使用其他登录方式")
+            return RedirectResponse(
+                url="/login?error=no_email&hint=missing_email&message=Google账号未关联邮箱，请使用其他登录方式"
+            )
 
         email = user_info["email"]
         name = user_info.get("name", email.split("@")[0])
@@ -330,7 +332,9 @@ async def google_callback(request: Request) -> RedirectResponse:
                 result="failed",
                 detail=f"user_creation_failed: {exc}",
             )
-            return RedirectResponse(url="/login?error=registration_failed&hint=account_creation&message=无法创建账号，请联系管理员或使用其他登录方式")
+            return RedirectResponse(
+                url="/login?error=registration_failed&hint=account_creation&message=无法创建账号，请联系管理员或使用其他登录方式"
+            )
         user = login_result["user"]
         if not login_result["created"]:
             _audit(
@@ -364,4 +368,6 @@ async def google_callback(request: Request) -> RedirectResponse:
             result="failed",
             detail=f"oauth_error: {exc}",
         )
-        return RedirectResponse(url="/login?error=oauth_failed&hint=network_timeout&message=Google登录超时，请检查网络后重试")
+        return RedirectResponse(
+            url="/login?error=oauth_failed&hint=network_timeout&message=Google登录超时，请检查网络后重试"
+        )

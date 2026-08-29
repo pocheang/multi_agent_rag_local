@@ -228,11 +228,7 @@ class MemoryStore:
 
     def list_global(self) -> list[dict[str, Any]]:
         data = self.get_session_payload(GLOBAL_MEMORY_SESSION_ID)
-        return [
-            item
-            for item in data.get("candidates", [])
-            if item.get("candidate_id") and not item.get("deleted")
-        ]
+        return [item for item in data.get("candidates", []) if item.get("candidate_id") and not item.get("deleted")]
 
     def add_candidate(
         self, session_id: str, question: str, answer: str, signals: dict[str, Any] | None = None
@@ -242,7 +238,9 @@ class MemoryStore:
         if proposed is None:
             return None
         score, normalized_signals = score_memory_candidate(answer=answer, signals=signals)
-        score = max(score, {"explicit_remember": 1.0, "preference": 0.9, "stable_fact": 0.85, "task": 0.8}[proposed.kind])
+        score = max(
+            score, {"explicit_remember": 1.0, "preference": 0.9, "stable_fact": 0.85, "task": 0.8}[proposed.kind]
+        )
         now = _now_iso()
         candidate = {
             "candidate_id": proposed.memory_id,

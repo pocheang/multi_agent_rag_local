@@ -146,8 +146,7 @@ def create_document_record(
                     not document_id
                     and str(row.get("source", "")) == source_value
                     and str(row.get("owner_user_id", "")) == str(owner_user_id)
-                    and str(row.get("tenant_id", "") or row.get("owner_user_id", ""))
-                    == str(tenant_id or owner_user_id)
+                    and str(row.get("tenant_id", "") or row.get("owner_user_id", "")) == str(tenant_id or owner_user_id)
                 )
             ),
             None,
@@ -155,7 +154,9 @@ def create_document_record(
         stable_document_id = str(existing.get("document_id")) if existing else (document_id or _new_document_id())
         previous_version = int(existing.get("version", 1) or 1) if existing else 0
         latest_version = int(existing.get("latest_version", previous_version) or previous_version) if existing else 0
-        version = latest_version + 1 if existing and str(existing.get("sha256", "")) != sha256 else max(1, previous_version)
+        version = (
+            latest_version + 1 if existing and str(existing.get("sha256", "")) != sha256 else max(1, previous_version)
+        )
         incoming = _normalize_record(
             {
                 "document_id": stable_document_id,

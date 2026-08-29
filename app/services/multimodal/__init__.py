@@ -26,6 +26,7 @@ def __getattr__(name: str) -> Any:
         return TableExtractor
     raise AttributeError(name)
 
+
 __all__ = [
     "ImageProcessor",
     "TableExtractor",

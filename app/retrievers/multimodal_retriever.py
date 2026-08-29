@@ -541,9 +541,7 @@ def _scope_filter(scope: AccessScope) -> dict[str, Any] | None:
     if scope.document_ids:
         document_ids = sorted(scope.document_ids)
         constraints.append(
-            {"document_id": document_ids[0]}
-            if len(document_ids) == 1
-            else {"document_id": {"$in": document_ids}}
+            {"document_id": document_ids[0]} if len(document_ids) == 1 else {"document_id": {"$in": document_ids}}
         )
     elif scope.allowed_sources:
         sources = sorted(scope.allowed_sources)

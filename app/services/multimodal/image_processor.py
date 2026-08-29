@@ -460,8 +460,7 @@ class ImageProcessor:
         if image.masked_image_data:
             return image.masked_image_data
         media_type = str(
-            image.metadata.get("media_type")
-            or _image_media_type(str(image.metadata.get("format", "png") or "png"))
+            image.metadata.get("media_type") or _image_media_type(str(image.metadata.get("format", "png") or "png"))
         )
         result = self.image_masking.mask(
             ImageInput(
