@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+import asyncio
 import logging
+import sys
 import threading
 import time
-from collections.abc import Iterator
-from contextlib import contextmanager
+from collections.abc import AsyncIterator, Iterator
+from contextlib import asynccontextmanager, contextmanager
 
 from app.core.config import get_settings
 from app.services.security.rate_limiter import SlidingWindowLimiter
@@ -152,6 +154,27 @@ class QueryLoadGuard:
             return
         with self._acquire_memory(user_key):
             yield self.stats()
+
+    @asynccontextmanager
+    async def acquire_async(self, user_key: str) -> AsyncIterator[dict[str, int | str]]:
+        """Acquire a slot without blocking the event loop.
+
+        ``acquire`` waits on a threading semaphore for up to
+        ``acquire_timeout_ms``, and the redis backend does blocking I/O.  Running
+        either inline in an async handler freezes every other task on the loop
+        precisely when the server is overloaded, so both the blocking enter and
+        the blocking exit run in worker threads.
+        """
+        manager = self.acquire(user_key)
+        stats = await asyncio.to_thread(manager.__enter__)
+        exc_info: tuple = (None, None, None)
+        try:
+            yield stats
+        except BaseException:
+            exc_info = sys.exc_info()
+            raise
+        finally:
+            await asyncio.to_thread(manager.__exit__, *exc_info)
 
     @contextmanager
     def _acquire_memory(self, user_key: str) -> Iterator[None]:

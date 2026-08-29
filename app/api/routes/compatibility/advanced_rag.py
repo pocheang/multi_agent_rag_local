@@ -15,7 +15,7 @@ from app.api.dependencies import (
     _require_permission,
     _require_user,
     _require_valid_session_id,
-    _reserve_chat_credit,
+    _reserve_chat_credit_async,
 )
 from app.api.deps.auth import require_admin
 from app.api.deps.documents import _allowed_sources_for_user
@@ -309,7 +309,7 @@ async def process_advanced_rag_query(
     request: Request,
     user: dict[str, Any] = Depends(_require_user),
 ):
-    with _reserve_chat_credit(request, user, "advanced_query") as credit:
+    async with _reserve_chat_credit_async(request, user, "advanced_query") as credit:
         response = await _process_advanced_rag_query_impl(request_data, request, user)
         credit.commit()
         return response

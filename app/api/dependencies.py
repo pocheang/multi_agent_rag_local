@@ -5,11 +5,13 @@ This module serves as the central hub for all shared dependencies and re-exports
 helper functions from specialized utility modules.
 """
 
+import asyncio
 import logging
 import re
+import sys
 import threading
 import uuid
-from contextlib import contextmanager
+from contextlib import asynccontextmanager, contextmanager
 from dataclasses import dataclass
 from typing import Any
 
@@ -85,6 +87,28 @@ def _reserve_chat_credit(request: Request, user: dict[str, Any], resource_type: 
             detail="credit_balance_exhausted",
         )
         raise forbidden(str(exc)) from exc
+
+
+@asynccontextmanager
+async def _reserve_chat_credit_async(request: Request, user: dict[str, Any], resource_type: str):
+    """Async twin of ``_reserve_chat_credit`` for async route handlers.
+
+    ``_reserve_chat_credit`` waits on a threading semaphore (up to
+    ``QUERY_ACQUIRE_TIMEOUT_MS``) and touches SQLite for the credit reservation;
+    both must stay off the event loop or an overloaded server stops answering
+    everything, including health checks.  Sync handlers -- the message-rerun path
+    -- keep using the sync version, which FastAPI already runs in a threadpool.
+    """
+    manager = _reserve_chat_credit(request, user, resource_type)
+    credit = await asyncio.to_thread(manager.__enter__)
+    exc_info: tuple = (None, None, None)
+    try:
+        yield credit
+    except BaseException:
+        exc_info = sys.exc_info()
+        raise
+    finally:
+        await asyncio.to_thread(manager.__exit__, *exc_info)
 
 
 # Shared service instances
