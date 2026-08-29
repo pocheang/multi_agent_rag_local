@@ -466,7 +466,23 @@
       "title": "执行追踪",
       "ariaLabel": "执行追踪",
       "empty": "暂无执行事件。",
-      "event": "{{stage}}：{{message}}（{{duration}}ms）"
+      "event": "{{stage}}：{{message}}（{{duration}}ms）",
+      "stages": {
+        "privacy_permission": "隐私校验",
+        "route": "路由",
+        "clarification": "澄清",
+        "plan": "规划",
+        "knowledge_strategy": "检索策略",
+        "knowledge": "检索",
+        "rag": "检索",
+        "tool": "工具",
+        "synthesize": "合成",
+        "verifier": "验证",
+        "finalize": "定稿",
+        "output_filter": "输出过滤",
+        "complete": "完成",
+        "failed": "失败"
+      }
     },
     "toolApproval": {
       "title": "工具审批",

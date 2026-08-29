@@ -466,7 +466,23 @@
       "title": "Execution trace",
       "ariaLabel": "Execution trace",
       "empty": "No execution events yet.",
-      "event": "{{stage}}: {{message}} ({{duration}}ms)"
+      "event": "{{stage}}: {{message}} ({{duration}}ms)",
+      "stages": {
+        "privacy_permission": "Privacy check",
+        "route": "Routing",
+        "clarification": "Clarification",
+        "plan": "Planning",
+        "knowledge_strategy": "Retrieval strategy",
+        "knowledge": "Retrieval",
+        "rag": "Retrieval",
+        "tool": "Tools",
+        "synthesize": "Synthesis",
+        "verifier": "Verification",
+        "finalize": "Finalization",
+        "output_filter": "Output filter",
+        "complete": "Complete",
+        "failed": "Failed"
+      }
     },
     "toolApproval": {
       "title": "Tool approval",

@@ -1,4 +1,24 @@
-export type ExecutionStage = "route" | "plan" | "rag" | "tool" | "synthesize" | "complete" | "failed";
+// Mirrors EventStage in app/domain/events.py. Keep both lists in sync: an
+// unknown stage makes isExecutionEvent reject the event and the UI silently
+// drops it.
+export const EXECUTION_STAGES = [
+  "privacy_permission",
+  "route",
+  "clarification",
+  "plan",
+  "knowledge_strategy",
+  "knowledge",
+  "rag",
+  "tool",
+  "synthesize",
+  "verifier",
+  "finalize",
+  "output_filter",
+  "complete",
+  "failed",
+] as const;
+
+export type ExecutionStage = (typeof EXECUTION_STAGES)[number];
 
 export type ExecutionStatus = "completed" | "failed" | "skipped";
 
@@ -20,12 +40,11 @@ export type ExecutionEvent = {
 export function isExecutionEvent(value: unknown): value is ExecutionEvent {
   if (!value || typeof value !== "object") return false;
   const event = value as Record<string, unknown>;
-  const stages: ExecutionStage[] = ["route", "plan", "rag", "tool", "synthesize", "complete", "failed"];
   const statuses: ExecutionStatus[] = ["completed", "failed", "skipped"];
 
-  return hasExactKeys(event, ["version", "stage", "status", "duration_ms", "message", "metadata", "occurred_at"])
+  return hasKeys(event, ["version", "stage", "status", "duration_ms", "message", "metadata", "occurred_at"])
     && event.version === "1"
-    && typeof event.stage === "string" && stages.includes(event.stage as ExecutionStage)
+    && typeof event.stage === "string" && EXECUTION_STAGES.includes(event.stage as ExecutionStage)
     && typeof event.status === "string" && statuses.includes(event.status as ExecutionStatus)
     && typeof event.duration_ms === "number" && Number.isFinite(event.duration_ms) && event.duration_ms >= 0
     && typeof event.message === "string" && typeof event.occurred_at === "string"
@@ -34,12 +53,14 @@ export function isExecutionEvent(value: unknown): value is ExecutionEvent {
 
 function isExecutionMetadataItem(value: unknown): value is ExecutionMetadataItem {
   return !!value && typeof value === "object"
-    && hasExactKeys(value as Record<string, unknown>, ["key", "value"])
+    && hasKeys(value as Record<string, unknown>, ["key", "value"])
     && typeof (value as Record<string, unknown>).key === "string"
     && typeof (value as Record<string, unknown>).value === "string";
 }
 
-function hasExactKeys(value: Record<string, unknown>, keys: readonly string[]): boolean {
-  const actual = Object.keys(value);
-  return actual.length === keys.length && keys.every((key) => Object.prototype.hasOwnProperty.call(value, key));
+// Required fields must be present and well-typed, but extra ones are allowed:
+// demanding an exact key set meant any field added to the backend
+// ExecutionEvent would make the UI discard every event, not just misread one.
+function hasKeys(value: Record<string, unknown>, keys: readonly string[]): boolean {
+  return keys.every((key) => Object.prototype.hasOwnProperty.call(value, key));
 }
