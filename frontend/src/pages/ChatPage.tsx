@@ -5,6 +5,10 @@ import {
 } from "@/pages/chat/constants";
 import type { Props } from "@/pages/chat/types";
 import { useChatStore } from "@/stores/useChatStore";
+import { ConfirmDialog } from "@/components/ConfirmDialog";
+import { PromptDialog } from "@/components/PromptDialog";
+import { useConfirmDialog } from "@/hooks/useConfirmDialog";
+import { usePromptDialog } from "@/hooks/usePromptDialog";
 import { ChatTopbar } from "@/pages/chat/components/ChatTopbar";
 import { ChatMessages } from "@/pages/chat/components/ChatMessages";
 import { ChatComposer } from "@/pages/chat/components/ChatComposer";
@@ -79,6 +83,9 @@ export function ChatPage({ user, onLogout, onUserRefresh }: Props) {
     chatScrollRef,
   } = useChatPageState();
 
+  const confirmDialog = useConfirmDialog();
+  const promptDialog = usePromptDialog();
+
   const dragHandlers = useDragHandlers(setComposerDropActive);
 
   const computed = useChatComputed({ documents, user });
@@ -124,6 +131,8 @@ export function ChatPage({ user, onLogout, onUserRefresh }: Props) {
     chatUploadInputRef,
     onLogout,
     closeSidebar,
+    confirm: confirmDialog.confirm,
+    promptInput: promptDialog.promptInput,
   });
 
   const helpers = useChatHelpers({
@@ -374,6 +383,29 @@ export function ChatPage({ user, onLogout, onUserRefresh }: Props) {
         />
         <SectionToggleButton sectionsHidden={sectionsHidden} onToggle={toggleSections} />
         <ApiSettings isOpen={settingsOpen} onClose={() => setSettingsOpen(false)} />
+        <ConfirmDialog
+          isOpen={confirmDialog.isOpen}
+          title={confirmDialog.options?.title || ""}
+          message={confirmDialog.options?.message || ""}
+          confirmText={confirmDialog.options?.confirmText}
+          cancelText={confirmDialog.options?.cancelText}
+          isDanger={confirmDialog.options?.isDanger}
+          onConfirm={confirmDialog.handleConfirm}
+          onCancel={confirmDialog.handleCancel}
+        />
+        <PromptDialog
+          isOpen={promptDialog.isOpen}
+          title={promptDialog.options?.title || ""}
+          message={promptDialog.options?.message || ""}
+          defaultValue={promptDialog.options?.defaultValue}
+          placeholder={promptDialog.options?.placeholder}
+          confirmText={promptDialog.options?.confirmText}
+          cancelText={promptDialog.options?.cancelText}
+          multiline={promptDialog.options?.multiline}
+          inputType={promptDialog.options?.inputType}
+          onConfirm={promptDialog.handleConfirm}
+          onCancel={promptDialog.handleCancel}
+        />
         <SessionManagementModal
           isOpen={sessionManagementOpen}
           onClose={() => setSessionManagementOpen(false)}
