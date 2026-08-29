@@ -110,10 +110,7 @@ class Settings(BaseSettings):
     memory_task_ttl_days: int = Field(default=30, ge=1, le=3650, alias="MEMORY_TASK_TTL_DAYS")
     memory_stable_fact_ttl_days: int = Field(default=365, ge=1, le=3650, alias="MEMORY_STABLE_FACT_TTL_DAYS")
 
-    # Query Analysis & Clarification
-
     # Multi-modal Processing
-    enable_image_processing: bool = Field(default=True, alias="ENABLE_IMAGE_PROCESSING")
     enable_table_extraction: bool = Field(default=True, alias="ENABLE_TABLE_EXTRACTION")
     enable_ocr: bool = Field(default=True, alias="ENABLE_OCR")
     vision_model: str = Field(default="gpt-4-vision-preview", alias="VISION_MODEL")
@@ -132,7 +129,6 @@ class Settings(BaseSettings):
     cache_l1_size: int = Field(default=256, alias="CACHE_L1_SIZE")
     cache_l1_ttl: int = Field(default=300, alias="CACHE_L1_TTL")  # 5 minutes
     cache_l2_ttl: int = Field(default=3600, alias="CACHE_L2_TTL")  # 1 hour
-    semantic_cache_enabled: bool = Field(default=True, alias="SEMANTIC_CACHE_ENABLED")
 
     # Performance Optimization - Database
 
@@ -226,12 +222,6 @@ class Settings(BaseSettings):
     query_max_concurrent: int = Field(default=24, alias="QUERY_MAX_CONCURRENT")
     query_max_waiting: int = Field(default=120, alias="QUERY_MAX_WAITING")
     query_acquire_timeout_ms: int = Field(default=3000, alias="QUERY_ACQUIRE_TIMEOUT_MS")
-    query_result_cache_backend: str = Field(default="auto", alias="QUERY_RESULT_CACHE_BACKEND")  # auto|memory|redis|off
-    query_result_cache_ttl_seconds: int = Field(default=45, alias="QUERY_RESULT_CACHE_TTL_SECONDS")
-    query_result_cache_max_items: int = Field(default=512, alias="QUERY_RESULT_CACHE_MAX_ITEMS")
-    query_result_session_ttl_seconds: int = Field(default=300, alias="QUERY_RESULT_SESSION_TTL_SECONDS")
-    stream_replay_cache_ttl_seconds: int = Field(default=600, alias="STREAM_REPLAY_CACHE_TTL_SECONDS")
-    stream_replay_cache_max_events: int = Field(default=1200, alias="STREAM_REPLAY_CACHE_MAX_EVENTS")
     shadow_queue_workers: int = Field(default=2, alias="SHADOW_QUEUE_WORKERS")
     shadow_queue_maxsize: int = Field(default=200, alias="SHADOW_QUEUE_MAXSIZE")
     synthesis_refine_max_rounds: int = Field(default=5, alias="SYNTHESIS_REFINE_MAX_ROUNDS")

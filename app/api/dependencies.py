@@ -42,7 +42,6 @@ from app.services.prompts.store import PromptStore
 from app.services.query.guard import QueryOverloadedError, QueryRateLimitedError
 from app.services.query_guard import QueryLoadGuard
 from app.services.runtime.background_queue import BackgroundTaskQueue
-from app.services.runtime.query_result_cache import QueryResultCache
 from app.services.runtime.runtime_metrics import RuntimeMetrics
 from app.services.security.quota import QuotaGuard
 from app.services.security.rate_limiter import SlidingWindowLimiter
@@ -137,7 +136,6 @@ class QueryRuntime:
 
     settings: Settings
     query_guard: QueryLoadGuard
-    query_result_cache: QueryResultCache
     quota_guard: QuotaGuard
     shadow_queue: BackgroundTaskQueue
 
@@ -152,12 +150,6 @@ def _build_query_runtime(new_settings: Settings) -> QueryRuntime:
             max_waiting=new_settings.query_max_waiting,
             acquire_timeout_ms=new_settings.query_acquire_timeout_ms,
             backend=new_settings.query_guard_backend,
-        ),
-        query_result_cache=QueryResultCache(
-            backend=new_settings.query_result_cache_backend,
-            ttl_seconds=new_settings.query_result_cache_ttl_seconds,
-            max_items=new_settings.query_result_cache_max_items,
-            session_ttl_seconds=new_settings.query_result_session_ttl_seconds,
         ),
         quota_guard=QuotaGuard(),
         shadow_queue=BackgroundTaskQueue(
@@ -210,7 +202,6 @@ def __getattr__(name: str):
     """Resolve legacy helper imports from split utility modules."""
     runtime_attributes = {
         "query_guard": "query_guard",
-        "query_result_cache": "query_result_cache",
         "quota_guard": "quota_guard",
         "shadow_queue": "shadow_queue",
     }
