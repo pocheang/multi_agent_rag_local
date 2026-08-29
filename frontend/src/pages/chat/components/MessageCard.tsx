@@ -7,6 +7,8 @@ import { CollapsibleSection } from "@/pages/chat/components/CollapsibleSection";
 import { MetadataBadges } from "@/pages/chat/components/MetadataBadges";
 import { AnimatedButtonLite as AnimatedButton } from "@/components/animations/AnimatedButtonLite";
 import { ThinkingIndicator } from "@/pages/chat/components/ThinkingIndicator";
+import { ConfirmDialog } from "@/components/ConfirmDialog";
+import { useConfirmDialog } from "@/hooks/useConfirmDialog";
 
 type Props = {
   message: SessionMessage;
@@ -20,6 +22,7 @@ export function MessageCard({ message, onEditMessage, onRemoveMessage }: Props) 
   const metadata = message.metadata || EMPTY_METADATA;
   const timeLocale = i18n.language === "zh" ? "zh-CN" : "en-US";
   const [processExpanded, setProcessExpanded] = useState(false);
+  const confirmDialog = useConfirmDialog();
 
   // Determine if this is a streaming message (thinking state)
   const isStreaming = message.message_id === "local-assistant-stream";
@@ -40,6 +43,7 @@ export function MessageCard({ message, onEditMessage, onRemoveMessage }: Props) 
   };
 
   return (
+    <>
     <article
       className={`bubble ${isAssistant ? "assistant" : "user"}`}
       role="article"
@@ -65,7 +69,8 @@ export function MessageCard({ message, onEditMessage, onRemoveMessage }: Props) 
                 const confirmMsg = message.role === "assistant"
                   ? t("components.messages.deleteAssistantConfirm")
                   : t("components.messages.deleteUserConfirm");
-                if (window.confirm(confirmMsg)) {
+                const confirmed = await confirmDialog.confirm({ message: confirmMsg, isDanger: true });
+                if (confirmed) {
                   await onRemoveMessage(message);
                 }
               }}
@@ -258,5 +263,14 @@ export function MessageCard({ message, onEditMessage, onRemoveMessage }: Props) 
         </>
       )}
     </article>
+    <ConfirmDialog
+      isOpen={confirmDialog.isOpen}
+      title={t("components.messages.delete")}
+      message={confirmDialog.options?.message || ""}
+      isDanger={confirmDialog.options?.isDanger}
+      onConfirm={confirmDialog.handleConfirm}
+      onCancel={confirmDialog.handleCancel}
+    />
+    </>
   );
 }
