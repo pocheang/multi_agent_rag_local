@@ -129,3 +129,29 @@
 .confirm-dialog-btn:active {
   transform: scale(0.97);
 }
+
+/* ============================================
+   Prompt Dialog (text-input variant)
+   ============================================ */
+
+.prompt-dialog-input {
+  width: 100%;
+  margin-top: 12px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--border-medium);
+  background: var(--surface);
+  color: var(--text-primary);
+  font-size: 14px;
+  font-family: inherit;
+}
+
+.prompt-dialog-input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.prompt-dialog-textarea {
+  resize: vertical;
+  min-height: 100px;
+}
