@@ -50,8 +50,21 @@ def collect_candidates(
     dynamic_top_k: int | None = None,
     dynamic_vector_weight: float | None = None,
     dynamic_bm25_weight: float | None = None,
+    *,
+    rewrite_fn=None,
+    vector_fn=None,
+    bm25_fn=None,
 ) -> tuple[list[dict], dict]:
-    """Collect and fuse candidates from vector and BM25 retrieval."""
+    """Collect and fuse candidates from vector and BM25 retrieval.
+
+    ``rewrite_fn`` / ``vector_fn`` / ``bm25_fn`` let a caller substitute the
+    retrieval primitives for one call.  They default to this module's own
+    implementations; callers previously achieved the same effect by reassigning
+    module globals, which raced across concurrent requests.
+    """
+    _rewrite = rewrite_fn or build_rewrite_queries
+    _vector = vector_fn or safe_similarity_search
+    _bm25 = bm25_fn or bm25_search
     rrf_k = int(getattr(settings, "hybrid_rrf_k", 60) or 60)
     flags = strategy_flags()
 
@@ -70,7 +83,7 @@ def collect_candidates(
     else:
         vector_weight, bm25_weight = hybrid_weights(settings)
 
-    variants = build_rewrite_queries(
+    variants = _rewrite(
         query,
         enable_llm=bool(
             flags["rewrite"]
@@ -117,7 +130,7 @@ def collect_candidates(
                 precomputed_raw_vector_results[variant], score_threshold=vector_threshold
             )
         else:
-            vector_results = safe_similarity_search(variant, k=vector_top_k, allowed_sources=allowed_sources)
+            vector_results = _vector(variant, k=vector_top_k, allowed_sources=allowed_sources)
             vector_results = filter_vector_results(vector_results, score_threshold=vector_threshold)
         diag["vector_hits_by_rewrite"][variant] = len(vector_results)
         for idx, (doc, score) in enumerate(vector_results, start=1):
@@ -141,7 +154,7 @@ def collect_candidates(
                 merged[item_id]["dense_score"] = float(score)
             scores[item_id] += vector_weight * rrf_score(idx, rrf_k)
 
-        sparse = bm25_search(variant, k=bm25_top_k, allowed_sources=allowed_sources)
+        sparse = _bm25(variant, k=bm25_top_k, allowed_sources=allowed_sources)
         diag["bm25_hits_by_rewrite"][variant] = len(sparse)
         for idx, item in enumerate(sparse, start=1):
             source = str((item.get("metadata", {}) or {}).get("source", "") or "")

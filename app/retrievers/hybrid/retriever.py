@@ -1,8 +1,6 @@
 import json
-import sys
 
 import app.retrievers.hybrid.candidate_collection as candidate_collection
-import app.retrievers.hybrid.parent_expansion as parent_expansion
 from app.core.config import get_settings
 from app.retrievers.bm25_retriever import bm25_search
 from app.retrievers.hybrid.caching import cache_lookup, cache_store, clear_retrieval_cache
@@ -140,13 +138,8 @@ def _safe_similarity_search(
 
 
 def _expand_to_parent_context(candidates: list[dict]) -> list[dict]:
-    """Backward-compatible wrapper for pre-refactor parent expansion helper."""
-    original_get_parent_text_map = parent_expansion.get_parent_text_map
-    parent_expansion.get_parent_text_map = get_parent_text_map
-    try:
-        return expand_to_parent_context(candidates)
-    finally:
-        parent_expansion.get_parent_text_map = original_get_parent_text_map
+    """Expand candidates to parent context using this module's text-map source."""
+    return expand_to_parent_context(candidates, parent_text_map_fn=get_parent_text_map)
 
 
 def _collect_candidates_for_current_module(
@@ -159,28 +152,27 @@ def _collect_candidates_for_current_module(
     dynamic_vector_weight: float | None = None,
     dynamic_bm25_weight: float | None = None,
 ) -> tuple[list[dict], dict]:
-    original_rewrite = candidate_collection.build_rewrite_queries
-    original_vector = candidate_collection.safe_similarity_search
-    original_bm25 = candidate_collection.bm25_search
-    module = sys.modules.get(__name__)
-    candidate_collection.build_rewrite_queries = getattr(module, "build_rewrite_queries", build_rewrite_queries)
-    candidate_collection.safe_similarity_search = getattr(module, "_safe_similarity_search", _safe_similarity_search)
-    candidate_collection.bm25_search = getattr(module, "bm25_search", bm25_search)
-    try:
-        return candidate_collection.collect_candidates(
-            query,
-            allowed_sources=allowed_sources,
-            vector_threshold=vector_threshold,
-            settings=settings,
-            precomputed_raw_vector_results=precomputed_raw_vector_results,
-            dynamic_top_k=dynamic_top_k,
-            dynamic_vector_weight=dynamic_vector_weight,
-            dynamic_bm25_weight=dynamic_bm25_weight,
-        )
-    finally:
-        candidate_collection.build_rewrite_queries = original_rewrite
-        candidate_collection.safe_similarity_search = original_vector
-        candidate_collection.bm25_search = original_bm25
+    """Collect candidates using this module's retrieval primitives.
+
+    The primitives are injected explicitly.  They used to be installed by
+    reassigning candidate_collection's module globals and restoring them in a
+    finally block, which raced whenever two retrievals overlapped -- and this is
+    a concurrent path (RAGAgentService gathers query variants across a thread
+    pool).
+    """
+    return candidate_collection.collect_candidates(
+        query,
+        allowed_sources=allowed_sources,
+        vector_threshold=vector_threshold,
+        settings=settings,
+        precomputed_raw_vector_results=precomputed_raw_vector_results,
+        dynamic_top_k=dynamic_top_k,
+        dynamic_vector_weight=dynamic_vector_weight,
+        dynamic_bm25_weight=dynamic_bm25_weight,
+        rewrite_fn=build_rewrite_queries,
+        vector_fn=_safe_similarity_search,
+        bm25_fn=bm25_search,
+    )
 
 
 def _collect_candidates(

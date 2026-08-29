@@ -1,14 +1,21 @@
 from app.retrievers.stores.parent import get_parent_text_map
 
 
-def expand_to_parent_context(candidates: list[dict]) -> list[dict]:
-    """Expand child chunks to parent context while deduplicating."""
+def expand_to_parent_context(candidates: list[dict], *, parent_text_map_fn=None) -> list[dict]:
+    """Expand child chunks to parent context while deduplicating.
+
+    ``parent_text_map_fn`` lets a caller substitute the parent-text lookup for
+    one call; it defaults to this module's own.  Callers previously achieved the
+    same effect by reassigning this module's global, which raced across
+    concurrent requests.
+    """
+    _parent_text_map = parent_text_map_fn or get_parent_text_map
     parent_ids: list[str] = []
     for item in candidates:
         parent_id = str((item.get("metadata", {}) or {}).get("parent_id", "")).strip()
         if parent_id:
             parent_ids.append(parent_id)
-    parent_map = get_parent_text_map(parent_ids)
+    parent_map = _parent_text_map(parent_ids)
 
     expanded: list[dict] = []
     seen: set[str] = set()
