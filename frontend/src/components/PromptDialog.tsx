@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import type React from "react";
 import { useTranslation } from "react-i18next";
 
@@ -33,14 +33,17 @@ export function PromptDialog({
   const [value, setValue] = useState(defaultValue);
   const inputRef = useRef<HTMLInputElement | HTMLTextAreaElement | null>(null);
 
+  useLayoutEffect(() => {
+    setValue(isOpen ? defaultValue : "");
+  }, [isOpen, defaultValue]);
+
   useEffect(() => {
     if (!isOpen) return;
-    setValue(defaultValue);
     window.setTimeout(() => {
       inputRef.current?.focus();
       inputRef.current?.select();
     }, 0);
-  }, [isOpen, defaultValue]);
+  }, [isOpen]);
 
   useEffect(() => {
     if (!isOpen) return;
