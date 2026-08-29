@@ -3,8 +3,8 @@ import logging
 import re
 from typing import Any
 
-from app.services.input_normalizer import normalize_user_question
 from app.services.models.runtime import get_reasoning_model
+from app.services.query.input_normalizer import normalize_user_question
 
 logger = logging.getLogger(__name__)
 

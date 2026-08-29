@@ -10,7 +10,7 @@ from collections.abc import Mapping, Sequence
 from typing import Any
 
 from app.agents.validation.models import CascadeLevel, CascadeResult, RuleBasisIssue, ValidationRequest
-from app.core.models import get_chat_model
+from app.services.models.runtime import get_chat_model
 
 logger = logging.getLogger(__name__)
 

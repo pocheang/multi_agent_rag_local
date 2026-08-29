@@ -1,7 +1,7 @@
 """Streaming components for query processing."""
 
 from app.graph.streaming.sse_encoder import encode_sse
-from app.services.query_intent import is_casual_chat_query
+from app.services.query.intent import is_casual_chat_query
 
 
 def run_query_stream(*args, **kwargs):

@@ -27,12 +27,12 @@ from app.agents.shared.config import (
     VALID_ROUTES,
     VALID_SKILLS,
 )
-from app.core.models import get_chat_model, get_reasoning_model
 from app.domain.text import normalize_string
 from app.prompts import build_router_prompt
 from app.services.agent_classifier import classify_agent_class, pick_cyber_skill
 from app.services.llm_intent_classifier import classify_intent_with_llm
-from app.services.query_intent import is_smalltalk_query
+from app.services.models.runtime import get_chat_model, get_reasoning_model
+from app.services.query.intent import is_smalltalk_query
 
 logger = logging.getLogger(__name__)
 

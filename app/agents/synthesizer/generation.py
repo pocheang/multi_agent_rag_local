@@ -15,18 +15,18 @@ from app.agents.synthesizer.templates import (
 )
 from app.agents.validation.public import verify_generated_answer
 from app.core.config import get_settings
-from app.core.models import get_chat_model, get_reasoning_model
 from app.prompts.core.canonical_agent_prompts import (
     ANSWER_PROMPT,
     NO_EVIDENCE_ANSWER_PROMPT,
     NO_EVIDENCE_REVIEW_PROMPT,
     REVIEW_PROMPT,
 )
-from app.services.bulkhead import bulkhead
-from app.services.language_analytics import LanguageAnalytics
-from app.services.language_detector import detect_language
-from app.services.query_intent import is_casual_chat_query
-from app.services.request_context import deadline_exceeded, overload_mode_enabled
+from app.services.language.analytics import LanguageAnalytics
+from app.services.language.detector import detect_language
+from app.services.models.runtime import get_chat_model, get_reasoning_model
+from app.services.query.intent import is_casual_chat_query
+from app.services.runtime.bulkhead import bulkhead
+from app.services.runtime.request_context import deadline_exceeded, overload_mode_enabled
 
 logger = logging.getLogger(__name__)
 

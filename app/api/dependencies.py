@@ -36,11 +36,10 @@ from app.api.utils.string_utils import normalize_string
 from app.core.config import Settings, get_settings
 from app.services.agent_classifier import classify_agent_class
 from app.services.auth.user_manager import InsufficientCreditsError
-from app.services.auto_ingest_watcher import AutoIngestWatcher
 from app.services.models.config_store import get_global_model_settings, public_global_model_settings
 from app.services.prompts.store import PromptStore
-from app.services.query.guard import QueryOverloadedError, QueryRateLimitedError
-from app.services.query_guard import QueryLoadGuard
+from app.services.query.guard import QueryLoadGuard, QueryOverloadedError, QueryRateLimitedError
+from app.services.runtime.auto_ingest_watcher import AutoIngestWatcher
 from app.services.runtime.background_queue import BackgroundTaskQueue
 from app.services.runtime.runtime_metrics import RuntimeMetrics
 from app.services.security.quota import QuotaGuard
@@ -208,24 +207,17 @@ def __getattr__(name: str):
     if name in runtime_attributes:
         return getattr(_query_runtime, runtime_attributes[name])
 
-    from app.api.utils import (
-        admin_helpers,
-        auth_dependencies,
-        auth_helpers,
-        document_helpers,
-        memory_helpers,
-        request_helpers,
-        session_helpers,
-    )
+    from app.api.deps import admin, auth, documents, sessions
+    from app.api.utils import auth_helpers, memory_helpers, request_helpers
 
     modules = (
-        admin_helpers,
-        auth_dependencies,
+        admin,
+        auth,
+        documents,
+        sessions,
         auth_helpers,
-        document_helpers,
         memory_helpers,
         request_helpers,
-        session_helpers,
     )
     for module in modules:
         if hasattr(module, name):

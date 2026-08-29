@@ -59,11 +59,7 @@ class RAGPipeline:
         capabilities: CoreCapabilities | None = None,
         engine: PipelineExecutionEngine | None = None,
         tool_agent: object | None = None,
-        **deprecated: Any,
     ) -> None:
-        # Deprecated injection names are intentionally ignored.  They remain
-        # accepted briefly so a stale caller cannot reactivate a legacy workflow.
-        del deprecated
         self._uses_default_capabilities = capabilities is None and tool_agent is None
         if capabilities is None:
             capabilities = CoreCapabilities()
@@ -101,10 +97,6 @@ class RAGPipeline:
             {"name": "synthesizer", "description": "citation-first answer synthesis"},
             {"name": "finalizer", "description": "grounding, safety, validation, and quality"},
         ]
-
-    async def _execute_compatibility(self, *_: Any, **__: Any) -> None:
-        """Retired test seam; no production code invokes a compatibility executor."""
-        raise RuntimeError("compatibility execution is retired")
 
     async def execute(self, request: PipelineRequest, profile: PipelineProfile | str | None = None) -> PipelineResult:
         selected = request.profile if profile is None else PipelineProfile(profile)

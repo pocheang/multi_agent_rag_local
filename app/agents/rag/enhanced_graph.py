@@ -60,7 +60,7 @@ from app.agents.rag.config import (
     WORD_COUNT_HIGH,
     WORD_COUNT_MEDIUM,
 )
-from app.tools.graph_tools_enhanced import graph_lookup_enhanced
+from app.tools.graph.enhanced import graph_lookup_enhanced
 
 logger = logging.getLogger(__name__)
 

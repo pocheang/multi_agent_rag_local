@@ -25,12 +25,12 @@ from app.api.schemas import (
 )
 from app.api.transport.errors import bad_request, not_found
 from app.pipeline.contracts import PipelineUser
-from app.services.input_normalizer import (
+from app.services.query.input_normalizer import (
     enhance_user_question_for_completion,
     normalize_and_validate_user_question,
     normalize_user_question,
 )
-from app.services.query_intent import is_casual_chat_query
+from app.services.query.intent import is_casual_chat_query
 
 router = APIRouter(prefix="/sessions", tags=["sessions"])
 

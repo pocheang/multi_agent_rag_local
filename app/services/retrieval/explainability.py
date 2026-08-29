@@ -1,6 +1,6 @@
 from typing import Any
 
-from app.services.evidence_scoring import graph_evidence_score, vector_evidence_score
+from app.services.retrieval.evidence_scoring import graph_evidence_score, vector_evidence_score
 
 
 def build_explainability_report(state: dict[str, Any]) -> dict[str, Any]:

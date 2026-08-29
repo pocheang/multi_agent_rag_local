@@ -19,7 +19,7 @@ from typing import Any
 from app.agents.shared.base import BaseAgent
 from app.agents.shared.config import CHUNK_PREVIEW_LENGTH, DENSE_SCORE_THRESHOLD, get_vector_rag_config
 from app.core.config import get_settings
-from app.retrievers.hybrid_retriever import hybrid_search_with_diagnostics
+from app.retrievers.hybrid.retriever import hybrid_search_with_diagnostics
 from app.retrievers.parameter_tuning import apply_dynamic_parameters
 from app.retrievers.query_expansion import expand_query
 from app.services.agent_document_filter import get_sources_by_agent_class
@@ -70,7 +70,7 @@ class UnifiedVectorRAGAgent(BaseAgent):
         self.self_rag_evaluator = None
         if self.get_config_value("enable_evaluation", False) and llm_client:
             try:
-                from app.services.self_rag_evaluator import SelfRAGEvaluator
+                from app.services.retrieval.self_rag_evaluator import SelfRAGEvaluator
 
                 self.self_rag_evaluator = SelfRAGEvaluator(llm_client)
                 logger.info("Self-RAG evaluation enabled")

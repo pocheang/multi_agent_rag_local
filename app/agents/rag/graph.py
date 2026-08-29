@@ -84,7 +84,7 @@ def _run_basic_graph_rag(
     This is the legacy implementation using basic graph_lookup.
     Includes validation, error handling, and fallback indicators.
     """
-    from app.tools.graph_tools import graph_lookup
+    from app.tools.graph.core import graph_lookup
 
     try:
         graph_result = graph_lookup(question, allowed_sources=allowed_sources)

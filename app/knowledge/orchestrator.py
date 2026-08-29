@@ -17,7 +17,7 @@ from app.knowledge.context import ContextBuilder
 from app.knowledge.deduplication import deduplicate_evidence
 from app.knowledge.fusion import reciprocal_rank_fuse, rerank_evidence
 from app.privacy.dlp import mask_evidence
-from app.services.query_rewrite import build_rewrite_queries
+from app.services.query.rule_rewrite import build_rewrite_queries
 
 TraceReporter = Callable[[ExecutionEvent], Awaitable[None]]
 QueryRewriter = Callable[[str], Sequence[str]]

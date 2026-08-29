@@ -6,7 +6,7 @@ import logging
 from collections import defaultdict
 
 from app.retrievers.hybrid.retriever import hybrid_search_with_diagnostics
-from app.services.query_rewriter import rewrite_query_for_retrieval
+from app.services.query.llm_rewriter import rewrite_query_for_retrieval
 
 logger = logging.getLogger(__name__)
 

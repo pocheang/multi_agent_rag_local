@@ -6,7 +6,7 @@ from hashlib import md5
 from urllib.parse import urlparse
 
 from app.core.config import get_settings
-from app.tools.web_search import search_web
+from app.tools.web.search import search_web
 
 logger = logging.getLogger(__name__)
 

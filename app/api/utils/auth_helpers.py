@@ -8,12 +8,11 @@ from urllib.parse import urlparse
 from fastapi import Request, Response
 from fastapi.security import HTTPAuthorizationCredentials
 
+from app.api.deps.auth import auth_service
 from app.api.transport.errors import forbidden
 from app.core.config import get_settings
-from app.services.auth_db import AuthDBService
 
 settings = get_settings()
-auth_service = AuthDBService()
 
 
 def _auth_cookie_name() -> str:

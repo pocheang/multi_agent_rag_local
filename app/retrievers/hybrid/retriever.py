@@ -10,7 +10,7 @@ from app.retrievers.reranker import rerank_with_diagnostics
 from app.retrievers.stores.parent import get_parent_text_map
 from app.retrievers.stores.vector import similarity_search
 from app.services.observability.tracing import traced_span
-from app.services.query_rewrite import build_rewrite_queries
+from app.services.query.rule_rewrite import build_rewrite_queries
 
 
 def hybrid_search_with_diagnostics(

@@ -494,7 +494,7 @@ async def _vector_retrieve(
 ) -> EvidenceBundle:
     """Vector similarity retrieval."""
     del route, plan
-    from app.retrievers.vector_store import similarity_search
+    from app.retrievers.stores.vector import similarity_search
 
     loop = asyncio.get_event_loop()
     matches = await loop.run_in_executor(
