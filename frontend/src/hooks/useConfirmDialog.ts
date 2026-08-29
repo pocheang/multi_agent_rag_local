@@ -1,36 +1,37 @@
-import { useState, useCallback } from "react";
+import { useCallback, useRef, useState } from "react";
 
 export interface ConfirmDialogOptions {
   title?: string;
   message: string;
   confirmText?: string;
   cancelText?: string;
-  onConfirm: () => void | Promise<void>;
-  onCancel?: () => void;
+  isDanger?: boolean;
 }
 
 export function useConfirmDialog() {
   const [isOpen, setIsOpen] = useState(false);
   const [options, setOptions] = useState<ConfirmDialogOptions | null>(null);
+  const resolverRef = useRef<((confirmed: boolean) => void) | null>(null);
 
-  const confirm = useCallback((opts: ConfirmDialogOptions) => {
+  const confirm = useCallback((opts: ConfirmDialogOptions): Promise<boolean> => {
     setOptions(opts);
     setIsOpen(true);
+    return new Promise<boolean>((resolve) => {
+      resolverRef.current = resolve;
+    });
   }, []);
 
-  const handleConfirm = useCallback(async () => {
-    if (options?.onConfirm) {
-      await options.onConfirm();
-    }
+  const handleConfirm = useCallback(() => {
     setIsOpen(false);
-    setOptions(null);
-  }, [options]);
+    resolverRef.current?.(true);
+    resolverRef.current = null;
+  }, []);
 
   const handleCancel = useCallback(() => {
-    options?.onCancel?.();
     setIsOpen(false);
-    setOptions(null);
-  }, [options]);
+    resolverRef.current?.(false);
+    resolverRef.current = null;
+  }, []);
 
   return {
     isOpen,
