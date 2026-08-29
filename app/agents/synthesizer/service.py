@@ -96,15 +96,13 @@ class SynthesizerAgentService:
         candidate = await self.synthesize_candidate(request, context, tool_results)
         text = candidate.text
         for index, item in reversed(tuple(enumerate(evidence.items, start=1))):
-            text = text.replace(f"[E{index}]", f"[{_citation_label(item.document_id, item.page)}]")
+            text = text.replace(f"[E{index}]", f"[{_citation_label(item.source, item.page)}]")
         cited_ids = _evidence_ids_for_refs(candidate.citations, evidence)
         cited_id_set = frozenset(cited_ids)
         return FinalAnswer(
             answer=text,
             citations=tuple(
-                _citation_label(item.document_id, item.page)
-                for item in evidence.items
-                if item.item_id in cited_id_set
+                _citation_label(item.source, item.page) for item in evidence.items if item.item_id in cited_id_set
             ),
             route=route,
             evidence=evidence,
@@ -126,8 +124,8 @@ def _answer_text(generated: object) -> str:
     return str(generated or "")
 
 
-def _citation_label(document_id: str, page: int | None) -> str:
-    return f"{document_id}:{page}" if page is not None else document_id
+def _citation_label(source: str, page: int | None) -> str:
+    return f"{source}:{page}" if page is not None else source
 
 
 def _references_from_markers(
@@ -159,10 +157,7 @@ def _references_from_markers(
 
 
 def _evidence_ids_for_refs(refs: tuple[EvidenceRef, ...], evidence: EvidenceBundle) -> tuple[str, ...]:
-    keys = {
-        (ref.document_id, ref.version, ref.page, ref.chunk_id, ref.image_id)
-        for ref in refs
-    }
+    keys = {(ref.document_id, ref.version, ref.page, ref.chunk_id, ref.image_id) for ref in refs}
     return tuple(
         item.item_id
         for item in evidence.items
@@ -172,9 +167,7 @@ def _evidence_ids_for_refs(refs: tuple[EvidenceRef, ...], evidence: EvidenceBund
 
 def _render_tool_results(tool_results: tuple[ToolResult, ...]) -> str:
     summaries = [
-        result.summary.strip()
-        for result in tool_results
-        if result.status == "succeeded" and result.summary.strip()
+        result.summary.strip() for result in tool_results if result.status == "succeeded" and result.summary.strip()
     ]
     if not summaries:
         return ""
