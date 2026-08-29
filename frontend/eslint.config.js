@@ -4,6 +4,7 @@ import tsparser from '@typescript-eslint/parser';
 import reactPlugin from 'eslint-plugin-react';
 import reactHooksPlugin from 'eslint-plugin-react-hooks';
 import reactRefreshPlugin from 'eslint-plugin-react-refresh';
+import globals from 'globals';
 
 export default [
   {
@@ -29,20 +30,8 @@ export default [
         },
       },
       globals: {
-        window: 'readonly',
-        document: 'readonly',
-        console: 'readonly',
-        setTimeout: 'readonly',
-        clearTimeout: 'readonly',
-        setInterval: 'readonly',
-        clearInterval: 'readonly',
-        localStorage: 'readonly',
-        sessionStorage: 'readonly',
-        fetch: 'readonly',
-        FormData: 'readonly',
-        URLSearchParams: 'readonly',
-        AbortController: 'readonly',
-        EventSource: 'readonly',
+        ...globals.browser,
+        ...globals.es2021,
       },
     },
     plugins: {
@@ -75,6 +64,10 @@ export default [
       'no-console': ['warn', { allow: ['warn', 'error'] }],
       'no-debugger': 'warn',
       'no-unused-vars': 'off', // Use @typescript-eslint/no-unused-vars instead
+      // TypeScript already reports undefined identifiers, and `tsc -b --noEmit`
+      // runs in CI. Leaving no-undef on for .ts/.tsx only produced false
+      // positives on DOM and TS lib globals (151 of them).
+      'no-undef': 'off',
       'prefer-const': 'warn',
       'no-var': 'error',
     },
