@@ -183,10 +183,12 @@ CASCADE_ENABLE_LEVEL1: Final[bool] = _get_bool_env("CASCADE_ENABLE_LEVEL1", True
 """Level 1: Fast rule-based validation (<10ms)."""
 
 CASCADE_ENABLE_LEVEL2: Final[bool] = _get_bool_env("CASCADE_ENABLE_LEVEL2", False)
-"""Level 2: Pattern matching validation (disabled by default, experimental)."""
+"""Level 2: NLI cross-encoder hallucination check, gates NLIValidator in
+app/agents/validation/cascade.py (disabled by default)."""
 
 CASCADE_ENABLE_LEVEL3: Final[bool] = _get_bool_env("CASCADE_ENABLE_LEVEL3", True)
-"""Level 3: NLI model validation (~75ms)."""
+"""Level 3: citation-completeness check, gates CitationValidator in
+app/agents/validation/cascade.py (~75ms budget, enabled by default)."""
 
 CASCADE_ENABLE_LEVEL4: Final[bool] = _get_bool_env("CASCADE_ENABLE_LEVEL4", True)
 """Level 4: Deep LLM validation (~3000ms)."""
