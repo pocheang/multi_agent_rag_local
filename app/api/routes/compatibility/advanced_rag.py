@@ -8,12 +8,27 @@ from typing import Any
 from fastapi import APIRouter, Depends, Request
 from pydantic import BaseModel, Field
 
-from app.api.dependencies import _require_permission, _require_user, _reserve_chat_credit
+from app.api.dependencies import (
+    _build_memory_context_for_session,
+    _history_store_for_user,
+    _promote_long_term_memory,
+    _require_permission,
+    _require_user,
+    _require_valid_session_id,
+    _reserve_chat_credit,
+)
 from app.api.deps.auth import require_admin
 from app.api.deps.documents import _allowed_sources_for_user
 from app.api.transport.errors import internal_error
 from app.domain.advanced_rag import AdvancedRAGResult, AnswerQuality, DecomposedQuery, SubQueryResult
-from app.pipeline.contracts import PipelineContext, PipelineRequest, PipelineResult, PipelineUser, SourceScope
+from app.pipeline.contracts import (
+    ConversationMessage,
+    PipelineContext,
+    PipelineRequest,
+    PipelineResult,
+    PipelineUser,
+    SourceScope,
+)
 from app.pipeline.profiles import PipelineProfile
 from app.pipeline.rag_pipeline import RAGPipeline
 from app.services.observability.agent_execution_tracker import AgentExecutionTracker
@@ -27,6 +42,10 @@ class AdvancedRAGRequest(BaseModel):
     """Request model for advanced RAG query."""
 
     query: str = Field(..., description="User query")
+    session_id: str | None = Field(
+        default=None,
+        description="Session to persist this exchange into and to draw memory context from",
+    )
     enable_decomposition: bool = Field(
         default=False,
         description="Enable query decomposition",
@@ -70,6 +89,65 @@ def _context_docs(contexts: tuple[PipelineContext, ...]) -> list[dict[str, Any]]
     return [
         {"id": ctx.document_id or ctx.chunk_id or ctx.source or "unknown", "content": ctx.content} for ctx in contexts
     ]
+
+
+def _response_metadata(
+    *,
+    pipeline_result_metadata: dict[str, Any],
+    route: str,
+    citations: list[dict[str, Any]],
+    execution_id: str,
+    session_id: str | None,
+) -> dict[str, Any]:
+    """Assemble the client-facing metadata block.
+
+    ``execution_id`` is required by the SSE trace endpoint
+    (``GET /api/v1/orchestration/executions/{execution_id}/events``); without it
+    the client has no way to subscribe to the run it just started.
+    """
+    return {
+        "route": route,
+        "citations": citations,
+        "validation": pipeline_result_metadata.get("validation", {}),
+        "execution_id": execution_id,
+        "session_id": session_id,
+    }
+
+
+async def _persist_exchange(
+    *,
+    user: dict[str, Any],
+    session_id: str | None,
+    question: str,
+    answer: str,
+    metadata: dict[str, Any],
+) -> None:
+    """Write the user turn and the assistant turn into the session history.
+
+    Mirrors the message-rerun path in ``app/api/routes/public/sessions.py`` so
+    both entry points produce identically shaped history rows.  A persistence
+    failure must never fail the request: the answer was already produced and
+    returning it is strictly better than a 500.
+    """
+    if not session_id:
+        return
+    try:
+        history_store = _history_store_for_user(user)
+        history_store.append_message(session_id=session_id, role="user", content=question)
+        history_store.append_message(
+            session_id=session_id,
+            role="assistant",
+            content=answer,
+            metadata=metadata,
+        )
+        _promote_long_term_memory(
+            user=user,
+            session_id=session_id,
+            question=question,
+            result={"answer": answer, **metadata},
+        )
+    except Exception:
+        logger.exception("Failed to persist chat exchange for session %s", session_id)
 
 
 async def _run_self_rag_evaluation(
@@ -150,6 +228,9 @@ async def _process_advanced_rag_query_impl(
         AdvancedRAGResult with complete processing results
     """
     _require_permission(user, "query:run", request, "advanced-rag")
+
+    session_id = _require_valid_session_id(request_data.session_id) if request_data.session_id else None
+
     tracker = AgentExecutionTracker.get_instance()
     execution_id = tracker.start_execution(
         request_data.query,
@@ -158,9 +239,13 @@ async def _process_advanced_rag_query_impl(
     )
     try:
         allowed_sources = _resolve_advanced_allowed_sources(user, request_data.allowed_sources)
+        memory_context = _build_memory_context_for_session(user, session_id, request_data.query)
+        conversation = (ConversationMessage(role="system", content=memory_context),) if memory_context else ()
         pipeline_request = PipelineRequest(
             question=request_data.query,
             profile=PipelineProfile.ADVANCED,
+            session_id=session_id,
+            conversation=conversation,
             user=PipelineUser(
                 user_id=str(user.get("user_id", "") or "") or None,
                 username=str(user.get("username", "") or "") or None,
@@ -187,17 +272,28 @@ async def _process_advanced_rag_query_impl(
                 plan_data=plan_data,
             )
 
+        metadata = _response_metadata(
+            pipeline_result_metadata=dict(pipeline_result.execution_metadata),
+            route=pipeline_result.route.route,
+            citations=[citation.model_dump(mode="json") for citation in pipeline_result.citations],
+            execution_id=execution_id,
+            session_id=session_id,
+        )
+        await _persist_exchange(
+            user=user,
+            session_id=session_id,
+            question=request_data.query,
+            answer=pipeline_result.answer,
+            metadata=metadata,
+        )
+
         result = AdvancedRAGResult(
             query=request_data.query,
             decomposed_query=decomposed_query,
             sub_query_results=sub_query_results,
             final_answer=pipeline_result.answer,
             answer_quality=answer_quality,
-            metadata={
-                "route": pipeline_result.route.route,
-                "citations": [citation.model_dump(mode="json") for citation in pipeline_result.citations],
-                "validation": pipeline_result.execution_metadata.get("validation", {}),
-            },
+            metadata=metadata,
         )
         tracker.complete_execution(execution_id, result.model_dump())
         return result
