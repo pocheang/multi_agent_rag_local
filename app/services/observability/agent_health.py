@@ -59,11 +59,6 @@ class AgentValidator:
         return _module_status("graph_rag", "app.agents.rag.graph")
 
     @staticmethod
-    def validate_react_agent() -> dict[str, Any]:
-        """Validate ReAct Agent module availability."""
-        return _module_status("react", "app.agents.tool.react")
-
-    @staticmethod
     def validate_synthesis_agent() -> dict[str, Any]:
         """Validate synthesis Agent module availability."""
         return _module_status("synthesis", "app.agents.synthesizer.generation")
@@ -87,7 +82,6 @@ class AgentValidator:
             "router": cls.validate_router_agent(),
             "vector_rag": cls.validate_vector_rag_agent(),
             "graph_rag": cls.validate_graph_rag_agent(),
-            "react": cls.validate_react_agent(),
             "synthesis": cls.validate_synthesis_agent(),
             "enhanced_router": cls.validate_enhanced_router_agent(),
             "workflow": cls.validate_workflow(),
