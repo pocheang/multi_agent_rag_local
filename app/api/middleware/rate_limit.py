@@ -48,7 +48,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         rate_key = f"rate_limit:{client_ip}:{request.url.path}"
 
         # Check rate limit
-        is_allowed, retry_after = self.rate_limiter.check_rate_limit(
+        is_allowed, retry_after = await self.rate_limiter.check_rate_limit_async(
             rate_key, endpoint_config["max_requests"], endpoint_config["window_seconds"]
         )
 

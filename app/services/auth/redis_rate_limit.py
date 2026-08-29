@@ -1,148 +1,125 @@
-"""
-Redis-backed Rate Limiting
+"""Redis-backed rate limiting.
 
-Provides distributed rate limiting using Redis with fallback to in-memory storage.
+Distributed sliding-window rate limiting with an in-memory fallback. The client
+is created lazily on first use: connecting eagerly in ``__init__`` meant a
+blocking network round trip during application startup, and the caller is ASGI
+middleware, so every operation here is async.
 """
 
+import asyncio
+import logging
 import time
 
 try:
-    import redis
+    import redis.asyncio as aioredis
 
     REDIS_AVAILABLE = True
-except ImportError:
+except ImportError:  # pragma: no cover - depends on the install extras
     REDIS_AVAILABLE = False
+
+logger = logging.getLogger(__name__)
+
+_MEMORY_STORE_MAX_KEYS = 10_000
+_MEMORY_STORE_TTL_SECONDS = 3600
 
 
 class RedisRateLimiter:
-    """
-    Redis-backed rate limiter with in-memory fallback.
+    """Sliding-window rate limiter over Redis, falling back to process memory.
 
-    Supports:
-    - Distributed rate limiting across multiple instances
-    - Sliding window algorithm
-    - Automatic key expiration
+    The in-memory fallback is per-process and therefore not a substitute for
+    Redis in a multi-instance deployment; it exists so a Redis outage degrades
+    the limiter instead of failing requests.
     """
 
     def __init__(self, redis_url: str | None = None):
-        """Initialize rate limiter."""
-        self.redis_client = None
-        self.use_redis = False
-        self._memory_store = {}  # Fallback
+        self._redis_url = redis_url
+        self._client = None
+        self._connect_attempted = False
+        self._connect_lock = asyncio.Lock()
+        self._memory_store: dict[str, dict[str, float]] = {}
 
-        # Try to connect to Redis
-        if REDIS_AVAILABLE and redis_url:
+    async def _get_client(self):
+        """Connect on first use; a failure permanently selects the memory path."""
+        if self._client is not None or self._connect_attempted:
+            return self._client
+        async with self._connect_lock:
+            if self._client is not None or self._connect_attempted:
+                return self._client
+            self._connect_attempted = True
+            if not (REDIS_AVAILABLE and self._redis_url):
+                logger.info("RedisRateLimiter: using in-memory storage (not recommended for production)")
+                return None
             try:
-                self.redis_client = redis.from_url(redis_url, decode_responses=False)
-                self.redis_client.ping()
-                self.use_redis = True
-                print(f"INFO: RedisRateLimiter: Using Redis at {redis_url}")
-            except Exception as e:
-                print(f"WARNING: RedisRateLimiter: Redis unavailable ({e}), using in-memory storage")
-                self.redis_client = None
+                client = aioredis.from_url(self._redis_url, decode_responses=False)
+                await client.ping()
+            except Exception as exc:
+                logger.warning("RedisRateLimiter: Redis unavailable (%s); using in-memory storage", exc)
+                return None
+            self._client = client
+            logger.info("RedisRateLimiter: using Redis at %s", self._redis_url)
+            return self._client
 
-        if not self.use_redis:
-            print("INFO: RedisRateLimiter: Using in-memory storage (not recommended for production)")
-
-    def check_rate_limit(self, key: str, max_requests: int, window_seconds: int) -> tuple[bool, int | None]:
-        """
-        Check if rate limit is exceeded.
-
-        Returns:
-            tuple[is_allowed, retry_after_seconds]
-        """
-        if self.use_redis and self.redis_client:
-            return self._check_redis(key, max_requests, window_seconds)
-        else:
+    async def check_rate_limit_async(self, key: str, max_requests: int, window_seconds: int) -> tuple[bool, int | None]:
+        """Return ``(is_allowed, retry_after_seconds)`` without blocking the loop."""
+        client = await self._get_client()
+        if client is None:
             return self._check_memory(key, max_requests, window_seconds)
-
-    def _check_redis(self, key: str, max_requests: int, window_seconds: int) -> tuple[bool, int | None]:
-        """Redis-based sliding window rate limiting."""
         try:
             current_time = time.time()
-            window_start = current_time - window_seconds
-
-            pipe = self.redis_client.pipeline()
-
-            # Remove old entries
-            pipe.zremrangebyscore(key, 0, window_start)
-
-            # Count requests in current window
+            pipe = client.pipeline()
+            pipe.zremrangebyscore(key, 0, current_time - window_seconds)
             pipe.zcard(key)
-
-            # Add current request
             pipe.zadd(key, {str(current_time): current_time})
-
-            # Set expiration
             pipe.expire(key, window_seconds + 1)
+            results = await pipe.execute()
 
-            results = pipe.execute()
-            current_count = results[1]  # Result of zcard
-
-            if current_count >= max_requests:
-                # Get oldest request in window to calculate retry_after
-                oldest = self.redis_client.zrange(key, 0, 0, withscores=True)
-                if oldest:
-                    oldest_time = oldest[0][1]
-                    retry_after = int(window_seconds - (current_time - oldest_time)) + 1
-                    return False, retry_after
-                return False, window_seconds
-
-            return True, None
-
-        except Exception as e:
-            print(f"WARNING: Redis rate limit check failed: {e}, falling back to memory")
-            self.use_redis = False
+            if int(results[1]) < max_requests:
+                return True, None
+            oldest = await client.zrange(key, 0, 0, withscores=True)
+            if oldest:
+                return False, int(window_seconds - (current_time - oldest[0][1])) + 1
+            return False, window_seconds
+        except Exception as exc:
+            logger.warning("Redis rate limit check failed (%s); falling back to memory", exc)
+            self._client = None
             return self._check_memory(key, max_requests, window_seconds)
 
     def _check_memory(self, key: str, max_requests: int, window_seconds: int) -> tuple[bool, int | None]:
-        """In-memory fallback rate limiting."""
+        """In-memory fallback. Pure CPU, so it is safe to call from the loop."""
         current_time = time.time()
 
-        # Clean up old entries periodically
-        if len(self._memory_store) > 10000:
-            cutoff = current_time - 3600
+        if len(self._memory_store) > _MEMORY_STORE_MAX_KEYS:
+            cutoff = current_time - _MEMORY_STORE_TTL_SECONDS
             self._memory_store = {k: v for k, v in self._memory_store.items() if v["window_start"] > cutoff}
 
-        # Get or create entry
-        if key not in self._memory_store:
+        entry = self._memory_store.get(key)
+        if entry is None or current_time - entry["window_start"] > window_seconds:
             self._memory_store[key] = {"count": 1, "window_start": current_time}
             return True, None
 
-        entry = self._memory_store[key]
-
-        # Check if window has expired
-        if current_time - entry["window_start"] > window_seconds:
-            # Reset window
-            self._memory_store[key] = {"count": 1, "window_start": current_time}
-            return True, None
-
-        # Within window, check limit
         if entry["count"] >= max_requests:
-            retry_after = int(window_seconds - (current_time - entry["window_start"])) + 1
-            return False, retry_after
+            return False, int(window_seconds - (current_time - entry["window_start"])) + 1
 
-        # Increment count
         entry["count"] += 1
         return True, None
 
-    def reset(self, key: str):
-        """Reset rate limit for a key."""
-        if self.use_redis and self.redis_client:
+    async def reset(self, key: str) -> None:
+        """Clear one key's window."""
+        client = await self._get_client()
+        if client is not None:
             try:
-                self.redis_client.delete(key)
-            except Exception:
-                pass
-        else:
-            self._memory_store.pop(key, None)
+                await client.delete(key)
+                return
+            except Exception as exc:
+                logger.warning("Redis rate limit reset failed (%s)", exc)
+        self._memory_store.pop(key, None)
 
 
-# Singleton instance
 _rate_limiter: RedisRateLimiter | None = None
 
 
 def get_rate_limiter(redis_url: str | None = None) -> RedisRateLimiter:
-    """Get or create rate limiter instance."""
+    """Get or create the process-wide rate limiter."""
     global _rate_limiter
     if _rate_limiter is None:
         _rate_limiter = RedisRateLimiter(redis_url)
