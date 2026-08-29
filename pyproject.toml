@@ -109,6 +109,15 @@ include = ["app*"]
 # ---------------------------------------------------------------------------
 # Note (2026-08-28): pytest/coverage configuration was removed here ahead of the v0.7
 # rewrite — `tests/` was cleared and will be rebuilt against the new architecture.
+# Note (2026-08-29): a minimal pytest config is back. Tests are being rebuilt
+# alongside the audit fixes, and CI needs discovery + asyncio mode to be
+# configured rather than passed on the command line. Coverage is still not
+# configured; there is no meaningful baseline to gate on yet.
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "strict"
+asyncio_default_fixture_loop_scope = "function"
 
 [tool.ruff]
 target-version = "py311"

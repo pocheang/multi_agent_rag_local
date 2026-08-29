@@ -1,0 +1,79 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      # Lint first: it needs no project dependencies, so a style failure reports
+      # in seconds instead of after the full install.
+      - name: Install ruff
+        run: pip install "ruff>=0.6.0"
+
+      - name: Lint
+        run: ruff check .
+
+      - name: Format check
+        run: ruff format --check .
+
+      - name: Install package
+        run: pip install -e ".[dev]"
+
+      - name: Endpoint census
+        # Guards against a refactor silently dropping routers. Counts OpenAPI
+        # operations, not len(app.routes): FastAPI 0.138+ stores an
+        # _IncludedRouter wrapper instead of flattening child routes, so that
+        # count varies by version (30 on 0.138.2 vs 156 on 0.135.3).
+        run: >-
+          python -c "import app.api.main as m; d = m.app.openapi()['paths'];
+          n = sum(1 for i in d.values() for k in i if k in {'get','post','put','patch','delete'});
+          print(f'{n} operations');
+          assert n >= 140, f'endpoint count collapsed to {n}'"
+
+      - name: Tests
+        run: pytest tests/ -q
+
+  frontend:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install
+        run: npm ci
+
+      - name: Type check
+        run: npm run type-check
+
+      - name: Build
+        run: npm run build
+
+      # `npm run lint` is deliberately not a gate yet: it reports 151 errors on
+      # a clean checkout, almost all no-undef on browser globals (Blob, URL)
+      # from an incomplete ESLint env config. Fixing that is its own task; a
+      # gate that is red on day one teaches everyone to ignore CI.
