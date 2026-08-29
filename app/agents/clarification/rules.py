@@ -21,7 +21,7 @@ class CompletenessAssessment:
     extracted_info: dict[str, str] = field(default_factory=dict)
 
 
-_QUESTIONS: dict[str, dict[str, ClarificationQuestion]] = {
+_QUESTIONS_ZH: dict[str, dict[str, ClarificationQuestion]] = {
     "rag_design": {
         "scenario": ClarificationQuestion(
             question="这个 RAG 系统主要用于什么场景？",
@@ -70,6 +70,57 @@ _QUESTIONS: dict[str, dict[str, ClarificationQuestion]] = {
     },
 }
 
+_QUESTIONS_EN: dict[str, dict[str, ClarificationQuestion]] = {
+    "rag_design": {
+        "scenario": ClarificationQuestion(
+            question="What is this RAG system mainly for?",
+            options=["Enterprise knowledge base", "Customer support Q&A", "Code knowledge base", "Data analysis"],
+            allow_custom_input=True,
+            field_name="scenario",
+        ),
+        "data_source": ClarificationQuestion(
+            question="What are the main data sources?",
+            options=["PDF / Office documents", "Databases", "APIs", "Web pages"],
+            allow_custom_input=True,
+            field_name="data_source",
+        ),
+        "scale": ClarificationQuestion(
+            question="Roughly how much data do you expect?",
+            options=["Small (<1GB)", "Medium (1-10GB)", "Large (10-100GB)", "Very large (>100GB)"],
+            allow_custom_input=True,
+            field_name="scale",
+        ),
+        "performance_requirement": ClarificationQuestion(
+            question="What response-time requirement do you have?",
+            options=["Real-time (<1s)", "Fast (1-3s)", "Normal (3-5s)", "No strict requirement"],
+            allow_custom_input=True,
+            field_name="performance_requirement",
+        ),
+    },
+    "document_comparison": {
+        "doc_ids": ClarificationQuestion(
+            question="Which documents or subjects should be compared?",
+            options=[],
+            allow_custom_input=True,
+            field_name="doc_ids",
+        ),
+        "comparison_aspect": ClarificationQuestion(
+            question="Which aspects matter most for the comparison?",
+            options=["Features", "Performance", "Cost", "Changes over time or versions"],
+            allow_custom_input=True,
+            field_name="comparison_aspect",
+        ),
+        "output_format": ClarificationQuestion(
+            question="What output format would you like?",
+            options=["Comparison table", "Detailed report", "Brief summary"],
+            allow_custom_input=True,
+            field_name="output_format",
+        ),
+    },
+}
+
+_QUESTIONS_BY_LANGUAGE = {"zh": _QUESTIONS_ZH, "en": _QUESTIONS_EN}
+
 _MAX_ROUNDS = {"rag_design": 7, "document_comparison": 5, "complete": 0}
 
 
@@ -114,10 +165,15 @@ def missing_fields(assessment: CompletenessAssessment, collected_info: dict[str,
     return tuple(field_name for field_name in assessment.required_fields if not known.get(field_name, "").strip())
 
 
-def question_for(intent: str, field_name: str) -> ClarificationQuestion | None:
-    """Return a fresh structured question so request state cannot mutate templates."""
+def question_for(intent: str, field_name: str, language: str = "zh") -> ClarificationQuestion | None:
+    """Return a fresh structured question so request state cannot mutate templates.
 
-    template = _QUESTIONS.get(intent, {}).get(field_name)
+    ``language`` selects the catalogue; an unrecognized value falls back to
+    Chinese.  Both catalogues expose identical field names and option counts.
+    """
+
+    catalog = _QUESTIONS_BY_LANGUAGE.get(str(language or "zh").lower(), _QUESTIONS_ZH)
+    template = catalog.get(intent, {}).get(field_name)
     return template.model_copy(deep=True) if template is not None else None
 
 
@@ -126,7 +182,7 @@ def max_rounds_for(intent: str) -> int:
 
 
 def _structured_fields(text: str) -> dict[str, str]:
-    supported = {field_name for questions in _QUESTIONS.values() for field_name in questions}
+    supported = {field_name for questions in _QUESTIONS_ZH.values() for field_name in questions}
     extracted: dict[str, str] = {}
     for field_name, value in re.findall(r"(?im)^\s*-\s*([a-z_]+)\s*:\s*(.+?)\s*$", text):
         if field_name in supported and value.strip():

@@ -60,7 +60,11 @@ class ClarificationAgentService:
             (field_name for field_name in missing if field_name not in active_context.asked_questions),
             None,
         )
-        question = question_for(assessment.intent, next_field or "")
+        question = question_for(
+            assessment.intent,
+            next_field or "",
+            language=_question_language(request),
+        )
         if question is None:
             return ClarificationResult(
                 action="continue",
@@ -114,6 +118,18 @@ class ClarificationAgentService:
         if expected is None:
             return token is None
         return bool(token) and hmac.compare_digest(expected, str(token))
+
+
+def _question_language(request: OrchestrationRequest) -> str:
+    """Pick the clarification language from the explicit override, then the query text.
+
+    A Chinese-only question catalogue in a bilingual product meant English users
+    were answered in Chinese, so the language is derived per request.
+    """
+    forced = str(getattr(request, "force_language", "") or "").strip().lower()
+    if forced in {"zh", "en"}:
+        return forced
+    return "zh" if any("一" <= ch <= "鿿" for ch in str(request.question or "")) else "en"
 
 
 __all__ = ["ClarificationAgentService"]

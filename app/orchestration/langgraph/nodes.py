@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Awaitable, Callable
 from typing import Any, Protocol
 
@@ -33,6 +34,8 @@ from app.privacy.models import PrivacyResult
 from app.privacy.service import PrivacyService
 from app.services.security.access_scope import AccessScopeResolver
 
+logger = logging.getLogger(__name__)
+
 
 class WorkflowServices(Protocol):
     """Structural service bundle consumed by the graph nodes."""
@@ -51,27 +54,39 @@ class WorkflowServices(Protocol):
         [OrchestrationRequest, RouteDecision, TaskPlan | None, EvidenceBundle, tuple[ToolResult, ...]],
         Awaitable[FinalAnswer],
     ]
-    candidate_synthesizer: Callable[
-        [OrchestrationRequest, ContextBundle, tuple[ToolResult, ...]],
-        Awaitable[CandidateAnswer],
-    ] | None
-    finalizer: Callable[
-        [OrchestrationRequest, EvidenceBundle, FinalAnswer, ExecutionPolicy],
-        Awaitable[FinalAnswer],
-    ] | None
+    candidate_synthesizer: (
+        Callable[
+            [OrchestrationRequest, ContextBundle, tuple[ToolResult, ...]],
+            Awaitable[CandidateAnswer],
+        ]
+        | None
+    )
+    finalizer: (
+        Callable[
+            [OrchestrationRequest, EvidenceBundle, FinalAnswer, ExecutionPolicy],
+            Awaitable[FinalAnswer],
+        ]
+        | None
+    )
     clarifier: Callable[[OrchestrationRequest, RouterDecision], Awaitable[ClarificationResult]] | None
-    verifier: Callable[
-        [OrchestrationRequest, ContextBundle, CandidateAnswer, int],
-        Awaitable[VerificationDecision],
-    ] | None
+    verifier: (
+        Callable[
+            [OrchestrationRequest, ContextBundle, CandidateAnswer, int],
+            Awaitable[VerificationDecision],
+        ]
+        | None
+    )
     knowledge_agent: Callable[
         [OrchestrationRequest, RouterDecision, TaskPlan | None, VerificationDecision | None],
         Awaitable[KnowledgeStrategy],
     ]
-    knowledge_orchestrator: Callable[
-        [KnowledgeStrategy, Any, Callable[[ExecutionEvent], Awaitable[None]]],
-        Awaitable[ContextBundle],
-    ] | None
+    knowledge_orchestrator: (
+        Callable[
+            [KnowledgeStrategy, Any, Callable[[ExecutionEvent], Awaitable[None]]],
+            Awaitable[ContextBundle],
+        ]
+        | None
+    )
     privacy: PrivacyService
     access_scope_resolver: AccessScopeResolver
 
@@ -133,8 +148,10 @@ class WorkflowNodeRuntime:
         )
         self._policy.validate_route(route)
         clarification_required = route.effective_route == "clarification"
-        next_stage = "clarification" if clarification_required else (
-            "planner" if self._policy.should_plan(route) else "knowledge"
+        next_stage = (
+            "clarification"
+            if clarification_required
+            else ("planner" if self._policy.should_plan(route) else "knowledge")
         )
         decision = RouterDecision(
             intent=route.intent,
@@ -164,13 +181,15 @@ class WorkflowNodeRuntime:
             expected_type=ClarificationResult,
         )
         if result.action == "ask":
-            raise StageExecutionError(
-                "clarification",
-                RuntimeError(
-                    "interactive clarification is required; use the clarification API with the returned thread"
-                ),
-            )
-        complete_query = result.complete_query or request.question
+            # Interactive clarification belongs to the HTTP clarification API
+            # (POST /api/v1/clarification/check), which owns the multi-round
+            # state.  Inside the pipeline nobody can answer the question, and the
+            # clarifier is called without collected context so it always asks —
+            # raising here turned every rag_design/comparison query into a 500.
+            logger.info("clarification requested but not interactively resolvable; continuing with original query")
+            complete_query = request.question
+        else:
+            complete_query = result.complete_query or request.question
         return {
             "clarification": result,
             "complete_query": complete_query,
@@ -239,9 +258,7 @@ class WorkflowNodeRuntime:
                 scope,
                 diagnostics=dict(evidence.diagnostics),
             )
-            evidence = evidence.model_copy(
-                update={"items": context.evidence, "diagnostics": context.diagnostics}
-            )
+            evidence = evidence.model_copy(update={"items": context.evidence, "diagnostics": context.diagnostics})
         tool_results: tuple[ToolResult, ...] = ()
         trace = [strategy_event, event]
         if plan is not None and self._policy.should_run_tools(route, plan):
@@ -503,10 +520,7 @@ def _items_for_references(
 ) -> tuple[EvidenceItem, ...]:
     """Resolve exact, versioned references without silently widening citations."""
 
-    keys = {
-        (ref.document_id, ref.version, ref.page, ref.chunk_id, ref.image_id)
-        for ref in references
-    }
+    keys = {(ref.document_id, ref.version, ref.page, ref.chunk_id, ref.image_id) for ref in references}
     return tuple(
         item
         for item in evidence.items
