@@ -77,5 +77,13 @@ jobs:
       - name: Type check
         run: npm run type-check
 
+      # Store-reset coverage: the Zustand stores live for the lifetime of the
+      # tab, so a field that survives logout shows the next person on a shared
+      # browser the previous one's data. The test discovers fields rather than
+      # listing them, so it catches one added to the store but forgotten in
+      # INITIAL_STATE.
+      - name: Tests
+        run: npm test -- --run
+
       - name: Build
         run: npm run build
