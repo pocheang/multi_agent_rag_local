@@ -26,7 +26,6 @@ from app.api.schemas import (
 from app.api.transport.errors import (
     bad_request,
     conflict,
-    forbidden,
     internal_error,
     not_found,
     rate_limited,
@@ -54,19 +53,65 @@ from app.services.runtime.ingest_queue import register_and_enqueue_uploads
 router = APIRouter(tags=["documents"])
 
 
+def _manageable_rows(user: dict[str, Any]) -> list[dict[str, Any]]:
+    """Documents this caller can both see and act on."""
+    return [
+        row
+        for row in _list_visible_documents_for_user(user)
+        if str(row.get("source", "") or "").strip()
+        and _is_source_manageable_for_user(str(row.get("source", "") or "").strip(), user)
+    ]
+
+
+def _resolve_manageable_document(
+    filename: str,
+    user: dict[str, Any],
+    source: str | None = None,
+) -> dict[str, Any] | None:
+    """Resolve the one document this request may act on, or None.
+
+    `source` *narrows* the candidates; it does not select one. It used to be
+    taken at face value:
+
+        source = normalize_string(source) or _resolve_manageable_source_for_filename(...)
+
+    which skipped the visibility rules entirely whenever the caller supplied
+    `?source=`, leaving only a directory check. See P0-3 in
+    docs/superpowers/plans/2026-08-29-user-data-isolation.md.
+
+    Returns the whole row, not just the path, so the caller can audit which
+    document -- and whose -- it acted on.
+    """
+    candidates = [row for row in _manageable_rows(user) if str(row.get("filename", "") or "").strip() == filename]
+    if source:
+        candidates = [row for row in candidates if str(row.get("source", "") or "").strip() == source]
+    return candidates[0] if len(candidates) == 1 else None
+
+
+def _resolve_manageable_document_by_id(document_id: str, user: dict[str, Any]) -> dict[str, Any] | None:
+    """Resolve a document by its immutable id.
+
+    Filenames are not identifiers: two users routinely hold a `report.pdf`, so
+    the filename form has to refuse whenever it is ambiguous. `document_id`
+    (`doc-{uuid4}`, assigned at registration) always names exactly one.
+    """
+    candidates = [row for row in _manageable_rows(user) if str(row.get("document_id", "") or "").strip() == document_id]
+    return candidates[0] if len(candidates) == 1 else None
+
+
 def _resolve_manageable_source_for_filename(filename: str, user: dict[str, Any]) -> str | None:
-    """Resolve the current user's manageable source path from a frontend filename."""
-    candidates: list[str] = []
-    for row in _list_visible_documents_for_user(user):
-        row_filename = str(row.get("filename", "") or "").strip()
-        row_source = str(row.get("source", "") or "").strip()
-        if row_filename != filename or not row_source:
-            continue
-        if _is_source_manageable_for_user(row_source, user):
-            candidates.append(row_source)
-    if len(candidates) == 1:
-        return candidates[0]
-    return None
+    """Back-compatible wrapper returning just the source path."""
+    row = _resolve_manageable_document(filename, user)
+    return str(row.get("source", "") or "").strip() if row else None
+
+
+def _document_audit_detail(row: dict[str, Any]) -> str:
+    """Identify the document and its owner, so a cross-user action is legible."""
+    return (
+        f"document_id={str(row.get('document_id', '') or '') or 'unknown'}; "
+        f"owner_user_id={str(row.get('owner_user_id', '') or '') or 'unknown'}; "
+        f"source={str(row.get('source', '') or '')}"
+    )
 
 
 def _require_registered_filename_source(filename: str, source: str) -> None:
@@ -106,20 +151,72 @@ def delete_document(
     source: str | None = None,
     user: dict[str, Any] = Depends(_require_user),
 ):
+    """Delete by filename. Refuses when the name is ambiguous -- prefer by-id."""
     _require_permission(user, "document:manage_own", request, "document", resource_id=filename)
-    source = normalize_string(source) or _resolve_manageable_source_for_filename(filename, user)
-    if source is None:
-        raise bad_request("source is required")
-    if not _is_source_manageable_for_user(source, user):
-        _audit(
-            request,
-            action="document.delete",
-            resource_type="document",
-            result="denied",
-            user=user,
-            resource_id=filename,
-        )
-        raise forbidden("source not allowed")
+    row = _resolve_manageable_document(filename, user, normalize_string(source))
+    return _perform_delete(row, filename, request, user, remove_file)
+
+
+@router.delete("/documents/by-id/{document_id}", response_model=FileIndexActionResponse)
+def delete_document_by_id(
+    document_id: str,
+    request: Request,
+    remove_file: bool = False,
+    user: dict[str, Any] = Depends(_require_user),
+):
+    """Delete by immutable id. Unambiguous where a filename is not."""
+    _require_permission(user, "document:manage_own", request, "document", resource_id=document_id)
+    row = _resolve_manageable_document_by_id(document_id, user)
+    filename = str((row or {}).get("filename", "") or "")
+    return _perform_delete(row, filename, request, user, remove_file)
+
+
+@router.post("/documents/{filename}/reindex", response_model=FileIndexActionResponse)
+def reindex_document(
+    filename: str, request: Request, source: str | None = None, user: dict[str, Any] = Depends(_require_user)
+):
+    """Reindex by filename. Refuses when the name is ambiguous -- prefer by-id."""
+    _require_permission(user, "document:manage_own", request, "document", resource_id=filename)
+    row = _resolve_manageable_document(filename, user, normalize_string(source))
+    return _perform_reindex(row, filename, request, user)
+
+
+@router.post("/documents/by-id/{document_id}/reindex", response_model=FileIndexActionResponse)
+def reindex_document_by_id(document_id: str, request: Request, user: dict[str, Any] = Depends(_require_user)):
+    """Reindex by immutable id. Unambiguous where a filename is not."""
+    _require_permission(user, "document:manage_own", request, "document", resource_id=document_id)
+    row = _resolve_manageable_document_by_id(document_id, user)
+    filename = str((row or {}).get("filename", "") or "")
+    return _perform_reindex(row, filename, request, user)
+
+
+def _deny_unresolved(action: str, request: Request, user: dict[str, Any], resource_id: str):
+    """One refusal for 'no such document' and 'not yours'.
+
+    Deliberately identical either way: telling an unauthorized caller that the
+    document exists but belongs to someone else is itself a disclosure.
+    """
+    _audit(
+        request,
+        action=action,
+        resource_type="document",
+        result="denied",
+        user=user,
+        resource_id=resource_id,
+    )
+    raise not_found("Document")
+
+
+def _perform_delete(
+    row: dict[str, Any] | None,
+    filename: str,
+    request: Request,
+    user: dict[str, Any],
+    remove_file: bool,
+) -> FileIndexActionResponse:
+    if row is None:
+        _deny_unresolved("document.delete", request, user, filename)
+    source = str(row.get("source", "") or "")
     try:
         _require_registered_filename_source(filename, source)
         result = FileIndexActionResponse(
@@ -132,6 +229,7 @@ def delete_document(
             result="success",
             user=user,
             resource_id=filename,
+            detail=_document_audit_detail(row),
         )
         return result
     except ValueError as e:
@@ -142,29 +240,20 @@ def delete_document(
             result="failed",
             user=user,
             resource_id=filename,
-            detail=str(e),
+            detail=f"{_document_audit_detail(row)}; error={e}",
         )
         raise conflict(str(e))
 
 
-@router.post("/documents/{filename}/reindex", response_model=FileIndexActionResponse)
-def reindex_document(
-    filename: str, request: Request, source: str | None = None, user: dict[str, Any] = Depends(_require_user)
-):
-    _require_permission(user, "document:manage_own", request, "document", resource_id=filename)
-    source = normalize_string(source) or _resolve_manageable_source_for_filename(filename, user)
-    if source is None:
-        raise bad_request("source is required")
-    if not _is_source_manageable_for_user(source, user):
-        _audit(
-            request,
-            action="document.reindex",
-            resource_type="document",
-            result="denied",
-            user=user,
-            resource_id=filename,
-        )
-        raise forbidden("source not allowed")
+def _perform_reindex(
+    row: dict[str, Any] | None,
+    filename: str,
+    request: Request,
+    user: dict[str, Any],
+) -> FileIndexActionResponse:
+    if row is None:
+        _deny_unresolved("document.reindex", request, user, filename)
+    source = str(row.get("source", "") or "")
     try:
         _require_registered_filename_source(filename, source)
         result = FileIndexActionResponse(
@@ -181,6 +270,7 @@ def reindex_document(
             result="success",
             user=user,
             resource_id=filename,
+            detail=_document_audit_detail(row),
         )
         return result
     except ValueError as e:
@@ -191,20 +281,9 @@ def reindex_document(
             result="failed",
             user=user,
             resource_id=filename,
-            detail=str(e),
+            detail=f"{_document_audit_detail(row)}; error={e}",
         )
         raise conflict(str(e))
-    except FileNotFoundError as e:
-        _audit(
-            request,
-            action="document.reindex",
-            resource_type="document",
-            result="failed",
-            user=user,
-            resource_id=filename,
-            detail=str(e),
-        )
-        raise not_found(str(e))
 
 
 @router.get("/documents/index-health", response_model=IndexHealthResponse)

@@ -192,14 +192,15 @@ export const documentApi = {
     return authFetch(`/documents/${encodePathParam(filename)}`, { method: "DELETE" }).then(parseOrThrow<{ ok: boolean; filename: string }>);
   },
 
-  async documentDelete(filename: string, source: string, removeFile: boolean) {
-    const qs = new URLSearchParams({
-      remove_file: removeFile ? "true" : "false",
-      source,
-    });
-    const res = await authFetch(`/documents/${encodePathParam(filename)}?${qs.toString()}`, {
-      method: "DELETE",
-    });
+  // Prefer the document_id form: a filename is not an identifier (two users
+  // routinely hold a report.pdf), so the filename route has to refuse whenever
+  // the name is ambiguous. Falls back for rows indexed before ids were assigned.
+  async documentDelete(filename: string, source: string, removeFile: boolean, documentId?: string | null) {
+    const qs = new URLSearchParams({ remove_file: removeFile ? "true" : "false" });
+    const path = documentId
+      ? `/documents/by-id/${encodePathParam(documentId)}?${qs.toString()}`
+      : `/documents/${encodePathParam(filename)}?${qs.toString()}&source=${encodeURIComponent(source)}`;
+    const res = await authFetch(path, { method: "DELETE" });
     return parseOrThrow<FileIndexActionResponse>(res);
   },
 
@@ -207,12 +208,11 @@ export const documentApi = {
     return authFetch(`/documents/${encodePathParam(filename)}/reindex`, { method: "POST" }).then(parseOrThrow<FileIndexActionResponse>);
   },
 
-  async documentReindex(filename: string, source: string) {
-    const qs = new URLSearchParams({ source });
-    const res = await authFetch(
-      `/documents/${encodePathParam(filename)}/reindex?${qs.toString()}`,
-      { method: "POST" },
-    );
+  async documentReindex(filename: string, source: string, documentId?: string | null) {
+    const path = documentId
+      ? `/documents/by-id/${encodePathParam(documentId)}/reindex`
+      : `/documents/${encodePathParam(filename)}/reindex?source=${encodeURIComponent(source)}`;
+    const res = await authFetch(path, { method: "POST" });
     return parseOrThrow<FileIndexActionResponse>(res);
   },
 
