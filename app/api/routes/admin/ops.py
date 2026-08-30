@@ -6,6 +6,7 @@ import csv
 import io
 import time
 from datetime import UTC, datetime, timedelta
+from functools import partial
 from typing import Any
 
 from fastapi import APIRouter, Depends, Request
@@ -31,6 +32,7 @@ from app.api.dependencies import (
 from app.api.routes.internal.pipeline_contract import execute_standard_compatibility
 from app.api.transport.errors import bad_request, service_unavailable
 from app.api.transport.middleware import get_request_metrics
+from app.pipeline.contracts import PipelineUser
 from app.services.models.config_store import get_global_model_settings, public_global_model_settings
 from app.services.observability.log_buffer import list_log_levels, reset_logger_levels, set_logger_level
 from app.services.runtime.runtime_ops import (
@@ -160,12 +162,28 @@ def _alerts_payload(*, hours: int) -> dict[str, Any]:
     )
 
 
-def _execute_standard_profile(question: str) -> dict[str, Any]:
-    """Keep operations comparisons on the standard RAGPipeline compatibility contract."""
+def _execute_standard_profile(question: str, *, user: dict[str, Any]) -> dict[str, Any]:
+    """Keep operations comparisons on the standard RAGPipeline compatibility contract.
+
+    ``user`` is mandatory.  The pipeline's ``privacy_permission`` stage resolves an
+    access scope and fails closed on a missing actor, so a run without an identity
+    aborts before the router with "authenticated user identity is required".
+
+    Consequence: a run measures the corpus the requesting admin can see -- the shared
+    ``data/docs/`` set plus that admin's own and public documents -- which is the same
+    corpus their live chat queries search.  Trends from two admins with different
+    visible corpora are therefore not directly comparable.
+    """
     return execute_standard_compatibility(
         question=question,
         use_web_fallback=True,
         use_reasoning=False,
+        user=PipelineUser(
+            user_id=str(user.get("user_id", "") or "") or None,
+            username=str(user.get("username", "") or "") or None,
+            role=str(user.get("role", "") or "") or None,
+            permissions=frozenset(user.get("permissions") or []),
+        ),
     )
 
 
@@ -278,7 +296,9 @@ def admin_ops_benchmark_run(
     if max_queries < 1:
         raise bad_request("max_queries must be >= 1")
     queue = api_dependencies.get_query_runtime().shadow_queue
-    accepted = queue.submit(run_benchmark, max_queries=max_queries, execute_query=_execute_standard_profile)
+    accepted = queue.submit(
+        run_benchmark, max_queries=max_queries, execute_query=partial(_execute_standard_profile, user=user)
+    )
     if not accepted:
         raise service_unavailable("background queue is full; retry shortly")
     _audit(
@@ -398,7 +418,7 @@ def admin_ops_replay_run(
         run_replay,
         history_store=history_store,
         max_questions=max_questions,
-        execute_query=_execute_standard_profile,
+        execute_query=partial(_execute_standard_profile, user=user),
     )
     if not accepted:
         raise service_unavailable("background queue is full; retry shortly")

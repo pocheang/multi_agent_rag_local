@@ -391,17 +391,33 @@ def append_benchmark_trend(entry: dict[str, Any]) -> None:
         f.write(json.dumps(payload, ensure_ascii=False) + "\n")
 
 
+# Deployment-specific override first, then the query set that ships with the repo.
+# Only the tracked default makes ``POST /admin/ops/benchmark/run`` work on a fresh
+# checkout: ``data/`` is gitignored runtime state, so a query set living only there
+# is absent everywhere it was not hand-placed.
+_BENCHMARK_QUERY_PATHS = (
+    Path("data/eval/benchmark_queries.txt"),
+    Path("config/eval/benchmark_queries.txt"),
+)
+
+
 def run_benchmark(
     *,
     max_queries: int,
     execute_query: Callable[[str], dict[str, Any]],
 ) -> dict[str, Any]:
     """Run the configured benchmark through the supplied pipeline adapter."""
-    query_path = Path("data/eval/benchmark_queries.txt")
-    if not query_path.exists():
+    query_path = next((path for path in _BENCHMARK_QUERY_PATHS if path.exists()), None)
+    if query_path is None:
         queries: list[str] = []
     else:
-        queries = [line.strip() for line in query_path.read_text(encoding="utf-8").splitlines() if line.strip()]
+        # ``#`` starts a comment so the shipped query set can document itself; without
+        # this every header line was run as a benchmark query.
+        queries = [
+            stripped
+            for line in query_path.read_text(encoding="utf-8").splitlines()
+            if (stripped := line.strip()) and not stripped.startswith("#")
+        ]
     # Capped well below the historical 100: each query is a full synchronous pipeline
     # round trip run serially inside one FastAPI threadpool worker, so a large batch
     # can block that worker for minutes.

@@ -319,6 +319,22 @@ varies by version. Count OpenAPI operations instead; the current baseline is 149
   run's stage events; it is not a token-level answer stream.
 - **Retry logic**: Retrieval retries retain their existing fallback policy; answer regeneration is capped at one retry per request
 - **Circuit breaker**: Opens after 5 consecutive failures, closes after 60s cooldown
+- **Admin ops benchmark/replay corpus** (fixed 2026-08-30): `POST /admin/ops/benchmark/run` and
+  `POST /admin/ops/replay/run` run their queries under the requesting admin's identity. They used to
+  pass no actor at all, and every query died in the pipeline's first node — `privacy_permission`
+  resolves an access scope and fails closed with "authenticated user identity is required". The
+  consequence of the fix is that a run measures the corpus that admin can see (the shared
+  `data/docs/` set plus their own and public documents) rather than a fixed corpus, so trends from
+  two admins with different visible documents are not directly comparable. Scoping the runs to
+  `data/docs/` instead was rejected: it would measure something no real query ever does, and would
+  need a synthetic actor, reopening the fail-closed hole the resolver exists to close.
+- **Benchmark query set** (2026-08-30): `run_benchmark` reads `data/eval/benchmark_queries.txt` if
+  present, otherwise the tracked default `config/eval/benchmark_queries.txt`. It previously read only
+  the `data/` path, which is gitignored runtime state — absent on every checkout where nobody placed
+  it by hand, so the job died with "benchmark query set is empty" inside the background queue, where
+  the endpoint's 202 response never surfaces it. `#` starts a comment in that file. The shipped set is
+  a corpus-agnostic starter: it exercises pipeline latency and route branches, but grounding and
+  citation numbers only mean something once the queries match documents actually in the corpus.
 - **Session management**: Frontend supports session rename and pin features (added 2026-08-16). See `docs/development/daily-logs/2026-08-16/` for implementation details.
 - **Clarification System** (added 2026-08-17, revised 2026-08-29): Dynamic clarification based on intent complexity, capped at 0-7 rounds depending on intent (`rag_design`: 7, `document_comparison`: 5, others: 5, already-complete: 0). Key services: `app/agents/clarification/service.py` and `rules.py`, wired as both the LangGraph `clarification` node and the resumable `/api/v1/clarification/check` HTTP endpoint (`app/api/routes/public/clarification.py`) — the two share one implementation. Questions exist in Chinese and English (`_QUESTIONS_ZH` / `_QUESTIONS_EN`), selected from `force_language` or the query's script. Inside the pipeline the clarifier has no collected context and therefore always asks; the node logs that and continues with the original query rather than failing the request — interactive clarification belongs to the HTTP endpoint.
 - **State management**: Frontend uses Zustand for global state, not Redux or Context API

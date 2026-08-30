@@ -1,0 +1,25 @@
+# Admin ops 基准查询集 / benchmark query set
+#
+# 被 app/services/runtime/runtime_ops.py::run_benchmark 读取,每行一条查询,
+# 空行和 # 开头的注释行会被跳过。
+#
+# 这是一份**起步查询集**,故意写成与具体语料无关的通用问法,用来跑通管道、
+# 测量延迟和各路由分支的开销。它测不出检索质量:grounding_support_ratio 和
+# citations 只有在查询与 data/docs/ 里的真实文档对得上时才有意义。
+#
+# 换成你自己的查询:要么直接改这个文件,要么放一份 data/eval/benchmark_queries.txt
+# —— 后者存在时优先生效,且不跟版本走,适合放部署环境专属、不便入库的查询。
+# 跑批上限由 max_queries 控制(硬上限 30)。
+
+什么是检索增强生成?
+向量检索和 BM25 检索有什么区别?
+如何评估一个问答系统的回答质量?
+请总结知识库中关于系统架构的主要内容。
+文档里提到了哪些配置项?
+比较一下两种部署方案的优缺点。
+这个项目使用了哪些第三方依赖?
+What is retrieval-augmented generation?
+How does hybrid search combine vector and keyword retrieval?
+Summarize the main points about system architecture.
+What configuration options are documented?
+Which third-party dependencies does this project rely on?
