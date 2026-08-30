@@ -10,7 +10,9 @@ This module provides graph-based retrieval augmented generation with:
 import logging
 
 from app.core.config import get_settings
+from app.retrievers.stores.vector import OwnerScope
 from app.services.agent_document_filter import get_sources_by_agent_class
+from app.services.observability.log_safety import question_ref
 
 logger = logging.getLogger(__name__)
 
@@ -93,9 +95,9 @@ def _run_basic_graph_rag(
 
         # Log differently based on error type
         if error_type in {"ServiceUnavailable", "ConnectionError"}:
-            logger.warning("Graph lookup unavailable for question '%s': %s", question, error_type)
+            logger.warning("Graph lookup unavailable for %s: %s", question_ref(question), error_type)
         else:
-            logger.exception("Graph lookup failed for question: %s", question)
+            logger.exception("Graph lookup failed for %s", question_ref(question))
 
         # Fallback to vector RAG when graph fails
         logger.info("Falling back to vector RAG due to graph lookup error")
@@ -123,7 +125,7 @@ def _run_basic_graph_rag(
 
     # Add fallback indicator if graph has no results
     if not has_results:
-        logger.info("Graph RAG returned empty results for question: %s", question)
+        logger.info("Graph RAG returned empty results for %s", question_ref(question))
         logger.info("Falling back to vector RAG due to empty graph results")
         return _fallback_to_vector_rag(question, allowed_sources, "empty_results")
 
@@ -155,8 +157,8 @@ def _run_enhanced_graph_rag(
         # Skip graph lookup if document quality is too low
         if pdf_context["quality_score"] < settings.graph_rag_min_pdf_quality:
             logger.info(
-                "Skipping graph RAG for question '%s' due to low PDF quality: %.2f < %.2f",
-                question,
+                "Skipping graph RAG for %s due to low PDF quality: %.2f < %.2f",
+                question_ref(question),
                 pdf_context["quality_score"],
                 settings.graph_rag_min_pdf_quality,
             )
@@ -237,6 +239,7 @@ def _fallback_to_vector_rag(
     question: str,
     allowed_sources: list[str] | None,
     reason: str,
+    owner: OwnerScope | None = None,
 ) -> dict:
     """
     Fallback to vector RAG when graph RAG fails or returns empty results.
@@ -251,12 +254,13 @@ def _fallback_to_vector_rag(
     """
     from app.agents.rag.vector import run_vector_rag
 
-    logger.info("Executing vector RAG fallback for question: %s (reason: %s)", question, reason)
+    logger.info("Executing vector RAG fallback for %s (reason: %s)", question_ref(question), reason)
 
     try:
         vector_result = run_vector_rag(
             question=question,
             allowed_sources=allowed_sources,
+            owner=owner,
         )
 
         # Add graph RAG metadata to indicate this was a fallback
@@ -295,6 +299,7 @@ class GraphRetrievalService:
         agent_class: str | None = None,
         retrieved_docs: list[dict] | None = None,
         enable_enhancements: bool | None = None,
+        owner: OwnerScope | None = None,
     ) -> dict:
         result = _run_graph_rag_impl(
             question,
@@ -305,7 +310,7 @@ class GraphRetrievalService:
         )
         if not result.get("fallback_used") and not self._has_graph_evidence(result):
             fallback_reason = str(result.get("error") or result.get("skipped_reason") or "empty_results")
-            fallback = _fallback_to_vector_rag(question, allowed_sources, fallback_reason)
+            fallback = _fallback_to_vector_rag(question, allowed_sources, fallback_reason, owner)
             for key in ("pdf_context", "skipped_reason", "error"):
                 if key in result:
                     fallback[key] = result[key]
@@ -350,12 +355,14 @@ def run_graph_rag(
     agent_class: str | None = None,
     retrieved_docs: list[dict] | None = None,
     enable_enhancements: bool | None = None,
+    owner: OwnerScope | None = None,
 ) -> dict:
     """Compatibility entry point forwarding to ``GraphRetrievalService``."""
     return GraphRetrievalService().retrieve(
         question,
         allowed_sources=allowed_sources,
         agent_class=agent_class,
+        owner=owner,
         retrieved_docs=retrieved_docs,
         enable_enhancements=enable_enhancements,
     )

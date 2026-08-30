@@ -294,17 +294,29 @@ class RAGAgentService:
 
         if "rag" not in route.allowed_capabilities:
             return EvidenceBundle()
-        if request.source_scope.allowed_sources is not None and not request.source_scope.allowed_sources:
-            return EvidenceBundle()
 
-        enabled: list[tuple[KnowledgeSource, TypedRetriever]] = [
-            ("vector", self._vector),
-            ("bm25", self._bm25),
-        ]
-        if route.effective_route in {"graph", "hybrid"}:
-            enabled.append(("graph", self._graph))
+        # An empty document scope means this caller may read no documents, so the
+        # document-backed retrievers are left out. Web results are not documents
+        # and carry no owner, so they stay available: short-circuiting the whole
+        # method here denied web search to anyone who had not uploaded a file.
+        #
+        # A *missing* scope (None) is deliberately still handed to them, and ends
+        # in a loud RetrievalFailureError: KnowledgeOrchestrator skips them as
+        # EmptyAccessScope and the degradation policy sees zero successes.
+        # Filtering them out here instead would turn "a caller bypassed the
+        # resolver" into a quiet empty result that reads as "no matches found".
+        document_scope = request.source_scope.allowed_sources
+        readable_documents = document_scope is None or bool(document_scope)
+
+        enabled: list[tuple[KnowledgeSource, TypedRetriever]] = []
+        if readable_documents:
+            enabled.extend((("vector", self._vector), ("bm25", self._bm25)))
+            if route.effective_route in {"graph", "hybrid"}:
+                enabled.append(("graph", self._graph))
         if "web" in route.allowed_capabilities:
             enabled.append(("web", self._web))
+        if not enabled:
+            return EvidenceBundle(route=route, plan=plan)
 
         source_queries: dict[KnowledgeSource, list[str]] = {name: [] for name, _ in enabled}
         for planned_request, max_retrievals in _retrieval_requests(request, plan, len(enabled)):
@@ -453,15 +465,22 @@ async def _discard_event(event: ExecutionEvent) -> None:
 def _get_allowed_sources(request: OrchestrationRequest) -> list[str] | None:
     """Extract allowed sources from request, converting to list if present.
 
+    An *empty* scope means the caller may read nothing and must stay distinct
+    from a *missing* one: collapsing both to None (as this used to) turned "this
+    user has no documents" into an unrestricted search of every tenant's corpus.
+    A missing scope still returns None so the store raises rather than guesses --
+    after privacy_permission rewrites the request there is always a resolved
+    scope, so None can only mean a caller skipped the resolver.
+
     Args:
         request: Orchestration request with source scope
 
     Returns:
-        List of allowed sources, or None if unrestricted
+        List of allowed sources, or None when no scope was resolved at all
     """
-    if request.source_scope.allowed_sources:
-        return list(request.source_scope.allowed_sources)
-    return None
+    if request.source_scope.allowed_sources is None:
+        return None
+    return list(request.source_scope.allowed_sources)
 
 
 async def _bm25_retrieve(
@@ -492,7 +511,7 @@ async def _vector_retrieve(
 ) -> EvidenceBundle:
     """Vector similarity retrieval."""
     del route, plan
-    from app.retrievers.stores.vector import similarity_search
+    from app.retrievers.stores.vector import OwnerScope, similarity_search
 
     loop = asyncio.get_event_loop()
     matches = await loop.run_in_executor(
@@ -501,7 +520,10 @@ async def _vector_retrieve(
         request.question,  # query: str
         None,  # k: int | None (use default)
         _get_allowed_sources(request),  # allowed_sources: list[str] | None
-        False,  # require_source_filter: bool (don't fail if no sources)
+        # require_source_filter stays at its default: a request that reached
+        # retrieval without a resolved scope must raise, not read every corpus.
+        True,  # require_source_filter
+        OwnerScope.from_access_scope(_compatibility_scope(request)),  # owner
     )
     return bundle_from_vector_matches(matches)
 
@@ -514,6 +536,7 @@ async def _graph_retrieve(
     """Knowledge graph retrieval."""
     del route, plan
     from app.agents.rag.graph import run_graph_rag
+    from app.retrievers.stores.vector import OwnerScope
 
     loop = asyncio.get_event_loop()
     result = await loop.run_in_executor(
@@ -522,6 +545,9 @@ async def _graph_retrieve(
         request.question,
         _get_allowed_sources(request),
         request.source_scope.agent_class_hint,
+        None,  # retrieved_docs
+        None,  # enable_enhancements
+        OwnerScope.from_access_scope(_compatibility_scope(request)),  # owner
     )
     return bundle_from_legacy_payload(result, "graph", fallback_document_id=f"graph:{request.question}")
 

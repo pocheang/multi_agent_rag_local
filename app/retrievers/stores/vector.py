@@ -1,6 +1,7 @@
 import logging
 import sqlite3
 import threading
+from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
 
@@ -13,6 +14,27 @@ from app.services.models.runtime import get_embedding_model
 logger = logging.getLogger(__name__)
 
 _VECTOR_OP_LOCK = threading.RLock()
+
+
+@dataclass(frozen=True, slots=True)
+class OwnerScope:
+    """Who is asking, for the store's own metadata check.
+
+    Deliberately not AccessScope: the store needs an identity to compare chunk
+    metadata against, not the caller's whole authorization decision, and keeping
+    it small stops the store from growing opinions about authorization.
+    """
+
+    user_id: str
+    tenant_id: str
+
+    @classmethod
+    def from_access_scope(cls, scope) -> "OwnerScope | None":
+        """Build from an AccessScope, or None if it has no usable identity."""
+        user_id = str(getattr(scope, "user_id", "") or "").strip()
+        if not user_id:
+            return None
+        return cls(user_id=user_id, tenant_id=str(getattr(scope, "tenant_id", "") or "").strip() or user_id)
 
 
 def _repair_chroma_segments_foreign_key(persist_directory: str) -> None:
@@ -134,8 +156,51 @@ def get_chroma_client():
     return get_vector_store()._client  # noqa: SLF001 - legacy named collections share this owner
 
 
+# Ingest gives a document with no explicit owner tenant_id="shared" (see
+# app/ingestion/loaders/dispatch.py:181), which is how the shared data/docs/
+# corpus is distinguished from an upload -- uploads always carry the uploader as
+# both owner_user_id and tenant_id.
+SHARED_CORPUS_TENANT = "shared"
+
+
+def _owner_clause(owner: OwnerScope) -> dict:
+    """Metadata predicate for 'this chunk is readable by this owner'."""
+    return {
+        "$or": [
+            {"owner_user_id": {"$eq": owner.user_id}},
+            {"visibility": {"$eq": "public"}},
+            {"tenant_id": {"$eq": SHARED_CORPUS_TENANT}},
+        ]
+    }
+
+
+def _verify_sources(matches, allowed_sources: list[str]):
+    """Post-condition: the store must not return a chunk outside the filter.
+
+    Chroma applies the `$in` itself, so this only fires if the filter did not do
+    what we asked -- a malformed clause, or a very large `$in` behaving
+    unexpectedly. Cheap insurance on the one call that decides what a user reads.
+    """
+    permitted = set(allowed_sources)
+    kept = [
+        row
+        for row in matches
+        if isinstance(row, tuple) and str((getattr(row[0], "metadata", {}) or {}).get("source", "")) in permitted
+    ]
+    if len(kept) != len(matches):
+        logger.error(
+            "similarity_search: store returned %d chunk(s) outside the source filter; dropped",
+            len(matches) - len(kept),
+        )
+    return kept
+
+
 def similarity_search(
-    query: str, k: int | None = None, allowed_sources: list[str] | None = None, require_source_filter: bool = True
+    query: str,
+    k: int | None = None,
+    allowed_sources: list[str] | None = None,
+    require_source_filter: bool = True,
+    owner: OwnerScope | None = None,
 ):
     """
     执行向量相似度搜索。
@@ -179,11 +244,18 @@ def similarity_search(
                 logger.error("allowed_sources must contain only strings")
                 raise TypeError("allowed_sources must contain only strings")
 
-            return store.similarity_search_with_relevance_scores(
+            source_clause: dict = {"source": {"$in": allowed_sources}}
+            # Defence in depth: the source list is derived from the caller's
+            # visible documents, so a bug there would hand the store the wrong
+            # paths. The owner metadata is written independently at ingest, so
+            # requiring both narrows what a wrong source list can reach.
+            where = source_clause if owner is None else {"$and": [source_clause, _owner_clause(owner)]}
+            matches = store.similarity_search_with_relevance_scores(
                 query,
                 k=k or settings.top_k,
-                filter={"source": {"$in": allowed_sources}},
+                filter=where,
             )
+            return _verify_sources(matches, allowed_sources)
 
         # 仅在显式允许时才不使用过滤（系统级操作）
         logger.warning("similarity_search: performing unfiltered search (require_source_filter=False)")

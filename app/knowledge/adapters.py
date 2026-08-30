@@ -72,17 +72,22 @@ def build_default_adapters() -> dict[KnowledgeSource, KnowledgeAdapter]:
 
 
 async def _retrieve_vector(plan: KnowledgeSourcePlan, scope: AccessScope) -> tuple[EvidenceItem, ...]:
-    from app.retrievers.stores.vector import similarity_search
+    from app.retrievers.stores.vector import OwnerScope, similarity_search
 
     allowed = sorted(scope.allowed_sources)
+    owner = OwnerScope.from_access_scope(scope)
 
     async def one(query: str) -> tuple[EvidenceItem, ...]:
+        # require_source_filter stays at its default. `allowed` is always a list
+        # here (an empty one returns no results), so disabling the guard only
+        # ever made a future edit dangerous.
         matches = await asyncio.to_thread(
             similarity_search,
             query,
             plan.top_k,
             allowed,
-            False,
+            True,
+            owner,
         )
         return bundle_from_vector_matches(matches).items
 
@@ -103,11 +108,13 @@ async def _retrieve_bm25(plan: KnowledgeSourcePlan, scope: AccessScope) -> tuple
 
 async def _retrieve_graph(plan: KnowledgeSourcePlan, scope: AccessScope) -> tuple[EvidenceItem, ...]:
     from app.agents.rag.graph import run_graph_rag
+    from app.retrievers.stores.vector import OwnerScope
 
     allowed = sorted(scope.allowed_sources)
+    owner = OwnerScope.from_access_scope(scope)
 
     async def one(query: str) -> tuple[EvidenceItem, ...]:
-        result = await asyncio.to_thread(run_graph_rag, query, allowed, None)
+        result = await asyncio.to_thread(run_graph_rag, query, allowed, None, None, None, owner)
         bundle = bundle_from_legacy_payload(result, "graph", fallback_document_id=f"graph:{query}")
         return tuple(item.model_copy(update={"modality": "graph"}) for item in bundle.items)
 
