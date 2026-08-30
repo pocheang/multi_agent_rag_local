@@ -11,6 +11,8 @@ Additional helper functions for web research agent:
 import logging
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
+from app.services.observability.log_safety import question_ref
+
 logger = logging.getLogger(__name__)
 
 
@@ -80,9 +82,9 @@ def run_parallel_web_research(questions: list[str], max_workers: int = 3, timeou
             try:
                 result = future.result(timeout=timeout_per_query)
                 results.append(result)
-                logger.info(f"Parallel search completed for: {question[:50]}...")
+                logger.info("Parallel search completed for %s", question_ref(question))
             except Exception as e:
-                logger.error(f"Parallel search failed for {question}: {e}")
+                logger.error("Parallel search failed for %s: %s", question_ref(question), e)
                 results.append(
                     {
                         "context": "",

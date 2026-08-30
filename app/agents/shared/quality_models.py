@@ -2,10 +2,9 @@
 Pydantic models for quality assurance agents.
 """
 
-from datetime import datetime
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, Field
 
 # ============================================================================
 # Route Validation Models
@@ -120,42 +119,3 @@ class QualityReport(BaseModel):
     issues: list[dict[str, str]] = Field(default_factory=list)
     suggestions: list[str] = Field(default_factory=list)
     execution_stats: ExecutionStats
-
-
-# ============================================================================
-# Context Tracking Models
-# ============================================================================
-
-
-class ConversationTurn(BaseModel):
-    """Single conversation turn"""
-
-    query: str
-    response: str
-    route: str
-    entities: list[str] = Field(default_factory=list)
-    timestamp: datetime
-
-
-class ConversationContext(BaseModel):
-    """Conversation context for session"""
-
-    model_config = ConfigDict(json_encoders={datetime: lambda v: v.isoformat()})
-
-    session_id: str
-    user_id: str
-    conversation_history: list[ConversationTurn] = Field(default_factory=list, max_length=10)
-    topic_stack: list[str] = Field(default_factory=list)
-    entity_mentions: dict[str, int] = Field(default_factory=dict)
-    current_intent: str | None = None
-    context_summary: str | None = None
-    last_update_time: datetime
-
-
-class ContextHints(BaseModel):
-    """Context hints for routing"""
-
-    resolve_references: dict[str, int] | None = None
-    followup: bool = False
-    previous_route: str | None = None
-    focus_entities: list[str] = Field(default_factory=list)

@@ -20,6 +20,7 @@ import re
 
 from app.domain.text import normalize_string
 from app.graph.knowledge.client import Neo4jClient
+from app.services.observability.log_safety import question_ref
 from app.services.runtime.bulkhead import bulkhead
 from app.services.runtime.resilience import call_with_circuit_breaker
 from app.tools.graph.config import (
@@ -192,7 +193,7 @@ def graph_lookup_enhanced(
     tokens = [_normalize_token(token) for token in raw_tokens if _normalize_token(token)]
 
     if not tokens:
-        logger.warning(f"No valid tokens extracted from question: {question}")
+        logger.warning("No valid tokens extracted from %s", question_ref(question))
         return {
             "entities": [],
             "neighbors": [],

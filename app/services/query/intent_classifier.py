@@ -5,6 +5,7 @@ import logging
 import re
 
 from app.services.models.runtime import get_chat_model
+from app.services.observability.log_safety import question_ref
 
 logger = logging.getLogger(__name__)
 
@@ -84,7 +85,9 @@ def classify_intent_with_llm(question: str) -> dict:
                 "method": "llm",
             }
 
-        logger.warning(f"Failed to extract JSON from LLM response: {content}")
+        # The response can echo the user's question back, so it gets the same
+        # treatment; the length in the ref is what usually identifies the fault.
+        logger.warning("Failed to extract JSON from LLM response: %s", question_ref(content))
         return _fallback_classification(question)
     except Exception as error:
         logger.error(f"LLM intent classification failed: {error}", exc_info=True)

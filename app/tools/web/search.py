@@ -2,6 +2,8 @@ import logging
 
 from ddgs import DDGS
 
+from app.services.observability.log_safety import question_ref
+
 logger = logging.getLogger(__name__)
 
 
@@ -32,7 +34,7 @@ def search_web(query: str, max_results: int = 5, timeout: int = 10) -> list[dict
                         "body": item.get("body", ""),
                     }
                 )
-        logger.debug(f"Web search returned {len(results)} results for query: {query[:50]}...")
+        logger.debug("Web search returned %d results for %s", len(results), question_ref(query))
     except Exception as e:
         logger.error(f"Web search failed: {type(e).__name__}: {str(e)}")
         raise

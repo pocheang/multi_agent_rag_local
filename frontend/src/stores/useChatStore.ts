@@ -81,13 +81,31 @@ export interface ChatState {
   setToasts: (toasts: Toast[] | ((prev: Toast[]) => Toast[])) => void;
   setError: (error: string | ((prev: string) => string)) => void;
   setSettingsOpen: (open: boolean | ((prev: boolean) => boolean)) => void;
+
+  /** Drop every value this user filled in. Called on logout and on user change. */
+  reset: () => void;
 }
 
 function updateValue<T>(val: T | ((prev: T) => T), prev: T): T {
   return typeof val === "function" ? (val as (prev: T) => T)(prev) : val;
 }
 
-export const useChatStore = create<ChatState>((set) => ({
+/** The data half of ChatState: every property that is not an action.
+ *
+ * Discriminated by value type, not by name: `settingsOpen` starts with "set"
+ * too, so a `set${string}` key filter would have silently dropped it -- and a
+ * field missing from INITIAL_STATE is exactly the drift this type exists to
+ * catch.
+ *
+ * Typed rather than inferred so the compiler enforces that INITIAL_STATE covers
+ * exactly these fields: a field added to ChatState but forgotten here is a
+ * compile error, not a value that quietly survives a logout.
+ */
+type ChatData = {
+  [K in keyof ChatState as ChatState[K] extends (...args: never[]) => unknown ? never : K]: ChatState[K];
+};
+
+const INITIAL_STATE: ChatData = {
   // Session State
   sidebarOpen: false,
   sidebarCollapsed: false,
@@ -128,6 +146,10 @@ export const useChatStore = create<ChatState>((set) => ({
   toasts: [],
   error: "",
   settingsOpen: false,
+};
+
+export const useChatStore = create<ChatState>((set) => ({
+  ...INITIAL_STATE,
 
   // Setters supporting both raw values and functional updates
   setSidebarOpen: (val) => set((s) => ({ sidebarOpen: updateValue(val, s.sidebarOpen) })),
@@ -165,4 +187,6 @@ export const useChatStore = create<ChatState>((set) => ({
   setToasts: (val) => set((s) => ({ toasts: updateValue(val, s.toasts) })),
   setError: (val) => set((s) => ({ error: updateValue(val, s.error) })),
   setSettingsOpen: (val) => set((s) => ({ settingsOpen: updateValue(val, s.settingsOpen) })),
+
+  reset: () => set(INITIAL_STATE),
 }));

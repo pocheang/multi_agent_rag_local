@@ -7,6 +7,7 @@ import re
 
 from app.domain.advanced_rag import DecomposedQuery
 from app.prompts import QUERY_DECOMPOSITION_PROMPT
+from app.services.observability.log_safety import question_ref
 
 logger = logging.getLogger(__name__)
 
@@ -41,12 +42,12 @@ class QueryDecomposer:
         """
         # Check if query needs decomposition
         if not self._needs_decomposition(query):
-            logger.info(f"Query does not need decomposition: {query}")
+            logger.info("Query does not need decomposition: %s", question_ref(query))
             return DecomposedQuery(original_query=query, sub_queries=[query], decomposition_strategy="none")
 
         # Detect decomposition strategy
         strategy = self._detect_strategy(query)
-        logger.info(f"Detected strategy: {strategy} for query: {query}")
+        logger.info("Detected strategy: %s for %s", strategy, question_ref(query))
 
         # Decompose using LLM
         sub_queries = await self._decompose_with_llm(query, strategy)

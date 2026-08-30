@@ -71,14 +71,6 @@ async def lifespan(app: FastAPI):
         except Exception as e:
             logger.warning(f"Reranker model warmup failed (non-critical): {e}")
 
-    try:
-        from app.services.legacy_agent_runtime import start_context_tracker_cleanup
-
-        start_context_tracker_cleanup()
-        logger.info("✓ Context Tracker background cleanup started")
-    except Exception as e:
-        logger.warning(f"Context cleanup startup failed (non-critical): {e}")
-
     from app.services.observability.agent_execution_tracker import get_tracker
 
     tracker = get_tracker()
@@ -120,13 +112,6 @@ async def lifespan(app: FastAPI):
         yield
     finally:
         logger.info("Shutting down services...")
-
-        try:
-            from app.services.legacy_agent_runtime import stop_context_tracker_cleanup
-
-            stop_context_tracker_cleanup()
-        except Exception as e:
-            logger.warning(f"Context cleanup shutdown failed: {e}")
 
         await tracker.stop_periodic_cleanup()
 
