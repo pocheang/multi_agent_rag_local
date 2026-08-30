@@ -225,16 +225,12 @@ QUALITY_LOW_THRESHOLD: Final[float] = _get_float_env("QUALITY_LOW_THRESHOLD", 0.
 # WHY: Multi-turn conversation context management
 # ============================================================================
 
-CONTEXT_MAX_HISTORY_TURNS: Final[int] = _get_int_env("CONTEXT_MAX_HISTORY_TURNS", 10)
 """Maximum conversation turns to retain in context."""
 
-CONTEXT_SUMMARY_FREQUENCY: Final[int] = _get_int_env("CONTEXT_SUMMARY_FREQUENCY", 5)
 """Summarize context every N turns to prevent memory overflow."""
 
-CONTEXT_SUMMARY_MIN_TURNS: Final[int] = _get_int_env("CONTEXT_SUMMARY_MIN_TURNS", 3)
 """Minimum turns before first summarization."""
 
-CONTEXT_TTL_SECONDS: Final[int] = _get_int_env("CONTEXT_TTL_SECONDS", 3600)
 """Context expiration time (1 hour default)."""
 
 

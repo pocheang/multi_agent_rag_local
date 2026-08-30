@@ -17,7 +17,7 @@ from app.domain.contracts import (
 )
 from app.domain.errors import StageExecutionError
 from app.domain.events import EventStage, ExecutionEvent
-from app.domain.knowledge import EvidenceRef, KnowledgeStrategy
+from app.domain.knowledge import AccessScope, EvidenceRef, KnowledgeStrategy
 from app.domain.workflow import (
     CandidateAnswer,
     ClarificationResult,
@@ -28,7 +28,7 @@ from app.domain.workflow import (
 from app.knowledge.context import ContextBuilder
 from app.orchestration.langgraph.state import OrchestrationGraphState
 from app.orchestration.policies import ExecutionPolicy
-from app.orchestration.request import OrchestrationRequest
+from app.orchestration.request import OrchestrationRequest, RequestScope
 from app.orchestration.timeout_control import ExecutionBudget, run_with_timeout
 from app.privacy.models import PrivacyResult
 from app.privacy.service import PrivacyService
@@ -119,7 +119,9 @@ class WorkflowNodeRuntime:
             if privacy.blocked:
                 raise PermissionError("input privacy inspection blocked the request")
             scope = self._services.access_scope_resolver.resolve(request.actor, request.source_scope)
-            sanitized = request.model_copy(update={"question": privacy.text})
+            sanitized = request.model_copy(
+                update={"question": privacy.text, "source_scope": _scope_to_request_scope(scope, request)}
+            )
             return privacy, scope, sanitized
 
         (privacy, scope, sanitized), event = await self._run_stage(
@@ -499,6 +501,24 @@ class WorkflowNodeRuntime:
         )
         await state["reporter"](event)
         return result, event
+
+
+def _scope_to_request_scope(scope: AccessScope, request: OrchestrationRequest) -> RequestScope:
+    """Narrow the request to exactly what the resolver authorized.
+
+    Retrieval reads `request.source_scope`, not the resolved AccessScope, so a
+    caller that passes no scope (RequestScope() -> None) or a wider one used to
+    reach the store unfiltered. Rewriting it here means no downstream stage can
+    be handed more than the resolver granted, whatever the caller sent.
+    """
+
+    return RequestScope(
+        allowed_sources=scope.allowed_sources,
+        document_ids=scope.document_ids,
+        acl_tags=scope.acl_tags,
+        allowed_fields=scope.allowed_fields,
+        agent_class_hint=request.source_scope.agent_class_hint,
+    )
 
 
 def _required(state: OrchestrationGraphState, key: str, expected_type: type[Any]) -> Any:

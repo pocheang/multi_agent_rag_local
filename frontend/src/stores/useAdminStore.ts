@@ -143,13 +143,31 @@ export interface AdminState {
   setEditDept: (val: string | ((prev: string) => string)) => void;
   setEditType: (val: string | ((prev: string) => string)) => void;
   setEditScope: (val: string | ((prev: string) => string)) => void;
+
+  /** Drop every value this user filled in. Called on logout and on user change. */
+  reset: () => void;
 }
 
 function updateValue<T>(val: T | ((prev: T) => T), prev: T): T {
   return typeof val === "function" ? (val as (prev: T) => T)(prev) : val;
 }
 
-export const useAdminStore = create<AdminState>((set) => ({
+/** The data half of AdminState: every property that is not an action.
+ *
+ * Discriminated by value type, not by name: `settingsOpen` starts with "set"
+ * too, so a `set${string}` key filter would have silently dropped it -- and a
+ * field missing from INITIAL_STATE is exactly the drift this type exists to
+ * catch.
+ *
+ * Typed rather than inferred so the compiler enforces that INITIAL_STATE covers
+ * exactly these fields: a field added to AdminState but forgotten here is a
+ * compile error, not a value that quietly survives a logout.
+ */
+type AdminData = {
+  [K in keyof AdminState as AdminState[K] extends (...args: never[]) => unknown ? never : K]: AdminState[K];
+};
+
+const INITIAL_STATE: AdminData = {
   section: "ops",
   users: [],
   logs: [],
@@ -210,6 +228,10 @@ export const useAdminStore = create<AdminState>((set) => ({
   editDept: "",
   editType: "",
   editScope: "",
+};
+
+export const useAdminStore = create<AdminState>((set) => ({
+  ...INITIAL_STATE,
 
   setSection: (val) => set((s) => ({ section: updateValue(val, s.section) })),
   setUsers: (val) => set((s) => ({ users: updateValue(val, s.users) })),
@@ -271,4 +293,6 @@ export const useAdminStore = create<AdminState>((set) => ({
   setEditDept: (val) => set((s) => ({ editDept: updateValue(val, s.editDept) })),
   setEditType: (val) => set((s) => ({ editType: updateValue(val, s.editType) })),
   setEditScope: (val) => set((s) => ({ editScope: updateValue(val, s.editScope) })),
+
+  reset: () => set(INITIAL_STATE),
 }));

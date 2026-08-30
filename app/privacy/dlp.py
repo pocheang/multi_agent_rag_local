@@ -15,11 +15,23 @@ _CONTENT_FIELDS = frozenset(
 )
 
 
+def memory_source_prefix(scope: AccessScope) -> str:
+    """The `memory://` namespace one scope owns; see app/knowledge/adapters.py."""
+
+    return f"memory://{scope.tenant_id}/{scope.user_id}/"
+
+
 def evidence_is_authorized(item: EvidenceItem, scope: AccessScope) -> bool:
     """Enforce document/source restrictions before evidence reaches a model."""
 
-    if item.layer in {"web", "tool", "memory"}:
+    # Web and tool results are not user documents and carry no owner to check.
+    if item.layer in {"web", "tool"}:
         return True
+    # Memory is owner-scoped by its store layout rather than by allowed_sources
+    # (a `memory://` URI is never a document path), so check the namespace it
+    # declares instead of exempting the layer outright.
+    if item.layer == "memory":
+        return item.source.startswith(memory_source_prefix(scope))
     if not scope.document_ids and not scope.allowed_sources:
         return False
     if scope.document_ids and item.document_id not in scope.document_ids:

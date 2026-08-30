@@ -179,6 +179,63 @@ decision, not a bug fix — do not "fix" them by flipping the flag.
 **Note**: Quality validation is controlled by `ExecutionPolicy`, not by per-profile
 settings — see Pipeline Profile above.
 
+### User Data Isolation
+
+Retrieval is scoped, not just filtered afterwards (fixed 2026-08-30). Two properties
+carry it, and both are pinned by `tests/security/`:
+
+- `privacy_permission` (`app/orchestration/langgraph/nodes.py`) resolves the caller's
+  `AccessScope` and **rewrites `request.source_scope` from it**, so no later stage can
+  be handed a wider range than the resolver authorized — whatever the API layer passed.
+  This is why `pipeline_contract.py` may still pass `allowed_sources=None` harmlessly.
+- `similarity_search` fails closed: a missing `allowed_sources` raises rather than
+  searching every tenant's corpus, and an *empty* one returns nothing. Those two cases
+  must stay distinct — collapsing them is what previously turned "this user has no
+  documents" into an unrestricted search.
+
+`evidence_is_authorized` (`app/privacy/dlp.py`) remains the output-side check. `web` and
+`tool` evidence is exempt (not user documents); `memory` is checked against the
+`memory://{tenant}/{user}/` namespace its store already enforces, not against
+`allowed_sources`, which only ever holds document paths.
+
+Counts of scope-dropped evidence are logged, never returned: they would tell a caller
+how many documents *other* tenants hold on a topic.
+
+An **empty** document scope (a user who has uploaded nothing) and a **missing** one are
+different states and must stay so. Empty drops the document-backed retrievers but keeps
+web — web results are not documents — and returns quietly; missing raises. Collapsing
+them in either direction is a bug: one way silently removes web search from every new
+user, the other turns "a caller bypassed the resolver" into a result that reads as "no
+matches found". `KnowledgeOrchestrator._retrieve_source` skips only
+`vector`/`bm25`/`graph`/`wiki`/`multimodal` on an empty scope; `RAGAgentService.retrieve`
+matches that list rather than short-circuiting ahead of it.
+
+The store adds a second, independent check: `similarity_search` takes an `OwnerScope` and
+requires the chunk's own `owner_user_id`/`visibility`/`tenant_id` metadata to match, not
+just its `source`. Source paths are *derived* from the visibility rules; owner metadata is
+written independently at ingest, so requiring both narrows what a wrong source list can
+reach. **This means chunks indexed before ingest wrote owner metadata are invisible once
+the clause is on — `$eq` does not match an absent key (verified on chromadb 1.5.9). Reindex
+any pre-existing store before deploying.** Every `similarity_search` call site must pass an
+owner; `tests/security/test_no_unrestricted_retrieval.py` enumerates them via AST and keeps
+the two genuinely caller-less ones in a documented allowlist. A partial guard would be
+worse than none.
+
+Documents are addressed by `document_id`, not filename: two users routinely hold a
+`report.pdf`, so `/documents/{filename}` refuses whenever the name is ambiguous and
+`/documents/by-id/{document_id}` is the form the frontend uses. A `?source=` query
+parameter *narrows* the candidates a filename resolves to — it must never select one on
+its own, which is what let an admin act on a file they could not even list. "No such
+document" and "not yours" both return 404 on purpose: distinguishing them discloses that
+someone else's document exists.
+
+BM25 keeps one prebuilt index per access scope (`_load_scoped_bm25`, LRU), and separates
+matching from ranking: a document is a candidate if it shares a term with the query, and
+BM25 only orders the candidates. Do not reintroduce `score > 0` as the membership test —
+BM25 IDF is negative for a term present in most documents, so in a small scope (one chunk,
+now a routine case) every term scores below zero and matching documents get dropped. A
+negative `bm25_score` in the output is normal and harmless: RRF fuses on rank, not score.
+
 ### Retrieval Strategy
 
 **Hybrid Retrieval** ([app/retrievers/hybrid/retriever.py](app/retrievers/hybrid/retriever.py)):
@@ -294,18 +351,38 @@ misled readers. The chat endpoint moved to `public/query.py`, the SSE endpoint t
 
 `tests/` was cleared ahead of the v0.7 rewrite and is being rebuilt incrementally: each bug
 fix lands with the regression test that would have caught it, rather than as a separate
-back-filling effort. As of 2026-08-29 there are 56 tests covering the chat round trip,
+back-filling effort. As of 2026-08-30 there are 174 tests covering the chat round trip,
 conversation context, graph routing, clarification, the async load guard, engine reuse,
 answer safety, retrieval module-global isolation, and a guard that every Settings field has
 a reader.
+
+`tests/security/` (112 of those) pins the user-data isolation invariants — see
+`docs/superpowers/plans/2026-08-29-user-data-isolation.md`. That plan is complete
+(phases 0-4) and all 8 of its `xfail(strict=True)` markers are cleared; keep using the same
+pattern for a new gap, so a fix that makes the test pass fails the suite until the marker
+is removed. `test_no_unrestricted_retrieval.py`
+is a ratchet rather than a plain assertion: `KNOWN_OFFENDERS` records how many
+unrestricted `similarity_search` calls each module has, and the count may only go down.
+It is currently empty.
+
+User questions must not reach the logs: `question_ref()`
+(`app/services/observability/log_safety.py`) gives a stable digest instead, and
+`tests/security/test_no_question_text_in_logs.py` enumerates every `logger.*` call via AST
+to keep it that way. Truncating (`question[:50]`) does not count as redaction.
 
 `pytest` is configured in `pyproject.toml` (`testpaths = ["tests"]`, strict asyncio mode).
 CI runs it on every push and pull request (`.github/workflows/ci.yml`), together with ruff
 and an OpenAPI endpoint census that fails if a refactor silently drops routers.
 
+The frontend has vitest tests too (`frontend/src/**/*.test.ts`, run by the `frontend` CI
+job). `storeReset.test.ts` covers the Zustand `reset()` that App.tsx calls on logout and on
+any identity change: the stores outlive a logout, so a field added to a store but forgotten
+in its `INITIAL_STATE` would show the next person on a shared browser the previous user's
+data. The test discovers fields rather than listing them, so it catches that drift.
+
 Note: do not use `len(app.routes)` to count endpoints. FastAPI 0.138+ stores an
 `_IncludedRouter` wrapper in `app.routes` instead of flattening child routes, so that number
-varies by version. Count OpenAPI operations instead; the current baseline is 149.
+varies by version. Count OpenAPI operations instead; the current baseline is 151 (CI asserts a >= 140 floor).
 
 ## Important Notes
 

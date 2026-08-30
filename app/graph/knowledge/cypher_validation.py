@@ -199,16 +199,22 @@ def get_simpler_query(query_type: str, allowed_sources: list[str] | None = None)
     """
     templates = get_query_templates()
 
+    # `is not None`, not truthiness: an *empty* allowed_sources means the caller
+    # may read nothing, so it must still pick the filtered template (which then
+    # matches no rows). Falling back to the unfiltered one would answer a
+    # read-nothing request from the whole graph.
+    scoped = allowed_sources is not None
+
     # Fallback strategy: remove complex clauses
     if query_type == "entity_paths_2hop":
         # Fall back to neighbors if 2-hop paths fail
-        template_name = "entity_neighbors_with_sources" if allowed_sources else "entity_neighbors"
+        template_name = "entity_neighbors_with_sources" if scoped else "entity_neighbors"
         template = next((t for t in templates if t.name == template_name), None)
         return template.query if template else None
 
     if query_type == "entity_neighbors":
         # Fall back to basic entity search if neighbors fail
-        template_name = "entity_search_with_sources" if allowed_sources else "entity_search"
+        template_name = "entity_search_with_sources" if scoped else "entity_search"
         template = next((t for t in templates if t.name == template_name), None)
         return template.query if template else None
 

@@ -1,3 +1,4 @@
+import functools
 import json
 
 import app.retrievers.hybrid.candidate_collection as candidate_collection
@@ -8,7 +9,7 @@ from app.retrievers.hybrid.parent_expansion import expand_to_parent_context
 from app.retrievers.hybrid.strategy import strategy_flags
 from app.retrievers.reranker import rerank_with_diagnostics
 from app.retrievers.stores.parent import get_parent_text_map
-from app.retrievers.stores.vector import similarity_search
+from app.retrievers.stores.vector import OwnerScope, similarity_search
 from app.services.observability.tracing import traced_span
 from app.services.query.rule_rewrite import build_rewrite_queries
 
@@ -19,6 +20,7 @@ def hybrid_search_with_diagnostics(
     dynamic_top_k: int | None = None,
     dynamic_vector_weight: float | None = None,
     dynamic_bm25_weight: float | None = None,
+    owner: OwnerScope | None = None,
 ) -> tuple[list[dict], dict]:
     """Perform hybrid search with full diagnostics."""
     with traced_span("retrieval.hybrid_search", {}):
@@ -39,6 +41,11 @@ def hybrid_search_with_diagnostics(
                 "dynamic_top_k": dynamic_top_k,
                 "dynamic_vector_weight": dynamic_vector_weight,
                 "dynamic_bm25_weight": dynamic_bm25_weight,
+                # The owner narrows what the store returns, so two callers with
+                # the same source list but different identities are different
+                # queries. Leaving it out would serve one of them the other's
+                # cached results the day the owner clause starts mattering.
+                "owner": [owner.user_id, owner.tenant_id] if owner is not None else None,
             },
             ensure_ascii=False,
             sort_keys=True,
@@ -57,6 +64,7 @@ def hybrid_search_with_diagnostics(
                 dynamic_top_k=dynamic_top_k,
                 dynamic_vector_weight=dynamic_vector_weight,
                 dynamic_bm25_weight=dynamic_bm25_weight,
+                owner=owner,
             )
 
         raw_vector_cache: dict[str, list] = {}
@@ -80,7 +88,7 @@ def hybrid_search_with_diagnostics(
 
                 for variant in variants:
                     raw_vector_cache[variant] = _safe_similarity_search(
-                        variant, k=vector_top_k, allowed_sources=allowed_sources
+                        variant, k=vector_top_k, allowed_sources=allowed_sources, owner=owner
                     )
 
                 fused, diag = _collect_candidates_for_current_module(
@@ -92,6 +100,7 @@ def hybrid_search_with_diagnostics(
                     dynamic_top_k=dynamic_top_k,
                     dynamic_vector_weight=dynamic_vector_weight,
                     dynamic_bm25_weight=dynamic_bm25_weight,
+                    owner=owner,
                 )
                 degraded = True
                 diag["degraded_reason"] = "strict_threshold_no_results"
@@ -127,14 +136,18 @@ def _safe_similarity_search(
     query: str,
     k: int,
     allowed_sources: list[str] | None = None,
+    owner: OwnerScope | None = None,
 ):
-    """Backward-compatible vector search wrapper using this module's patch point."""
-    if allowed_sources is None:
-        return similarity_search(query, k=k, require_source_filter=False)
-    try:
-        return similarity_search(query, k=k, allowed_sources=allowed_sources)
-    except TypeError:
-        return similarity_search(query, k=k, require_source_filter=False)
+    """Vector search hop for hybrid retrieval; this module's patch point.
+
+    Both of the escape hatches this used to have -- treating `allowed_sources is
+    None` as "search everything", and recovering from a TypeError by retrying
+    without the filter -- widened a single user's query into a scan of every
+    tenant's corpus. A TypeError here means the signature changed, so let it
+    propagate; a missing scope means the caller skipped the resolver, so let
+    similarity_search raise.
+    """
+    return similarity_search(query, k=k, allowed_sources=allowed_sources, owner=owner)
 
 
 def _expand_to_parent_context(candidates: list[dict]) -> list[dict]:
@@ -151,6 +164,7 @@ def _collect_candidates_for_current_module(
     dynamic_top_k: int | None = None,
     dynamic_vector_weight: float | None = None,
     dynamic_bm25_weight: float | None = None,
+    owner: OwnerScope | None = None,
 ) -> tuple[list[dict], dict]:
     """Collect candidates using this module's retrieval primitives.
 
@@ -170,7 +184,9 @@ def _collect_candidates_for_current_module(
         dynamic_vector_weight=dynamic_vector_weight,
         dynamic_bm25_weight=dynamic_bm25_weight,
         rewrite_fn=build_rewrite_queries,
-        vector_fn=_safe_similarity_search,
+        # Bound here rather than threaded through collect_candidates: the owner
+        # belongs to the vector hop, not to candidate collection.
+        vector_fn=functools.partial(_safe_similarity_search, owner=owner),
         bm25_fn=bm25_search,
     )
 

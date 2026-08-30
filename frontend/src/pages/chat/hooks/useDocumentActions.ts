@@ -130,7 +130,7 @@ export function useDocumentActions(params: UseDocumentActionsParams) {
     });
     if (!confirmed) return;
     try {
-      const res = await appApi.documentDelete(item.filename, item.source, removeFile);
+      const res = await appApi.documentDelete(item.filename, item.source, removeFile, item.document_id);
       setUploadInfo(
         `${item.filename}: chunks_removed=${res.chunks_removed}, triplets_removed=${res.triplets_removed}, file_removed=${res.file_removed}`,
       );
@@ -143,7 +143,7 @@ export function useDocumentActions(params: UseDocumentActionsParams) {
 
   const reindexDocument = async (item: IndexedFileSummary) => {
     try {
-      const res = await appApi.documentReindex(item.filename, item.source);
+      const res = await appApi.documentReindex(item.filename, item.source, item.document_id);
       if (res.skipped) {
         const skippedSummary = t("components.workbench.reindexSkipped", {
           filename: item.filename,

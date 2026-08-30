@@ -6,6 +6,7 @@ from hashlib import md5
 from urllib.parse import urlparse
 
 from app.core.config import get_settings
+from app.services.observability.log_safety import question_ref
 from app.tools.web.search import search_web
 
 logger = logging.getLogger(__name__)
@@ -203,14 +204,14 @@ def run_web_research(
     # Execute search
     search_start = time.time()
     try:
-        logger.info(f"Starting web search for query: {question[:50]}...")
+        logger.info("Starting web search for %s", question_ref(question))
         results = search_web(question, max_results=5)
         metrics["search_time"] = time.time() - search_start
         metrics["total_results"] = len(results)
         logger.info(f"Web search returned {len(results)} raw results in {metrics['search_time']:.2f}s")
     except Exception as e:
         metrics["search_time"] = time.time() - search_start
-        logger.exception(f"Web search failed for question: {question}")
+        logger.exception("Web search failed for %s", question_ref(question))
         return {
             "context": "",
             "citations": [],

@@ -60,6 +60,7 @@ from app.agents.rag.config import (
     WORD_COUNT_HIGH,
     WORD_COUNT_MEDIUM,
 )
+from app.services.observability.log_safety import question_ref
 from app.tools.graph.enhanced import graph_lookup_enhanced
 
 logger = logging.getLogger(__name__)
@@ -389,12 +390,12 @@ def run_graph_rag_with_pdf_context(
 
         if error_type in {"ServiceUnavailable", "ConnectionError"}:
             logger.warning(
-                "Enhanced graph lookup unavailable for question '%s': %s",
-                question,
+                "Enhanced graph lookup unavailable for %s: %s",
+                question_ref(question),
                 error_type,
             )
         else:
-            logger.exception("Enhanced graph lookup failed for question: %s", question)
+            logger.exception("Enhanced graph lookup failed for %s", question_ref(question))
 
         return {
             "context": "",

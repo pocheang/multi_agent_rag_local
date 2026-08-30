@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Iterable
 
 from app.domain.contracts import EvidenceItem
 from app.domain.knowledge import AccessScope
 from app.domain.workflow import ContextBundle
 from app.privacy.dlp import mask_evidence
+
+logger = logging.getLogger(__name__)
 
 _LAYER_PRIORITY = {
     "evidence": 0,
@@ -39,12 +42,23 @@ class ContextBuilder:
         resolved, conflict_notes = _resolve_conflicts(authorized)
         bounded, truncated = _truncate(resolved, self._token_budget)
         rendered = "\n\n".join(_render_item(index, item) for index, item in enumerate(bounded, start=1))
+        scope_dropped = len(raw) - len(authorized)
+        if scope_dropped:
+            # Deliberately logged rather than returned. Retrieval that reaches
+            # outside the caller's scope makes this count a measure of how many
+            # documents *other* tenants hold on the topic, which the caller must
+            # not be able to read back out of the response.
+            logger.warning(
+                "context_scope_dropped: user=%s tenant=%s dropped=%d of %d",
+                scope.user_id,
+                scope.tenant_id,
+                scope_dropped,
+                len(raw),
+            )
         merged_diagnostics = dict(diagnostics or {})
         merged_diagnostics.update(
             {
-                "context_input_count": len(raw),
                 "context_authorized_count": len(authorized),
-                "context_scope_dropped": len(raw) - len(authorized),
                 "context_conflicts_dropped": len(conflict_notes),
                 "context_conflicts": conflict_notes,
                 "context_token_budget": self._token_budget,

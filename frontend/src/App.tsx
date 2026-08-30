@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useState, type ReactNode } from "react";
+import { lazy, Suspense, useEffect, useRef, useState, type ReactNode } from "react";
 import { Navigate, Route, Routes, useLocation, useNavigate } from "react-router-dom";
 import { authApi } from "@/lib/api";
 import type { AuthUser } from "@/types/api";
@@ -8,6 +8,20 @@ import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { ChatErrorBoundary } from "@/components/ChatErrorBoundary";
 import { AdminErrorBoundary } from "@/components/AdminErrorBoundary";
 import { usePerformanceMonitoring } from "@/hooks/usePerformanceMonitoring";
+import { useChatStore } from "@/stores/useChatStore";
+import { useAdminStore } from "@/stores/useAdminStore";
+
+/**
+ * Drop everything the previous user filled in.
+ *
+ * Zustand stores live for the lifetime of the tab, so without this the next
+ * person to sign in on a shared browser sees the previous one's session list,
+ * documents and prompts until the first refetch lands.
+ */
+function clearUserState() {
+  useChatStore.getState().reset();
+  useAdminStore.getState().reset();
+}
 
 const LoginPage = lazy(() => import("@/pages/LoginPage").then(({ LoginPage }) => ({ default: LoginPage })));
 const ChatPage = lazy(() => import("@/pages/ChatPage").then(({ ChatPage }) => ({ default: ChatPage })));
@@ -55,6 +69,7 @@ export function App() {
       .then(setUser)
       .catch(() => {
         authApi.setToken("");
+        clearUserState();
         setUser(null);
       })
       .finally(() => setAuthReady(true));
@@ -63,6 +78,7 @@ export function App() {
   const logout = async () => {
     await authApi.logout();
     authApi.setToken("");
+    clearUserState();
     setUser(null);
     navigate("/app/login");
   };
@@ -70,6 +86,17 @@ export function App() {
   const loginSuccess = (nextUser: AuthUser) => {
     setUser(nextUser);
   };
+
+  // Belt and braces for identity changes that do not go through `logout` --
+  // a session expiring and someone else signing in on the same tab, say.
+  const lastUserId = useRef<string | null>(null);
+  useEffect(() => {
+    const nextId = user?.user_id ?? null;
+    if (lastUserId.current !== null && lastUserId.current !== nextId) {
+      clearUserState();
+    }
+    lastUserId.current = nextId;
+  }, [user?.user_id]);
 
   const refreshUser = async () => {
     setUser(await authApi.me());

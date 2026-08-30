@@ -24,6 +24,7 @@ from app.prompts.core.canonical_agent_prompts import (
 from app.services.language.analytics import LanguageAnalytics
 from app.services.language.detector import detect_language
 from app.services.models.runtime import get_chat_model, get_reasoning_model
+from app.services.observability.log_safety import question_ref
 from app.services.query.intent import is_casual_chat_query
 from app.services.runtime.bulkhead import bulkhead
 from app.services.runtime.request_context import deadline_exceeded, overload_mode_enabled
@@ -594,5 +595,5 @@ def stream_synthesize_answer(
         # Yield detected language metadata
         yield {"type": "metadata", "detected_language": detected_language}
     except Exception:
-        logger.exception(f"Stream synthesis failed for question: {question}")
+        logger.exception("Stream synthesis failed for %s", question_ref(question))
         yield SYNTHESIS_FALLBACK_MESSAGE

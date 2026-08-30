@@ -22,7 +22,9 @@ from app.core.config import get_settings
 from app.retrievers.hybrid.retriever import hybrid_search_with_diagnostics
 from app.retrievers.parameter_tuning import apply_dynamic_parameters
 from app.retrievers.query_expansion import expand_query
+from app.retrievers.stores.vector import OwnerScope
 from app.services.agent_document_filter import get_sources_by_agent_class
+from app.services.observability.log_safety import question_ref
 
 logger = logging.getLogger(__name__)
 
@@ -83,6 +85,7 @@ class UnifiedVectorRAGAgent(BaseAgent):
         allowed_sources: list[str] | None = None,
         agent_class: str | None = None,
         enable_evaluation: bool | None = None,
+        owner: OwnerScope | None = None,
         **kwargs,
     ) -> dict[str, Any]:
         """
@@ -111,7 +114,7 @@ class UnifiedVectorRAGAgent(BaseAgent):
         filtered_sources = self._apply_agent_filtering(allowed_sources, agent_class)
 
         # Step 4: Execute retrieval
-        results, diagnostics = self._execute_retrieval(search_query, filtered_sources, dynamic_params)
+        results, diagnostics = self._execute_retrieval(search_query, filtered_sources, dynamic_params, owner)
 
         # Step 5: Process results
         citations = self._build_citations(results)
@@ -159,7 +162,7 @@ class UnifiedVectorRAGAgent(BaseAgent):
                 query, max_expansion_ratio=getattr(self.settings, "query_expansion_max_ratio", 3.0)
             )
             if expanded and expanded != query:
-                logger.info(f"Query expanded: '{query}' -> '{expanded}'")
+                logger.info("Query expanded: %s -> %s", question_ref(query), question_ref(expanded))
                 return expanded
         except Exception as e:
             logger.warning(f"Query expansion failed: {e}", exc_info=True)
@@ -186,7 +189,11 @@ class UnifiedVectorRAGAgent(BaseAgent):
         return allowed_sources
 
     def _execute_retrieval(
-        self, query: str, allowed_sources: list[str] | None, dynamic_params: dict[str, Any]
+        self,
+        query: str,
+        allowed_sources: list[str] | None,
+        dynamic_params: dict[str, Any],
+        owner: OwnerScope | None = None,
     ) -> tuple:
         """Execute hybrid retrieval with diagnostics."""
         return self._hybrid_search(
@@ -195,6 +202,7 @@ class UnifiedVectorRAGAgent(BaseAgent):
             dynamic_top_k=dynamic_params.get("top_k"),
             dynamic_vector_weight=dynamic_params.get("vector_weight"),
             dynamic_bm25_weight=dynamic_params.get("bm25_weight"),
+            owner=owner,
         )
 
     def _build_citations(self, results: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -323,6 +331,7 @@ def run_vector_rag(
     question: str,
     allowed_sources: list[str] | None = None,
     agent_class: str | None = None,
+    owner: OwnerScope | None = None,
 ) -> dict[str, Any]:
     """
     Backward-compatible function interface for vector RAG.
@@ -339,7 +348,7 @@ def run_vector_rag(
         Dictionary with retrieval results
     """
     agent = UnifiedVectorRAGAgent()
-    result = agent.run(query=question, allowed_sources=allowed_sources, agent_class=agent_class)
+    result = agent.run(query=question, allowed_sources=allowed_sources, agent_class=agent_class, owner=owner)
 
     # Extract core result (remove BaseAgent wrapper fields for compatibility)
     return {

@@ -31,13 +31,34 @@ def _is_source_allowed_for_user(source: str | None, user: dict[str, Any]) -> boo
     return uploads_root in source_path.parents
 
 
+def _has_cross_tenant_rights(user: dict[str, Any]) -> bool:
+    """Whether this actor may act on documents outside its own uploads.
+
+    Mirrors the gate app/services/security/access_scope.py already applies to
+    *reading* across tenants, so managing cannot reach further than listing.
+    No caller grants these permissions today (the authenticated user dict is
+    user_id/username/role/status/credit_balance), which is exactly the point:
+    admins can neither see nor act on another user's documents until someone
+    deliberately wires an admin flow that grants it.
+    """
+    if str(user.get("role", "viewer")).lower() != "admin":
+        return False
+    permissions = frozenset(str(value) for value in user.get("permissions", ()) or ())
+    return "*" in permissions or "tenant:cross_read" in permissions
+
+
 def _is_source_manageable_for_user(source: str | None, user: dict[str, Any]) -> bool:
-    """Check if a source is manageable by the user."""
+    """Check if a source is manageable by the user.
+
+    The admin branch used to grant the whole uploads root on the role alone, so
+    `DELETE /documents/report.pdf?source=/uploads/bob/report.pdf` acted on Bob's
+    file -- while the same admin could not even list it. See P0-3 in
+    docs/superpowers/plans/2026-08-29-user-data-isolation.md.
+    """
     if not source:
         return False
-    role = str(user.get("role", "viewer")).lower()
     source_path = Path(source).resolve()
-    if role == "admin":
+    if _has_cross_tenant_rights(user):
         uploads_root = settings.uploads_path.resolve()
         return uploads_root in source_path.parents
     uploads_root = (settings.uploads_path / user["user_id"]).resolve()
