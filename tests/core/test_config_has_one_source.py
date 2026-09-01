@@ -40,6 +40,10 @@ APP = pathlib.Path(__file__).resolve().parents[2] / "app"
 ALLOWED: dict[str, str] = {
     # These two choose *which* settings file to load, so they cannot live in it.
     "app/core/config.py::resolve_runtime_env_file": "selects the runtime env file",
+    # The same chicken-and-egg one layer out: this bootstrap configures the
+    # source that supplies Settings, so it cannot be supplied by it. It is also
+    # why NACOS_PASSWORD stays in the environment and never becomes a field.
+    "app/core/remote_config.py::_bootstrap": "bootstraps the configuration source itself",
     # A deployment pinning the local backend must beat persisted admin settings;
     # reading it from Settings would let the admin UI override the pin.
     "app/services/models/runtime.py::_local_backend_forced": "process-env pin over admin settings",

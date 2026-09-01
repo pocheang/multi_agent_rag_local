@@ -5,7 +5,7 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, Request
 
-from app.api import dependencies as api_dependencies
+from app.api.application.config_reload import apply_config_reload
 from app.api.dependencies import (
     _admin_model_settings_view,
     _api_settings_view,
@@ -24,9 +24,6 @@ from app.api.schemas import (
     UserApiSettingsTestResponse,
 )
 from app.api.transport.errors import bad_request, internal_error
-from app.core.config import reload_settings
-from app.graph.knowledge.client import Neo4jClient
-from app.retrievers.stores.vector import clear_vector_store_cache
 from app.services.models.catalog import CATALOG_VERSION, get_model_catalog
 from app.services.models.config_store import (
     ModelSettingsReindexError,
@@ -42,9 +39,8 @@ from app.services.models.config_store import (
 from app.services.models.config_store import (
     save_user_api_settings as save_user_api_settings_service,
 )
-from app.services.models.runtime import clear_model_caches, probe_chat_model_configuration
+from app.services.models.runtime import probe_chat_model_configuration
 from app.services.observability.alerting import emit_alert
-from app.services.runtime.bulkhead import reset_bulkheads
 from app.services.security.network import OutboundURLValidationError
 
 router = APIRouter(tags=["admin", "settings"])
@@ -144,12 +140,7 @@ def admin_test_model_settings(
 @router.post("/admin/config/reload")
 def admin_reload_config(request: Request, user: dict[str, Any] = Depends(_require_user)):
     _require_permission(user, "admin:ops_manage", request, "admin")
-    new_settings = reload_settings()
-    api_dependencies.reload_query_runtime(new_settings)
-    clear_model_caches()
-    clear_vector_store_cache()
-    Neo4jClient.close_shared_driver()
-    reset_bulkheads()
+    new_settings = apply_config_reload()
     _audit(
         request,
         action="admin.config.reload",

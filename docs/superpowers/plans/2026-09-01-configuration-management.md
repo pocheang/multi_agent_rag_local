@@ -1,6 +1,6 @@
 # 配置治理：收敛到 Settings，再接入 Nacos 配置中心
 
-状态：阶段 0 已完成（2026-09-01），阶段 1-3 待实施。
+状态：阶段 0 与阶段 1 的代码部分已完成（2026-09-01）。阶段 1 剩余的是起容器，阶段 2-3 待实施。
 
 ## 1. 目标与非目标
 
@@ -71,21 +71,25 @@ pydantic-settings 把 `.runtime/{APP_ENV}.env` 读进 `Settings`，**不会导�
 ## 4. 接入形状：一个 settings source，不是第四层
 
 ```python
-# app/core/config.py
-class NacosSettingsSource(PydanticBaseSettingsSource):
+# app/core/remote_config.py
+class RemoteSettingsSource(PydanticBaseSettingsSource):
     """远端配置作为一个 source。类型、校验、默认值仍在 Settings 里。
 
-    远端不可达时回落到 SDK 的本地快照；快照也没有时返回空 dict，
+    远端不可达时回落到本层自己写的快照；快照也没有时返回空 dict，
     让下层 source（.runtime/*.env → 默认值）接管。绝不阻塞启动。
     """
 
+# app/core/config.py
 class Settings(BaseSettings):
     @classmethod
     def settings_customise_sources(cls, settings_cls, init_settings, env_settings,
                                    dotenv_settings, file_secret_settings):
-        return (init_settings, env_settings, NacosSettingsSource(settings_cls),
+        return (init_settings, env_settings, RemoteSettingsSource(settings_cls),
                 dotenv_settings, file_secret_settings)
 ```
+
+后端是可换的：`RemoteConfigClient` 只有 `fetch` 和 `watch` 两个方法，Nacos 适配器
+（`app/core/remote_config_nacos.py`）实现它，测试用 fake 实现它。
 
 这个顺序就是 §1 的优先级：`init > 进程环境 > Nacos > .runtime/*.env > 默认值`。
 
@@ -108,12 +112,28 @@ class Settings(BaseSettings):
 - 删除 `health.py::_runtime_diagnostics_summary`——死代码，且它 `_request_metrics_lock, _request_metrics = get_request_metrics()` 把一个 list 解包成两个名字，任何调用都会抛异常。`deps/admin.py` 里有能跑的那份。
 - 新增 `tests/core/test_config_has_one_source.py`：AST 扫描 `app/` 的直接环境读取，允许清单按 `path::function` 键入并写明理由；遗留常量块用 ratchet 冻结在 37，只减不增。
 
-### 阶段 1：Nacos 作为 settings source
+### 阶段 1：Nacos 作为 settings source —— **代码部分已完成（2026-09-01）**
 
-- `docker-compose` 加 nacos + MySQL（standalone 模式），**先配鉴权再启用**（见 §6）。
-- 实现 `NacosSettingsSource`：命名空间按 `APP_ENV` 分，dataId 按模块分组（`querymind-retrieval`、`querymind-router`…），格式用 properties 以对齐现有 alias。
-- 离线兜底：SDK 本地快照 → 空 dict，三级降级都不阻塞启动。**这条要有测试**：断掉 Nacos 后进程仍能起来并使用 `.runtime/*.env` 的值。
-- 配置变更监听 → 复用现成的 `reload_settings()` + `clear_model_caches()` + `reload_query_runtime()`。热更新语义要写清楚：哪些字段热生效，哪些需要重启（例如 `APP_DB_PATH`）。
+已落地：
+
+- `app/core/remote_config.py`：`RemoteSettingsSource` + `RemoteConfigClient` 协议 + properties 解析 + 快照。
+- `app/core/remote_config_nacos.py`：SDK 适配器，**惰性 import**，`ImportError` 视为"没有客户端"并降级到快照。因此没采用配置中心的安装完全不需要装这个依赖；`pyproject.toml` 里作为 `config-centre` extra。
+- `Settings.settings_customise_sources` 声明优先级：`init > 进程环境 > 配置中心 > .runtime/*.env > 默认值`。
+- 三级降级：远端 → 上一次成功抓取写下的本地快照（`.runtime/remote-config/`）→ 什么都不给，由下层 source 接管。每一级都有测试，包括"远端超时 + 无快照仍能启动"。
+- 变更监听接到 `app/api/application/config_reload.py::apply_config_reload()`——这个函数是从管理端 `POST /admin/config/reload` 里抽出来的**同一段序列**，两个入口共用。监听器如果自己只清一部分缓存，就会变成第二个、更安静的"已重载"定义，差异只会以"点按钮生效、在控制台保存不生效"的形式暴露出来。
+- `tests/core/test_remote_config_source.py`（19 个测试）。
+
+两个实现中确认的事实，都钉成了测试：
+
+1. **source 必须返回 alias 键**。`{"ENABLE_CALIBRATION": True}` 生效，`{"enable_calibration": True}` 被**静默忽略**——`Settings` 按 alias 校验，`extra="ignore"` 丢掉其余，没有任何报错。好在 alias 正是 `config/env/*` 和渲染文件已经在用的名字，一个名字从仓库一路走到控制台。
+2. `no_snapshot=True` 传给 SDK 的 `get_config`：这一层自己管快照，只在**真的抓取成功**后写。让 SDK 悄悄替换成它自己的缓存，会让"服务器答了"和"没答"变得无法区分，而这条日志正是值没生效时运维唯一能依据的东西。
+
+剩余（需要起容器）：
+
+- `docker-compose` 加 nacos + MySQL（standalone），**先配鉴权再启用**（见 §6）。
+- dataId 分组决策：默认按模块分（`querymind-retrieval`、`querymind-router`…），`NACOS_DATA_IDS` 里靠后的覆盖靠前的。
+- 用真实 SDK 跑一遍，确认适配器的调用签名（本地只用 fake client 验证过协议一侧）。
+- 热更新语义盘点：哪些字段热生效，哪些需要重启。`apply_config_reload()` 的 docstring 已经点明边界——仍在遗留常量块里的值在进程重启前不会被重新读取。
 
 ### 阶段 2：管理端页面
 

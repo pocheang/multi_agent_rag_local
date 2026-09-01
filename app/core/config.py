@@ -4,7 +4,7 @@ from functools import lru_cache
 from pathlib import Path
 
 from pydantic import Field
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic_settings import BaseSettings, PydanticBaseSettingsSource, SettingsConfigDict
 
 logger = logging.getLogger(__name__)
 
@@ -26,6 +26,39 @@ class Settings(BaseSettings):
         env_file_encoding="utf-8",
         extra="ignore",
     )
+
+    @classmethod
+    def settings_customise_sources(
+        cls,
+        settings_cls: type[BaseSettings],
+        init_settings: PydanticBaseSettingsSource,
+        env_settings: PydanticBaseSettingsSource,
+        dotenv_settings: PydanticBaseSettingsSource,
+        file_secret_settings: PydanticBaseSettingsSource,
+    ) -> tuple[PydanticBaseSettingsSource, ...]:
+        """Declare the precedence, once, here.
+
+            init > real process environment > configuration centre > .runtime/*.env > defaults
+
+        The process environment sits *above* the configuration centre on
+        purpose: a deployment has to keep one way to pin a value that the
+        console cannot move. `MODEL_BACKEND=local` already depends on exactly
+        that, overriding persisted admin model settings.
+
+        `RemoteSettingsSource` returns `{}` unless `NACOS_ENABLED` is true, so
+        this costs an installation without a configuration centre one function
+        call and no import of the SDK.
+        """
+
+        from app.core.remote_config import RemoteSettingsSource
+
+        return (
+            init_settings,
+            env_settings,
+            RemoteSettingsSource(settings_cls),
+            dotenv_settings,
+            file_secret_settings,
+        )
 
     app_env: str = Field(default="dev", alias="APP_ENV")
     model_backend: str = Field(default="local", alias="MODEL_BACKEND")

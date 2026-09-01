@@ -11,12 +11,14 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 
 from app.api import dependencies as api_dependencies
+from app.api.application.config_reload import reload_from_remote_config
 from app.api.dependencies import (
     _auto_ingest_stop_event,
     auto_ingest_watcher,
 )
 from app.api.deps.runtime import install_app_services
 from app.core.config import validate_security_settings
+from app.core.remote_config import watch_remote_config
 from app.graph.knowledge.client import Neo4jClient
 from app.services.observability.log_buffer import setup_log_capture
 
@@ -47,6 +49,12 @@ async def lifespan(app: FastAPI):
     )
 
     query_runtime.shadow_queue.start()
+
+    # A console edit should take effect the same way the admin endpoint's
+    # reload does. Returns False when no configuration centre is configured,
+    # which is the default, so this costs an ordinary start one env lookup.
+    if watch_remote_config(reload_from_remote_config):
+        logger.info("remote config: watching for changes")
 
     try:
         from app.services.legacy_agent_runtime import warm_nli_model

@@ -680,11 +680,54 @@ The first nine were folded into `Settings` the same day and the dead module dele
 37 are frozen by a ratchet and migrate in batches. See
 `docs/superpowers/plans/2026-09-01-configuration-management.md`.
 
+**Precedence is declared once**, by the source order in
+`Settings.settings_customise_sources`:
+
+```
+init > real process environment > configuration centre > .runtime/{APP_ENV}.env > defaults
+```
+
+`RemoteSettingsSource` (`app/core/remote_config.py`) is the configuration-centre slot; the
+Nacos adapter behind it (`app/core/remote_config_nacos.py`) imports the SDK lazily, so an
+`ImportError` degrades to the snapshot and an installation that has not adopted a
+configuration centre never needs the dependency (`pip install -e .[config-centre]`). The
+source returns `{}` unless `NACOS_ENABLED` is true, which is the default.
+
+**The process environment sits above the centre on purpose**: a deployment needs one way to
+pin a value the console cannot move, which is what `MODEL_BACKEND=local` already does to
+persisted admin model settings. The rejected alternative — fetching remote values at startup
+and writing them into `os.environ` — destroys exactly that, and smuggles values past
+`Settings`'s validation.
+
+**Nothing may break startup.** `get_settings()` is on the path to everything, so the source
+degrades in three steps: the remote document, the snapshot written by the last *successful*
+fetch (`.runtime/remote-config/`), then nothing at all — which simply leaves the lower
+sources in charge. The SDK is called with `no_snapshot=True` because this layer keeps its
+own: letting the SDK substitute its cache would make "the server answered" and "it did not"
+indistinguishable, and that log line is what an operator has when a value fails to take
+effect.
+
+**A settings source must return values keyed by field *alias*.** `{"ENABLE_CALIBRATION":
+True}` applies; `{"enable_calibration": True}` is **silently ignored** — `Settings` validates
+by alias and `extra="ignore"` drops the rest, with no error anywhere. Aliases are what
+`config/env/*` and the rendered file already use, so one name follows a value from the
+repository to the console.
+
+A change pushed from the console and the admin endpoint's reload run the **same** sequence,
+`app/api/application/config_reload.py::apply_config_reload()`. A watcher that cleared its own
+subset of caches would be a second, quieter definition of "reloaded", and the difference
+would only ever surface as "it took effect when I clicked the button but not when I saved it
+in the console". That function's limit is worth knowing: a value already read into a
+module-level constant is not revisited, so the legacy constant block keeps its start-up
+values until the process restarts.
+
 `tests/core/test_config_has_one_source.py` keeps it that way, in two parts: an AST guard
 that every direct environment read in `app/` is in an allowlist keyed on
 `path::enclosing_function` **with a reason**, and a ratchet on the legacy constant block
 that may shrink and never grow. Four reads are legitimately exempt and stay:
 `resolve_runtime_env_file` (it chooses the settings file, so it cannot live in it),
+`remote_config._bootstrap` (the same chicken-and-egg one layer out: it configures the source
+that supplies `Settings`, which is also why `NACOS_PASSWORD` never becomes a field),
 `_local_backend_forced` (a deployment pinning the local backend must beat persisted admin
 settings), conda-environment diagnostics, and pytest detection.
 
@@ -918,7 +961,7 @@ A third makes it three. Do not add a pixel-diff CI gate for the reason above, an
 
 `tests/` was cleared ahead of the v0.7 rewrite and is being rebuilt incrementally: each bug
 fix lands with the regression test that would have caught it, rather than as a separate
-back-filling effort. As of 2026-09-01 there are 476 tests covering the chat round trip,
+back-filling effort. As of 2026-09-01 there are 495 tests covering the chat round trip,
 conversation context, graph routing, clarification, the async load guard, engine reuse,
 answer safety, reader-facing citation numbering, stage-timeout degradation, the governed
 tool stack with its multi-step loop and approve-then-resume cycle, retrieval
@@ -926,8 +969,8 @@ module-global isolation, connector persistence, streaming redaction, two-phase r
 complexity- and plan-driven retrieval width, caller deadlines, skill-shaped synthesis,
 follow-up completion, answer provenance, an answer that shows the reader none of the
 machinery that produced it, a router cache that opens no event loop, a guard that every
-Settings field has a reader, and a guard that no module reads the environment behind
-`Settings`'s back.
+Settings field has a reader, a guard that no module reads the environment behind
+`Settings`'s back, and the configuration-centre source with its three-step degradation.
 
 `tests/security/` (154 of those) pins the user-data isolation invariants — see
 `docs/superpowers/plans/2026-08-29-user-data-isolation.md`. That plan is complete

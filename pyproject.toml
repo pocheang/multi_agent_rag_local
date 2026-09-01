@@ -48,6 +48,13 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+# Nacos as a configuration source. Optional on purpose: the source returns
+# nothing unless NACOS_ENABLED is true, and app/core/remote_config.py treats a
+# missing SDK as "no client" and degrades to the local snapshot, so an
+# installation that has not adopted a configuration centre never imports this.
+config-centre = [
+  "nacos-sdk-python>=0.1.12",
+]
 # Tesseract-based OCR for image and scanned-PDF ingestion. Requires the
 # native ``tesseract`` binary on PATH (see TESSERACT_CMD env var).
 ocr = [
