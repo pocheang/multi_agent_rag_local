@@ -394,6 +394,9 @@
       "title": "执行追踪",
       "ariaLabel": "执行追踪",
       "empty": "暂无执行事件。",
+      "hide": "隐藏",
+      "show": "显示",
+      "count": "{{count}} 步",
       "event": "{{stage}}：{{message}}（{{duration}}ms）",
       "stages": {
         "privacy_permission": "隐私校验",
@@ -417,6 +420,7 @@
       "ariaLabel": "工具审批",
       "confirm": "确认",
       "confirming": "确认中…",
+      "dismiss": "暂不执行",
       "errorFallback": "无法确认此工具请求，请重试。"
     },
     "integrations": {
@@ -750,7 +754,15 @@
       "updateSuccess": "消息已更新",
       "updateFailed": "更新消息失败",
       "deleteSuccess": "消息已删除",
-      "deleteFailed": "删除消息失败"
+      "deleteFailed": "删除消息失败",
+      "toolRuns": "执行的操作",
+      "toggleToolRuns": "切换执行的操作",
+      "toolStatus": {
+        "succeeded": "已完成",
+        "failed": "失败",
+        "skipped": "未执行",
+        "approval_required": "等待你确认"
+      }
     },
     "apiSettings": {
       "title": "模型 API 设置",
@@ -793,6 +805,7 @@
       "viewArchitecture": "查看系统架构",
       "railLabel": "收起后的侧边栏",
       "expandRail": "展开侧栏",
+      "toggleSidebar": "会话与工具",
       "newSessionFromRail": "展开并新建会话",
       "searchFromRail": "展开并搜索会话",
       "accountFromRail": "展开账号信息",
@@ -1044,5 +1057,11 @@
     "messagesImported": "导入消息数",
     "metadataImported": "元数据已导入",
     "contextImported": "上下文已导入"
+  },
+  "chat": {
+    "badges": {
+      "noSources": "无检索来源",
+      "sourceDetail": "{{source}}：{{count}} 条结果"
+    }
   }
 }

@@ -18,6 +18,8 @@ export type SessionSummary = {
 };
 
 export type Citation = {
+  /** Reader-facing marker ("[1]") matching the one in the answer text. */
+  marker?: string;
   source: string;
   content: string;
   document_id?: string;
@@ -25,11 +27,27 @@ export type Citation = {
   metadata?: Record<string, unknown>;
 };
 
+/** One governed tool invocation, as the run reports it. */
+export type ToolRun = {
+  tool_id: string;
+  status: string;
+  summary: string;
+};
+
+/** A governed action the run produced but did not perform. */
+export type PendingApproval = {
+  tool_id: string;
+  token: string;
+  summary: string;
+};
+
 export type AdvancedQueryResponse = {
   query: string;
   decomposed_query: Record<string, unknown> | null;
   sub_query_results: Array<Record<string, unknown>>;
   final_answer: string;
+  status?: "complete" | "pending_approval";
+  pending_approval?: PendingApproval | null;
   answer_quality: Record<string, unknown> | null;
   metadata: Record<string, unknown>;
 };
@@ -37,10 +55,24 @@ export type AdvancedQueryResponse = {
 export type NormalizedQueryResult = {
   answer: string;
   citations: Citation[];
+  /** "pending_approval" means the answer is complete but the action the user
+   *  asked for is waiting on their confirmation and has NOT been performed. */
+  status: "complete" | "pending_approval";
+  pendingApproval: PendingApproval | null;
+  toolRuns: ToolRun[];
   route?: string;
   executionId?: string;
   qualityReport?: Record<string, unknown>;
   executionMetadata?: Record<string, unknown>;
+};
+
+export type RetrievalSourceOutcome = {
+  source: string;
+  status: string;
+  count: number;
+  /** Why a source did not complete. `EmptyAccessScope` means the caller has no
+   *  documents, which is not a failure. */
+  reason?: string | null;
 };
 
 export type SessionMessageMetadata = {
@@ -48,10 +80,18 @@ export type SessionMessageMetadata = {
   execution_route?: string;
   agent_class?: string;
   web_used?: boolean;
+  /** Which sources the run actually reached, and what each returned. Derived
+   *  from the run's own diagnostics rather than assumed: `web_used` alone was a
+   *  single bit for a system with eight sources, and nothing set it. */
+  sources?: RetrievalSourceOutcome[];
+  contributing_sources?: string[];
   latency_ms?: number;
   thoughts?: string[];
   graph_entities?: string[];
   citations?: Citation[];
+  /** What the governed tool loop actually did, so a multi-step run leaves a
+   *  record instead of only whatever the answer prose mentions. */
+  tool_runs?: ToolRun[];
   quality_report?: Record<string, unknown>;
   current_status?: string;
   execution_steps?: Array<{

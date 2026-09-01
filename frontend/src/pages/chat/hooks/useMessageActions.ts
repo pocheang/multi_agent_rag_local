@@ -1,6 +1,6 @@
 import { useEffect, useRef } from "react";
 import { appApi } from "@/lib/api";
-import type { SessionMessage, SessionSummary } from "@/types/api";
+import type { PendingApproval, SessionMessage, SessionSummary } from "@/types/api";
 import { EMPTY_METADATA } from "@/pages/chat/constants";
 import { isAbortError, createInitialStreamMessages } from "./streamUtils";
 import { createStreamMessageUpdater } from "./streamMessageUpdater";
@@ -24,6 +24,14 @@ interface UseMessageActionsParams {
   setQuestion: (question: string) => void;
   onExecutionId?: (executionId: string | null) => void;
   onCreditsChanged?: () => Promise<void>;
+  /** Raised when a run produced a governed action it did not perform, together
+   *  with the question that produced it. Confirming re-runs `ask` with that
+   *  question and the token, which is what actually executes the action.
+   *
+   *  The question comes from here rather than being tracked alongside `ask`
+   *  call sites: there are three of them, and one forgetting to record it means
+   *  a confirmation silently resends a stale question. */
+  onPendingApproval?: (pending: PendingApproval | null, question: string) => void;
 }
 
 interface UseMessageActionsReturn {
@@ -35,6 +43,7 @@ interface UseMessageActionsReturn {
     question: string;
     isSending: boolean;
     sessionId?: string;
+    approvalToken?: string;
   }) => Promise<void>;
 }
 
@@ -47,6 +56,7 @@ export function useMessageActions({
   setQuestion,
   onExecutionId,
   onCreditsChanged,
+  onPendingApproval,
 }: UseMessageActionsParams): UseMessageActionsReturn {
   const streamAbortRef = useRef<AbortController | null>(null);
   const streamStoppedRef = useRef(false);
@@ -95,10 +105,12 @@ export function useMessageActions({
     question,
     isSending,
     sessionId,
+    approvalToken,
   }: {
     question: string;
     isSending: boolean;
     sessionId?: string;
+    approvalToken?: string;
   }) => {
     const q = question.trim();
     if (!q || isSending) return;
@@ -136,10 +148,14 @@ export function useMessageActions({
         sessionId: sid,
         enableDecomposition: true,
         enableSelfRag: true,
+        ...(approvalToken ? { approvalToken } : {}),
         signal: runAbort.signal,
       });
       if (!isRunActive()) return;
       if (result.executionId) onExecutionId?.(result.executionId);
+      // A resumed run either performed the action or reported why it could not;
+      // either way the previous pending approval is spent.
+      onPendingApproval?.(result.status === "pending_approval" ? result.pendingApproval : null, q);
       setMessages((prev) => prev.map((message) => (
         message.message_id === "local-assistant-stream"
           ? {
@@ -149,6 +165,7 @@ export function useMessageActions({
                 ...EMPTY_METADATA,
                 route: result.route || "",
                 citations: result.citations,
+                tool_runs: result.toolRuns,
                 quality_report: result.qualityReport,
               },
             }

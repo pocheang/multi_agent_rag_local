@@ -394,6 +394,9 @@
       "title": "Execution trace",
       "ariaLabel": "Execution trace",
       "empty": "No execution events yet.",
+      "hide": "Hide",
+      "show": "Show",
+      "count": "{{count}} steps",
       "event": "{{stage}}: {{message}} ({{duration}}ms)",
       "stages": {
         "privacy_permission": "Privacy check",
@@ -417,6 +420,7 @@
       "ariaLabel": "Tool approval",
       "confirm": "Confirm",
       "confirming": "Confirming…",
+      "dismiss": "Not now",
       "errorFallback": "Unable to confirm this tool request. Please try again."
     },
     "integrations": {
@@ -750,7 +754,15 @@
       "updateSuccess": "Message updated",
       "updateFailed": "Failed to update message",
       "deleteSuccess": "Message deleted",
-      "deleteFailed": "Failed to delete message"
+      "deleteFailed": "Failed to delete message",
+      "toolRuns": "Actions taken",
+      "toggleToolRuns": "Toggle actions taken",
+      "toolStatus": {
+        "succeeded": "done",
+        "failed": "failed",
+        "skipped": "not run",
+        "approval_required": "awaiting your confirmation"
+      }
     },
     "apiSettings": {
       "title": "Model API Settings",
@@ -793,6 +805,7 @@
       "viewArchitecture": "View system architecture",
       "railLabel": "Collapsed sidebar",
       "expandRail": "Expand sidebar",
+      "toggleSidebar": "Sessions and tools",
       "newSessionFromRail": "Expand and create session",
       "searchFromRail": "Expand and search sessions",
       "accountFromRail": "Expand account information",
@@ -1044,5 +1057,11 @@
     "messagesImported": "Messages Imported",
     "metadataImported": "Metadata Imported",
     "contextImported": "Context Imported"
+  },
+  "chat": {
+    "badges": {
+      "noSources": "no sources",
+      "sourceDetail": "{{source}}: {{count}} results"
+    }
   }
 }

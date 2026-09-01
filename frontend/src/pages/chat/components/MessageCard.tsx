@@ -156,12 +156,32 @@ export function MessageCard({ message, onEditMessage, onRemoveMessage }: Props) 
             </CollapsibleSection>
           )}
 
+          {(metadata.tool_runs || []).length > 0 && (
+            <CollapsibleSection title={t("components.messages.toolRuns")} ariaLabel={t("components.messages.toggleToolRuns")}>
+              <ul className="compact-list">
+                {(metadata.tool_runs || []).map((run, index) => (
+                  <li key={`${message.message_id}-tool-${index}`}>
+                    <strong>{run.tool_id}</strong>
+                    {" — "}
+                    {t(`components.messages.toolStatus.${run.status}`, { defaultValue: run.status })}
+                    {run.summary ? `: ${run.summary}` : ""}
+                  </li>
+                ))}
+              </ul>
+            </CollapsibleSection>
+          )}
+
           {(metadata.citations || []).length > 0 && (
             <CollapsibleSection title={t("components.messages.citations")} ariaLabel={t("components.messages.toggleCitations")}>
               <div className="citation-grid">
-                {(metadata.citations || []).slice(0, 8).map((citation, index) => (
+                {/* Not truncated: the answer text cites these by number, so hiding
+                    an entry leaves a [n] in the text that resolves to nothing. */}
+                {(metadata.citations || []).map((citation, index) => (
                   <div key={`${message.message_id}-cit-${index}`} className="citation-card">
-                    <strong>{citation.source || "unknown"}</strong>
+                    <strong>
+                      {citation.marker ? `${citation.marker} ` : ""}
+                      {citation.source || "unknown"}
+                    </strong>
                     <MarkdownBlock text={citation.content || ""} />
                   </div>
                 ))}

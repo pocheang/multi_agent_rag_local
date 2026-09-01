@@ -6,6 +6,7 @@ export async function streamExecutionEvents(
   executionId: string,
   signal: AbortSignal,
   onEvent: (event: ExecutionEvent) => void,
+  onAnswerFragment?: (text: string) => void,
 ): Promise<void> {
   const response = await authFetch(
     `/api/v1/orchestration/executions/${encodeURIComponent(executionId)}/events`,
@@ -13,5 +14,5 @@ export async function streamExecutionEvents(
     { timeoutMs: 0 }, // SSE streams should not timeout - they're long-lived connections
   );
   if (!response.ok) return;
-  await consumeExecutionEventStream(response, onEvent, signal);
+  await consumeExecutionEventStream(response, onEvent, signal, onAnswerFragment);
 }

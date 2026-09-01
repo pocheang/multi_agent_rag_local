@@ -8,7 +8,9 @@ import type {
   IndexHealthResponse,
   IndexedFileSummary,
   NormalizedQueryResult,
+  PendingApproval,
   PromptCheckResponse,
+  ToolRun,
   PromptTemplate,
   SessionDetail,
   SessionSummary,
@@ -24,6 +26,9 @@ type AdvancedQueryInput = {
   sessionId?: string;
   enableDecomposition: boolean;
   enableSelfRag: boolean;
+  /** Resume a run whose governed action was awaiting confirmation. The backend
+   *  replays the approved call rather than re-selecting a tool. */
+  approvalToken?: string;
   signal?: AbortSignal;
 };
 
@@ -41,6 +46,31 @@ function citationList(value: unknown): Citation[] {
   });
 }
 
+function toolRunList(value: unknown): ToolRun[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((run): ToolRun[] => {
+    if (typeof run !== "object" || run === null || Array.isArray(run)) return [];
+    const record = run as Record<string, unknown>;
+    if (typeof record.tool_id !== "string" || typeof record.status !== "string") return [];
+    return [{
+      tool_id: record.tool_id,
+      status: record.status,
+      summary: typeof record.summary === "string" ? record.summary : "",
+    }];
+  });
+}
+
+function pendingApproval(value: unknown): PendingApproval | null {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) return null;
+  const record = value as Record<string, unknown>;
+  if (typeof record.token !== "string" || typeof record.tool_id !== "string") return null;
+  return {
+    tool_id: record.tool_id,
+    token: record.token,
+    summary: typeof record.summary === "string" ? record.summary : "",
+  };
+}
+
 function recordOrUndefined(value: unknown): Record<string, unknown> | undefined {
   return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : undefined;
 }
@@ -56,6 +86,7 @@ export const queryApi = {
         ...(input.sessionId ? { session_id: input.sessionId } : {}),
         enable_decomposition: input.enableDecomposition,
         enable_self_rag: input.enableSelfRag,
+        ...(input.approvalToken ? { approval_token: input.approvalToken } : {}),
       }),
     });
     const payload = await parseOrThrow<AdvancedQueryResponse>(res);
@@ -63,6 +94,9 @@ export const queryApi = {
     return {
       answer: typeof payload.final_answer === "string" ? payload.final_answer : "",
       citations: citationList(metadata.citations),
+      status: payload.status === "pending_approval" ? "pending_approval" : "complete",
+      pendingApproval: pendingApproval(payload.pending_approval),
+      toolRuns: toolRunList(metadata.tool_runs),
       route: typeof metadata.route === "string" ? metadata.route : undefined,
       executionId: typeof metadata.execution_id === "string" ? metadata.execution_id : undefined,
       qualityReport: recordOrUndefined(payload.answer_quality),

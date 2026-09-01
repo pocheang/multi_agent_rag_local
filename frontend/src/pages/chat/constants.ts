@@ -34,6 +34,7 @@ export const EMPTY_METADATA: ChatMetadata = {
   thoughts: [],
   graph_entities: [],
   citations: [],
+  tool_runs: [],
   current_status: "",
   execution_steps: [],
 };
