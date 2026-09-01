@@ -1,6 +1,6 @@
 # 配置治理：收敛到 Settings，再接入 Nacos 配置中心
 
-状态：阶段 0 与阶段 1 的代码部分已完成（2026-09-01）。阶段 1 剩余的是起容器，阶段 2-3 待实施。
+状态：阶段 0、阶段 1 已完成（2026-09-01），含对真实 SDK 的端到端验证。阶段 1 剩余的只有「在真机上起一次容器」。阶段 2-3 待实施。
 
 ## 1. 目标与非目标
 
@@ -128,12 +128,35 @@ class Settings(BaseSettings):
 1. **source 必须返回 alias 键**。`{"ENABLE_CALIBRATION": True}` 生效，`{"enable_calibration": True}` 被**静默忽略**——`Settings` 按 alias 校验，`extra="ignore"` 丢掉其余，没有任何报错。好在 alias 正是 `config/env/*` 和渲染文件已经在用的名字，一个名字从仓库一路走到控制台。
 2. `no_snapshot=True` 传给 SDK 的 `get_config`：这一层自己管快照，只在**真的抓取成功**后写。让 SDK 悄悄替换成它自己的缓存，会让"服务器答了"和"没答"变得无法区分，而这条日志正是值没生效时运维唯一能依据的东西。
 
-剩余（需要起容器）：
+**用真实 SDK 验证过了**，方式是本地起一个假 Nacos HTTP 服务，让真实的 `nacos.NacosClient`
+打过去——不需要容器就能验证适配器。五项全过：真实 fetch、值按 alias 进入 `Settings`
+（`TOP_K=23`、`STRICT_CSP=true`）、快照落在本层指定路径且 SDK 没有自建 `nacos-data/`、
+轮询在无变更时静默而在文档变更后触发、服务停掉后回落快照。
 
-- `docker-compose` 加 nacos + MySQL（standalone），**先配鉴权再启用**（见 §6）。
-- dataId 分组决策：默认按模块分（`querymind-retrieval`、`querymind-router`…），`NACOS_DATA_IDS` 里靠后的覆盖靠前的。
-- 用真实 SDK 跑一遍，确认适配器的调用签名（本地只用 fake client 验证过协议一侧）。
-- 热更新语义盘点：哪些字段热生效，哪些需要重启。`apply_config_reload()` 的 docstring 已经点明边界——仍在遗留常量块里的值在进程重启前不会被重新读取。
+验证过程中改掉的三件事：
+
+1. **依赖 pin 从 `>=0.1.12` 改成 `>=1.0.0,<2.0`。** 原来的写法会解析到 3.2.0，而 2.x/3.x
+   是一次重写：包名是 `v2.nacos` 而不是 `nacos`，`get_config` 是协程。本层由同步的
+   `Settings()` 构造调用，而 `reload_settings()` 可以从请求处理器里被触达——在那里驱动
+   异步客户端要么 `asyncio.run`（在运行中的 loop 里会抛），要么每次开一个私有 loop，
+   正是本仓库已经修过两次的缺陷（`app/agents/rag/cache.py`、`app/agents/shared/cache.py`）。
+   1.0.0 是最后一个同步客户端版本。
+2. **放弃 SDK 自带的 watcher，改成自己轮询。** `add_config_watcher` 内部走 `_init_pulling`，
+   它会建 `multiprocessing.Manager()`、`multiprocessing.Queue` 和一个 10 线程回调池；在
+   Windows（spawn）上注册 watcher **根本没有返回**——加不加 `__main__` 守卫都验证过一次。
+   一个守护线程按 `NACOS_POLL_INTERVAL_MS`（默认 30s）拉一次 HTTP GET，省掉一个进程和一个
+   线程池，各平台行为一致，而且复用了已经会降级到快照的 `fetch`。代价是最长 30s 的生效延迟，
+   与它替换掉的长轮询同一量级。
+3. **客户端构造时 `set_options(no_snapshot=True)`。** 否则 SDK 会在工作目录建 `nacos-data/`
+   写自己那份快照——两份内容不同的缓存，而且没有任何日志说明是哪一份回答了请求。
+
+`deploy/compose/compose.config-centre.yaml` 已就绪：standalone + 内嵌 Derby（单机部署不需要
+MySQL），鉴权强制开启且三个密钥用 `${VAR:?}` 声明**没有默认值**——没设就起不来，端口只绑
+127.0.0.1。
+
+剩余：在真机上 `docker compose up` 起一次，建 namespace 和三个 dataId，确认控制台改一个值能在
+30s 内生效。热更新语义盘点也留在那一步——`apply_config_reload()` 的 docstring 已经点明边界：
+仍在遗留常量块里的值在进程重启前不会被重新读取。
 
 ### 阶段 2：管理端页面
 

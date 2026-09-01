@@ -1,0 +1,93 @@
+# Nacos as the configuration centre, in the shape the monitoring stack already
+# uses: an overlay file, brought up alongside the base compose.
+#
+#   docker compose -f compose.yaml -f compose.config-centre.yaml up -d nacos
+#
+# Standalone with the embedded Derby store, which is what a single-node
+# deployment wants: no MySQL, one container, and the data lives in a named
+# volume rather than in the image.
+#
+# ## Read this before enabling it
+#
+# **Authentication is on, and the two secrets below have no defaults on
+# purpose.** Nacos ships with `nacos/nacos` and has had authentication-bypass
+# CVEs; an unauthenticated console that can rewrite this application's
+# configuration is a remote-code-execution-shaped problem, not a configuration
+# problem. `docker compose` will refuse to start the container until
+# NACOS_AUTH_IDENTITY_KEY, NACOS_AUTH_IDENTITY_VALUE and NACOS_AUTH_TOKEN are
+# set in the environment (the `:?` expansion below), and the port is bound to
+# 127.0.0.1 so it is never reachable from outside the host without a deliberate
+# tunnel.
+#
+# Generate them once, keep them out of the repository:
+#
+#   export NACOS_AUTH_TOKEN=$(openssl rand -base64 32)      # >= 32 bytes
+#   export NACOS_AUTH_IDENTITY_KEY=$(openssl rand -hex 8)
+#   export NACOS_AUTH_IDENTITY_VALUE=$(openssl rand -hex 16)
+#
+# Then change the console's admin password on first login.
+#
+# ## Pointing the application at it
+#
+# The `NACOS_*` bootstrap is read with `os.getenv` at import time and is
+# deliberately not part of `Settings` -- it configures the source that supplies
+# Settings. So it must be a real environment variable on the backend process,
+# **not** a key in `.runtime/*.env`: pydantic-settings reads that file into
+# Settings without exporting anything, so a bootstrap key placed there would be
+# silently ignored. That is why these are under `environment:` and not in the
+# rendered env file.
+
+services:
+  nacos:
+    image: nacos/nacos-server:v2.4.3-slim
+    restart: unless-stopped
+    environment:
+      MODE: standalone
+      NACOS_AUTH_ENABLE: "true"
+      NACOS_AUTH_TOKEN_EXPIRE_SECONDS: "18000"
+      NACOS_AUTH_TOKEN: ${NACOS_AUTH_TOKEN:?set NACOS_AUTH_TOKEN to a random value of at least 32 bytes}
+      NACOS_AUTH_IDENTITY_KEY: ${NACOS_AUTH_IDENTITY_KEY:?set NACOS_AUTH_IDENTITY_KEY}
+      NACOS_AUTH_IDENTITY_VALUE: ${NACOS_AUTH_IDENTITY_VALUE:?set NACOS_AUTH_IDENTITY_VALUE}
+      JVM_XMS: 256m
+      JVM_XMX: 512m
+      JVM_XMN: 128m
+    ports:
+      # Loopback only. The console is a write interface to this application's
+      # configuration; reaching it should require being on the host.
+      - "127.0.0.1:8848:8848"
+      - "127.0.0.1:9848:9848"
+    volumes:
+      - nacos_data:/home/nacos/data
+      - nacos_logs:/home/nacos/logs
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8848/nacos/v1/console/health/readiness"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 60s
+    networks: [querymind]
+
+  backend:
+    environment:
+      NACOS_ENABLED: "true"
+      NACOS_SERVER_ADDR: nacos:8848
+      NACOS_NAMESPACE: ${APP_ENV:-development}
+      NACOS_GROUP: DEFAULT_GROUP
+      # Later ids override earlier ones, the same rule the render step uses.
+      NACOS_DATA_IDS: querymind-base,querymind-retrieval,querymind-router
+      NACOS_USERNAME: ${NACOS_USERNAME:-nacos}
+      NACOS_PASSWORD: ${NACOS_PASSWORD:?set NACOS_PASSWORD to the console account's password}
+      NACOS_TIMEOUT_MS: "3000"
+      # How long an edit in the console takes to reach a running process.
+      NACOS_POLL_INTERVAL_MS: "30000"
+    depends_on:
+      nacos:
+        condition: service_healthy
+
+volumes:
+  nacos_data:
+  nacos_logs:
+
+networks:
+  querymind:
+    external: false

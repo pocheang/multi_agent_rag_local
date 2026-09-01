@@ -713,6 +713,21 @@ by alias and `extra="ignore"` drops the rest, with no error anywhere. Aliases ar
 `config/env/*` and the rendered file already use, so one name follows a value from the
 repository to the console.
 
+**Change detection is polled, not pushed, and that is not a preference.**
+`nacos-sdk-python` 1.x does it in `_init_pulling`, which builds a
+`multiprocessing.Manager()`, a `multiprocessing.Queue` and a ten-thread callback pool — and on
+Windows, where the start method is spawn, registering a watcher never returned (verified twice
+against a stub server, with and without a `__main__` guard). `watch_remote_config` runs one
+daemon thread that re-fetches every `NACOS_POLL_INTERVAL_MS` (default 30s) and compares a
+digest of the documents. The cost is up to that much latency on a console edit; what it buys
+is one less process, one less thread pool, and the same behaviour on every platform.
+
+**The SDK dependency is pinned to `>=1.0.0,<2.0` as a design constraint.** 2.x and 3.x import
+as `v2.nacos`, not `nacos`, and their `get_config` is a coroutine — and this client is called
+from synchronous `Settings()` construction, reachable from a request handler via
+`reload_settings()`. Driving it there means `asyncio.run` (which raises inside a running loop)
+or a private loop per call, the exact defect already fixed twice in this repository.
+
 A change pushed from the console and the admin endpoint's reload run the **same** sequence,
 `app/api/application/config_reload.py::apply_config_reload()`. A watcher that cleared its own
 subset of caches would be a second, quieter definition of "reloaded", and the difference
@@ -961,7 +976,7 @@ A third makes it three. Do not add a pixel-diff CI gate for the reason above, an
 
 `tests/` was cleared ahead of the v0.7 rewrite and is being rebuilt incrementally: each bug
 fix lands with the regression test that would have caught it, rather than as a separate
-back-filling effort. As of 2026-09-01 there are 495 tests covering the chat round trip,
+back-filling effort. As of 2026-09-01 there are 496 tests covering the chat round trip,
 conversation context, graph routing, clarification, the async load guard, engine reuse,
 answer safety, reader-facing citation numbering, stage-timeout degradation, the governed
 tool stack with its multi-step loop and approve-then-resume cycle, retrieval

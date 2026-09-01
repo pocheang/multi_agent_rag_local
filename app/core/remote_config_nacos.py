@@ -6,18 +6,29 @@ is actually configured: `RemoteSettingsSource` imports this lazily and treats an
 installation that has not adopted Nacos therefore does not need the dependency
 installed at all.
 
+**The dependency is pinned to the 1.x line, and that is a design constraint, not
+conservatism.** `nacos-sdk-python` 2.x and 3.x are a rewrite: the package is
+imported as `v2.nacos`, not `nacos`, and `get_config` is a coroutine. This layer
+is called from `Settings()` construction, which is synchronous and may run
+inside an already-running event loop -- `reload_settings()` is reachable from a
+request handler. Driving an async client from there means `asyncio.run` (which
+raises inside a running loop) or a private loop per call, which is the exact
+defect this repository has already fixed twice, in `app/agents/rag/cache.py` and
+`app/agents/shared/cache.py`. 1.0.0 is the last release with the synchronous
+client, and its signatures were verified against the installed package rather
+than taken from documentation.
+
+Only `fetch` lives here. Change detection is polled by
+`remote_config.watch_remote_config`, because the SDK's own watcher builds a
+`multiprocessing.Manager()` and never returned on Windows -- see that function.
+
 Everything the SDK raises is the caller's to handle -- `RemoteSettingsSource`
 catches per call so one unreachable server cannot fail a start.
 """
 
 from __future__ import annotations
 
-import logging
-from collections.abc import Callable
-
 from app.core.remote_config import RemoteConfigSettings
-
-logger = logging.getLogger(__name__)
 
 
 class NacosConfigClient:
@@ -35,6 +46,12 @@ class NacosConfigClient:
             username=config.username or None,
             password=config.password or None,
         )
+        # Client-wide, so the fetch `add_config_watcher` performs internally
+        # obeys it too. Without this the SDK falls back to its own snapshot
+        # directory and creates `nacos-data/` in the working directory -- a
+        # second cache with different contents and no log line saying which one
+        # answered.
+        self._client.set_options(no_snapshot=True)
         # Seconds; the bootstrap is in milliseconds to match STAGE_TIMEOUT_*.
         self._timeout = max(config.timeout_ms, 1) / 1000.0
 
@@ -51,18 +68,3 @@ class NacosConfigClient:
 
         content = self._client.get_config(data_id, group, timeout=self._timeout, no_snapshot=True)
         return content if isinstance(content, str) else None
-
-    def watch(self, group: str, data_id: str, callback: Callable[[], None]) -> None:
-        """Run `callback` on every change to this document."""
-
-        def _on_change(args: object) -> None:
-            # The SDK hands over the changed content; this layer re-reads
-            # everything through the settings sources instead, so that one
-            # changed document and a full reload take the identical path.
-            del args
-            try:
-                callback()
-            except Exception:
-                logger.exception("remote config: change callback failed for %s", data_id)
-
-        self._client.add_config_watcher(data_id, group, _on_change)

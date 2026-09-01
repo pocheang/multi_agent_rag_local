@@ -34,8 +34,10 @@ chicken-and-egg that keeps `APP_ENV` and `RUNTIME_ENV_FILE` out of it.
 
 from __future__ import annotations
 
+import hashlib
 import logging
 import os
+import threading
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from pathlib import Path
@@ -50,17 +52,15 @@ SNAPSHOT_ROOT = Path(".runtime") / "remote-config"
 
 
 class RemoteConfigClient(Protocol):
-    """The two operations a configuration centre has to provide.
+    """The one operation a configuration centre has to provide.
 
-    Narrow on purpose: it is what a fake in a test has to implement, and it is
-    the whole surface a different backend would have to satisfy.
+    Narrow on purpose: it is what a fake in a test has to implement, and the
+    whole surface a different backend would have to satisfy. Change detection is
+    deliberately *not* part of it -- see `watch_remote_config`, which polls this.
     """
 
     def fetch(self, group: str, data_id: str) -> str | None:
         """Return the raw document, or None when it is unavailable."""
-
-    def watch(self, group: str, data_id: str, callback: Callable[[], None]) -> None:
-        """Call `callback` whenever the document changes."""
 
 
 @dataclass(frozen=True)
@@ -75,6 +75,7 @@ class RemoteConfigSettings:
     username: str
     password: str
     timeout_ms: int
+    poll_interval_ms: int = 30_000
 
     @property
     def snapshot_dir(self) -> Path:
@@ -99,6 +100,7 @@ def _bootstrap() -> RemoteConfigSettings:
         username=os.getenv("NACOS_USERNAME", "").strip(),
         password=os.getenv("NACOS_PASSWORD", ""),
         timeout_ms=int(os.getenv("NACOS_TIMEOUT_MS", "3000")),
+        poll_interval_ms=int(os.getenv("NACOS_POLL_INTERVAL_MS", "30000")),
     )
 
 
@@ -127,23 +129,26 @@ def parse_properties(text: str) -> dict[str, str]:
     return values
 
 
-class RemoteSettingsSource(PydanticBaseSettingsSource):
-    """Values from the configuration centre, degrading to a snapshot, then to nothing."""
+class RemoteDocuments:
+    """Fetching and snapshotting, with no pydantic in it.
+
+    Separate from `RemoteSettingsSource` because the poller needs exactly this
+    and has no settings class to give a `PydanticBaseSettingsSource`. Keeping
+    them one class meant constructing a source around a placeholder type, which
+    is a sign the responsibility was mixed rather than a thing to work around.
+    """
 
     def __init__(
         self,
-        settings_cls: type,
         client: RemoteConfigClient | None = None,
         config: RemoteConfigSettings | None = None,
     ) -> None:
-        super().__init__(settings_cls)
         self._config = config if config is not None else _bootstrap()
         self._client = client
 
-    # `PydanticBaseSettingsSource` declares this abstract; the whole document is
-    # read at once in `__call__`, so there is nothing per-field to do here.
-    def get_field_value(self, field: FieldInfo, field_name: str) -> tuple[Any, str, bool]:
-        return None, field_name, False
+    @property
+    def config(self) -> RemoteConfigSettings:
+        return self._config
 
     def _resolve_client(self) -> RemoteConfigClient | None:
         if self._client is not None:
@@ -198,48 +203,119 @@ class RemoteSettingsSource(PydanticBaseSettingsSource):
             logger.warning("remote config: using local snapshot for %s", data_id)
         return snapshot
 
+    def all(self) -> dict[str, str]:
+        """Every watched document, by data id, skipping the ones with nothing.
+
+        Shared with the poller so change detection sees exactly what a reload
+        would load. Comparing against anything else would eventually report a
+        change that changes no setting, or miss one that does.
+        """
+
+        found: dict[str, str] = {}
+        for data_id in self._config.data_ids:
+            document = self._document(data_id)
+            if document:
+                found[data_id] = document
+        return found
+
+
+class RemoteSettingsSource(PydanticBaseSettingsSource):
+    """Values from the configuration centre, degrading to a snapshot, then to nothing."""
+
+    def __init__(
+        self,
+        settings_cls: type,
+        client: RemoteConfigClient | None = None,
+        config: RemoteConfigSettings | None = None,
+    ) -> None:
+        super().__init__(settings_cls)
+        self._documents = RemoteDocuments(client=client, config=config)
+
+    # `PydanticBaseSettingsSource` declares this abstract; the whole document is
+    # read at once in `__call__`, so there is nothing per-field to do here.
+    def get_field_value(self, field: FieldInfo, field_name: str) -> tuple[Any, str, bool]:
+        return None, field_name, False
+
     def __call__(self) -> dict[str, Any]:
-        if not self._config.enabled:
+        config = self._documents.config
+        if not config.enabled:
             return {}
         values: dict[str, Any] = {}
         # Later data ids win, so the declared order in NACOS_DATA_IDS is the
         # override order -- the same rule the render step uses for its layers.
-        for data_id in self._config.data_ids:
-            document = self._document(data_id)
-            if document:
-                values.update(parse_properties(document))
+        for document in self._documents.all().values():
+            values.update(parse_properties(document))
         if values:
-            logger.info("remote config: %d values from %s", len(values), self._config.server_addr or "snapshot")
+            logger.info("remote config: %d values from %s", len(values), config.server_addr or "snapshot")
         return values
 
 
-def watch_remote_config(callback: Callable[[], None], client: RemoteConfigClient | None = None) -> bool:
-    """Call `callback` when any watched document changes. Returns whether watching began.
+def _digest(documents: dict[str, str]) -> str:
+    """A stable fingerprint of every watched document."""
 
-    The callback is what turns a console edit into a live change; wiring it to
-    `reload_settings()` plus the existing cache clears is the caller's job,
-    because this module must not import the API layer.
+    hasher = hashlib.sha256()
+    for data_id in sorted(documents):
+        hasher.update(data_id.encode("utf-8"))
+        hasher.update(b"\0")
+        hasher.update(documents[data_id].encode("utf-8"))
+        hasher.update(b"\0")
+    return hasher.hexdigest()
+
+
+def watch_remote_config(
+    callback: Callable[[], None],
+    client: RemoteConfigClient | None = None,
+    stop: threading.Event | None = None,
+    config: RemoteConfigSettings | None = None,
+) -> bool:
+    """Poll the watched documents; call `callback` when any of them changes.
+
+    **Deliberately polling rather than the SDK's own watcher.**
+    `nacos-sdk-python` 1.x does change detection in `_init_pulling`, which builds
+    a `multiprocessing.Manager()`, a `multiprocessing.Queue` and a ten-thread
+    callback pool. On Windows, where the start method is spawn, registering a
+    watcher did not return at all -- verified twice against a stub server, once
+    with and once without a `__main__` guard. One HTTP GET per document on a
+    daemon thread costs a process and a thread pool less, behaves the same on
+    every platform, and reuses the `fetch` path that already degrades to a
+    snapshot.
+
+    The cost is latency: an edit in the console takes effect within
+    `NACOS_POLL_INTERVAL_MS` (default 30s), the same order as the long poll it
+    replaces.
+
+    Returns whether polling began. Wiring `callback` to the reload sequence is
+    the caller's job, because this module must not import the API layer.
     """
 
-    config = _bootstrap()
+    config = config if config is not None else _bootstrap()
     if not config.enabled:
         return False
-    if client is None:
-        try:
-            from app.core.remote_config_nacos import NacosConfigClient
+    documents = RemoteDocuments(client=client, config=config)
+    stop_event = stop if stop is not None else threading.Event()
 
-            client = NacosConfigClient(config)
-        except Exception:
-            logger.exception("remote config: cannot watch, no client")
-            return False
-    started = False
-    for data_id in config.data_ids:
+    def _poll() -> None:
+        # Seeded with what this process already loaded, so an unchanged document
+        # does not fire a reload on the first tick.
         try:
-            client.watch(config.group, data_id, callback)
-            started = True
+            last = _digest(documents.all())
         except Exception:
-            logger.exception("remote config: could not watch %s", data_id)
-    return started
+            logger.exception("remote config: could not seed the poller")
+            last = ""
+        interval = max(config.poll_interval_ms, 1000) / 1000.0
+        while not stop_event.wait(interval):
+            try:
+                current = _digest(documents.all())
+            except Exception:
+                logger.exception("remote config: poll failed")
+                continue
+            if current != last:
+                last = current
+                logger.info("remote config: change detected")
+                callback()
+
+    threading.Thread(target=_poll, name="remote-config-poller", daemon=True).start()
+    return True
 
 
 def remote_config_enabled() -> bool:

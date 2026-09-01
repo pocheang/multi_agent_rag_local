@@ -52,8 +52,11 @@ dependencies = [
 # nothing unless NACOS_ENABLED is true, and app/core/remote_config.py treats a
 # missing SDK as "no client" and degrades to the local snapshot, so an
 # installation that has not adopted a configuration centre never imports this.
+# Pinned to the 1.x line on purpose: 2.x/3.x are a rewrite that imports as
+# `v2.nacos` and whose `get_config` is a coroutine, and this client is called
+# from synchronous Settings construction. See app/core/remote_config_nacos.py.
 config-centre = [
-  "nacos-sdk-python>=0.1.12",
+  "nacos-sdk-python>=1.0.0,<2.0",
 ]
 # Tesseract-based OCR for image and scanned-PDF ingestion. Requires the
 # native ``tesseract`` binary on PATH (see TESSERACT_CMD env var).

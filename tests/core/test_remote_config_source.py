@@ -22,7 +22,8 @@ from __future__ import annotations
 
 import shutil
 import tempfile
-from collections.abc import Callable
+import threading
+import time
 from pathlib import Path
 
 import pytest
@@ -62,16 +63,12 @@ class FakeClient:
         self.documents = documents or {}
         self.error = error
         self.fetches: list[str] = []
-        self.watched: list[tuple[str, str]] = []
 
     def fetch(self, group: str, data_id: str) -> str | None:
         self.fetches.append(data_id)
         if self.error is not None:
             raise self.error
         return self.documents.get(data_id)
-
-    def watch(self, group: str, data_id: str, callback: Callable[[], None]) -> None:
-        self.watched.append((group, data_id))
 
 
 def _probe(source: PydanticBaseSettingsSource | None) -> type[Settings]:
@@ -223,14 +220,46 @@ def test_watching_is_off_when_the_centre_is(monkeypatch):
     assert watch_remote_config(lambda: None) is False
 
 
-def test_watching_covers_every_data_id(monkeypatch):
+def test_the_poller_fires_only_on_an_actual_change(monkeypatch):
+    """Polling, not the SDK's watcher, which never returned on Windows.
+
+    Driven by a stop event and a 1s floor rather than by sleeping through the
+    real 30s interval: what is being pinned is *when* the callback fires, not
+    how long the wait is.
+    """
+
     monkeypatch.setenv("NACOS_ENABLED", "true")
     monkeypatch.setenv("NACOS_SERVER_ADDR", "nacos.test:8848")
-    monkeypatch.setenv("NACOS_DATA_IDS", "base,overlay")
-    client = FakeClient()
+    monkeypatch.setenv("NACOS_POLL_INTERVAL_MS", "1")
+    client = FakeClient({"querymind": DOCUMENT})
+    calls = threading.Event()
+    stop = threading.Event()
 
-    assert watch_remote_config(lambda: None, client=client) is True
-    assert client.watched == [("DEFAULT_GROUP", "base"), ("DEFAULT_GROUP", "overlay")]
+    assert watch_remote_config(calls.set, client=client, stop=stop) is True
+    try:
+        # Unchanged document: the seed already matches, so nothing fires.
+        assert calls.wait(0.5) is False
+        client.documents["querymind"] = "TOP_K=99\n"
+        assert calls.wait(3.0) is True
+    finally:
+        stop.set()
+
+
+def test_the_poller_survives_an_unreachable_centre(monkeypatch):
+    """A failing poll is logged and retried, never fatal to the thread."""
+
+    monkeypatch.setenv("NACOS_ENABLED", "true")
+    monkeypatch.setenv("NACOS_SERVER_ADDR", "nacos.test:8848")
+    monkeypatch.setenv("NACOS_POLL_INTERVAL_MS", "1")
+    client = FakeClient(error=TimeoutError("down"))
+    stop = threading.Event()
+
+    assert watch_remote_config(lambda: None, client=client, stop=stop) is True
+    try:
+        time.sleep(0.3)
+        assert any(thread.name == "remote-config-poller" for thread in threading.enumerate())
+    finally:
+        stop.set()
 
 
 class _Marker(PydanticBaseSettingsSource):
