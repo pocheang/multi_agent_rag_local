@@ -1,6 +1,6 @@
 # 配置治理：收敛到 Settings，再接入 Nacos 配置中心
 
-状态：阶段 0、1、2 已完成（2026-09-01）。剩余：阶段 1 的「在真机上起一次容器」，以及阶段 3。
+状态：阶段 0、1、2 全部完成并在真实 Nacos 2.4.3 上跑通（2026-09-01）。剩余：阶段 3。
 
 ## 1. 目标与非目标
 
@@ -158,9 +158,27 @@ MySQL），鉴权强制开启且三个密钥用 `${VAR:?}` 声明**没有默认�
 单元测试用的是 fake client，而 fake 你问它什么形状它就答什么形状，抓不到「本仓库的调用和 SDK
 的签名漂移了」这一类问题，上面三个缺陷全都住在这个缺口里。
 
-剩余：在真机上 `docker compose up` 起一次，建 namespace 和三个 dataId，确认控制台改一个值能在
-30s 内生效。热更新语义盘点也留在那一步——`apply_config_reload()` 的 docstring 已经点明边界：
-仍在遗留常量块里的值在进程重启前不会被重新读取。
+**已在真实 Nacos 2.4.3 上跑通（2026-09-01）**：容器起来、三个 dataId 发布、应用读到、快照落盘、
+轮询在 0.3s 内发现控制台的改动、`Settings` 重建后拿到新值。四个来源层在管理页上同时出现过一次
+（`TOP_K` 环境钉住呈琥珀色且输入禁用、`RERANKER_TOP_N` 来自配置中心、四个来自 runtime-file、
+其余 default），点保存后写回 Nacos 并重载运行时。
+
+两个只有真跑才暴露的 bug：
+
+1. **`RemoteDocuments` 根本没有 `publish` 方法**——重构拆类时它落到了 `RemoteSettingsSource` 上。
+   端点的 11 个测试全绿，因为它们用的 `FakeDocuments` 自带这个方法：**fake 你问它什么它就有什么**。
+   现在有一条只 fake 网络边界（client）、用真实 store 走真实端点的测试。
+2. **每次编辑都写进最后一个 dataId**。页面上显示 `RERANKER_TOP_N` 来自 `querymind-retrieval`，
+   保存却写进了 `querymind-router`，同一个键于是存在于两个文档、后者静默胜出，页面和存储从那一刻起开始漂移。
+   现在每个键写回**定义它的那个文档**，只有任何文档都没有的新键才落到 fallback（最后一个 id，因为
+   后面的覆盖前面的）。
+
+**Nacos 2.4 的一个部署事实**：`NACOS_AUTH_ENABLE=true` 且用内嵌 Derby 时，用户表是空的，
+`nacos/nacos` 登录会返回 "User nacos not found"。需要先调一次
+`POST /nacos/v1/auth/users/admin` 引导管理员账号。
+
+热更新语义盘点仍未做——`apply_config_reload()` 的 docstring 已经点明边界：仍在遗留常量块里的值
+在进程重启前不会被重新读取。
 
 ### 阶段 2：管理端页面 —— **已完成（2026-09-01）**
 

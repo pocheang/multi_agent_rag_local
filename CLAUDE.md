@@ -737,9 +737,22 @@ environment outranks the centre, so it would succeed and change nothing. The bro
 disables those inputs too, but that is a convenience: the rule is enforced server-side
 because the browser is not where it can be.
 
-The document is rewritten whole rather than patched, from what this process currently reads
-plus the edit. The centre owns version history and rollback; merging here would be a second,
-worse implementation of both.
+**Each edited key is written back to the document that already defines it**, and each such
+document is rewritten whole rather than patched. Writing everything to one document instead
+put the same key in two places with the later id silently winning, so the page showed a value
+from one document while the edit landed in another — found by clicking Save against a real
+server. A key no document defines yet goes to the last data id, which is the fallback
+precisely because later ids override earlier ones. The centre owns version history and
+rollback; merging in this layer would be a second, worse implementation of both.
+
+Verified end to end against a real Nacos 2.4.3, which is also where two defects the unit
+tests could not see turned up: `RemoteDocuments` had no `publish` method at all — it had
+landed on the wrong class in a refactor, and all eleven endpoint tests passed because the
+fake they inject implements whatever it is asked for. One test now fakes only the client, the
+actual network boundary, and drives the real store. Deployment note: with
+`NACOS_AUTH_ENABLE=true` and the embedded store, the user table starts empty and
+`nacos/nacos` fails with "User nacos not found" until `POST /nacos/v1/auth/users/admin`
+bootstraps the account.
 
 **The process environment sits above the centre on purpose**: a deployment needs one way to
 pin a value the console cannot move, which is what `MODEL_BACKEND=local` already does to
@@ -1024,7 +1037,7 @@ A third makes it three. Do not add a pixel-diff CI gate for the reason above, an
 
 `tests/` was cleared ahead of the v0.7 rewrite and is being rebuilt incrementally: each bug
 fix lands with the regression test that would have caught it, rather than as a separate
-back-filling effort. As of 2026-09-01 there are 517 tests covering the chat round trip,
+back-filling effort. As of 2026-09-01 there are 520 tests covering the chat round trip,
 conversation context, graph routing, clarification, the async load guard, engine reuse,
 answer safety, reader-facing citation numbering, stage-timeout degradation, the governed
 tool stack with its multi-step loop and approve-then-resume cycle, retrieval

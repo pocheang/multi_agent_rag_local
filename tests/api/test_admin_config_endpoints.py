@@ -17,11 +17,17 @@ prevents the console from claiming a change it did not make:
 
 from __future__ import annotations
 
+import shutil
+import tempfile
+from pathlib import Path
+
 import pytest
 from fastapi import HTTPException
 from starlette.requests import Request
 
 from app.api.routes.admin import config as admin_config
+from app.core import remote_config
+from app.core.remote_config import RemoteConfigSettings
 
 ADMIN = {"user_id": "admin-1", "username": "ops-admin", "role": "admin", "permissions": ["admin:ops_manage"]}
 
@@ -71,7 +77,12 @@ def _no_audit_writes(monkeypatch):
 
 @pytest.fixture
 def _centre(monkeypatch):
-    documents = FakeDocuments({"querymind-retrieval": "TOP_K=7\nRERANKER_TOP_N=5\n"})
+    documents = FakeDocuments(
+        {
+            "querymind-base": "TOP_K=7\n",
+            "querymind-retrieval": "RERANKER_TOP_N=5\n",
+        }
+    )
     monkeypatch.setattr(admin_config, "remote_config_enabled", lambda: True)
     monkeypatch.setattr(admin_config, "RemoteDocuments", lambda *a, **k: documents)
     monkeypatch.setattr(admin_config, "apply_config_reload", lambda: None)
@@ -147,6 +158,43 @@ def test_saving_rewrites_the_document_whole_and_keeps_untouched_keys(monkeypatch
     assert written["RERANKER_TOP_N"] == "5"
 
 
+def test_an_edited_key_goes_back_to_the_document_that_defines_it(monkeypatch, _centre):
+    """Found by clicking Save against a real Nacos.
+
+    Every edit used to go to the last data id, so `RERANKER_TOP_N` -- shown on
+    the page as coming from `querymind-retrieval` -- was written into
+    `querymind-router` instead. The key then existed in two documents with
+    different values, the later one silently winning, and the page and the store
+    drifted apart from that moment on.
+    """
+
+    monkeypatch.delenv("TOP_K", raising=False)
+    payload = admin_config.ConfigValues(values={"TOP_K": "9", "RERANKER_TOP_N": "6"})
+
+    admin_config.admin_save_config(payload, _request(), ADMIN)
+
+    written = dict(_centre.published)
+    assert set(written) == {"querymind-base", "querymind-retrieval"}
+    assert written["querymind-base"]["TOP_K"] == "9"
+    assert written["querymind-retrieval"]["RERANKER_TOP_N"] == "6"
+    # And neither document gained the other's key.
+    assert "RERANKER_TOP_N" not in written["querymind-base"]
+    assert "TOP_K" not in written["querymind-retrieval"]
+
+
+def test_a_key_no_document_defines_yet_goes_to_the_last_data_id(monkeypatch, _centre):
+    """Later ids override earlier ones, so the last one is where a new key belongs."""
+
+    monkeypatch.delenv("TOP_K", raising=False)
+    payload = admin_config.ConfigValues(values={"BM25_TOP_K": "9"})
+
+    admin_config.admin_save_config(payload, _request(), ADMIN)
+
+    data_id, written = _centre.published[0]
+    assert data_id == "querymind-retrieval"
+    assert written["BM25_TOP_K"] == "9"
+
+
 def test_an_unknown_data_id_is_refused(monkeypatch, _centre):
     monkeypatch.delenv("TOP_K", raising=False)
     payload = admin_config.ConfigValues(values={"TOP_K": "9"}, data_id="somewhere-else")
@@ -177,3 +225,60 @@ def test_a_successful_save_reloads_the_runtime(monkeypatch, _centre):
     admin_config.admin_save_config(payload, _request(), ADMIN)
 
     assert reloaded == [True]
+
+
+def test_the_real_document_store_satisfies_what_the_endpoint_calls(monkeypatch):
+    """The gap a fake cannot see.
+
+    Every test above swaps in `FakeDocuments`, which implements whatever the
+    endpoint asks for -- so `RemoteDocuments` shipped without a `publish` method
+    at all (it had landed on the wrong class after a refactor) and every one of
+    them still passed. The save failed the first time a human clicked it.
+
+    This one fakes only the *client*, the actual network boundary, and drives the
+    real store through the real endpoint.
+    """
+
+    published: list[tuple[str, str, str]] = []
+
+    class FakeClient:
+        def fetch(self, group: str, data_id: str) -> str:
+            return "TOP_K=7\nRERANKER_TOP_N=5\n"
+
+        def publish(self, group: str, data_id: str, content: str) -> bool:
+            published.append((group, data_id, content))
+            return True
+
+    config = RemoteConfigSettings(
+        enabled=True,
+        server_addr="nacos.test:8848",
+        namespace="test",
+        group="DEFAULT_GROUP",
+        data_ids=("querymind",),
+        username="",
+        password="",
+        timeout_ms=3000,
+    )
+    root = Path(tempfile.mkdtemp(prefix="querymind-endpoint-"))
+    monkeypatch.setattr(remote_config, "SNAPSHOT_ROOT", root)
+    monkeypatch.setattr(admin_config, "remote_config_enabled", lambda: True)
+    monkeypatch.setattr(
+        admin_config,
+        "RemoteDocuments",
+        lambda *a, **k: remote_config.RemoteDocuments(client=FakeClient(), config=config),
+    )
+    monkeypatch.setattr(admin_config, "apply_config_reload", lambda: None)
+    monkeypatch.delenv("TOP_K", raising=False)
+
+    try:
+        body = admin_config.admin_save_config(admin_config.ConfigValues(values={"BM25_TOP_K": "9"}), _request(), ADMIN)
+    finally:
+        shutil.rmtree(root, ignore_errors=True)
+
+    assert body["ok"] is True
+    group, data_id, content = published[0]
+    assert (group, data_id) == ("DEFAULT_GROUP", "querymind")
+    # Rendered in the same KEY=value form, with the untouched keys preserved.
+    assert "BM25_TOP_K=9" in content
+    assert "TOP_K=7" in content
+    assert "RERANKER_TOP_N=5" in content

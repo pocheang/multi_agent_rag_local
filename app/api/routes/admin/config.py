@@ -53,10 +53,11 @@ def admin_config_schema(request: Request, user: dict[str, Any] = Depends(_requir
 def admin_save_config(payload: ConfigValues, request: Request, user: dict[str, Any] = Depends(_require_user)):
     """Write edited values to the configuration centre and reload.
 
-    The document is rewritten whole, from what this process currently reads plus
-    the edit, so a key the administrator did not touch keeps its value. Reading
-    and writing through the same `RemoteDocuments` is what makes that safe: the
-    page showed what this read returns.
+    Each edited key is written back to the document that already defines it, and
+    each such document is rewritten whole from what this process currently reads
+    plus the edit -- so a key the administrator did not touch keeps its value.
+    Reading and writing through the same `RemoteDocuments` is what makes that
+    safe: the page showed what this read returns.
 
     A value pinned in the process environment is rejected rather than written.
     Writing it would appear to succeed and change nothing, because the
@@ -89,19 +90,38 @@ def admin_save_config(payload: ConfigValues, request: Request, user: dict[str, A
         raise bad_request(f"pinned in the process environment, so the console cannot change them: {', '.join(pinned)}")
 
     documents = RemoteDocuments()
-    data_id = payload.data_id or documents.config.data_ids[-1]
-    if data_id not in documents.config.data_ids:
-        raise bad_request(f"unknown data id: {data_id}")
+    known = documents.config.data_ids
+    if payload.data_id is not None and payload.data_id not in known:
+        raise bad_request(f"unknown data id: {payload.data_id}")
 
-    existing = parse_properties(documents.all().get(data_id, ""))
-    merged = {**existing, **accepted}
-    try:
-        published = documents.publish(data_id, merged)
-    except Exception as exc:
-        logger.exception("admin config: publish failed")
-        raise bad_request(f"the configuration centre rejected the write: {exc}") from exc
-    if not published:
-        raise bad_request("the configuration centre did not accept the write")
+    current = {data_id: parse_properties(text) for data_id, text in documents.all().items()}
+    fallback = payload.data_id or known[-1]
+
+    # Each key goes back to the document that already defines it. Writing
+    # everything to one document instead puts the same key in two places, where
+    # the later id silently wins -- so the page would show a value from one
+    # document, the edit would land in another, and the two would drift apart.
+    # A key nothing defines yet goes to the fallback, which is the last id
+    # precisely because later ids override earlier ones.
+    routed: dict[str, dict[str, str]] = {}
+    for alias, value in accepted.items():
+        target = payload.data_id
+        if target is None:
+            owning = [data_id for data_id in known if alias in current.get(data_id, {})]
+            target = owning[-1] if owning else fallback
+        routed.setdefault(target, {})[alias] = value
+
+    written: list[str] = []
+    for data_id, changes in routed.items():
+        merged = {**current.get(data_id, {}), **changes}
+        try:
+            published = documents.publish(data_id, merged)
+        except Exception as exc:
+            logger.exception("admin config: publish failed for %s", data_id)
+            raise bad_request(f"the configuration centre rejected the write: {exc}") from exc
+        if not published:
+            raise bad_request(f"the configuration centre did not accept the write to {data_id}")
+        written.append(data_id)
 
     apply_config_reload()
     _audit(
@@ -109,13 +129,13 @@ def admin_save_config(payload: ConfigValues, request: Request, user: dict[str, A
         action="admin.config.save",
         resource_type="admin",
         result="success",
-        resource_id=data_id,
+        resource_id=",".join(sorted(written)),
         user=user,
         detail=f"changed: {', '.join(sorted(accepted))}",
     )
     return {
         "ok": True,
-        "data_id": data_id,
+        "data_id": sorted(written),
         "changed": sorted(accepted),
         "fields": describe(get_settings(), documents),
     }

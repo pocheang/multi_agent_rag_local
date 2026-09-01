@@ -222,6 +222,23 @@ class RemoteDocuments:
                 found[data_id] = document
         return found
 
+    def publish(self, data_id: str, values: dict[str, str]) -> bool:
+        """Replace one document with `values`, rendered in the same format.
+
+        The document is rewritten whole rather than patched: the centre keeps
+        the version history and the rollback, so a merge here would be a second,
+        worse implementation of both. The caller is responsible for having read
+        the current values first -- which the admin endpoint does, from this same
+        source, so what it writes back is what the page was showing plus the
+        edit.
+        """
+
+        client = self._resolve_client()
+        if client is None:
+            raise RuntimeError("no configuration centre client available")
+        body = "".join(f"{key}={values[key]}\n" for key in sorted(values))
+        return bool(client.publish(self._config.group, data_id, body))
+
 
 class RemoteSettingsSource(PydanticBaseSettingsSource):
     """Values from the configuration centre, degrading to a snapshot, then to nothing."""
@@ -252,23 +269,6 @@ class RemoteSettingsSource(PydanticBaseSettingsSource):
         if values:
             logger.info("remote config: %d values from %s", len(values), config.server_addr or "snapshot")
         return values
-
-    def publish(self, data_id: str, values: dict[str, str]) -> bool:
-        """Replace one document with `values`, rendered in the same format.
-
-        The document is rewritten whole rather than patched: the centre keeps
-        the version history and the rollback, so a merge here would be a second,
-        worse implementation of both. The caller is responsible for having read
-        the current values first -- which the admin endpoint does, from this same
-        source, so what it writes back is what the page was showing plus the
-        edit.
-        """
-
-        client = self._resolve_client()
-        if client is None:
-            raise RuntimeError("no configuration centre client available")
-        body = "".join(f"{key}={values[key]}\n" for key in sorted(values))
-        return bool(client.publish(self._config.group, data_id, body))
 
 
 def _digest(documents: dict[str, str]) -> str:
