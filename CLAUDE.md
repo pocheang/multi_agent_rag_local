@@ -36,8 +36,9 @@ ruff format .                       # Format code
 ```
 
 Note (2026-08-28): `tests/` and `scripts/` were cleared ahead of the v0.7 rewrite. `scripts/`
-is still empty (no `scripts/init_db.py`); `tests/` is being rebuilt incrementally alongside
-bug fixes — see Testing Strategy below.
+holds exactly one file, `scripts/audit/frontend_audit.py`, and still no
+`scripts/init_db.py`; `tests/` is being rebuilt incrementally alongside bug fixes — see
+Testing Strategy below.
 
 **Tests and lint**
 ```bash
@@ -58,7 +59,8 @@ persisting messages, conversation context was filled but never read, the query
 endpoint never returned its execution_id, the `graph` route never queried the
 graph, and 184 modules (~13,000 lines) had zero importers. All were fixed or
 deleted; `app/` went from 583 to 371 Python files and Settings from 261 to 216
-fields. See `docs/superpowers/plans/2026-08-29-backend-full-audit-remediation.md`
+fields. Those are what the audit left behind, not a ceiling — today it is 374 files and
+236 settings fields (2026-09-01). See `docs/superpowers/plans/2026-08-29-backend-full-audit-remediation.md`
 for the plan, what was deliberately left dormant, and what remains open.
 
 ### Frontend
@@ -76,6 +78,20 @@ cd frontend
 npm run build                       # TypeScript compile + Vite build
 npm run preview                     # Preview production build (port 4173)
 ```
+
+**Checks and visual verification**
+```bash
+cd frontend
+npm run lint                        # eslint, gates on errors (warning ratchet: 25)
+npm run type-check                  # tsc -b --noEmit
+npm run lint:design                 # shape/depth scale ratchet (see Frontend styling)
+npm test -- --run                   # vitest (.test.ts and .test.tsx)
+npm run screenshots                 # both servers up; PNGs of 8 app states
+```
+
+CI runs everything above except `screenshots`, which is a local before/after tool
+by design — see [Frontend styling](#frontend-styling-adopted-2026-08-31) for when to
+reach for which.
 
 ### Docker Deployment
 
@@ -187,7 +203,13 @@ PipelineResult → returned to caller
 **Validation layers** (applied based on profile):
 1. **Route confidence checks**: Threshold-based validation
 2. **Retrieval quality scoring**: none. A local-LLM (Ollama) batch relevance scorer existed in `app/agents/rag/relevance.py` with no callers anywhere in the request pipeline; it was deleted on 2026-08-29. Retrieval results are not quality-scored.
-3. **Answer validation**: Citation completeness, hallucination detection, NLI checks
+3. **Answer validation**: Citation completeness, hallucination detection, NLI checks, and
+   **sentence grounding** — `apply_sentence_grounding`
+   (`app/services/retrieval/citation_grounding.py`), reached from
+   `app/orchestration/finalization.py`, scores each sentence's token overlap with the
+   evidence and hedges the ones under 0.22. It skips sentences that make no claim, which is
+   not a nicety: it once counted a bare `[1]` as a sentence, found it unsupported, and
+   hedged the attribution instead of the claim.
 4. **Safety checks**: Two independent regex redaction paths, with different pattern sets.
    `app/services/answer_safety.py` runs on every finalized answer and covers OpenAI-style
    keys, AWS access key ids, private-key headers, and `password=`/`token=` assignments;
@@ -572,6 +594,13 @@ rounds are not shown twice in two formats. One consequence of the old shape: the
   Neither ever fired because nothing reached the code. It is a plain synchronous TTL+LRU now;
   do not reconnect it to `app/services/caching/`, which exists for values worth a network
   round trip and is what made an in-memory memo look like it needed a loop.
+
+  `app/agents/shared/cache.py`, the router decision memo, had the identical defect and took
+  the identical fix, so the rule generalises: **nothing reached from `asyncio.to_thread` may
+  drive an event loop.** `get_event_loop()` raises in a worker thread, and the fallback of
+  installing a private one leaves a loop open per worker for the life of the process. A memo
+  over in-memory values is a dictionary lookup; it never needed a loop.
+  `tests/agents/test_router_cache.py` pins that.
 - **Reranking**: BGE-Reranker-V2-M3 (top 5 results)
 - **Retrieval width** (wired to the chat path 2026-08-31): how wide a search is now depends
   on the question and on the plan, and both decisions live in `KnowledgeAgentService` —
@@ -617,6 +646,65 @@ variables or run the render step first.
 `Settings` falls back to its hardcoded defaults for every field — including
 `MODEL_BACKEND=local`. Run the render step (or export real environment variables)
 before treating any configured value as active.
+
+**`MODEL_BACKEND=local` means there is no LLM in the loop at all**, and it is what a fresh
+checkout runs — so it is the state most first impressions are formed in. `local` resolves to
+`LocalEvidenceChatModel` (`app/services/models/runtime.py`), an offline stand-in that keeps
+the app usable with no API key and no Ollama: it routes by keyword (`_route_json` —
+关系/依赖/graph/relation/路径 → `hybrid`, everything else → `vector`) and assembles an answer
+out of the evidence sections of its own prompt. Every quality number in this file — router
+accuracy, citation completeness, P@5 — describes the LLM path and means nothing on this one.
+`MODEL_BACKEND=local` in the real process environment additionally **overrides persisted
+admin model settings** (`_local_backend_forced`), so a deployment that sets it cannot be
+talked out of it from the admin UI.
+
+Having no model to hide behind is why this is the path where prompt scaffolding leaks into
+prose. It has narrated itself, echoed `ContextBuilder`'s `[E1] document=…; layer=…` header
+as though it were text, and returned its own answer template as the answer.
+`tests/services/test_answer_readability.py` pins all of it: the reader must never see the
+machinery that produced the answer.
+
+**A value read with `os.getenv` cannot be configured.** pydantic-settings loads
+`.runtime/{APP_ENV}.env` into `Settings` **without exporting anything into the process
+environment** — with `APP_ENV=development` in that file, `Settings().app_env` is
+`development` while `os.getenv("APP_ENV")` is still unset. So `make config-render` cannot
+set such a key, nor can anything that pushes values into `Settings`; it has to be a real
+exported environment variable, present before the module is imported. None of the keys
+below appeared anywhere in `config/env/`.
+
+An AST census on 2026-09-01 found **47 live keys** outside `Settings`: 2 in the router,
+2 in the request middleware (one of them `STRICT_CSP`, which picks the Content-Security-Policy),
+5 in an admin endpoint, 2 duplicated in the Self-RAG evaluator, 37 behind the helper
+functions in `app/agents/shared/config.py`, plus 5 in a module with no importers at all.
+The first nine were folded into `Settings` the same day and the dead module deleted; the
+37 are frozen by a ratchet and migrate in batches. See
+`docs/superpowers/plans/2026-09-01-configuration-management.md`.
+
+`tests/core/test_config_has_one_source.py` keeps it that way, in two parts: an AST guard
+that every direct environment read in `app/` is in an allowlist keyed on
+`path::enclosing_function` **with a reason**, and a ratchet on the legacy constant block
+that may shrink and never grow. Four reads are legitimately exempt and stay:
+`resolve_runtime_env_file` (it chooses the settings file, so it cannot live in it),
+`_local_backend_forced` (a deployment pinning the local backend must beat persisted admin
+settings), conda-environment diagnostics, and pytest detection.
+
+Two consequences worth knowing. `ENABLE_WEB_ROUTE_DOWNGRADE` silently rewrites a `web`
+route to `vector` inside `decide_route` — a third and invisible answer to "who authorized
+the web", see Knowledge Agent above. And **anything read at import time cannot be
+reconfigured at runtime**: the router's calibrator and the request-metrics deque were both
+bound at import and are now resolved on first use, because a value that is only read once,
+before `Settings` is loaded, is not configuration.
+
+**`GET /api/advanced-rag/config` reports the switches that actually gate its two
+features** (fixed 2026-09-01). Every value it returned was unrelated to what ran:
+`query_decomposition.enabled_by_default` came from `ENABLE_QUERY_DECOMPOSITION` while the
+real switch is `QUERY_DECOMPOSE_ENABLED`, **which defaults to on** — so the page reported
+`false` on a feature that was running; `self_rag.enabled_by_default` came from
+`ENABLE_SELF_RAG` while the gate is `VectorRAGConfig.enable_evaluation`; and
+`max_sub_queries` came from an environment variable rather than the bound `QueryDecomposer`
+enforces (now the named `DEFAULT_MAX_SUB_QUERIES`). A configuration page that reports
+something other than the running configuration is worse than no page — it is the reason
+this section exists.
 
 **Additional config**: [app/agents/shared/config.py](app/agents/shared/config.py) contains component-specific settings (currently undergoing simplification - many constants are legacy tuning parameters that will be consolidated or removed)
 
@@ -768,19 +856,80 @@ scroll, so the *document* scrolled instead) and a composer occupying 68% of a ph
 viewport. Those are a box-model reasoning error and a design judgement. Reach for the
 tooling for consistency and contracts; it buys nothing on either of those.
 
+**Fixing CSS: which tool, and in what order.** The first question is which of four kinds of
+defect this is, because each has a different tool and none of them substitutes for another.
+Reaching for the wrong one is how the last pass lost most of its time.
+
+*Which rule wins?* Fix it in the **layer**, above — never by raising specificity and never
+with `!important`. The layer order exists so a utility beats the sheet it replaces without
+an arms race. `getComputedStyle(el)` names the value that won; `el.matches(selector)` says
+whether your selector matched **at all**, which is the failure the white-on-white Delete
+button actually was — a rule that looked right and was never applied to anything.
+
+*Is a value wrong?* Use the token, then `npm run lint:design`. A literal that is genuinely
+off-scale needs a `--write` re-freeze plus a sentence in the commit saying why.
+
+*Is a class name wrong?* A `cva()` table in the component (`class-variance-authority` is
+already a dependency), so the accepted variants are a type and the emitted classes a value.
+No tool can check a stylesheet against class names the component never emits.
+
+*Is it geometry, contrast, or overlap?* **No linter and no unit test will find this.**
+Measure it in a real browser and read numbers, not impressions:
+
+| symptom | the number that settles it |
+|---|---|
+| a box that will not scroll | `getComputedStyle(el).minHeight` — `100vh` with `overflow:auto` is an unbounded box, so the *document* scrolls instead |
+| something covering something else | `getBoundingClientRect()` on both, plus their `z-index` (the floating controls sit at 10002, the sidebar at 1000) |
+| a control eating the phone | `rect.height / window.innerHeight` at 375x812 |
+| text nobody can read | the contrast ratio of the two *resolved* colours; 1.0 is a blank rectangle |
+
+*Is it a11y state?* Read the accessibility tree, not the pixels. `aria-expanded` /
+`aria-pressed` on a toggle is invisible in a screenshot and obvious in the tree.
+
+**`npm run screenshots` captures the app's states to PNG** (`frontend/scripts/screenshots.mjs`,
+Playwright + Chromium): desktop 1440x900 and phone 375x812, signed in and signed out, sidebar
+open and closed, workbench collapsed and expanded — eight files. Both servers must be up
+(`.claude/launch.json` starts them as `backend` and `frontend`); credentials come from
+`SHOT_USER` / `SHOT_PASSWORD` so nothing usable is committed, and `SHOT_OUT` redirects the
+output when you do not want eight more PNGs in the tree.
+
+The protocol is the whole point: **run it before and after a change and look at the pair.**
+It is deliberately **not a CI gate** — pixel gating needs a seeded corpus and a pinned font
+stack, and without those it fails on the day somebody upgrades Chromium rather than the day
+the UI breaks. It earned its place on the first run, twice: a floating control covering the
+sidebar's own Collapse button, and a `padding-left` that pushed the brand block into the
+button at the other end of the same row. Both were obvious on screen and invisible to every
+suite, which were all green throughout.
+
+**What vitest cannot do here, in principle.** jsdom has no layout engine, and it fails
+*convincingly*: `getBoundingClientRect()` returns all zeros, `offsetHeight` is 0, `matchMedia`
+is not a function — while `getComputedStyle(el).height` cheerfully returns the **declared**
+`200px` that no layout ever computed. So a component test pins class names, ARIA and
+behaviour, and can never see a clipped panel, an overlap, or a composer taking 68% of a
+phone screen. That is the line between `npm test` and `npm run screenshots`, and it is why
+both exist.
+
+**What not to reach for.** No CSS-in-JS runtime and no second component library: this app
+already runs two systems — the 73 legacy sheets and Tailwind — and is spending down to one.
+A third makes it three. Do not add a pixel-diff CI gate for the reason above, and do not
+"fix" a cascade problem by re-freezing the design baseline.
+
 ### Testing Strategy
 
 `tests/` was cleared ahead of the v0.7 rewrite and is being rebuilt incrementally: each bug
 fix lands with the regression test that would have caught it, rather than as a separate
-back-filling effort. As of 2026-08-31 there are 430 tests covering the chat round trip,
+back-filling effort. As of 2026-09-01 there are 476 tests covering the chat round trip,
 conversation context, graph routing, clarification, the async load guard, engine reuse,
 answer safety, reader-facing citation numbering, stage-timeout degradation, the governed
 tool stack with its multi-step loop and approve-then-resume cycle, retrieval
 module-global isolation, connector persistence, streaming redaction, two-phase retrieval,
 complexity- and plan-driven retrieval width, caller deadlines, skill-shaped synthesis,
-follow-up completion, and a guard that every Settings field has a reader.
+follow-up completion, answer provenance, an answer that shows the reader none of the
+machinery that produced it, a router cache that opens no event loop, a guard that every
+Settings field has a reader, and a guard that no module reads the environment behind
+`Settings`'s back.
 
-`tests/security/` (147 of those) pins the user-data isolation invariants — see
+`tests/security/` (154 of those) pins the user-data isolation invariants — see
 `docs/superpowers/plans/2026-08-29-user-data-isolation.md`. That plan is complete
 (phases 0-4) and all 8 of its `xfail(strict=True)` markers are cleared; keep using the same
 pattern for a new gap, so a fix that makes the test pass fails the suite until the marker
@@ -807,15 +956,25 @@ sizes would test the wrong thing.
 CI runs it on every push and pull request (`.github/workflows/ci.yml`), together with ruff
 and an OpenAPI endpoint census that fails if a refactor silently drops routers.
 
-The frontend has vitest tests too (`frontend/src/**/*.test.ts`, run by the `frontend` CI
-job). `pendingApproval.test.ts` pins that a governed action awaiting confirmation travels
-with the question that produced it: ChatPage first tracked the question in a ref every
+The frontend has vitest tests too: `src/**/*.test.ts` **and** `src/**/*.test.tsx`, run by
+the `frontend` CI job, which also runs eslint (`--max-warnings 25`, itself a ratchet), `tsc`,
+`npm run lint:design`, and the build. The `.tsx` half of that glob was missing until
+2026-09-01, so every component suite was silently skipped — a component test cannot be
+written in a `.ts` file. The default `environment` stays `node`; the two component suites
+(`ExecutionTracePanel.test.tsx`, `ChatRuntimePanels.test.tsx`) opt into jsdom per file with
+`// @vitest-environment jsdom`, rather than making the pure-logic suites — most of them — pay
+for jsdom setup.
+
+`pendingApproval.test.ts` pins that a governed action awaiting confirmation travels with
+the question that produced it: ChatPage first tracked the question in a ref every
 `ask` call site had to remember to set, and the clarification-complete path did not, so
 confirming after a clarified query would have re-sent a stale question.
 `storeReset.test.ts` covers the Zustand `reset()` that App.tsx calls on logout and on
 any identity change: the stores outlive a logout, so a field added to a store but forgotten
 in its `INITIAL_STATE` would show the next person on a shared browser the previous user's
 data. The test discovers fields rather than listing them, so it catches that drift.
+That suite is 36 tests across 6 files — small, and deliberately aimed at the things a
+screenshot cannot check.
 
 Note: do not use `len(app.routes)` to count endpoints. FastAPI 0.138+ stores an
 `_IncludedRouter` wrapper in `app.routes` instead of flattening child routes, so that number
@@ -853,6 +1012,20 @@ varies by version. Count OpenAPI operations instead; the current baseline is 151
   emitted is tracked as a string rather than a length, because redaction changes lengths and
   offset arithmetic desyncs. Both redaction pattern sets had their whitespace quantifiers
   bounded (`\s*` → `\s{0,8}`) so a partial buffer cannot make a pattern scan unboundedly.
+- **Answer provenance**: what a message may claim about where it came from is computed in
+  one place — `retrieval_summary` (`app/api/routes/internal/pipeline_contract.py`), from the
+  knowledge diagnostics both entry points already carry. **`used` means a source contributed
+  evidence, not that it was selected**: a web search that returned nothing is not what a
+  reader means by "this answer used the web". The response therefore keeps three states
+  apart — `sources` (every source with its status, result count and reason), the derived
+  `contributing_sources`, and `web_used` for older readers. There used to be only that
+  boolean and **no endpoint set it**: the chat endpoint had no such key and the client
+  defaulted a missing value to false, so every answer displayed `web: no`, including ones
+  written entirely from web results. It is not only a badge —
+  `score_memory_candidate` weights `web_used` at 0.20, so every long-term memory candidate
+  had been scored as though the answer were purely local. A source that ran and found
+  nothing is worth showing (it explains a thin answer); one skipped because the caller has
+  no documents is not a fact about this answer, and the badge leaves it out.
 - **Retry logic**: Retrieval retries retain their existing fallback policy; answer regeneration is capped at one retry per request
 - **Circuit breaker**: Opens after 5 consecutive failures, closes after 60s cooldown
 - **Stage timeouts and degradation** (reworked 2026-08-30): stage ceilings live in
@@ -927,7 +1100,7 @@ varies by version. Count OpenAPI operations instead; the current baseline is 151
   comparison-shaped question -- which mattered most where it was least visible,
   since interactive clarification cannot happen inside the pipeline and the run
   continued with the original question on a route nothing had chosen for it.
-- **Clarification System** (added 2026-08-17, revised 2026-08-29): Dynamic clarification based on intent complexity, capped at 0-7 rounds depending on intent (`rag_design`: 7, `document_comparison`: 5, others: 5, already-complete: 0). Key services: `app/agents/clarification/service.py` and `rules.py`, wired as both the LangGraph `clarification` node and the resumable `/api/v1/clarification/check` HTTP endpoint (`app/api/routes/public/clarification.py`) — the two share one implementation. Questions exist in Chinese and English (`_QUESTIONS_ZH` / `_QUESTIONS_EN`), selected from `force_language` or the query's script. Inside the pipeline the clarifier has no collected context and therefore always asks; the node logs that and continues with the original query rather than failing the request — interactive clarification belongs to the HTTP endpoint.
+- **Clarification System** (added 2026-08-17, revised 2026-08-29): Dynamic clarification based on intent complexity, capped by `max_rounds_for(intent)` — one round per field the question catalogue actually has a question for, so `rag_design`: 4, `document_comparison`: 1, and anything already complete or unrecognised: 0. (This bullet used to quote the hand-written table those numbers replaced on 2026-08-29 — 7 and 5 — which promised rounds that could not happen; see "Dormant by design" above.) Key services: `app/agents/clarification/service.py` and `rules.py`, wired as both the LangGraph `clarification` node and the resumable `/api/v1/clarification/check` HTTP endpoint (`app/api/routes/public/clarification.py`) — the two share one implementation. Questions exist in Chinese and English (`_QUESTIONS_ZH` / `_QUESTIONS_EN`), selected from `force_language` or the query's script. Inside the pipeline the clarifier has no collected context and therefore always asks; the node logs that and continues with the original query rather than failing the request — interactive clarification belongs to the HTTP endpoint.
 - **State management**: Frontend uses Zustand for global state, not Redux or Context API
 
 ## Common Issues
