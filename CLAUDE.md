@@ -693,6 +693,28 @@ Nacos adapter behind it (`app/core/remote_config_nacos.py`) imports the SDK lazi
 configuration centre never needs the dependency (`pip install -e .[config-centre]`). The
 source returns `{}` unless `NACOS_ENABLED` is true, which is the default.
 
+**The bootstrap must be a real environment variable, never a key in `.runtime/*.env`** —
+that file is read into `Settings` without being exported, so a bootstrap key placed there is
+silently ignored, which is the same trap the rest of this section is about. It belongs in the
+process environment, which for a deployment means `environment:` in
+`deploy/compose/compose.config-centre.yaml`:
+
+| key | default | |
+|---|---|---|
+| `NACOS_ENABLED` | `false` | nothing below is read while this is off |
+| `NACOS_SERVER_ADDR` | — | required when enabled |
+| `NACOS_NAMESPACE` | `""` | the public namespace |
+| `NACOS_GROUP` | `DEFAULT_GROUP` | |
+| `NACOS_DATA_IDS` | `querymind` | comma-separated; **later ids override earlier ones**, the same rule the render step uses for its layers |
+| `NACOS_USERNAME` / `NACOS_PASSWORD` | `""` | never `Settings` fields — see the allowlist below |
+| `NACOS_TIMEOUT_MS` | `3000` | per fetch |
+| `NACOS_POLL_INTERVAL_MS` | `30000` | how long a console edit takes to reach a running process |
+
+`scripts/verify_config_centre.py` drives the **real** SDK against a stub server with no
+container, and is the thing to run after touching the adapter or bumping the pin: a fake
+client answers whatever shape it is asked for, so the unit tests cannot catch this
+repository's calls drifting from the SDK's.
+
 **The process environment sits above the centre on purpose**: a deployment needs one way to
 pin a value the console cannot move, which is what `MODEL_BACKEND=local` already does to
 persisted admin model settings. The rejected alternative — fetching remote values at startup

@@ -154,6 +154,10 @@ class Settings(BaseSettings):
 MySQL），鉴权强制开启且三个密钥用 `${VAR:?}` 声明**没有默认值**——没设就起不来，端口只绑
 127.0.0.1。
 
+验证脚本本身已提交为 `scripts/verify_config_centre.py`——改适配器或抬 SDK pin 之后跑它。
+单元测试用的是 fake client，而 fake 你问它什么形状它就答什么形状，抓不到「本仓库的调用和 SDK
+的签名漂移了」这一类问题，上面三个缺陷全都住在这个缺口里。
+
 剩余：在真机上 `docker compose up` 起一次，建 namespace 和三个 dataId，确认控制台改一个值能在
 30s 内生效。热更新语义盘点也留在那一步——`apply_config_reload()` 的 docstring 已经点明边界：
 仍在遗留常量块里的值在进程重启前不会被重新读取。

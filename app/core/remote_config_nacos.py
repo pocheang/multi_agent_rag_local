@@ -18,6 +18,11 @@ defect this repository has already fixed twice, in `app/agents/rag/cache.py` and
 client, and its signatures were verified against the installed package rather
 than taken from documentation.
 
+`scripts/verify_config_centre.py` exercises this module against the real SDK
+with a stub server and no container. Run it after any change here, or after
+bumping the pin: the unit tests use a fake client, which answers whatever shape
+it is asked for and therefore cannot catch these calls drifting from the SDK's.
+
 Only `fetch` lives here. Change detection is polled by
 `remote_config.watch_remote_config`, because the SDK's own watcher builds a
 `multiprocessing.Manager()` and never returned on Windows -- see that function.
