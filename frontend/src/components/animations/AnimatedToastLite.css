@@ -1,265 +1,270 @@
-/**
- * AnimatedToastLite CSS - 纯CSS动画实现
- *
- * 零JS依赖，使用CSS变量和变换实现流畅动画
- * GPU加速，60fps性能保证
- *
- * @version 1.0.0
- * @created 2026-08-16
- */
+/* Imported from a component, so there is no import site to carry the
+   layer -- it is declared here instead. See styles/tailwind.css. */
+@layer components {
+  /**
+   * AnimatedToastLite CSS - 纯CSS动画实现
+   *
+   * 零JS依赖，使用CSS变量和变换实现流畅动画
+   * GPU加速，60fps性能保证
+   *
+   * @version 1.0.0
+   * @created 2026-08-16
+   */
 
-/* ============================================
-   Toast容器
-   ============================================ */
+  /* ============================================
+     Toast容器
+     ============================================ */
 
-.toast-lite-container {
-  position: fixed;
-  top: 20px;
-  right: 20px;
-  z-index: 9999;
-  pointer-events: none;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
+  .toast-lite-container {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    z-index: 9999;
+    pointer-events: none;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
 
-/* ============================================
-   Toast基础样式
-   ============================================ */
+  /* ============================================
+     Toast基础样式
+     ============================================ */
 
-.toast-lite {
-  position: relative;
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  min-width: 300px;
-  max-width: 420px;
-  padding: 16px 20px;
-  background: white;
-  border-radius: 12px;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12),
-              0 2px 8px rgba(0, 0, 0, 0.08);
-  pointer-events: auto;
-  cursor: pointer;
-  overflow: hidden;
+  .toast-lite {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    min-width: 300px;
+    max-width: 420px;
+    padding: 16px 20px;
+    background: white;
+    border-radius: 12px;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12),
+                0 2px 8px rgba(0, 0, 0, 0.08);
+    pointer-events: auto;
+    cursor: pointer;
+    overflow: hidden;
+
+    /* 进入动画 */
+    animation: toast-slide-in 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+
+    /* GPU加速 */
+    will-change: transform, opacity;
+
+    /* 堆叠偏移 */
+    transform: translateY(calc(var(--toast-index, 0) * -70px));
+    transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  }
 
   /* 进入动画 */
-  animation: toast-slide-in 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-
-  /* GPU加速 */
-  will-change: transform, opacity;
-
-  /* 堆叠偏移 */
-  transform: translateY(calc(var(--toast-index, 0) * -70px));
-  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-/* 进入动画 */
-@keyframes toast-slide-in {
-  from {
-    opacity: 0;
-    transform: translateX(400px) scale(0.8);
-  }
-  to {
-    opacity: 1;
-    transform: translateX(0) scale(1);
-  }
-}
-
-/* 退出动画 */
-.toast-lite--exiting {
-  animation: toast-slide-out 0.3s cubic-bezier(0.4, 0, 1, 1) forwards;
-}
-
-@keyframes toast-slide-out {
-  to {
-    opacity: 0;
-    transform: translateX(400px) scale(0.8);
-  }
-}
-
-/* Hover暂停效果 */
-.toast-lite:hover {
-  transform: translateY(calc(var(--toast-index, 0) * -70px)) scale(1.02);
-  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.16),
-              0 4px 12px rgba(0, 0, 0, 0.12);
-}
-
-/* ============================================
-   Toast类型样式
-   ============================================ */
-
-/* Info */
-.toast-lite--info {
-  border-left: 4px solid #3b82f6;
-  background: linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%);
-}
-
-.toast-lite--info .toast-lite__icon {
-  color: #3b82f6;
-}
-
-.toast-lite--info .toast-lite__progress {
-  background: #3b82f6;
-}
-
-/* Success */
-.toast-lite--success {
-  border-left: 4px solid #10b981;
-  background: linear-gradient(135deg, #ecfdf5 0%, #d1fae5 100%);
-}
-
-.toast-lite--success .toast-lite__icon {
-  color: #10b981;
-  font-weight: bold;
-}
-
-.toast-lite--success .toast-lite__progress {
-  background: #10b981;
-}
-
-/* Warning */
-.toast-lite--warning {
-  border-left: 4px solid #f59e0b;
-  background: linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%);
-}
-
-.toast-lite--warning .toast-lite__icon {
-  color: #f59e0b;
-}
-
-.toast-lite--warning .toast-lite__progress {
-  background: #f59e0b;
-}
-
-/* Error */
-.toast-lite--error {
-  border-left: 4px solid #ef4444;
-  background: linear-gradient(135deg, #fef2f2 0%, #fee2e2 100%);
-}
-
-.toast-lite--error .toast-lite__icon {
-  color: #ef4444;
-  font-weight: bold;
-}
-
-.toast-lite--error .toast-lite__progress {
-  background: #ef4444;
-}
-
-/* ============================================
-   Toast内容
-   ============================================ */
-
-.toast-lite__icon {
-  flex-shrink: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 24px;
-  height: 24px;
-  font-size: 18px;
-  line-height: 1;
-}
-
-.toast-lite__message {
-  flex: 1;
-  font-size: 14px;
-  line-height: 1.5;
-  color: #1f2937;
-  word-break: break-word;
-}
-
-.toast-lite__close {
-  flex-shrink: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 24px;
-  height: 24px;
-  padding: 0;
-  border: none;
-  background: transparent;
-  color: #6b7280;
-  font-size: 16px;
-  line-height: 1;
-  cursor: pointer;
-  border-radius: 4px;
-  transition: background-color 0.2s ease, color 0.2s ease;
-}
-
-.toast-lite__close:hover {
-  background: rgba(0, 0, 0, 0.05);
-  color: #1f2937;
-}
-
-.toast-lite__close:active {
-  background: rgba(0, 0, 0, 0.1);
-}
-
-/* ============================================
-   进度条
-   ============================================ */
-
-.toast-lite__progress {
-  position: absolute;
-  bottom: 0;
-  left: 0;
-  height: 3px;
-  width: 100%;
-  transform-origin: left;
-  animation: toast-progress linear forwards;
-  animation-duration: var(--toast-duration, 4000ms);
-}
-
-@keyframes toast-progress {
-  from {
-    transform: scaleX(1);
-  }
-  to {
-    transform: scaleX(0);
-  }
-}
-
-/* ============================================
-   响应式
-   ============================================ */
-
-@media (max-width: 640px) {
-  .toast-lite-container {
-    top: 10px;
-    right: 10px;
-    left: 10px;
+  @keyframes toast-slide-in {
+    from {
+      opacity: 0;
+      transform: translateX(400px) scale(0.8);
+    }
+    to {
+      opacity: 1;
+      transform: translateX(0) scale(1);
+    }
   }
 
-  .toast-lite {
-    min-width: auto;
-    max-width: none;
-    width: 100%;
-  }
-}
-
-/* ============================================
-   无障碍：减少动画
-   ============================================ */
-
-@media (prefers-reduced-motion: reduce) {
-  .toast-lite {
-    animation: none;
-    transition: opacity 0.2s ease;
-  }
-
+  /* 退出动画 */
   .toast-lite--exiting {
-    animation: none;
-    opacity: 0;
+    animation: toast-slide-out 0.3s cubic-bezier(0.4, 0, 1, 1) forwards;
   }
 
-  .toast-lite:hover {
-    transform: translateY(calc(var(--toast-index, 0) * -70px));
+  @keyframes toast-slide-out {
+    to {
+      opacity: 0;
+      transform: translateX(400px) scale(0.8);
+    }
   }
+
+  /* Hover暂停效果 */
+  .toast-lite:hover {
+    transform: translateY(calc(var(--toast-index, 0) * -70px)) scale(1.02);
+    box-shadow: 0 12px 32px rgba(0, 0, 0, 0.16),
+                0 4px 12px rgba(0, 0, 0, 0.12);
+  }
+
+  /* ============================================
+     Toast类型样式
+     ============================================ */
+
+  /* Info */
+  .toast-lite--info {
+    border-left: 4px solid #3b82f6;
+    background: linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%);
+  }
+
+  .toast-lite--info .toast-lite__icon {
+    color: #3b82f6;
+  }
+
+  .toast-lite--info .toast-lite__progress {
+    background: #3b82f6;
+  }
+
+  /* Success */
+  .toast-lite--success {
+    border-left: 4px solid #10b981;
+    background: linear-gradient(135deg, #ecfdf5 0%, #d1fae5 100%);
+  }
+
+  .toast-lite--success .toast-lite__icon {
+    color: #10b981;
+    font-weight: bold;
+  }
+
+  .toast-lite--success .toast-lite__progress {
+    background: #10b981;
+  }
+
+  /* Warning */
+  .toast-lite--warning {
+    border-left: 4px solid #f59e0b;
+    background: linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%);
+  }
+
+  .toast-lite--warning .toast-lite__icon {
+    color: #f59e0b;
+  }
+
+  .toast-lite--warning .toast-lite__progress {
+    background: #f59e0b;
+  }
+
+  /* Error */
+  .toast-lite--error {
+    border-left: 4px solid #ef4444;
+    background: linear-gradient(135deg, #fef2f2 0%, #fee2e2 100%);
+  }
+
+  .toast-lite--error .toast-lite__icon {
+    color: #ef4444;
+    font-weight: bold;
+  }
+
+  .toast-lite--error .toast-lite__progress {
+    background: #ef4444;
+  }
+
+  /* ============================================
+     Toast内容
+     ============================================ */
+
+  .toast-lite__icon {
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    font-size: 18px;
+    line-height: 1;
+  }
+
+  .toast-lite__message {
+    flex: 1;
+    font-size: 14px;
+    line-height: 1.5;
+    color: #1f2937;
+    word-break: break-word;
+  }
+
+  .toast-lite__close {
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    padding: 0;
+    border: none;
+    background: transparent;
+    color: #6b7280;
+    font-size: 16px;
+    line-height: 1;
+    cursor: pointer;
+    border-radius: 4px;
+    transition: background-color 0.2s ease, color 0.2s ease;
+  }
+
+  .toast-lite__close:hover {
+    background: rgba(0, 0, 0, 0.05);
+    color: #1f2937;
+  }
+
+  .toast-lite__close:active {
+    background: rgba(0, 0, 0, 0.1);
+  }
+
+  /* ============================================
+     进度条
+     ============================================ */
 
   .toast-lite__progress {
-    animation: none;
-    display: none;
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    height: 3px;
+    width: 100%;
+    transform-origin: left;
+    animation: toast-progress linear forwards;
+    animation-duration: var(--toast-duration, 4000ms);
   }
+
+  @keyframes toast-progress {
+    from {
+      transform: scaleX(1);
+    }
+    to {
+      transform: scaleX(0);
+    }
+  }
+
+  /* ============================================
+     响应式
+     ============================================ */
+
+  @media (max-width: 640px) {
+    .toast-lite-container {
+      top: 10px;
+      right: 10px;
+      left: 10px;
+    }
+
+    .toast-lite {
+      min-width: auto;
+      max-width: none;
+      width: 100%;
+    }
+  }
+
+  /* ============================================
+     无障碍：减少动画
+     ============================================ */
+
+  @media (prefers-reduced-motion: reduce) {
+    .toast-lite {
+      animation: none;
+      transition: opacity 0.2s ease;
+    }
+
+    .toast-lite--exiting {
+      animation: none;
+      opacity: 0;
+    }
+
+    .toast-lite:hover {
+      transform: translateY(calc(var(--toast-index, 0) * -70px));
+    }
+
+    .toast-lite__progress {
+      animation: none;
+      display: none;
+    }
+  }
+
 }

@@ -11,6 +11,8 @@
 import { useState } from 'react';
 import './AnimatedButtonLite.css';
 
+import { animatedButton } from './animatedButtonVariants';
+
 type ButtonState = 'idle' | 'loading' | 'success' | 'error';
 
 interface AnimatedButtonLiteProps {
@@ -60,7 +62,7 @@ export function AnimatedButtonLite({
   return (
     <button
       type="button"
-      className={`animated-btn-lite animated-btn-lite--${variant} animated-btn-lite--${size} animated-btn-lite--${state} ${className}`}
+      className={animatedButton({ variant, size, state, class: className })}
       onClick={handleClick}
       disabled={disabled || state === 'loading'}
       aria-busy={state === 'loading'}

@@ -6,23 +6,102 @@
 */
 
 /* Core foundation */
-@import "./core/tokens.css";
-@import "./core/reset.css";
-@import "./core/utilities.css";
+@import "./core/tokens.css" layer(legacy);
+@import "./core/reset.css" layer(legacy);
+@import "./core/utilities.css" layer(legacy);
+/* The elevation language, then the surfaces that speak it. Global so
+   login, admin and the architecture page match chat. */
 
-/* Tailwind CSS v4 utilities */
-@import "./tailwind.css";
+/* Tailwind v4.
+   These directives sit in the entry rather than in a file it imports:
+   `@source` cannot be nested, and with the directives one level down the
+   plugin had no source list at all -- it emitted zero bytes of utility CSS,
+   which is why the four `tw:` class names already in the codebase did
+   nothing. */
+/* Cascade order, lowest first. `legacy` is the 73 hand-written stylesheets;
+   `design` is the elevation/shape language. Utilities sit highest so a
+   Tailwind class written in a component applies without anyone having to
+   out-specify the CSS it replaces -- that is what makes incremental
+   migration possible at all. */
+@layer theme, legacy, components, design, utilities;
+
+@import "tailwindcss/theme.css" layer(theme) prefix(tw);
+@import "tailwindcss/utilities.css" layer(utilities) prefix(tw);
+
+@theme inline {
+  --color-bg: var(--bg);
+  --color-bg-secondary: var(--bg-secondary);
+  --color-bg-tertiary: var(--bg-tertiary);
+  --color-surface: var(--surface);
+  --color-surface-hover: var(--surface-hover);
+  --color-surface-active: var(--surface-active);
+  --color-text-primary: var(--text-primary);
+  --color-text-secondary: var(--text-secondary);
+  --color-text-tertiary: var(--text-tertiary);
+  --color-text-inverse: var(--text-inverse);
+  --color-border-light: var(--border-light);
+  --color-border-medium: var(--border-medium);
+  --color-border-strong: var(--border-strong);
+  --color-accent: var(--accent);
+  --color-accent-hover: var(--accent-hover);
+  --color-accent-light: var(--accent-light);
+  --color-accent-soft: var(--accent-soft);
+  --color-success: var(--success);
+  --color-success-light: var(--success-light);
+  --color-warning: var(--warning);
+  --color-warning-light: var(--warning-light);
+  --color-danger: var(--danger);
+  --color-danger-light: var(--danger-light);
+  --color-info: var(--info);
+  --color-info-light: var(--info-light);
+  --font-sans: var(--font-sans);
+  --font-mono: var(--font-mono);
+  --radius-sm: var(--radius-sm);
+  --radius-md: var(--radius-md);
+  --radius-lg: var(--radius-lg);
+  --radius-xl: var(--radius-xl);
+  --radius-2xl: var(--radius-2xl);
+  --shadow-sm: var(--shadow-sm);
+  --shadow-md: var(--shadow-md);
+  --shadow-lg: var(--shadow-lg);
+  --shadow-xl: var(--shadow-xl);
+  --shadow-2xl: var(--shadow-2xl);
+  --shadow-brand-sm: var(--shadow-brand-sm);
+  --shadow-brand-md: var(--shadow-brand-md);
+  --shadow-brand-lg: var(--shadow-brand-lg);
+  --breakpoint-mobile-tight: 32.5rem;
+  --breakpoint-sidebar: 67.5rem;
+
+  /* The shape and depth scale, exposed as utilities. Written here as well as
+     in core/elevation.css so `tw:rounded-card` and `tw:shadow-elev-1` exist:
+     `@theme` is what turns a variable into a class Tailwind can emit, and
+     without it the scale is a convention that only a code review enforces. */
+  --radius-control: var(--shape-control);
+  --radius-card: var(--shape-card);
+  --radius-panel: var(--shape-panel);
+  --radius-pill: var(--shape-pill);
+
+  --shadow-elev-1: var(--elev-1);
+  --shadow-elev-2: var(--elev-2);
+  --shadow-elev-3: var(--elev-3);
+}
+
+@source "../**/*.{ts,tsx}";
 
 /* Atomic shared components */
-@import "./components/buttons/index.css";
-@import "./components/forms/index.css";
-@import "./components/badges.css";
-@import "./components/skeletons.css";
-@import "./components/spinners.css";
+@import "./components/buttons/index.css" layer(legacy);
+@import "./components/forms/index.css" layer(legacy);
+@import "./components/badges.css" layer(legacy);
+@import "./components/skeletons.css" layer(legacy);
+@import "./components/spinners.css" layer(legacy);
 
 /* Composite shared components */
-@import "./components/cards.css";
-@import "./components/tables.css";
-@import "./components/confirm-dialog.css";
-@import "./components/clarification-prompt.css";
-@import "./components/thinking-indicator.css";
+@import "./components/cards.css" layer(legacy);
+@import "./components/tables.css" layer(legacy);
+@import "./components/confirm-dialog.css" layer(legacy);
+@import "./components/clarification-prompt.css" layer(legacy);
+@import "./components/thinking-indicator.css" layer(legacy);
+
+/* The elevation language, then the surfaces that speak it. */
+@import "./core/elevation.css" layer(design);
+@import "./core/surfaces.css" layer(design);

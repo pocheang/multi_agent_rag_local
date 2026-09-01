@@ -1,0 +1,214 @@
+{
+  "src/components/SessionManagement/SessionExportImport.css": {
+    "radii": 5,
+    "shadows": 1
+  },
+  "src/components/SessionManagement/SessionMetadataEditor.css": {
+    "radii": 8,
+    "shadows": 3
+  },
+  "src/components/SessionManagement/SessionSearch.css": {
+    "radii": 11,
+    "shadows": 3
+  },
+  "src/components/SessionManagement/TagInput.css": {
+    "radii": 5,
+    "shadows": 2
+  },
+  "src/components/animations/AnimatedButtonLite.css": {
+    "radii": 2,
+    "shadows": 2
+  },
+  "src/components/animations/AnimatedToastLite.css": {
+    "radii": 1,
+    "shadows": 2
+  },
+  "src/styles/components/badges.css": {
+    "radii": 1,
+    "shadows": 0
+  },
+  "src/styles/components/buttons/base.css": {
+    "radii": 1,
+    "shadows": 0
+  },
+  "src/styles/components/buttons/groups.css": {
+    "radii": 0,
+    "shadows": 2
+  },
+  "src/styles/components/buttons/variants.css": {
+    "radii": 0,
+    "shadows": 11
+  },
+  "src/styles/components/clarification-prompt.css": {
+    "radii": 0,
+    "shadows": 1
+  },
+  "src/styles/components/confirm-dialog.css": {
+    "radii": 0,
+    "shadows": 2
+  },
+  "src/styles/components/data-flow.css": {
+    "radii": 1,
+    "shadows": 4
+  },
+  "src/styles/components/dropdowns.css": {
+    "radii": 0,
+    "shadows": 2
+  },
+  "src/styles/components/forms/inputs.css": {
+    "radii": 1,
+    "shadows": 2
+  },
+  "src/styles/components/forms/selects.css": {
+    "radii": 1,
+    "shadows": 2
+  },
+  "src/styles/components/modals.css": {
+    "radii": 8,
+    "shadows": 10
+  },
+  "src/styles/components/sidebar/actions.css": {
+    "radii": 2,
+    "shadows": 1
+  },
+  "src/styles/components/sidebar/footer.css": {
+    "radii": 3,
+    "shadows": 2
+  },
+  "src/styles/components/sidebar/layout.css": {
+    "radii": 0,
+    "shadows": 1
+  },
+  "src/styles/components/sidebar/modern-layout.css": {
+    "radii": 2,
+    "shadows": 3
+  },
+  "src/styles/components/sidebar/modern-sessions.css": {
+    "radii": 6,
+    "shadows": 10
+  },
+  "src/styles/components/sidebar/modules.css": {
+    "radii": 8,
+    "shadows": 5
+  },
+  "src/styles/components/sidebar/rail.css": {
+    "radii": 2,
+    "shadows": 4
+  },
+  "src/styles/components/skeletons.css": {
+    "radii": 1,
+    "shadows": 0
+  },
+  "src/styles/components/tables.css": {
+    "radii": 0,
+    "shadows": 2
+  },
+  "src/styles/components/thinking-indicator.css": {
+    "radii": 2,
+    "shadows": 0
+  },
+  "src/styles/components/topbar.css": {
+    "radii": 1,
+    "shadows": 5
+  },
+  "src/styles/components/welcome-screen.css": {
+    "radii": 2,
+    "shadows": 8
+  },
+  "src/styles/core/surfaces.css": {
+    "radii": 0,
+    "shadows": 1
+  },
+  "src/styles/features/citations.css": {
+    "radii": 4,
+    "shadows": 2
+  },
+  "src/styles/features/composer/actions.css": {
+    "radii": 4,
+    "shadows": 7
+  },
+  "src/styles/features/composer/editor.css": {
+    "radii": 0,
+    "shadows": 1
+  },
+  "src/styles/features/composer/layout.css": {
+    "radii": 1,
+    "shadows": 2
+  },
+  "src/styles/features/graph.css": {
+    "radii": 10,
+    "shadows": 0
+  },
+  "src/styles/features/hidden-sections.css": {
+    "radii": 1,
+    "shadows": 6
+  },
+  "src/styles/features/messages.css": {
+    "radii": 4,
+    "shadows": 6
+  },
+  "src/styles/features/process.css": {
+    "radii": 1,
+    "shadows": 5
+  },
+  "src/styles/pages/admin/actions.css": {
+    "radii": 2,
+    "shadows": 1
+  },
+  "src/styles/pages/admin/layout.css": {
+    "radii": 2,
+    "shadows": 2
+  },
+  "src/styles/pages/admin/ops.css": {
+    "radii": 4,
+    "shadows": 0
+  },
+  "src/styles/pages/admin/tables.css": {
+    "radii": 10,
+    "shadows": 5
+  },
+  "src/styles/pages/analytics.css": {
+    "radii": 0,
+    "shadows": 6
+  },
+  "src/styles/pages/architecture.css": {
+    "radii": 8,
+    "shadows": 9
+  },
+  "src/styles/pages/auth/forms.css": {
+    "radii": 2,
+    "shadows": 2
+  },
+  "src/styles/pages/auth/layout.css": {
+    "radii": 4,
+    "shadows": 6
+  },
+  "src/styles/pages/auth/social.css": {
+    "radii": 0,
+    "shadows": 4
+  },
+  "src/styles/pages/chat-density.css": {
+    "radii": 1,
+    "shadows": 0
+  },
+  "src/styles/pages/chat-responsive.css": {
+    "radii": 1,
+    "shadows": 0
+  },
+  "src/styles/pages/landing.css": {
+    "radii": 0,
+    "shadows": 1
+  },
+  "src/styles/pages/profile.css": {
+    "radii": 1,
+    "shadows": 0
+  },
+  "src/styles/themes/light/chat.css": {
+    "radii": 1,
+    "shadows": 37
+  },
+  "src/styles/themes/light/contrast.css": {
+    "radii": 0,
+    "shadows": 1
+  }
+}

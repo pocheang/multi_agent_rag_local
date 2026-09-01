@@ -77,6 +77,14 @@ jobs:
       - name: Type check
         run: npm run type-check
 
+      # Shape and depth scale, as a ratchet. The chat screen once carried eight
+      # radii and eighteen distinct shadows at the same time; that drift is
+      # cheap to prevent and expensive to undo. Existing counts are frozen per
+      # file in scripts/design-scale-baseline.json -- a file may improve, never
+      # regress, and a new file starts at zero.
+      - name: Design scale
+        run: npm run lint:design
+
       # Store-reset coverage: the Zustand stores live for the lifetime of the
       # tab, so a field that survives logout shows the next person on a shared
       # browser the previous one's data. The test discovers fields rather than

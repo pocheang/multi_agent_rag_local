@@ -1,16 +1,19 @@
 /* Chat route stylesheet entry.
    Keep chat-only shell, sidebar, message, composer, citation, graph, and route theme CSS out of main.css. */
 
-@import "../components/topbar.css";
-@import "../components/topbar-responsive.css";
-@import "./chat.css";
-@import "../components/sidebar/index.css";
-@import "../features/messages.css";
-@import "../features/composer/index.css";
-@import "../features/citations.css";
-@import "../features/graph.css";
-@import "../features/process.css";
-@import "../features/runtime-panels.css";
-@import "../features/hidden-sections.css";
-@import "../themes/light/chat.css";
-@import "./chat-responsive.css";
+@import "../components/topbar.css" layer(legacy);
+@import "../components/topbar-responsive.css" layer(legacy);
+@import "./chat.css" layer(legacy);
+@import "../components/sidebar/index.css" layer(legacy);
+@import "../features/messages.css" layer(legacy);
+@import "../features/composer/index.css" layer(legacy);
+@import "../features/citations.css" layer(legacy);
+@import "../features/graph.css" layer(legacy);
+@import "../features/process.css" layer(legacy);
+@import "../features/runtime-panels.css" layer(legacy);
+@import "../features/hidden-sections.css" layer(legacy);
+@import "../themes/light/chat.css" layer(legacy);
+@import "../themes/light/contrast.css" layer(legacy);
+@import "./chat-responsive.css" layer(legacy);
+/* Last: density and small-screen corrections tighten the rules above. */
+@import "./chat-density.css" layer(legacy);
