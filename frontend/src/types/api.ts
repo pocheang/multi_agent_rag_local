@@ -469,3 +469,32 @@ export type ClarificationResponse = {
     reason: string;
   };
 };
+
+/** One field an administrator may change, and where its current value came from.
+ *
+ *  `layer` is the thing the page exists to show: a value pinned in the process
+ *  environment outranks the configuration centre, so editing it would look like
+ *  it worked and change nothing. `editable_here` is false for exactly those. */
+export type ConfigField = {
+  alias: string;
+  group: string;
+  summary: string;
+  type: string;
+  value: string | number | boolean;
+  default: string | number | boolean;
+  layer: "environment" | "config-centre" | "runtime-file" | "default";
+  editable_here: boolean;
+  requires_restart: boolean;
+};
+
+export type ConfigSchemaResponse = {
+  config_centre_enabled: boolean;
+  fields: ConfigField[];
+};
+
+export type ConfigSaveResponse = {
+  ok: boolean;
+  data_id: string;
+  changed: string[];
+  fields: ConfigField[];
+};

@@ -8,6 +8,7 @@ from fastapi import FastAPI
 
 from app.api.routes import sessions as sessions_management
 from app.api.routes.admin import agent_quality as admin_agent_quality
+from app.api.routes.admin import config as admin_config
 from app.api.routes.admin import graph_rag as admin_graph_rag
 from app.api.routes.admin import language_stats as admin_language_stats
 from app.api.routes.admin import ops as admin_ops
@@ -34,6 +35,7 @@ ROUTER_MODULES = (
     admin_users,
     admin_ops,
     admin_settings,
+    admin_config,
     admin_language_stats,
     admin_agent_quality,
     agent_tracking,

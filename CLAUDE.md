@@ -715,6 +715,27 @@ container, and is the thing to run after touching the adapter or bumping the pin
 client answers whatever shape it is asked for, so the unit tests cannot catch this
 repository's calls drifting from the SDK's.
 
+**What an administrator may change is an allowlist**, `app/core/config_schema.py`, not an
+annotation per field. `Settings` has 236 of them; annotating individually would scatter a
+security-relevant decision across 236 lines and leave "what can console access reach?"
+with no single answer. It is opt-in — a new field is not editable until it is named — and
+`tests/core/test_config_schema.py` asserts by *shape* that nothing matching KEY, SECRET,
+PASSWORD, TOKEN, PATH, URL, DSN, CORS or ORIGIN ever appears there, so a future addition has
+to defeat the rule deliberately rather than by inattention.
+
+`GET /admin/config/schema` returns each editable field with its current value and **which
+layer supplied it**, and `POST /admin/config/values` writes to the configuration centre and
+reloads. Two things it refuses, and both prevent the console from claiming a change it did
+not make: a write with no configuration centre configured (there would be nowhere to put it
+that the process reads), and a write to a value pinned in the process environment — the
+environment outranks the centre, so it would succeed and change nothing. The browser
+disables those inputs too, but that is a convenience: the rule is enforced server-side
+because the browser is not where it can be.
+
+The document is rewritten whole rather than patched, from what this process currently reads
+plus the edit. The centre owns version history and rollback; merging here would be a second,
+worse implementation of both.
+
 **The process environment sits above the centre on purpose**: a deployment needs one way to
 pin a value the console cannot move, which is what `MODEL_BACKEND=local` already does to
 persisted admin model settings. The rejected alternative — fetching remote values at startup
@@ -998,7 +1019,7 @@ A third makes it three. Do not add a pixel-diff CI gate for the reason above, an
 
 `tests/` was cleared ahead of the v0.7 rewrite and is being rebuilt incrementally: each bug
 fix lands with the regression test that would have caught it, rather than as a separate
-back-filling effort. As of 2026-09-01 there are 496 tests covering the chat round trip,
+back-filling effort. As of 2026-09-01 there are 517 tests covering the chat round trip,
 conversation context, graph routing, clarification, the async load guard, engine reuse,
 answer safety, reader-facing citation numbering, stage-timeout degradation, the governed
 tool stack with its multi-step loop and approve-then-resume cycle, retrieval
@@ -1007,7 +1028,8 @@ complexity- and plan-driven retrieval width, caller deadlines, skill-shaped synt
 follow-up completion, answer provenance, an answer that shows the reader none of the
 machinery that produced it, a router cache that opens no event loop, a guard that every
 Settings field has a reader, a guard that no module reads the environment behind
-`Settings`'s back, and the configuration-centre source with its three-step degradation.
+`Settings`'s back, the configuration-centre source with its three-step degradation, and the
+admin configuration surface with the writes it refuses.
 
 `tests/security/` (154 of those) pins the user-data isolation invariants — see
 `docs/superpowers/plans/2026-08-29-user-data-isolation.md`. That plan is complete
@@ -1053,8 +1075,13 @@ confirming after a clarified query would have re-sent a stale question.
 any identity change: the stores outlive a logout, so a field added to a store but forgotten
 in its `INITIAL_STATE` would show the next person on a shared browser the previous user's
 data. The test discovers fields rather than listing them, so it catches that drift.
-That suite is 36 tests across 6 files — small, and deliberately aimed at the things a
-screenshot cannot check.
+That suite is 40 tests across 7 files — small, and deliberately aimed at the things a
+screenshot cannot check. `AdminConfigEditor.test.tsx` is the newest: it pins that a value
+pinned in the process environment renders disabled, and that only edited fields are sent —
+posting the whole form would turn a page load into a write of every value, and a stale read
+into an overwrite. Note that auto-cleanup between renders only registers when vitest runs
+with `globals`, which this project does not; a component test must call `cleanup()` itself
+or every later query in the file finds two of everything.
 
 Note: do not use `len(app.routes)` to count endpoints. FastAPI 0.138+ stores an
 `_IncludedRouter` wrapper in `app.routes` instead of flattening child routes, so that number

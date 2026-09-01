@@ -52,15 +52,19 @@ SNAPSHOT_ROOT = Path(".runtime") / "remote-config"
 
 
 class RemoteConfigClient(Protocol):
-    """The one operation a configuration centre has to provide.
+    """The two operations a configuration centre has to provide.
 
     Narrow on purpose: it is what a fake in a test has to implement, and the
     whole surface a different backend would have to satisfy. Change detection is
-    deliberately *not* part of it -- see `watch_remote_config`, which polls this.
+    deliberately *not* part of it -- see `watch_remote_config`, which polls
+    `fetch`.
     """
 
     def fetch(self, group: str, data_id: str) -> str | None:
         """Return the raw document, or None when it is unavailable."""
+
+    def publish(self, group: str, data_id: str, content: str) -> bool:
+        """Replace the document. Returns whether the centre accepted it."""
 
 
 @dataclass(frozen=True)
@@ -248,6 +252,23 @@ class RemoteSettingsSource(PydanticBaseSettingsSource):
         if values:
             logger.info("remote config: %d values from %s", len(values), config.server_addr or "snapshot")
         return values
+
+    def publish(self, data_id: str, values: dict[str, str]) -> bool:
+        """Replace one document with `values`, rendered in the same format.
+
+        The document is rewritten whole rather than patched: the centre keeps
+        the version history and the rollback, so a merge here would be a second,
+        worse implementation of both. The caller is responsible for having read
+        the current values first -- which the admin endpoint does, from this same
+        source, so what it writes back is what the page was showing plus the
+        edit.
+        """
+
+        client = self._resolve_client()
+        if client is None:
+            raise RuntimeError("no configuration centre client available")
+        body = "".join(f"{key}={values[key]}\n" for key in sorted(values))
+        return bool(client.publish(self._config.group, data_id, body))
 
 
 def _digest(documents: dict[str, str]) -> str:

@@ -351,6 +351,21 @@
     "export": {
       "csv": "Export as CSV",
       "json": "Export as JSON"
+    },
+    "config": {
+      "title": "Runtime configuration",
+      "save": "Save {{count}} change(s)",
+      "saved": "Saved {{count}} change(s); the runtime has reloaded.",
+      "noCentre": "No configuration centre is configured, so these values are read-only here. Set NACOS_ENABLED and restart to edit them.",
+      "needsRestart": "(restart required)",
+      "group": {
+        "retrieval": "Retrieval",
+        "query": "Query understanding",
+        "routing": "Routing",
+        "answer": "Answer",
+        "budgets": "Budgets and timeouts",
+        "security": "Security"
+      }
     }
   },
   "common": {

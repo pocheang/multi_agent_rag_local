@@ -1,4 +1,5 @@
 import { useTranslation } from "react-i18next";
+import { AdminConfigEditor } from "@/pages/admin/AdminConfigEditor";
 import type { BenchmarkTrendItem } from "@/types/api";
 
 interface Props {
@@ -24,6 +25,8 @@ export function AdminRagSettings({
 
   return (
     <main className="panel ops-wrap">
+      <AdminConfigEditor />
+
       <div className="section-head">
         <strong>{t("admin.ui.ragOps")}</strong>
         <div className="row-actions">

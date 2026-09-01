@@ -23,7 +23,7 @@ with a stub server and no container. Run it after any change here, or after
 bumping the pin: the unit tests use a fake client, which answers whatever shape
 it is asked for and therefore cannot catch these calls drifting from the SDK's.
 
-Only `fetch` lives here. Change detection is polled by
+Only `fetch` and `publish` live here. Change detection is polled by
 `remote_config.watch_remote_config`, because the SDK's own watcher builds a
 `multiprocessing.Manager()` and never returned on Windows -- see that function.
 
@@ -73,3 +73,13 @@ class NacosConfigClient:
 
         content = self._client.get_config(data_id, group, timeout=self._timeout, no_snapshot=True)
         return content if isinstance(content, str) else None
+
+    def publish(self, group: str, data_id: str, content: str) -> bool:
+        """Replace the document, and say whether the centre accepted it.
+
+        `publish_config` returns a bool rather than raising on a rejected write,
+        so the result has to be checked; a caller that ignored it would report a
+        saved configuration that the centre never stored.
+        """
+
+        return bool(self._client.publish_config(data_id, group, content, timeout=self._timeout))

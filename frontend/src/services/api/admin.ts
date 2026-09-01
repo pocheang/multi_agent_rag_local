@@ -2,6 +2,8 @@ import type {
   AdminModelSettingsPayload,
   AdminModelSettingsView,
   AdminRuntimeSnapshot,
+  ConfigSaveResponse,
+  ConfigSchemaResponse,
   AdminUserSummary,
   AuditLogEntry,
   BenchmarkTrendItem,
@@ -212,5 +214,14 @@ export const adminConfigApi = {
       reloaded_at: string;
       snapshot: Record<string, unknown>;
     }>(res);
+  },
+  /** Every editable field, its current value, and which layer supplied it. */
+  configSchema() {
+    return request<ConfigSchemaResponse>("/admin/config/schema");
+  },
+  /** Only the fields that were actually edited; the server merges the rest into
+   *  the document it already holds, so an untouched key keeps its value. */
+  saveConfig(values: Record<string, string>, dataId?: string) {
+    return buildPostRequest<ConfigSaveResponse>("/admin/config/values", { values, data_id: dataId ?? null });
   },
 };

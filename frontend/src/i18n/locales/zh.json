@@ -351,6 +351,21 @@
     "export": {
       "csv": "导出为 CSV",
       "json": "导出为 JSON"
+    },
+    "config": {
+      "title": "运行时配置",
+      "save": "保存 {{count}} 项修改",
+      "saved": "已保存 {{count}} 项修改，运行时已重载。",
+      "noCentre": "未配置配置中心，这里只读。设置 NACOS_ENABLED 并重启后才能编辑。",
+      "needsRestart": "（需重启）",
+      "group": {
+        "retrieval": "检索",
+        "query": "查询理解",
+        "routing": "路由",
+        "answer": "答案",
+        "budgets": "预算与超时",
+        "security": "安全"
+      }
     }
   },
   "common": {
