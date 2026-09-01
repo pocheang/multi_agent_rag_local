@@ -148,7 +148,12 @@ export function WorkbenchPanel({
       </div>
 
       <section className="panel sidebar-module">
-        <button type="button" className="sidebar-module-toggle" onClick={() => toggleToolSection("agents")}>
+        <button
+          type="button"
+          className="sidebar-module-toggle"
+          aria-expanded={!toolsCollapsed.agents}
+          onClick={() => toggleToolSection("agents")}
+        >
           <div className="sidebar-module-copy">
             <strong>{t("components.workbench.agentWorkbench")}</strong>
             <small>{t("components.workbench.agentWorkbenchDesc")}</small>
@@ -156,6 +161,7 @@ export function WorkbenchPanel({
           <span className={`sidebar-module-status ${agentClassHint ? "status-locked" : "status-auto"}`}>
             {moduleStatus.agents}
           </span>
+          <span className="sidebar-module-chevron" aria-hidden="true" />
         </button>
         {!toolsCollapsed.agents && (
           <div className="sidebar-module-body">
@@ -170,12 +176,18 @@ export function WorkbenchPanel({
       </section>
 
       <section className="panel sidebar-module">
-        <button type="button" className="sidebar-module-toggle" onClick={() => toggleToolSection("pdf")}>
+        <button
+          type="button"
+          className="sidebar-module-toggle"
+          aria-expanded={!toolsCollapsed.pdf}
+          onClick={() => toggleToolSection("pdf")}
+        >
           <div className="sidebar-module-copy">
             <strong>{t("components.workbench.pdfWorkbench")}</strong>
             <small>{t("components.workbench.pdfWorkbenchDesc")}</small>
           </div>
           <span className="sidebar-module-status status-files">{moduleStatus.pdf}</span>
+          <span className="sidebar-module-chevron" aria-hidden="true" />
         </button>
         {!toolsCollapsed.pdf && (
           <div className="sidebar-module-body">
@@ -192,12 +204,18 @@ export function WorkbenchPanel({
       </section>
 
       <section className="panel sidebar-module">
-        <button type="button" className="sidebar-module-toggle" onClick={() => toggleToolSection("docs")}>
+        <button
+          type="button"
+          className="sidebar-module-toggle"
+          aria-expanded={!toolsCollapsed.docs}
+          onClick={() => toggleToolSection("docs")}
+        >
           <div className="sidebar-module-copy">
             <strong>{t("components.workbench.knowledgeBase")}</strong>
             <small>{t("components.workbench.knowledgeBaseDesc")}</small>
           </div>
           <span className="sidebar-module-status status-docs">{moduleStatus.docs}</span>
+          <span className="sidebar-module-chevron" aria-hidden="true" />
         </button>
         {!toolsCollapsed.docs && (
           <div className="sidebar-module-body">
@@ -245,12 +263,18 @@ export function WorkbenchPanel({
       </section>
 
       <section className="panel sidebar-module">
-        <button type="button" className="sidebar-module-toggle" onClick={() => toggleToolSection("prompts")}>
+        <button
+          type="button"
+          className="sidebar-module-toggle"
+          aria-expanded={!toolsCollapsed.prompts}
+          onClick={() => toggleToolSection("prompts")}
+        >
           <div className="sidebar-module-copy">
             <strong>{t("components.workbench.promptLibrary")}</strong>
             <small>{t("components.workbench.promptLibraryDesc")}</small>
           </div>
           <span className="sidebar-module-status status-saved">{moduleStatus.prompts}</span>
+          <span className="sidebar-module-chevron" aria-hidden="true" />
         </button>
         {!toolsCollapsed.prompts && (
           <div className="sidebar-module-body">

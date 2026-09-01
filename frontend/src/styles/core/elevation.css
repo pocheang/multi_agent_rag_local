@@ -1,0 +1,54 @@
+/* ============================================
+   Elevation and shape
+
+   The language the rest of the app is restyled against. Two scales, both
+   short on purpose.
+
+   A DOM audit of one chat screen found eight radii in use at once -- 6, 8, 9,
+   10, 12, 14, 18 and 20px -- and almost every surface outlined with the same
+   `1px solid #E2E8F0` plus an inconsistent shadow (or none). Eight values is
+   not a scale, it is the absence of one, and an outline plus a shadow states
+   the same separation twice.
+
+   Here separation comes from *depth*, not from outlines: a surface sits on
+   the background and casts a very soft, wide shadow. Two layers per level --
+   a tight one for the contact edge, a wide one for the ambient falloff --
+   because a single blur reads as a drop shadow rather than as a raised
+   surface.
+   ============================================ */
+
+:root {
+  /* Shape. Four steps, each with a job. */
+  --shape-control: 8px; /* buttons, inputs, chips */
+  --shape-card: 12px; /* cards, list rows, panels */
+  --shape-panel: 16px; /* large containers, modals, the composer */
+  --shape-pill: 999px; /* badges, avatars */
+
+  /* Depth. Opacities are low: the point is that you notice the surface, not
+     the shadow. Tinted with the app's slate rather than pure black, which
+     otherwise reads as grey haze on a cool background. */
+  --elev-0: none;
+  --elev-1:
+    0 1px 2px rgba(15, 23, 42, 0.04),
+    0 2px 8px rgba(15, 23, 42, 0.04);
+  --elev-2:
+    0 2px 4px rgba(15, 23, 42, 0.05),
+    0 8px 20px rgba(15, 23, 42, 0.07);
+  --elev-3:
+    0 4px 8px rgba(15, 23, 42, 0.06),
+    0 20px 48px rgba(15, 23, 42, 0.12);
+
+  /* A hairline for *dividing* things inside one surface. Outlining a card and
+     separating two rows are different jobs; only the second one survives. */
+  --hairline: rgba(15, 23, 42, 0.07);
+
+  /* How far a surface rises when pointed at. One pixel: enough to register,
+     small enough that a list does not jitter as the pointer crosses it. */
+  --lift: -1px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --lift: 0px;
+  }
+}

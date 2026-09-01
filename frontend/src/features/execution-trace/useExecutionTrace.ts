@@ -1,6 +1,6 @@
 import { useEffect, useReducer } from "react";
 
-import { initialExecutionTraceState, reduceExecutionTrace } from "../tool-approval/state";
+import { initialExecutionTraceState, reduceExecutionTrace } from "./state";
 import { streamExecutionEvents } from "@/services/execution/execution-api";
 
 export function useExecutionTrace(executionId: string | null) {
@@ -15,12 +15,14 @@ export function useExecutionTrace(executionId: string | null) {
 
     // Start streaming when we have an executionId
     const controller = new AbortController();
-    void streamExecutionEvents(executionId, controller.signal, (event) => dispatch({ type: "event_received", event }));
+    void streamExecutionEvents(
+      executionId,
+      controller.signal,
+      (event) => dispatch({ type: "event_received", event }),
+      (text) => dispatch({ type: "answer_fragment", text }),
+    );
     return () => controller.abort();
   }, [executionId]);
 
-  return {
-    ...state,
-    resolveApproval: () => dispatch({ type: "approval_resolved" }),
-  };
+  return state;
 }
