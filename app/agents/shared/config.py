@@ -132,10 +132,6 @@ WHY: Most queries need citation-backed answers."""
 # WHY: Multi-stage quality validation with configurable thresholds
 # ============================================================================
 
-# Context Tracking
-ENABLE_CONTEXT_TRACKING: Final[bool] = _get_bool_env("ENABLE_CONTEXT_TRACKING", True)
-"""Enable conversation context tracking for multi-turn queries."""
-
 # Route Validation Thresholds
 ROUTE_HIGH_CONFIDENCE_THRESHOLD: Final[float] = _get_float_env("ROUTE_HIGH_CONFIDENCE_THRESHOLD", 0.85)
 ROUTE_MEDIUM_CONFIDENCE_THRESHOLD: Final[float] = _get_float_env("ROUTE_MEDIUM_CONFIDENCE_THRESHOLD", 0.60)

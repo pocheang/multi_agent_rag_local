@@ -11,10 +11,10 @@ Optimizations:
 import json
 import logging
 import re
+import threading
 from dataclasses import dataclass
 
 from app.agents.router.calibration import ConfidenceCalibrator
-from app.agents.router.config import ENABLE_CALIBRATION, ENABLE_WEB_ROUTE_DOWNGRADE
 from app.agents.router.examples import get_mixed_examples
 from app.agents.shared.cache import cached_router_decision
 from app.agents.shared.config import (
@@ -27,6 +27,7 @@ from app.agents.shared.config import (
     VALID_ROUTES,
     VALID_SKILLS,
 )
+from app.core.config import get_settings
 from app.domain.text import normalize_string
 from app.prompts import build_router_prompt
 from app.services.agent_classifier import classify_agent_class, pick_cyber_skill
@@ -46,8 +47,29 @@ __all__ = [
     "get_calibration_stats",
 ]
 
-# Initialize global calibrator for confidence calibration
-_calibrator = ConfidenceCalibrator() if ENABLE_CALIBRATION else None
+# The calibrator is resolved on first use, never at import.
+#
+# `ENABLE_CALIBRATION` is a `Settings` field now, and Settings is read from the
+# rendered runtime env after this module has already been imported. Binding the
+# switch at import time is exactly what made it settable only as a real exported
+# environment variable, and it would make a config-centre push unable to reach
+# it. The lock matters because `decide_route` runs under `asyncio.to_thread`:
+# two threads racing here would each build a calibrator, and both would flush
+# accumulated outcomes to the same file.
+_calibrator: ConfidenceCalibrator | None = None
+_calibrator_lock = threading.Lock()
+
+
+def _get_calibrator() -> ConfidenceCalibrator | None:
+    """The calibrator, or None while `ENABLE_CALIBRATION` is off."""
+
+    if not get_settings().enable_calibration:
+        return None
+    global _calibrator
+    with _calibrator_lock:
+        if _calibrator is None:
+            _calibrator = ConfidenceCalibrator()
+        return _calibrator
 
 
 @dataclass
@@ -186,7 +208,8 @@ def decide_route(
 
     if is_smalltalk_query(question):
         raw_confidence = 0.95  # High confidence for smalltalk detection
-        calibrated_confidence = _calibrator.calibrate(raw_confidence) if _calibrator else raw_confidence
+        calibrator = _get_calibrator()
+        calibrated_confidence = calibrator.calibrate(raw_confidence) if calibrator else raw_confidence
 
         return LegacyRouteDecision(
             route=ROUTE_VECTOR,
@@ -267,7 +290,7 @@ Suggested skill: {skill}"""
         # Web route downgrade (configurable)
         # Reason: In production, we prioritize local knowledge base first to reduce latency
         # and API costs. Web search is only used when explicitly enabled or local retrieval fails.
-        if route == ROUTE_WEB and ENABLE_WEB_ROUTE_DOWNGRADE:
+        if route == ROUTE_WEB and get_settings().enable_web_route_downgrade:
             route = ROUTE_VECTOR
             reason = _append_reason(reason, "web_downgraded_to_local_first")
             logger.debug("Web route downgraded to vector (ENABLE_WEB_ROUTE_DOWNGRADE=True)")
@@ -322,8 +345,9 @@ Suggested skill: {skill}"""
 
     # Apply confidence calibration
     raw_confidence = route_confidence
-    if _calibrator is not None:
-        calibrated_confidence = _calibrator.calibrate(raw_confidence)
+    calibrator = _get_calibrator()
+    if calibrator is not None:
+        calibrated_confidence = calibrator.calibrate(raw_confidence)
         logger.debug(f"Calibrated confidence: {raw_confidence:.2f} -> {calibrated_confidence:.2f}")
     else:
         calibrated_confidence = raw_confidence
@@ -370,8 +394,9 @@ def record_routing_feedback(raw_confidence: float, was_correct: bool) -> None:
         if result_quality > threshold:
             record_routing_feedback(decision.confidence, was_correct=True)
     """
-    if _calibrator is not None:
-        _calibrator.record_feedback(raw_confidence, was_correct)
+    calibrator = _get_calibrator()
+    if calibrator is not None:
+        calibrator.record_feedback(raw_confidence, was_correct)
         logger.info(f"Recorded routing feedback: confidence={raw_confidence:.2f}, correct={was_correct}")
 
 
@@ -382,6 +407,7 @@ def get_calibration_stats() -> dict[str, dict]:
     Returns:
         Dictionary mapping bucket names to calibration stats
     """
-    if _calibrator is not None:
-        return _calibrator.get_stats()
+    calibrator = _get_calibrator()
+    if calibrator is not None:
+        return calibrator.get_stats()
     return {}

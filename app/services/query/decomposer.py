@@ -12,6 +12,14 @@ from app.services.observability.log_safety import question_ref
 logger = logging.getLogger(__name__)
 
 
+DEFAULT_MAX_SUB_QUERIES = 4
+"""How many sub-queries a decomposition may produce.
+
+Named rather than inlined so `GET /api/advanced-rag/config` can report the bound
+that is actually enforced. It reported an unrelated environment variable before.
+"""
+
+
 class QueryDecomposer:
     """Service for decomposing complex queries into simpler sub-queries."""
 
@@ -24,7 +32,7 @@ class QueryDecomposer:
         """
         self.llm = llm_client
         self.decomposition_prompt = self._load_prompt()
-        self.max_sub_queries = 4
+        self.max_sub_queries = DEFAULT_MAX_SUB_QUERIES
 
     def _load_prompt(self) -> str:
         """Load decomposition prompt template."""

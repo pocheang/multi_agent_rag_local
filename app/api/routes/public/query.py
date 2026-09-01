@@ -9,6 +9,7 @@ from typing import Any
 from fastapi import APIRouter, Depends, Request
 from pydantic import BaseModel, Field
 
+from app.agents.shared.config import get_vector_rag_config
 from app.api.dependencies import (
     _build_memory_context_for_session,
     _history_store_for_user,
@@ -23,6 +24,7 @@ from app.api.deps.auth import require_admin
 from app.api.deps.documents import _allowed_sources_for_user
 from app.api.routes.internal.pipeline_contract import retrieval_summary
 from app.api.transport.errors import internal_error
+from app.core.config import get_settings
 from app.domain.advanced_rag import (
     AdvancedRAGResult,
     AnswerQuality,
@@ -41,6 +43,7 @@ from app.pipeline.contracts import (
 from app.pipeline.profiles import PipelineProfile
 from app.pipeline.rag_pipeline import RAGPipeline
 from app.services.observability.agent_execution_tracker import AgentExecutionTracker
+from app.services.query.decomposer import DEFAULT_MAX_SUB_QUERIES
 
 logger = logging.getLogger(__name__)
 
@@ -431,17 +434,26 @@ async def health_check():
 
 @router.get("/config", dependencies=[Depends(require_admin)])
 async def get_config():
-    """Get current advanced RAG configuration."""
-    import os
+    """Report the switches that actually gate these two features.
 
+    Every value here used to come from an environment variable that nothing else
+    reads: `ENABLE_QUERY_DECOMPOSITION` against a real switch named
+    `QUERY_DECOMPOSE_ENABLED` that defaults to *on*, so the page said "false"
+    while the feature ran; `ENABLE_SELF_RAG` against a gate that lives on
+    `VectorRAGConfig`; and a `max_sub_queries` unrelated to the bound the
+    decomposer enforces. A configuration page that reports something other than
+    the running configuration is worse than no page.
+    """
+
+    settings = get_settings()
     return {
         "query_decomposition": {
-            "enabled_by_default": os.getenv("ENABLE_QUERY_DECOMPOSITION", "false").lower() == "true",
-            "max_sub_queries": int(os.getenv("QUERY_DECOMPOSITION_MAX_SUBQUERIES", "4")),
+            "enabled_by_default": settings.query_decompose_enabled,
+            "max_sub_queries": DEFAULT_MAX_SUB_QUERIES,
         },
         "self_rag": {
-            "enabled_by_default": os.getenv("ENABLE_SELF_RAG", "false").lower() == "true",
-            "relevance_threshold": float(os.getenv("SELF_RAG_RELEVANCE_THRESHOLD", "0.6")),
-            "quality_threshold": float(os.getenv("SELF_RAG_QUALITY_THRESHOLD", "0.7")),
+            "enabled_by_default": get_vector_rag_config().enable_evaluation,
+            "relevance_threshold": settings.self_rag_relevance_threshold,
+            "quality_threshold": settings.self_rag_quality_threshold,
         },
     }

@@ -3,10 +3,10 @@ Self-RAG evaluator service for evaluating retrieval relevance and answer quality
 """
 
 import logging
-import os
 import re
 from typing import Any
 
+from app.core.config import get_settings
 from app.domain.advanced_rag import AnswerQuality, RelevanceScore
 
 logger = logging.getLogger(__name__)
@@ -25,8 +25,9 @@ class SelfRAGEvaluator:
         self.llm = llm_client
         self.relevance_prompt = self._load_relevance_prompt()
         self.quality_prompt = self._load_quality_prompt()
-        self.relevance_threshold = float(os.getenv("SELF_RAG_RELEVANCE_THRESHOLD", "0.6"))
-        self.quality_threshold = float(os.getenv("SELF_RAG_QUALITY_THRESHOLD", "0.7"))
+        settings = get_settings()
+        self.relevance_threshold = settings.self_rag_relevance_threshold
+        self.quality_threshold = settings.self_rag_quality_threshold
 
     def _load_relevance_prompt(self) -> str:
         """Load relevance evaluation prompt template."""

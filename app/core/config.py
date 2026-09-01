@@ -93,6 +93,19 @@ class Settings(BaseSettings):
     dynamic_vector_top_k_cap: int = Field(default=16, alias="DYNAMIC_VECTOR_TOP_K_CAP")
     dynamic_bm25_top_k_cap: int = Field(default=16, alias="DYNAMIC_BM25_TOP_K_CAP")
     dynamic_reranker_top_n_cap: int = Field(default=10, alias="DYNAMIC_RERANKER_TOP_N_CAP")
+
+    # Folded in from module-level `os.getenv` reads on 2026-09-01.  Those were
+    # unreachable by the documented config flow: pydantic-settings loads
+    # `.runtime/{APP_ENV}.env` into Settings without exporting anything into the
+    # process environment, so a key read with `os.getenv` could only ever be set
+    # as a real exported variable -- and none of these appear in `config/env/`.
+    # Anything a config centre is meant to manage has to be a field here first.
+    enable_calibration: bool = Field(default=False, alias="ENABLE_CALIBRATION")
+    enable_web_route_downgrade: bool = Field(default=False, alias="ENABLE_WEB_ROUTE_DOWNGRADE")
+    self_rag_relevance_threshold: float = Field(default=0.6, alias="SELF_RAG_RELEVANCE_THRESHOLD")
+    self_rag_quality_threshold: float = Field(default=0.7, alias="SELF_RAG_QUALITY_THRESHOLD")
+    request_metrics_maxlen: int = Field(default=1000, alias="REQUEST_METRICS_MAXLEN")
+    strict_csp: bool = Field(default=False, alias="STRICT_CSP")
     retrieval_cache_enabled: bool = Field(default=True, alias="RETRIEVAL_CACHE_ENABLED")
     retrieval_cache_ttl_seconds: int = Field(default=45, alias="RETRIEVAL_CACHE_TTL_SECONDS")
     retrieval_cache_max_items: int = Field(default=256, alias="RETRIEVAL_CACHE_MAX_ITEMS")

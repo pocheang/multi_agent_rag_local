@@ -2,7 +2,6 @@
 Request middleware for the QueryMind API.
 """
 
-import os
 import threading
 import time
 import uuid
@@ -12,13 +11,28 @@ from typing import Any
 
 from fastapi import Request
 
+from app.core.config import get_settings
 from app.services.runtime.runtime_metrics import RuntimeMetrics
 
-# Global metrics storage
+# Global metrics storage.
+#
+# The deque is built on first use rather than at import: its bound is a Settings
+# field now, and Settings is not loaded yet while this module is being imported.
 _request_metrics_lock = threading.Lock()
-_REQUEST_METRICS_MAXLEN = int(os.getenv("REQUEST_METRICS_MAXLEN", "1000"))
-_request_metrics: deque[dict[str, Any]] = deque(maxlen=_REQUEST_METRICS_MAXLEN)
+_request_metrics: deque[dict[str, Any]] | None = None
 runtime_metrics = RuntimeMetrics()
+
+
+def _metrics() -> deque[dict[str, Any]]:
+    """The request-metrics ring, sized from settings on first use.
+
+    Call only while holding `_request_metrics_lock`.
+    """
+
+    global _request_metrics
+    if _request_metrics is None:
+        _request_metrics = deque(maxlen=get_settings().request_metrics_maxlen)
+    return _request_metrics
 
 
 async def request_timing_middleware(request: Request, call_next):
@@ -46,7 +60,7 @@ async def request_timing_middleware(request: Request, call_next):
 
         # Content Security Policy - prevent XSS and injection attacks
         # Check if strict CSP is enabled (requires nonce support in frontend)
-        use_strict_csp = os.getenv("STRICT_CSP", "false").lower() == "true"
+        use_strict_csp = get_settings().strict_csp
 
         if use_strict_csp:
             # Stricter CSP without unsafe-inline/unsafe-eval
@@ -101,7 +115,7 @@ async def request_timing_middleware(request: Request, call_next):
             "error": error_text,
         }
         with _request_metrics_lock:
-            _request_metrics.append(metric)
+            _metrics().append(metric)
         runtime_metrics.inc("http_requests_total")
         runtime_metrics.inc(f"http_status_{status_code}_total")
         runtime_metrics.observe("http_request_duration", elapsed_ms / 1000.0)
@@ -110,4 +124,4 @@ async def request_timing_middleware(request: Request, call_next):
 def get_request_metrics() -> list[dict[str, Any]]:
     """Get recent request metrics."""
     with _request_metrics_lock:
-        return list(_request_metrics)
+        return list(_metrics())

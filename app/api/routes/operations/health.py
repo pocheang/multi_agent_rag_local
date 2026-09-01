@@ -1,9 +1,7 @@
 """Health check and metrics routes for the QueryMind API."""
 
 import asyncio
-import os
 import socket
-import sys
 import time
 from typing import Any
 from urllib.parse import urlparse
@@ -16,9 +14,6 @@ from app.__version__ import __version__
 from app.api import dependencies as api_dependencies
 from app.api.dependencies import runtime_metrics
 from app.api.deps.auth import require_admin
-from app.api.transport.middleware import get_request_metrics
-from app.services.models.config_store import get_global_model_settings, public_global_model_settings
-from app.services.observability.log_buffer import list_captured_logs
 
 router = APIRouter()
 
@@ -213,47 +208,6 @@ def _check_embedding_model_ready() -> dict[str, Any]:
     except Exception as e:
         latency = int((time.perf_counter() - start) * 1000)
         return {"ok": False, "required": True, "latency_ms": latency, "error": str(e)}
-
-
-def _runtime_diagnostics_summary() -> dict[str, Any]:
-    settings = api_dependencies.get_query_runtime().settings
-    conda_prefix = str(os.environ.get("CONDA_PREFIX", "") or "").strip()
-    conda_env = str(os.environ.get("CONDA_DEFAULT_ENV", "") or "").strip()
-    recent_errors = list_captured_logs(limit=20, level="ERROR")
-    global_model_settings = public_global_model_settings(get_global_model_settings())
-    recent_failures = []
-    _request_metrics_lock, _request_metrics = get_request_metrics()
-    with _request_metrics_lock:
-        for row in reversed(list(_request_metrics)):
-            status_code = int(row.get("status_code", 0) or 0)
-            error = str(row.get("error", "") or "")
-            if status_code < 400 and not error:
-                continue
-            recent_failures.append(
-                {
-                    "ts": str(row.get("ts", "")),
-                    "path": str(row.get("path", "")),
-                    "status_code": status_code,
-                    "error": error,
-                    "duration_ms": int(row.get("duration_ms", 0) or 0),
-                }
-            )
-            if len(recent_failures) >= 10:
-                break
-    return {
-        "python_executable": sys.executable,
-        "python_version": sys.version.split()[0],
-        "conda_prefix": conda_prefix,
-        "conda_env": conda_env,
-        "model_backend": str(settings.model_backend or ""),
-        "reasoning_model_backend": str(settings.reasoning_model_backend or settings.model_backend or ""),
-        "ollama_base_url": str(settings.ollama_base_url or ""),
-        "ollama_chat_model": str(settings.ollama_chat_model or ""),
-        "ollama_embed_model": str(settings.ollama_embed_model or ""),
-        "global_model_settings": global_model_settings,
-        "recent_errors": recent_errors[:5],
-        "recent_failures": recent_failures,
-    }
 
 
 @router.get("/")
