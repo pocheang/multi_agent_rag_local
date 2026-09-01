@@ -35,6 +35,9 @@ DEFAULT_ACCURACY: Final[float] = 0.5  # Default accuracy when no history
 # Configuration file path - anchored at repository root
 REPOSITORY_ROOT: Final[Path] = Path(__file__).resolve().parents[3]
 CALIBRATION_CONFIG_PATH: Final[Path] = REPOSITORY_ROOT / "config" / "router_calibration.json"
+"""Tracked starter distribution; accumulated outcomes go to ROUTER_CALIBRATION_PATH."""
+
+_FLUSH_EVERY: Final[int] = 20
 
 
 def get_bucket_for_confidence(confidence: float) -> str:
@@ -277,13 +280,27 @@ class ConfidenceCalibrator:
         Initialize calibrator.
 
         Args:
-            config_path: Path to calibration config file (defaults to config/router_calibration.json)
+            config_path: Where accumulated outcomes are stored. Defaults to
+                ROUTER_CALIBRATION_PATH under data/, seeded once from the
+                tracked config/router_calibration.json starter file.
+
+        Accumulated outcomes are runtime state. Writing them into the tracked
+        `config/` file, which is what this used to do, meant every request dirtied
+        a checked-in file.
         """
         if config_path is None:
-            config_path = CALIBRATION_CONFIG_PATH
+            from app.core.config import get_settings
+
+            config_path = get_settings().router_calibration_path
 
         self.config_path = config_path
-        self.calibration_data = load_calibration_data(config_path)
+        if config_path.exists():
+            self.calibration_data = load_calibration_data(config_path)
+        else:
+            # Seed from the shipped starter so a fresh deployment does not begin
+            # with an empty distribution.
+            self.calibration_data = load_calibration_data(CALIBRATION_CONFIG_PATH)
+        self._unsaved = 0
 
     def calibrate(self, raw_confidence: float) -> float:
         """
@@ -304,9 +321,22 @@ class ConfidenceCalibrator:
         Args:
             raw_confidence: Raw confidence that was used
             was_correct: Whether the decision was correct
+
+        Updates in memory every time and persists every `_FLUSH_EVERY` records.
+        This used to write the file synchronously on each call, which put a disk
+        write on the request path for a statistic that is only read at startup.
         """
         update_calibration_data(self.calibration_data, raw_confidence, was_correct)
+        self._unsaved += 1
+        if self._unsaved >= _FLUSH_EVERY:
+            self.flush()
+
+    def flush(self) -> None:
+        """Persist accumulated outcomes."""
+        if not self._unsaved:
+            return
         save_calibration_data(self.calibration_data, self.config_path)
+        self._unsaved = 0
 
     def get_stats(self) -> dict[str, dict]:
         """

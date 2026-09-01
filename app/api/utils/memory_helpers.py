@@ -6,7 +6,12 @@ from typing import Any
 
 from app.core.config import get_settings
 from app.memory.long_term import memory_base_dir
-from app.services.sessions.memory_store import MemoryStore, build_memory_context
+from app.services.sessions.memory_store import (
+    SHORT_TERM_ROUNDS,
+    MemoryStore,
+    _pair_user_assistant_rounds,
+    build_memory_context,
+)
 
 settings = get_settings()
 
@@ -49,6 +54,31 @@ def _build_memory_context_for_session(
     messages = session_data.get("messages", []) or []
     long_term = _memory_store_for_user(user).list_long_term(session_id)
     return build_memory_context(question=question, session_messages=messages, long_term_memories=long_term)
+
+
+def _recent_session_turns(
+    user: dict[str, Any],
+    session_id: str | None,
+    history_store_fn,
+    *,
+    rounds: int = SHORT_TERM_ROUNDS,
+) -> tuple[tuple[str, str], ...]:
+    """Return the last few (question, answer) pairs of a session, oldest first.
+
+    Separate from `_build_memory_context_for_session` because the two have
+    different consumers with different needs: synthesis wants the rendered block
+    (short-term rounds *and* the resolved long-term memories), while query
+    rewriting needs the turns themselves -- it has to see who said what to
+    complete a follow-up question, and a pre-rendered blob cannot tell it that.
+
+    Bounded by the same `SHORT_TERM_ROUNDS` the rendered block uses, so the two
+    views of a session do not silently disagree about how far back it reaches.
+    """
+    if not session_id:
+        return ()
+    session_data = history_store_fn(user).get_session(session_id) or {}
+    messages = session_data.get("messages", []) or []
+    return tuple(_pair_user_assistant_rounds(messages)[-rounds:]) if rounds > 0 else ()
 
 
 def _promote_long_term_memory(

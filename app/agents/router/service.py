@@ -44,17 +44,14 @@ class RouterAgentService:
                 allowed_capabilities=frozenset({"rag", "tool"}),
                 reason="explicit_owned_connector_command",
             )
+        # Assessed, but no longer short-circuiting. Returning here meant the LLM
+        # router never ran for these questions, so anything that merely *looked*
+        # like a comparison ("A 和 B 的区别") was answered from vector+BM25 with
+        # graph and web silently excluded -- including when the user skipped
+        # clarification and the pipeline continued with the original question.
         completeness = assess_completeness(request.question)
         missing = missing_fields(completeness, {})
-        if missing:
-            return RouteDecision(
-                intent="knowledge_retrieval",
-                route="clarification",
-                confidence=1.0,
-                requires_plan=completeness.complexity == "complex",
-                allowed_capabilities=frozenset({"rag"}),
-                reason=f"missing_required_information:{','.join(missing)}",
-            )
+
         legacy = await asyncio.to_thread(
             self._decider,
             request.question,
@@ -67,6 +64,7 @@ class RouterAgentService:
             # Access attributes directly - let AttributeError bubble up if missing
             route = str(legacy.route).lower() if legacy.route is not None else "vector"
             confidence = float(legacy.confidence) if legacy.confidence is not None else 0.5
+            raw_confidence = float(getattr(legacy, "raw_confidence", confidence) or confidence)
             reason = str(legacy.reason) if legacy.reason is not None else "legacy_router"
         except (AttributeError, ValueError, TypeError) as exc:
             # Provide clear error message about what went wrong
@@ -75,7 +73,17 @@ class RouterAgentService:
                 f"Expected object with 'route', 'confidence', and 'reason' attributes."
             ) from exc
 
-        return _to_domain_route(route, confidence, reason)
+        decision = _to_domain_route(route, confidence, reason, raw_confidence)
+        if not missing:
+            return decision
+        return decision.model_copy(
+            update={
+                "clarification_fields": missing,
+                # A question worth clarifying is a question worth planning for.
+                "requires_plan": decision.requires_plan or completeness.complexity == "complex",
+                "reason": f"{decision.reason}|missing_required_information:{','.join(missing)}",
+            }
+        )
 
     @staticmethod
     def _default_decider(*args: object, **kwargs: object) -> object:
@@ -84,7 +92,12 @@ class RouterAgentService:
         return decide_route(*args, **kwargs)
 
 
-def _to_domain_route(route: str, confidence: float, reason: str) -> RouteDecision:
+def _to_domain_route(
+    route: str,
+    confidence: float,
+    reason: str,
+    raw_confidence: float | None = None,
+) -> RouteDecision:
     # Warn if confidence is out of valid range before normalization
     if confidence < 0.0 or confidence > 1.0:
         import logging
@@ -97,7 +110,9 @@ def _to_domain_route(route: str, confidence: float, reason: str) -> RouteDecisio
     if route == "react":
         return RouteDecision(
             intent="tool_call",
+            route="react",
             confidence=normalized_confidence,
+            raw_confidence=raw_confidence,
             requires_plan=True,
             allowed_capabilities=frozenset({"rag", "tool"}),
             reason=reason,
@@ -105,7 +120,9 @@ def _to_domain_route(route: str, confidence: float, reason: str) -> RouteDecisio
     if route == "hybrid":
         return RouteDecision(
             intent="hybrid",
+            route="hybrid",
             confidence=normalized_confidence,
+            raw_confidence=raw_confidence,
             requires_plan=True,
             allowed_capabilities=frozenset({"rag"}),
             reason=reason,
@@ -113,7 +130,9 @@ def _to_domain_route(route: str, confidence: float, reason: str) -> RouteDecisio
     if route == "web":
         return RouteDecision(
             intent="web_search",
+            route="web",
             confidence=normalized_confidence,
+            raw_confidence=raw_confidence,
             requires_plan=False,
             allowed_capabilities=frozenset({"rag", "web"}),
             reason=reason,
@@ -126,6 +145,7 @@ def _to_domain_route(route: str, confidence: float, reason: str) -> RouteDecisio
         intent="knowledge_retrieval",
         route=route,
         confidence=normalized_confidence,
+        raw_confidence=raw_confidence,
         requires_plan=False,
         allowed_capabilities=frozenset({"rag"}),
         reason=reason,

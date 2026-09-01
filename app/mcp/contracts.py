@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from datetime import UTC, datetime, timedelta
 from typing import Annotated, Literal
 from uuid import uuid4
@@ -32,8 +33,27 @@ class ToolCall(ImmutableContract):
     execution_id: str = Field(default_factory=lambda: str(uuid4()), max_length=128)
 
 
+class ToolParameter(ImmutableContract):
+    """One declared, validated input to a governed tool.
+
+    A typed contract rather than raw JSON Schema: everything else on this
+    boundary is a pydantic model with ``extra="forbid"``, and a free-form schema
+    dict would be the one place an unvalidated payload could enter.  It also
+    keeps the catalogue the selector shows the model small enough to be exact.
+    """
+
+    name: str = Field(pattern=r"^[a-z][a-z0-9_]{0,63}$")
+    description: str = Field(default="", max_length=400)
+    required: bool = True
+    max_length: int = Field(default=256, ge=1, le=8_000)
+    pattern: str | None = Field(default=None, max_length=256)
+    """Regex the supplied value must ``fullmatch``. The tightest gate available:
+    tool arguments now originate from a model, not from a regex capture group
+    with a shape baked into it."""
+
+
 class ToolDefinition(ImmutableContract):
-    """Registered tool policy and execution limits."""
+    """Registered tool policy, declared inputs, and execution limits."""
 
     tool_id: str = Field(pattern=r"^querymind_[a-z0-9]+(?:_[a-z0-9]+)+$")
     connector_id: str | None = Field(default=None, min_length=1, max_length=64)
@@ -41,14 +61,47 @@ class ToolDefinition(ImmutableContract):
     risk: ToolRisk = "read_only"
     required_scopes: frozenset[str] = Field(default_factory=frozenset)
     timeout_seconds: int = Field(default=20, ge=1, le=120)
+    description: str = Field(default="", max_length=400)
+    """What the tool does, in the words the selector shows the model."""
+    parameters: tuple[ToolParameter, ...] = Field(default_factory=tuple)
+
+    def validation_error(self, arguments: tuple[ToolArgument, ...]) -> str | None:
+        """Return why these arguments are unacceptable, or None if they are fine."""
+
+        declared = {parameter.name: parameter for parameter in self.parameters}
+        supplied: dict[str, str] = {}
+        for argument in arguments:
+            if argument.name in supplied:
+                return f"duplicate argument: {argument.name}"
+            if argument.name not in declared:
+                return f"unknown argument: {argument.name}"
+            supplied[argument.name] = argument.value
+        for parameter in self.parameters:
+            value = supplied.get(parameter.name)
+            if value is None:
+                if parameter.required:
+                    return f"missing required argument: {parameter.name}"
+                continue
+            if len(value) > parameter.max_length:
+                return f"argument too long: {parameter.name}"
+            if parameter.pattern is not None and re.fullmatch(parameter.pattern, value) is None:
+                return f"argument does not match its declared pattern: {parameter.name}"
+        return None
 
 
 class ApprovalRequest(ImmutableContract):
-    """A single-use approval request for a high-risk tool call."""
+    """A single-use approval request for a high-risk tool call.
+
+    Carries the approved ``arguments`` because resuming replays *this* call
+    rather than asking the selector again. A model re-reading the same question
+    is not guaranteed to produce the same call, and "the user approved that
+    action" has to mean the action they were shown.
+    """
 
     token: str = Field(default_factory=lambda: uuid4().hex + uuid4().hex)
     tool_id: str
     actor_id: str
+    arguments: tuple[ToolArgument, ...] = Field(default_factory=tuple)
     call_fingerprint: str = Field(pattern=r"^[a-f0-9]{64}$")
     expires_at: datetime = Field(default_factory=lambda: datetime.now(UTC) + timedelta(minutes=5))
     approved: bool = False

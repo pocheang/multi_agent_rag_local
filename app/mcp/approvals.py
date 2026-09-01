@@ -16,15 +16,32 @@ class ApprovalStore:
         self._requests: dict[str, ApprovalRequest] = {}
 
     def create(self, call: ToolCall, actor: RequestActor) -> ApprovalRequest:
-        """Create an approval token bound to one actor and tool."""
+        """Create an approval token bound to one actor and one exact call."""
         actor_id = _actor_id(actor)
         request = ApprovalRequest(
             tool_id=call.tool_id,
             actor_id=actor_id,
+            arguments=call.arguments,
             call_fingerprint=_call_fingerprint(call),
         )
         self._requests[request.token] = request
         return request
+
+    def approved_call(self, token: str, actor: RequestActor) -> ToolCall | None:
+        """Rebuild the approved call so a later run can replay it exactly.
+
+        Resuming replays the approved call instead of re-running tool selection:
+        a model re-reading the same question may choose differently, and the
+        approval has to authorize the action the user was actually shown.
+        """
+
+        try:
+            request = self._request_for_actor(token, actor)
+        except ValueError:
+            return None
+        if not request.approved or request.consumed or request.expires_at <= datetime.now(UTC):
+            return None
+        return ToolCall(tool_id=request.tool_id, arguments=request.arguments, approval_token=token)
 
     def approve(self, token: str, actor: RequestActor) -> None:
         """Approve a valid, unexpired token for its original actor only."""
@@ -61,8 +78,17 @@ class ApprovalStore:
 
 
 def _call_fingerprint(call: ToolCall) -> str:
+    """Identify the *call* -- tool and arguments -- and nothing about the run.
+
+    ``execution_id`` used to be part of this, which made a token structurally
+    unredeemable: every chat turn is a new execution, so the fingerprint of the
+    call being retried could never equal the fingerprint of the call that was
+    approved. Approval already binds to one actor, is single-use, and expires;
+    tying it to a run as well only prevented the retry it exists to enable.
+    """
+
     digest = sha256()
-    values = ((call.tool_id, call.execution_id), *((argument.name, argument.value) for argument in call.arguments))
+    values = ((call.tool_id, ""), *((argument.name, argument.value) for argument in call.arguments))
     for pair in values:
         for value in pair:
             encoded = value.encode("utf-8")

@@ -83,6 +83,7 @@ def test_execution_id_is_returned_in_metadata():
         pipeline_result_metadata={"validation": {"state": "validated"}},
         route="vector",
         citations=[{"source": "doc1"}],
+        tool_runs=[],
         execution_id="exec-123",
         session_id="s1",
     )

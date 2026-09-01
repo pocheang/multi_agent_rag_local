@@ -1,8 +1,8 @@
 import logging
 from collections import defaultdict
 
+from app.knowledge.width import adaptive_retrieval_params
 from app.retrievers.bm25_retriever import bm25_search
-from app.retrievers.hybrid.adaptive_params import adaptive_retrieval_params
 from app.retrievers.hybrid.fusion import hybrid_weights, rrf_score
 from app.retrievers.hybrid.rank_features import rank_feature_score
 from app.retrievers.hybrid.strategy import strategy_flags

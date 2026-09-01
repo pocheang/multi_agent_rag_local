@@ -72,6 +72,18 @@ class ClarificationAgentService:
                 complete_query=self.compose_complete_query(request.question, active_context.collected_info),
                 workflow_thread_id=thread_id,
             )
+        # Asking is what advances a round, and recording the field is what stops
+        # the same one being asked twice. Both used to happen only in the session
+        # store, and only when the user *answered* -- so a caller that asked
+        # again without answering got the identical question back forever, and
+        # the round cap above could never be reached.
+        asked = active_context.asked_questions
+        active_context = active_context.model_copy(
+            update={
+                "clarification_round": active_context.clarification_round + 1,
+                "asked_questions": [*asked, next_field] if next_field and next_field not in asked else asked,
+            }
+        )
         return ClarificationResult(
             action="ask",
             question=question,

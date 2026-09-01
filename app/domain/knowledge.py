@@ -30,7 +30,11 @@ class EvidenceRef(ImmutableKnowledgeContract):
     """Stable pointer to an immutable evidence artifact."""
 
     document_id: str = Field(min_length=1)
-    version: int = Field(ge=1)
+    # Optional, and matching EvidenceItem.version, on purpose: web results and
+    # graph context are real evidence with no version to point at. Requiring one
+    # here meant every marker aimed at them was silently dropped, so a web-routed
+    # answer came back with no citations at all.
+    version: int | None = Field(default=None, ge=1)
     page: int | None = Field(default=None, ge=1)
     chunk_id: str | None = None
     image_id: str | None = None
@@ -66,6 +70,10 @@ class KnowledgeStrategy(ImmutableKnowledgeContract):
     sources: tuple[KnowledgeSourcePlan, ...] = Field(min_length=1)
     rewrite: bool = True
     rerank: bool = True
+    # How many items survive reranking. None means "use RERANKER_TOP_N".
+    # Widening `top_k` without widening this just feeds the reranker more
+    # candidates and throws the extra ones away.
+    rerank_top_n: int | None = Field(default=None, ge=1, le=100)
     visual_required: bool = False
     rationale: str = Field(min_length=1)
 

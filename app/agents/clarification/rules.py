@@ -121,7 +121,11 @@ _QUESTIONS_EN: dict[str, dict[str, ClarificationQuestion]] = {
 
 _QUESTIONS_BY_LANGUAGE = {"zh": _QUESTIONS_ZH, "en": _QUESTIONS_EN}
 
-_MAX_ROUNDS = {"rag_design": 7, "document_comparison": 5, "complete": 0}
+_REQUIRED_FIELDS: dict[str, tuple[str, ...]] = {
+    "rag_design": ("scenario", "data_source", "scale", "performance_requirement"),
+    "document_comparison": ("doc_ids",),
+    "complete": (),
+}
 
 
 def assess_completeness(question: str) -> CompletenessAssessment:
@@ -139,7 +143,7 @@ def assess_completeness(question: str) -> CompletenessAssessment:
         return CompletenessAssessment(
             intent="rag_design",
             complexity="complex",
-            required_fields=("scenario", "data_source", "scale", "performance_requirement"),
+            required_fields=_REQUIRED_FIELDS["rag_design"],
             extracted_info=extracted,
         )
 
@@ -151,7 +155,7 @@ def assess_completeness(question: str) -> CompletenessAssessment:
             complexity="complex",
             # Named comparison targets are essential; aspect and presentation
             # have safe general-purpose defaults and must not force extra turns.
-            required_fields=("doc_ids",),
+            required_fields=_REQUIRED_FIELDS["document_comparison"],
             extracted_info=extracted,
         )
 
@@ -178,7 +182,14 @@ def question_for(intent: str, field_name: str, language: str = "zh") -> Clarific
 
 
 def max_rounds_for(intent: str) -> int:
-    return _MAX_ROUNDS.get(intent, 5)
+    """One round per field there is actually a question for.
+
+    The cap used to be a hand-written number per intent -- 7 for `rag_design`,
+    which has four fields -- so it could never be reached and the UI promised
+    three rounds that do not exist. Deriving it means the cap and the question
+    catalogue cannot drift apart.
+    """
+    return len(_REQUIRED_FIELDS.get(intent, ()))
 
 
 def _structured_fields(text: str) -> dict[str, str]:

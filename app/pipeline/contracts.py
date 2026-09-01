@@ -8,7 +8,7 @@ any API route.
 from __future__ import annotations
 
 from datetime import datetime
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -72,6 +72,9 @@ class PipelineRequest(_ImmutableContract):
     enable_self_rag: bool = False
     enable_context_tracking: bool = True
     force_language: str = ""
+    # Set on a resume: the run replays the tool call the user approved instead
+    # of asking the selector again.
+    approval_token: str | None = Field(default=None, min_length=24, max_length=256)
     request_id: str | None = None
     # Ties the stage events this run emits to the trace the caller already
     # opened, so GET /api/v1/orchestration/executions/{id}/events finds them.
@@ -133,6 +136,7 @@ def to_orchestration_request(request: PipelineRequest) -> OrchestrationRequest:
         enable_self_rag=request.enable_self_rag,
         enable_context_tracking=request.enable_context_tracking,
         force_language=request.force_language,
+        approval_token=request.approval_token,
         request_id=request.request_id,
         execution_id=request.execution_id,
         runtime_context=request.runtime_context,
@@ -144,6 +148,10 @@ class PipelineCitation(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
+    # The reader-facing marker ("[1]") this citation carries in the answer text.
+    # Set only on the numbered path; a caller that parses bare citation labels
+    # has no answer text to have numbered against.
+    marker: str | None = None
     source: str
     content: str = ""
     document_id: str | None = None
@@ -199,11 +207,49 @@ class DegradationEvent(BaseModel):
     metadata: dict[str, Any] = Field(default_factory=dict)
 
 
+class ToolRunView(BaseModel):
+    """One governed tool invocation, as the caller may see it.
+
+    Without this the multi-step loop is invisible: a request that ran two tools
+    produced one answer and no record of what happened. Carries no approval
+    token -- that belongs to `PipelineResult.pending_approval`, which is the
+    single place a client should look for an action it can confirm.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    tool_id: str
+    status: str
+    summary: str = ""
+
+
+class PendingApproval(BaseModel):
+    """A governed action the run produced but did not perform.
+
+    Its presence is the whole reason ``PipelineResult.status`` exists: the run
+    completed normally and produced an answer, but the action the user asked
+    for is waiting on their confirmation.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    tool_id: str
+    token: str
+    summary: str = ""
+
+
 class PipelineResult(BaseModel):
     """Normalized result produced by the future unified execution pipeline."""
 
     model_config = ConfigDict(extra="forbid")
 
+    # A discriminator rather than a separate response shape or a 202: the run
+    # *did* complete and the answer *is* the answer. Only the governed action
+    # is outstanding, and a caller that ignores this field still behaves
+    # correctly -- it just will not offer the confirmation.
+    status: Literal["complete", "pending_approval"] = "complete"
+    pending_approval: PendingApproval | None = None
+    tool_runs: tuple[ToolRunView, ...] = Field(default_factory=tuple)
     answer: str
     citations: tuple[PipelineCitation, ...] = Field(default_factory=tuple)
     route: PipelineRoute

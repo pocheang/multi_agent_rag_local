@@ -27,8 +27,13 @@ USER_TEXT_NAMES = frozenset({"question", "query", "answer", "content", "text", "
 _LOG_METHODS = frozenset({"debug", "info", "warning", "error", "exception", "critical"})
 
 # Call sites that legitimately log one of these names, and why.
+#
+# Keyed on `path::enclosing_function`, not on a line number. Line numbers made
+# this allowlist fail on any edit *above* the exempt call -- inserting a comment
+# was enough -- which trains readers to re-point the entry rather than look at
+# whether a real leak appeared.
 ALLOWED_LOGGED_TEXT: dict[str, str] = {
-    "app/evaluation/baselines/api_retriever.py:57": (
+    "app/evaluation/baselines/api_retriever.py::retrieve": (
         "offline evaluation harness; the query comes from a fixed eval dataset, "
         "not from a user, and seeing it is the point of the run"
     ),
@@ -84,30 +89,52 @@ def _leaked_names(node: ast.Call) -> set[str]:
     return found
 
 
+def _enclosing_functions(tree: ast.AST) -> dict[int, str]:
+    """Map each node id to the function that contains it."""
+    owner: dict[int, str] = {}
+
+    def walk(node: ast.AST, current: str) -> None:
+        for child in ast.iter_child_nodes(node):
+            name = child.name if isinstance(child, ast.FunctionDef | ast.AsyncFunctionDef) else current
+            owner[id(child)] = name
+            walk(child, name)
+
+    walk(tree, "<module>")
+    return owner
+
+
 def test_no_logging_call_passes_user_text():
     offenders: list[str] = []
     for path in _python_sources():
         key = path.as_posix()
         tree = ast.parse(path.read_text(encoding="utf-8", errors="ignore"))
+        owner = _enclosing_functions(tree)
         for node in ast.walk(tree):
             if not isinstance(node, ast.Call) or not _is_logger_call(node):
                 continue
             leaked = _leaked_names(node)
-            if leaked and f"{key}:{node.lineno}" not in ALLOWED_LOGGED_TEXT:
+            if leaked and f"{key}::{owner.get(id(node), '<module>')}" not in ALLOWED_LOGGED_TEXT:
                 offenders.append(f"{key}:{node.lineno} -> {sorted(leaked)}")
 
     assert not offenders, (
         f"Logging calls carrying user text: {sorted(offenders)}. "
         "Wrap it in question_ref(), log a count or a category instead, or add "
-        "the exact `path:line` to ALLOWED_LOGGED_TEXT with a reason."
+        "`path::enclosing_function` to ALLOWED_LOGGED_TEXT with a reason."
     )
 
 
 def test_the_allowlist_is_not_stale():
+    """An entry must name a file and a function that still exist.
+
+    A stale exemption is worse than none: it silently covers whatever ends up
+    with that name later."""
     for key in ALLOWED_LOGGED_TEXT:
-        path, _, line = key.rpartition(":")
+        path, separator, function = key.partition("::")
+        assert separator, f"{key} must be path::enclosing_function"
         assert Path(path).exists(), f"{key} names a file that no longer exists"
-        assert line.isdigit(), f"{key} must be path:line"
+        tree = ast.parse(Path(path).read_text(encoding="utf-8", errors="ignore"))
+        defined = {node.name for node in ast.walk(tree) if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef)}
+        assert function in defined, f"{key} names a function that no longer exists"
 
 
 # --- the helper itself ------------------------------------------------------

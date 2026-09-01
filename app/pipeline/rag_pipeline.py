@@ -14,11 +14,13 @@ from app.orchestration.execution_events import get_default_execution_event_store
 from app.orchestration.policies import ExecutionPolicy
 from app.pipeline.contracts import (
     DegradationEvent,
+    PendingApproval,
     PipelineCitation,
     PipelineContext,
     PipelineRequest,
     PipelineResult,
     PipelineRoute,
+    ToolRunView,
     to_orchestration_request,
 )
 from app.pipeline.profiles import PipelineProfile
@@ -130,10 +132,14 @@ class RAGPipeline:
 
     @staticmethod
     def _result_from_final_answer(profile: PipelineProfile, answer: FinalAnswer) -> PipelineResult:
-        # Prefer structured evidence items for citations (preserves document_id and page)
-        if answer.evidence.items:
+        # Citations come from the cited subset, in citation-number order, so the
+        # marker below is the same number the answer text carries. Contexts come
+        # from the full authorized set: they answer a different question -- what
+        # the answer had available, not what it used.
+        if answer.cited_evidence:
             citations = tuple(
                 PipelineCitation(
+                    marker=f"[{number}]",
                     source=item.source,
                     content=item.content,
                     document_id=item.document_id,
@@ -146,7 +152,7 @@ class RAGPipeline:
                     layer=item.layer,
                     metadata={"acl_tags": sorted(item.acl_tags)} if item.acl_tags else {},
                 )
-                for item in answer.evidence.items
+                for number, item in enumerate(answer.cited_evidence, start=1)
             )
         else:
             # Fallback: parse citation labels like "doc1:5" to extract document_id and page
@@ -199,7 +205,29 @@ class RAGPipeline:
                 ),
             )
         )
+        pending = next(
+            (
+                result
+                for result in answer.tool_results
+                if result.status == "approval_required" and result.approval_token
+            ),
+            None,
+        )
         return PipelineResult(
+            status="pending_approval" if pending is not None else "complete",
+            pending_approval=(
+                None
+                if pending is None
+                else PendingApproval(
+                    tool_id=pending.tool_id,
+                    token=str(pending.approval_token),
+                    summary=pending.summary,
+                )
+            ),
+            tool_runs=tuple(
+                ToolRunView(tool_id=result.tool_id, status=result.status, summary=result.summary)
+                for result in answer.tool_results
+            ),
             answer=answer.answer,
             citations=citations,
             route=PipelineRoute(

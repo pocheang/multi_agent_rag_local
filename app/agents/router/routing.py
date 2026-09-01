@@ -63,6 +63,7 @@ class LegacyRouteDecision:
     skill: str
     agent_class: str
     confidence: float = 0.7  # Default confidence for backward compatibility
+    raw_confidence: float = 0.7  # Pre-calibration value; the calibration loop keys on it
 
 
 # Inject few-shot examples into prompt
@@ -196,6 +197,7 @@ def decide_route(
             skill=SKILL_DEFAULT,
             agent_class=forced or AGENT_CLASS_GENERAL,
             confidence=calibrated_confidence,
+            raw_confidence=raw_confidence,
         )
 
     # Select intent classification method
@@ -332,6 +334,7 @@ Suggested skill: {skill}"""
         skill=skill,
         agent_class=agent_class,
         confidence=calibrated_confidence,
+        raw_confidence=raw_confidence,
     )
 
 

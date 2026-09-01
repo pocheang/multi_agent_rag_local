@@ -3,6 +3,7 @@ API routes for advanced RAG functionality.
 """
 
 import logging
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from fastapi import APIRouter, Depends, Request
@@ -12,6 +13,7 @@ from app.api.dependencies import (
     _build_memory_context_for_session,
     _history_store_for_user,
     _promote_long_term_memory,
+    _recent_session_turns,
     _require_permission,
     _require_user,
     _require_valid_session_id,
@@ -19,8 +21,15 @@ from app.api.dependencies import (
 )
 from app.api.deps.auth import require_admin
 from app.api.deps.documents import _allowed_sources_for_user
+from app.api.routes.internal.pipeline_contract import retrieval_summary
 from app.api.transport.errors import internal_error
-from app.domain.advanced_rag import AdvancedRAGResult, AnswerQuality, DecomposedQuery, SubQueryResult
+from app.domain.advanced_rag import (
+    AdvancedRAGResult,
+    AnswerQuality,
+    DecomposedQuery,
+    PendingApprovalView,
+    SubQueryResult,
+)
 from app.pipeline.contracts import (
     ConversationMessage,
     PipelineContext,
@@ -54,10 +63,80 @@ class AdvancedRAGRequest(BaseModel):
         default=False,
         description="Enable Self-RAG evaluation",
     )
+    approval_token: str | None = Field(
+        default=None,
+        min_length=24,
+        max_length=256,
+        description=(
+            "Resume a run whose governed action was awaiting confirmation. Send the same "
+            "query together with the token returned in `pending_approval`, after confirming "
+            "it at POST /api/v1/connectors/approvals/{token}. The run replays the approved "
+            "call rather than re-selecting a tool."
+        ),
+    )
     allowed_sources: list[str] | None = Field(
         default=None,
         description="Optional list of allowed sources",
     )
+    use_web_fallback: bool = Field(
+        default=False,
+        description=(
+            "Allow a freshness-driven web search on routes that did not ask for one. The web "
+            "route searches the web regardless, and a caller with no documents falls back to it "
+            "automatically unless WEB_SEARCH_ON_EMPTY_CORPUS is off."
+        ),
+    )
+    timeout_ms: int | None = Field(
+        default=None,
+        ge=1_000,
+        le=120_000,
+        description=(
+            "Stop spending time on this query after this many milliseconds. It narrows the "
+            "server's own budget and never extends it, so a value above STAGE_TIMEOUT_TOTAL_MS "
+            "has no effect. Relative rather than absolute on purpose: a client's clock does not "
+            "have to agree with the server's. Scope resolution and output redaction still run."
+        ),
+    )
+
+
+def _conversation_for(
+    user: dict[str, Any],
+    session_id: str | None,
+    memory_context: str,
+) -> tuple[ConversationMessage, ...]:
+    """Carry the session as turns, with the resolved memory block ahead of them.
+
+    `ConversationTurn` has always been a *sequence* of role/content pairs, but
+    this endpoint collapsed the whole session into one `system` message holding a
+    pre-rendered block. Synthesis could live with that -- it re-renders whatever
+    it is given -- but query rewriting cannot: completing "它的成本呢？" into a
+    standalone question means knowing what the previous turn asked, and a blob
+    labelled `system` does not say.
+
+    The block stays, ahead of the turns, because it also carries the long-term
+    memories that the raw turns do not. Bounding stays with the consumers:
+    `_render_conversation` caps what reaches synthesis, `SHORT_TERM_ROUNDS` caps
+    what reaches rewriting.
+    """
+    turns: list[ConversationMessage] = []
+    if memory_context:
+        turns.append(ConversationMessage(role="system", content=memory_context))
+    for question, answer in _recent_session_turns(user, session_id):
+        turns.append(ConversationMessage(role="user", content=question))
+        turns.append(ConversationMessage(role="assistant", content=answer))
+    return tuple(turns)
+
+
+def _deadline_from(timeout_ms: int | None) -> datetime | None:
+    """Turn the client's relative budget into the absolute form the pipeline carries.
+
+    The wire format is relative because the two clocks need not agree; the
+    contract is absolute because the budget is consumed across stages and a
+    relative value would have to be re-derived at each one.
+    """
+    if timeout_ms is None:
+        return None
+    return datetime.now(UTC) + timedelta(milliseconds=timeout_ms)
 
 
 def _resolve_advanced_allowed_sources(
@@ -96,6 +175,7 @@ def _response_metadata(
     pipeline_result_metadata: dict[str, Any],
     route: str,
     citations: list[dict[str, Any]],
+    tool_runs: list[dict[str, Any]],
     execution_id: str,
     session_id: str | None,
 ) -> dict[str, Any]:
@@ -105,10 +185,17 @@ def _response_metadata(
     (``GET /api/v1/orchestration/executions/{execution_id}/events``); without it
     the client has no way to subscribe to the run it just started.
     """
+    summary = retrieval_summary(pipeline_result_metadata)
     return {
         "route": route,
         "citations": citations,
+        # Rides the same path citations do, so a multi-step run leaves a record
+        # in the persisted message rather than only in the answer prose.
+        "tool_runs": tool_runs,
         "validation": pipeline_result_metadata.get("validation", {}),
+        # The badge read `web: no` on every answer because this block never
+        # carried the field; the client defaulted a missing value to False.
+        **summary,
         "execution_id": execution_id,
         "session_id": session_id,
     }
@@ -240,7 +327,7 @@ async def _process_advanced_rag_query_impl(
     try:
         allowed_sources = _resolve_advanced_allowed_sources(user, request_data.allowed_sources)
         memory_context = _build_memory_context_for_session(user, session_id, request_data.query)
-        conversation = (ConversationMessage(role="system", content=memory_context),) if memory_context else ()
+        conversation = _conversation_for(user, session_id, memory_context)
         pipeline_request = PipelineRequest(
             question=request_data.query,
             profile=PipelineProfile.ADVANCED,
@@ -255,6 +342,9 @@ async def _process_advanced_rag_query_impl(
             source_scope=SourceScope(allowed_sources=frozenset(allowed_sources)),
             enable_decomposition=request_data.enable_decomposition,
             enable_self_rag=request_data.enable_self_rag,
+            approval_token=request_data.approval_token,
+            use_web_fallback=request_data.use_web_fallback,
+            deadline_at=_deadline_from(request_data.timeout_ms),
             execution_id=execution_id,
         )
         pipeline_result = await RAGPipeline().execute(pipeline_request)
@@ -277,6 +367,7 @@ async def _process_advanced_rag_query_impl(
             pipeline_result_metadata=dict(pipeline_result.execution_metadata),
             route=pipeline_result.route.route,
             citations=[citation.model_dump(mode="json") for citation in pipeline_result.citations],
+            tool_runs=[run.model_dump(mode="json") for run in pipeline_result.tool_runs],
             execution_id=execution_id,
             session_id=session_id,
         )
@@ -293,6 +384,15 @@ async def _process_advanced_rag_query_impl(
             decomposed_query=decomposed_query,
             sub_query_results=sub_query_results,
             final_answer=pipeline_result.answer,
+            # 200 with a discriminator rather than 202: the run completed and the
+            # answer is the answer. Only the governed action is outstanding, so a
+            # client that ignores these two fields still behaves correctly.
+            status=pipeline_result.status,
+            pending_approval=(
+                None
+                if pipeline_result.pending_approval is None
+                else PendingApprovalView(**pipeline_result.pending_approval.model_dump())
+            ),
             answer_quality=answer_quality,
             metadata=metadata,
         )

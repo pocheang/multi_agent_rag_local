@@ -26,8 +26,12 @@ _BINARY_PAYLOAD_KEYS = {"data", "b64_json", "image", "images"}
 
 _SECRET_PATTERNS = [
     re.compile(r"\b(?:sk|rk|pk)-[A-Za-z0-9_\-]{6,}\b"),
-    re.compile(r"\bBearer\s+[A-Za-z0-9._\-]{8,}\b", flags=re.IGNORECASE),
-    re.compile(r"\b(?:api[_-]?key|token|secret|password)\s*[:=]\s*\S+\b", flags=re.IGNORECASE),
+    # The whitespace runs are bounded, not `\s+`/`\s*`. An unbounded run means no
+    # finite look-back can prove a match does not straddle a chunk boundary, which
+    # is what app/privacy/streaming.py needs in order to redact a stream safely.
+    # Eight is far past anything a real credential line contains.
+    re.compile(r"\bBearer\s{1,8}[A-Za-z0-9._\-]{8,}\b", flags=re.IGNORECASE),
+    re.compile(r"\b(?:api[_-]?key|token|secret|password)\s{0,8}[:=]\s{0,8}\S+\b", flags=re.IGNORECASE),
 ]
 _URL_RE = re.compile(r"https?://[^\s'\"<>]+", flags=re.IGNORECASE)
 _EMAIL_RE = re.compile(r"\b[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}\b")

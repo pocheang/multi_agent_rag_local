@@ -85,7 +85,8 @@ class UnifiedVectorRAGAgent(BaseAgent):
         allowed_sources: list[str] | None = None,
         agent_class: str | None = None,
         enable_evaluation: bool | None = None,
-        owner: OwnerScope | None = None,
+        *,
+        owner: OwnerScope | None,
         **kwargs,
     ) -> dict[str, Any]:
         """
@@ -96,6 +97,8 @@ class UnifiedVectorRAGAgent(BaseAgent):
             allowed_sources: Optional list of allowed document sources
             agent_class: Agent class for automatic document filtering
             enable_evaluation: Whether to enable Self-RAG evaluation
+            owner: Caller identity for the store's own metadata check; keyword-only
+                and defaultless so a caller cannot drop it by omission
             **kwargs: Additional parameters
 
         Returns:
@@ -114,7 +117,7 @@ class UnifiedVectorRAGAgent(BaseAgent):
         filtered_sources = self._apply_agent_filtering(allowed_sources, agent_class)
 
         # Step 4: Execute retrieval
-        results, diagnostics = self._execute_retrieval(search_query, filtered_sources, dynamic_params, owner)
+        results, diagnostics = self._execute_retrieval(search_query, filtered_sources, dynamic_params, owner=owner)
 
         # Step 5: Process results
         citations = self._build_citations(results)
@@ -193,7 +196,8 @@ class UnifiedVectorRAGAgent(BaseAgent):
         query: str,
         allowed_sources: list[str] | None,
         dynamic_params: dict[str, Any],
-        owner: OwnerScope | None = None,
+        *,
+        owner: OwnerScope | None,
     ) -> tuple:
         """Execute hybrid retrieval with diagnostics."""
         return self._hybrid_search(
@@ -331,7 +335,8 @@ def run_vector_rag(
     question: str,
     allowed_sources: list[str] | None = None,
     agent_class: str | None = None,
-    owner: OwnerScope | None = None,
+    *,
+    owner: OwnerScope | None,
 ) -> dict[str, Any]:
     """
     Backward-compatible function interface for vector RAG.
@@ -343,6 +348,10 @@ def run_vector_rag(
         question: User query
         allowed_sources: Optional list of allowed sources
         agent_class: Agent class for filtering
+        owner: Caller identity for the store's own metadata check.  Keyword-only
+            and defaultless: this function is how the graph route reaches the
+            vector store, and an owner defaulted to None there quietly removed
+            the store-side ownership clause from the whole fallback path.
 
     Returns:
         Dictionary with retrieval results

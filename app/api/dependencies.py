@@ -30,6 +30,7 @@ from app.api.utils.auth_helpers import (
     _audit,
 )
 from app.api.utils.memory_helpers import _build_memory_context_for_session as _build_memory_context_for_session_impl
+from app.api.utils.memory_helpers import _recent_session_turns as _recent_session_turns_impl
 
 # Import helper functions from utility modules
 from app.api.utils.string_utils import normalize_string
@@ -239,6 +240,11 @@ def __getattr__(name: str):
 def _build_memory_context_for_session(user: dict[str, Any], session_id: str | None, question: str) -> str:
     """Build the LLM-ready memory context block for a session."""
     return _build_memory_context_for_session_impl(user, session_id, question, _history_store_for_user)
+
+
+def _recent_session_turns(user: dict[str, Any], session_id: str | None) -> tuple[tuple[str, str], ...]:
+    """Return the session's recent (question, answer) pairs for query rewriting."""
+    return _recent_session_turns_impl(user, session_id, _history_store_for_user)
 
 
 def _runtime_diagnostics_summary() -> dict[str, Any]:

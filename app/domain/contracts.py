@@ -39,6 +39,15 @@ class RouteDecision(ImmutableContract):
     # semantic field used by existing callers.
     route: str | None = None
     confidence: float = Field(ge=0, le=1)
+    # The pre-calibration confidence, carried only so the calibration loop can
+    # attribute an outcome to the bucket that produced it. Feeding the calibrated
+    # value back would train the calibrator on its own output.
+    raw_confidence: float | None = Field(default=None, ge=0, le=1)
+    # Fields the request is missing, if any. Deliberately *not* a route: what to
+    # retrieve and whether to ask a question first are different decisions, and
+    # collapsing them into `route="clarification"` threw away the router's answer
+    # to the first one -- every comparison-shaped question lost graph and web.
+    clarification_fields: tuple[str, ...] = Field(default_factory=tuple)
     requires_plan: bool
     allowed_capabilities: frozenset[Capability] = Field(default_factory=frozenset)
     reason: str = Field(min_length=1)
@@ -233,7 +242,15 @@ class FinalAnswer(ImmutableContract):
         )
     )
     evidence: EvidenceBundle = Field(default_factory=EvidenceBundle)
+    # The cited subset, in citation-number order: `cited_evidence[n - 1]` is what
+    # `[n]` in the answer points at. Separate from `evidence`, which stays the
+    # full authorized retrieval set -- collapsing the two made "retrieved
+    # context" mean "whatever happened to be cited".
+    cited_evidence: tuple[EvidenceItem, ...] = Field(default_factory=tuple)
     evidence_ids: tuple[str, ...] = Field(default_factory=tuple)
+    # Carried to the public boundary so a caller can see what ran -- and, when a
+    # governed write is waiting on confirmation, that nothing ran yet.
+    tool_results: tuple[ToolResult, ...] = Field(default_factory=tuple)
     unresolved_items: tuple[str, ...] = Field(default_factory=tuple)
     conflict_notes: tuple[str, ...] = Field(default_factory=tuple)
     execution_summary: str = ""

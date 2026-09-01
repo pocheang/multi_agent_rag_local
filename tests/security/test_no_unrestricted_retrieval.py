@@ -30,7 +30,12 @@ import os
 from pathlib import Path
 
 # module path -> why an unrestricted search is legitimate there
-ALLOWED_UNRESTRICTED: dict[str, str] = {}
+ALLOWED_UNRESTRICTED: dict[str, str] = {
+    "app/evaluation/baselines/api_retriever.py": (
+        "offline evaluation harness measuring retrieval quality over a fixed corpus; it has "
+        "no request and no user, and comparing baselines is the whole point of the run"
+    ),
+}
 
 # A ratchet: the count per module may go down, never up. Empty since phase 1
 # (2026-08-30) removed the last of them, so any entry appearing here again is a
@@ -227,3 +232,91 @@ def test_the_ownerless_allowlist_is_not_stale():
             stale.append(key)
 
     assert not stale, f"{stale} no longer calls similarity_search; drop the allowlist entry."
+
+
+# --- P1-5: and it must not be able to lose the owner on the way there --------
+#
+# The check above only sees *direct* similarity_search calls, so it passed the
+# whole time the graph route was reaching the store through
+# `run_graph_rag -> _fallback_to_vector_rag -> run_vector_rag ->
+# hybrid_search_with_diagnostics -> _safe_similarity_search`. Every hop wrote
+# `owner=owner`, which satisfies an AST check, but `_fallback_to_vector_rag`
+# declared `owner: OwnerScope | None = None` and two of its three callers relied
+# on that default -- so the common fallback (Neo4j down, or an empty graph
+# result) searched with the source filter alone and no ownership clause.
+#
+# The two guards below pin the shape of that bug rather than the one instance:
+# an owner cannot be defaulted away, and it cannot be nulled without saying so.
+
+
+def _is_none_default(node: ast.expr | None) -> bool:
+    """True for an explicit `= None`; kw_defaults uses a bare None for "no default"."""
+    return node is not None and isinstance(node, ast.Constant) and node.value is None
+
+
+def _owner_parameters_defaulting_to_none(tree: ast.AST) -> list[int]:
+    lines: list[int] = []
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef):
+            continue
+        args = node.args
+        positional = [*args.posonlyargs, *args.args]
+        first_defaulted = len(positional) - len(args.defaults)
+        for index, argument in enumerate(positional):
+            if argument.arg == "owner" and index >= first_defaulted:
+                if _is_none_default(args.defaults[index - first_defaulted]):
+                    lines.append(node.lineno)
+        for argument, default in zip(args.kwonlyargs, args.kw_defaults, strict=True):
+            if argument.arg == "owner" and _is_none_default(default):
+                lines.append(node.lineno)
+    return lines
+
+
+def _null_owner_arguments(tree: ast.AST) -> list[int]:
+    return [
+        node.lineno
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Call)
+        for keyword in node.keywords
+        if keyword.arg == "owner" and _is_none_default(keyword.value)
+    ]
+
+
+def test_no_retrieval_helper_defaults_its_owner_away():
+    """A helper on the way to the store may not make the owner optional.
+
+    `similarity_search` itself is exempt: it is the one place that decides what a
+    missing owner means. Everywhere upstream, `owner` must be keyword-only with
+    no default, so omitting it is a TypeError at the call site instead of a
+    silently ownership-blind search.
+    """
+    offenders: list[str] = []
+    for path in _python_sources():
+        key = path.as_posix()
+        if key == "app/retrievers/stores/vector.py":
+            continue
+        tree = ast.parse(path.read_text(encoding="utf-8", errors="ignore"))
+        offenders.extend(f"{key}:{line}" for line in _owner_parameters_defaulting_to_none(tree))
+
+    assert not offenders, (
+        f"`owner` defaults to None at {sorted(offenders)}. Declare it keyword-only "
+        "with no default (`*, owner: OwnerScope | None`) so a caller cannot drop it "
+        "by omission."
+    )
+
+
+def test_no_module_passes_a_null_owner_without_saying_why():
+    """Writing `owner=None` is allowed, but only somewhere the allowlist explains."""
+    offenders: list[str] = []
+    for path in _python_sources():
+        key = path.as_posix()
+        if key in OWNERLESS_CALL_SITES:
+            continue
+        tree = ast.parse(path.read_text(encoding="utf-8", errors="ignore"))
+        offenders.extend(f"{key}:{line}" for line in _null_owner_arguments(tree))
+
+    assert not offenders, (
+        f"`owner=None` passed at {sorted(offenders)}. Pass "
+        "OwnerScope.from_access_scope(scope), or add the module to "
+        "OWNERLESS_CALL_SITES with a reason if it genuinely has no caller."
+    )

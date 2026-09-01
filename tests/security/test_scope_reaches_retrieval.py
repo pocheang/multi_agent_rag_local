@@ -148,9 +148,11 @@ class _RecordingCapabilities:
 
     def __init__(self) -> None:
         self.seen: list[OrchestrationRequest] = []
+        self.seen_scopes: list[object] = []
 
     def orchestration_services(self):
-        from app.domain.contracts import EvidenceBundle, FinalAnswer, RouteDecision, TaskPlan, ValidationStatus
+        from app.domain.contracts import FinalAnswer, RouteDecision, TaskPlan, ValidationStatus
+        from app.domain.workflow import ContextBundle
         from app.orchestration.engine import OrchestrationServices
 
         route = RouteDecision(
@@ -167,11 +169,15 @@ class _RecordingCapabilities:
         async def planner(request, decision):
             return TaskPlan()
 
-        async def retriever(request, decision, plan):
+        async def retriever(request, decision, plan, strategy, scope):
+            # Both are recorded: the request carries the narrowed source scope and
+            # `scope` is the resolver's own AccessScope. Retrieval must never be
+            # handed a wider range than the resolver authorized, on either.
             self.seen.append(request)
-            return EvidenceBundle(route=decision, plan=plan)
+            self.seen_scopes.append(scope)
+            return ContextBundle()
 
-        async def tool_runner(request, decision, plan, evidence):
+        async def tool_runner(request, decision, plan):
             return ()
 
         async def synthesizer(request, decision, plan, evidence, tool_results):

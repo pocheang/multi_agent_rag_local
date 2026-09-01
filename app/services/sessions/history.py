@@ -593,8 +593,10 @@ class HistoryStore:
             if field_name not in ctx.get("asked_questions", []):
                 ctx.setdefault("asked_questions", []).append(field_name)
 
-            # Increment round
-            ctx["clarification_round"] = ctx.get("clarification_round", 0) + 1
+            # The round is advanced by *asking*, in ClarificationAgentService, and
+            # this used to advance it again on the answer. One counter, one owner:
+            # incrementing here as well double-counted every completed exchange
+            # and made the cap fire at half the configured number of questions.
 
             data["clarification_context"] = ctx
             data["updated_at"] = self._now()

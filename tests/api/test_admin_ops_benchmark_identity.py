@@ -19,7 +19,8 @@ import pytest
 
 from app.api.routes.admin import ops
 from app.api.routes.internal import pipeline_contract
-from app.domain.contracts import EvidenceBundle, FinalAnswer, RouteDecision, TaskPlan, ValidationStatus
+from app.domain.contracts import FinalAnswer, RouteDecision, TaskPlan, ValidationStatus
+from app.domain.workflow import ContextBundle
 from app.orchestration.engine import OrchestrationServices
 from app.pipeline.rag_pipeline import RAGPipeline
 
@@ -43,10 +44,10 @@ def _stub_services() -> OrchestrationServices:
     async def planner(request, route):
         return TaskPlan()
 
-    async def retriever(request, route, plan):
-        return EvidenceBundle(route=route, plan=plan)
+    async def retriever(request, route, plan, strategy, scope):
+        return ContextBundle()
 
-    async def tool_runner(request, route, plan, evidence):
+    async def tool_runner(request, route, plan):
         return ()
 
     async def synthesizer(request, route, plan, evidence, tool_results):

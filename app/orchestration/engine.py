@@ -10,7 +10,7 @@ from typing import Any, Protocol
 from app.core.config import get_settings
 from app.domain.contracts import EvidenceBundle, FinalAnswer, RouteDecision, TaskPlan, ToolResult
 from app.domain.events import ExecutionEvent
-from app.domain.knowledge import KnowledgeStrategy
+from app.domain.knowledge import AccessScope, KnowledgeStrategy
 from app.domain.workflow import (
     CandidateAnswer,
     ClarificationResult,
@@ -18,6 +18,7 @@ from app.domain.workflow import (
     RouterDecision,
     VerificationDecision,
 )
+from app.orchestration.answer_stream import current_answer_stream_id, get_default_answer_stream_store
 from app.orchestration.event_publisher import EventPublisher, NullEventPublisher
 from app.orchestration.execution_events import current_execution_id
 from app.orchestration.langgraph.checkpoint import checkpoint_config
@@ -30,14 +31,21 @@ from app.orchestration.timeout_control import (
     get_timeout_config,
 )
 from app.privacy.service import PrivacyService
+from app.services.runtime.request_context import get_request_api_settings, request_context
 from app.services.security.access_scope import AccessScopeResolver
 
 Router = Callable[[OrchestrationRequest], Awaitable[RouteDecision]]
 Planner = Callable[[OrchestrationRequest, RouteDecision], Awaitable[TaskPlan]]
-Retriever = Callable[[OrchestrationRequest, RouteDecision, TaskPlan | None], Awaitable[EvidenceBundle]]
-ToolRunner = Callable[
-    [OrchestrationRequest, RouteDecision, TaskPlan, EvidenceBundle], Awaitable[tuple[ToolResult, ...]]
+# Takes the Knowledge Agent's strategy and the resolved scope, and returns the
+# context it built: retrieval executes a decision, it does not make one, and the
+# context is built once rather than rebuilt by the caller.
+Retriever = Callable[
+    [OrchestrationRequest, RouteDecision, TaskPlan | None, KnowledgeStrategy, AccessScope],
+    Awaitable[ContextBundle],
 ]
+# No EvidenceBundle: the tool path must not be reachable from retrieved
+# content. See app/agents/tool/selector.py for the threat model.
+ToolRunner = Callable[[OrchestrationRequest, RouteDecision, TaskPlan], Awaitable[tuple[ToolResult, ...]]]
 Synthesizer = Callable[
     [OrchestrationRequest, RouteDecision, TaskPlan | None, EvidenceBundle, tuple[ToolResult, ...]],
     Awaitable[FinalAnswer],
@@ -55,10 +63,6 @@ Verifier = Callable[
 KnowledgeAgent = Callable[
     [OrchestrationRequest, RouterDecision, TaskPlan | None, VerificationDecision | None],
     Awaitable[KnowledgeStrategy],
-]
-KnowledgeOrchestrator = Callable[
-    [KnowledgeStrategy, Any, Callable[[ExecutionEvent], Awaitable[None]]],
-    Awaitable[ContextBundle],
 ]
 
 
@@ -94,7 +98,6 @@ class OrchestrationServices:
         clarifier: Clarifier | None = None,
         verifier: Verifier | None = None,
         knowledge_agent: KnowledgeAgent | None = None,
-        knowledge_orchestrator: KnowledgeOrchestrator | None = None,
         privacy: PrivacyService | None = None,
         access_scope_resolver: AccessScopeResolver | None = None,
         context: object | None = None,
@@ -110,7 +113,6 @@ class OrchestrationServices:
         self.clarifier = clarifier
         self.verifier = verifier
         self.knowledge_agent = knowledge_agent or _default_knowledge_agent
-        self.knowledge_orchestrator = knowledge_orchestrator
         self.privacy = privacy or PrivacyService()
         self.access_scope_resolver = access_scope_resolver or AccessScopeResolver()
         self.context = context
@@ -216,16 +218,34 @@ class OrchestrationEngine:
     ) -> FinalAnswer:
         reporter = publish or self._publisher.publish
         timeout_config = self._timeout_config or get_timeout_config(request.profile)
-        budget = ExecutionBudget(timeout_config)
+        budget = ExecutionBudget(timeout_config, deadline_at=request.deadline_at)
         self._services.bind_event_reporter(reporter)
         # Tell the publisher which execution these events belong to.  Scoped to
         # this task's context, and reset below, so a shared engine never files
         # one request's events under another request's id.
         execution_token = current_execution_id.set(request.execution_id)
+        # Answer fragments are addressed by the same id, so a client watching the
+        # trace is already subscribed to the right stream.
+        answer_token = current_answer_stream_id.set(request.execution_id)
         try:
-            return await self._run_workflow(request, reporter, budget)
+            # Publish the same budget the stage ceilings enforce to the helpers
+            # that check a deadline on their own -- the LLM query rewriter and
+            # the synthesizer's self-review and fact-verification exits. They
+            # read `app.services.runtime.request_context`, which nothing on the
+            # request path had ever set: `remaining_seconds()` returned None, and
+            # `_llm_rewrite` treats None as "no time", so QUERY_REWRITE_WITH_LLM
+            # was a switch that could not turn anything on.
+            with request_context(
+                timeout_ms=max(1, budget.remaining_ms()),
+                overload_mode=False,
+                api_settings=get_request_api_settings(),
+            ):
+                return await self._run_workflow(request, reporter, budget)
         finally:
             current_execution_id.reset(execution_token)
+            if request.execution_id:
+                get_default_answer_stream_store().complete(request.execution_id)
+            current_answer_stream_id.reset(answer_token)
 
     async def _run_workflow(
         self,
@@ -297,9 +317,10 @@ async def _default_knowledge_agent(
     route: RouterDecision,
     plan: TaskPlan | None,
     retry_feedback: VerificationDecision | None,
+    scope: AccessScope | None = None,
 ) -> KnowledgeStrategy:
     """Lazy compatibility default that avoids orchestration import cycles."""
 
     from app.agents.knowledge.service import KnowledgeAgentService
 
-    return await KnowledgeAgentService().decide(request, route, plan, retry_feedback)
+    return await KnowledgeAgentService().decide(request, route, plan, retry_feedback, scope)

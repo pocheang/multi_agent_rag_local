@@ -29,6 +29,35 @@ class KnowledgeAdapter(Protocol):
     ) -> tuple[EvidenceItem, ...]: ...
 
 
+class PriorEvidenceAdapter(Protocol):
+    """An adapter whose retrieval is sharpened by what the other sources found.
+
+    The orchestrator runs sources concurrently, which is the right default: they
+    are independent.  A source that implements this protocol declares it is not,
+    and the orchestrator gives it a second phase after the independent ones have
+    returned.  That costs its duration on the critical path instead of hiding it
+    under the others, so an adapter must report `wants_prior_evidence` False
+    whenever the prior evidence would not change what it does -- paying for a
+    phase that changes nothing is the whole reason this is opt-in per call rather
+    than a static property of the source.
+
+    `prior` is evidence this system retrieved under the caller's own scope, and it
+    must not be used to widen retrieval -- only to tune it.  See
+    `GraphKnowledgeAdapter`.
+    """
+
+    source: KnowledgeSource
+
+    def wants_prior_evidence(self) -> bool: ...
+
+    async def retrieve_with_prior(
+        self,
+        plan: KnowledgeSourcePlan,
+        scope: AccessScope,
+        prior: tuple[EvidenceItem, ...],
+    ) -> tuple[EvidenceItem, ...]: ...
+
+
 class CallableKnowledgeAdapter:
     """Small dependency-injection adapter used by production and compatibility facades."""
 
@@ -62,7 +91,7 @@ def build_default_adapters() -> dict[KnowledgeSource, KnowledgeAdapter]:
     return {
         "vector": CallableKnowledgeAdapter("vector", _retrieve_vector),
         "bm25": CallableKnowledgeAdapter("bm25", _retrieve_bm25),
-        "graph": CallableKnowledgeAdapter("graph", _retrieve_graph),
+        "graph": GraphKnowledgeAdapter(),
         "multimodal": CallableKnowledgeAdapter("multimodal", _retrieve_multimodal),
         "wiki": CallableKnowledgeAdapter("wiki", _retrieve_wiki),
         "memory": CallableKnowledgeAdapter("memory", _retrieve_memory),
@@ -106,19 +135,87 @@ async def _retrieve_bm25(plan: KnowledgeSourcePlan, scope: AccessScope) -> tuple
     return _flatten(await asyncio.gather(*(one(query) for query in plan.queries)))
 
 
-async def _retrieve_graph(plan: KnowledgeSourcePlan, scope: AccessScope) -> tuple[EvidenceItem, ...]:
-    from app.agents.rag.graph import run_graph_rag
-    from app.retrievers.stores.vector import OwnerScope
+class GraphKnowledgeAdapter:
+    """Graph retrieval, optionally tuned by what the document sources found.
 
-    allowed = sorted(scope.allowed_sources)
-    owner = OwnerScope.from_access_scope(scope)
+    Two things are separable here and were previously confused.  The *enhanced
+    lookup* (entity normalization, alias matching, relation weighting) needs no
+    documents.  The *adaptive result limits* -- and the decision to skip a graph
+    lookup whose source documents are too poor to have produced a trustworthy
+    graph -- are estimated from the documents, which only exist after the other
+    sources have run.
 
-    async def one(query: str) -> tuple[EvidenceItem, ...]:
-        result = await asyncio.to_thread(run_graph_rag, query, allowed, None, None, None, owner)
-        bundle = bundle_from_legacy_payload(result, "graph", fallback_document_id=f"graph:{query}")
-        return tuple(item.model_copy(update={"modality": "graph"}) for item in bundle.items)
+    So this adapter asks for a second phase only when enhanced mode is on.  With
+    `GRAPH_RAG_ENHANCED` off, the prior evidence has no reader and the adapter
+    stays in phase one, where graph retrieval overlaps everything else exactly as
+    before.
 
-    return _flatten(await asyncio.gather(*(one(query) for query in plan.queries)))
+    **Prior evidence tunes; it never widens.** What crosses into
+    `run_graph_rag` is a quality *score* over the retrieved text plus its page
+    and format metadata; `run_graph_rag_with_pdf_context` does not read entities
+    out of the documents to query with, and `allowed_sources`/`owner` are still
+    the caller's, resolved by `privacy_permission`.  A document that argues for
+    its own importance can therefore buy itself a larger `max_neighbors` and
+    nothing else.  Keep it that way: letting document text choose which entities
+    to look up would make retrieved content steer retrieval, and the answer to
+    "who wrote this document" is not always "the person asking".
+    """
+
+    source: KnowledgeSource = "graph"
+
+    def wants_prior_evidence(self) -> bool:
+        from app.core.config import get_settings
+
+        return bool(get_settings().graph_rag_enhanced)
+
+    async def retrieve(self, plan: KnowledgeSourcePlan, scope: AccessScope) -> tuple[EvidenceItem, ...]:
+        return await self.retrieve_with_prior(plan, scope, ())
+
+    async def retrieve_with_prior(
+        self,
+        plan: KnowledgeSourcePlan,
+        scope: AccessScope,
+        prior: tuple[EvidenceItem, ...],
+    ) -> tuple[EvidenceItem, ...]:
+        from app.agents.rag.graph import run_graph_rag
+        from app.retrievers.stores.vector import OwnerScope
+
+        allowed = sorted(scope.allowed_sources)
+        owner = OwnerScope.from_access_scope(scope)
+        documents = _as_quality_documents(prior)
+
+        async def one(query: str) -> tuple[EvidenceItem, ...]:
+            result = await asyncio.to_thread(
+                run_graph_rag,
+                query,
+                allowed,
+                None,
+                documents,
+                None,
+                owner=owner,
+            )
+            bundle = bundle_from_legacy_payload(result, "graph", fallback_document_id=f"graph:{query}")
+            return tuple(item.model_copy(update={"modality": "graph"}) for item in bundle.items)
+
+        return _flatten(await asyncio.gather(*(one(query) for query in plan.queries)))
+
+
+def _as_quality_documents(items: tuple[EvidenceItem, ...]) -> list[dict] | None:
+    """Shape evidence into what the PDF quality analyzer reads, and nothing more.
+
+    Only text evidence: the analyzer scores prose structure and density, so an
+    image caption or a graph triple would score as a poor document and drag the
+    estimate down for reasons that say nothing about document quality.
+    """
+    documents = [
+        {
+            "content": item.content,
+            "metadata": {"page": item.page, "source": item.source},
+        }
+        for item in items
+        if item.modality == "text" and item.layer == "evidence"
+    ]
+    return documents or None
 
 
 async def _retrieve_web(plan: KnowledgeSourcePlan, scope: AccessScope) -> tuple[EvidenceItem, ...]:
@@ -207,7 +304,9 @@ def _flatten(groups: Sequence[Sequence[EvidenceItem]]) -> tuple[EvidenceItem, ..
 __all__ = [
     "AdapterCallable",
     "CallableKnowledgeAdapter",
+    "GraphKnowledgeAdapter",
     "KnowledgeAdapter",
+    "PriorEvidenceAdapter",
     "UnavailableKnowledgeAdapter",
     "UnavailableKnowledgeSourceError",
     "build_default_adapters",

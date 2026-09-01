@@ -33,14 +33,27 @@ class SimpleRetriever:
             if self.system_name == "vector_only":
                 results = similarity_search(
                     query=query,
-                    top_k=self.settings.vector_top_k or 10,
+                    # `k`, not `top_k`: this raised TypeError on every call, so
+                    # the vector_only baseline had never once run. The unfiltered
+                    # search is the point here -- the harness measures retrieval
+                    # over a fixed corpus with no request and no user -- and is
+                    # allowlisted in tests/security/test_no_unrestricted_retrieval.py.
+                    k=self.settings.vector_top_k or 10,
                     allowed_sources=None,
+                    require_source_filter=False,
+                    owner=None,
                 )
-                retrieved_docs = [doc.get("source", "") for doc in results]
+                # similarity_search returns (Document, score) pairs, not dicts.
+                retrieved_docs = [document.metadata.get("source", "") for document, _score in results]
             elif self.system_name == "hybrid":
                 results, _ = hybrid_search_with_diagnostics(
                     query=query,
                     allowed_sources=None,
+                    # Offline harness measuring retrieval quality over a fixed
+                    # corpus: there is no request and no user to scope to. Written
+                    # out rather than defaulted, and allowlisted in
+                    # tests/security/test_no_unrestricted_retrieval.py.
+                    owner=None,
                 )
                 retrieved_docs = [doc.get("source", "") for doc in results]
             else:

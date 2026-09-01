@@ -2,30 +2,21 @@
 
 from __future__ import annotations
 
-import asyncio
-import atexit
-import concurrent.futures
 import logging
-import threading
-from collections.abc import Awaitable, Callable
+from abc import ABC, abstractmethod
+from collections.abc import Awaitable, Callable, Mapping
 from contextvars import ContextVar
 
-from app.agents.rag.evidence_builder import (
-    bundle_from_bm25_records,
-    bundle_from_legacy_payload,
-    bundle_from_vector_matches,
-)
-from app.domain.contracts import EvidenceBundle, RouteDecision, TaskPlan
+from app.domain.contracts import RouteDecision, TaskPlan
 from app.domain.events import ExecutionEvent
-from app.domain.knowledge import AccessScope, KnowledgeSource, KnowledgeSourcePlan, KnowledgeStrategy
-from app.knowledge.adapters import CallableKnowledgeAdapter
+from app.domain.knowledge import AccessScope, KnowledgeSource, KnowledgeStrategy
+from app.domain.workflow import ContextBundle
+from app.knowledge.adapters import KnowledgeAdapter, build_default_adapters
 from app.knowledge.orchestrator import KnowledgeOrchestrator
 from app.orchestration.request import OrchestrationRequest
-from app.services.security.access_scope import DEFAULT_CONTEXT_FIELDS
 
 logger = logging.getLogger(__name__)
 
-TypedRetriever = Callable[[OrchestrationRequest, RouteDecision, TaskPlan | None], Awaitable[EvidenceBundle]]
 DegradationReporter = Callable[[ExecutionEvent], Awaitable[None]]
 
 # Per-request degradation reporter, installed by the orchestration engine for the
@@ -36,76 +27,41 @@ _current_degradation_reporter: ContextVar[DegradationReporter | None] = ContextV
     "rag_current_degradation_reporter", default=None
 )
 
-# Default timeout for individual retriever operations (seconds)
-DEFAULT_RETRIEVER_TIMEOUT = 30.0
 
-# Overall timeout multiplier for concurrent retrieval operations
-# Multiplied by individual retriever timeout to allow for retries and parallel execution
-OVERALL_TIMEOUT_MULTIPLIER = 2.0
+def _default_retriever_timeout() -> float:
+    """Bound one source with the same setting KnowledgeOrchestrator uses.
 
-# Error message length limit for event reporting (characters)
-# Longer messages are truncated to prevent excessive log output
-ERROR_MESSAGE_MAX_LENGTH = 1000
-
-# Thread pool management: lazy initialization to avoid resource leak
-_retriever_pool: concurrent.futures.ThreadPoolExecutor | None = None
-_pool_lock = threading.Lock()
-_MAX_WORKERS = 50
-
-
-def _get_retriever_pool() -> concurrent.futures.ThreadPoolExecutor:
-    """Get or create the shared retriever thread pool.
-
-    Uses lazy initialization to avoid creating threads at module import time.
-    Thread pool is automatically cleaned up at program exit via atexit.
-
-    Thread-safe: protected by lock to prevent race conditions.
+    This used to be a hardcoded 30s while the whole knowledge stage was capped at
+    10s, so the inner timeout could never fire: the stage ceiling killed the
+    request first. Deriving it from `KNOWLEDGE_SOURCE_TIMEOUT_MS` keeps the inner
+    bound below the outer one by construction -- see
+    tests/orchestration/test_timeout_degradation.py.
     """
-    global _retriever_pool
+    from app.core.config import get_settings
 
-    if _retriever_pool is not None:
-        return _retriever_pool
-
-    with _pool_lock:
-        # Double-check pattern: another thread might have created it
-        if _retriever_pool is not None:
-            return _retriever_pool
-
-        _retriever_pool = concurrent.futures.ThreadPoolExecutor(
-            max_workers=_MAX_WORKERS, thread_name_prefix="retriever"
-        )
-
-        # Register cleanup at program exit
-        atexit.register(_shutdown_retriever_pool)
-
-        return _retriever_pool
+    return max(0.1, float(get_settings().knowledge_source_timeout_ms) / 1000.0)
 
 
-def _shutdown_retriever_pool() -> None:
-    """Shutdown the retriever thread pool gracefully.
-
-    Called automatically at program exit via atexit.
-    Can also be called manually for testing or explicit cleanup.
-    """
-    global _retriever_pool
-
-    if _retriever_pool is None:
-        return
-
-    with _pool_lock:
-        if _retriever_pool is not None:
-            try:
-                _retriever_pool.shutdown(wait=True, cancel_futures=False)
-            except Exception as e:
-                # Suppress exceptions during shutdown to prevent atexit errors
-                logger.debug(f"Exception during retriever pool shutdown: {e}")
-                pass
-            finally:
-                _retriever_pool = None
+# The module-level ThreadPoolExecutor that used to live here belonged to the
+# four `_*_retrieve` thunks, which ran blocking retrievers through
+# `run_in_executor`. `app/knowledge/adapters.py` uses `asyncio.to_thread`
+# instead, so the pool had no remaining user; keeping it would have kept 50
+# idle worker slots and an atexit hook alive for nothing.
 
 
 class RetrieverSoftFailure(RuntimeError):
     """A legacy retriever returned an explicit failure payload."""
+
+
+NOT_ATTEMPTED: frozenset[str] = frozenset({"EmptyAccessScope", "AdapterNotConfigured"})
+"""Reasons a source never ran, as opposed to ran and failed.
+
+Both are reported as `skipped`, and both are outside the degradation policy's
+question: it asks how much of the retrieval this run *attempted* came back, and
+a source that was never attempted belongs in neither the numerator nor the
+denominator. Counting them made "this user has no documents" and "this
+deployment has no graph store" indistinguishable from "the vector store threw".
+"""
 
 
 class RetrievalFailureError(Exception):
@@ -137,14 +93,18 @@ class RetrievalFailureError(Exception):
         super().__init__(message)
 
 
-class RAGDegradationPolicy:
+class RAGDegradationPolicy(ABC):
     """Policy for determining if retrieval degradation is acceptable.
 
     This policy determines when partial retrieval failures are acceptable
     versus when the entire RAG operation should fail.
 
+    Abstract for real: it used to raise NotImplementedError without inheriting
+    ABC, so the base class was instantiable and a subclass could forget the
+    method without anyone noticing until a request hit it.
     """
 
+    @abstractmethod
     def is_acceptable(
         self,
         successful_attempts: int,
@@ -222,34 +182,53 @@ class RequireSpecificRetrieverPolicy(RAGDegradationPolicy):
         return not (self.required_retrievers & failed_retriever_names)
 
 
+def _policy_from_settings() -> RAGDegradationPolicy:
+    """Select the configured degradation policy.
+
+    `RequireMinimumCountPolicy` and `RequireSpecificRetrieverPolicy` were written
+    and then never reachable: nothing constructed them and nothing could ask for
+    them. These two settings are how a deployment says "one source is not enough"
+    or "this answer is meaningless without the graph".
+    """
+
+    from app.core.config import get_settings
+
+    settings = get_settings()
+    required = {name.strip() for name in str(settings.retrieval_required_sources or "").split(",") if name.strip()}
+    if required:
+        return RequireSpecificRetrieverPolicy(required)
+    minimum = int(settings.retrieval_min_successful_sources)
+    return RequireMinimumCountPolicy(minimum) if minimum > 1 else RequireAtLeastOnePolicy()
+
+
 class RAGAgentService:
     """Backward-compatible facade that delegates execution to KnowledgeOrchestrator."""
 
     def __init__(
         self,
         *,
-        vector: TypedRetriever | None = None,
-        bm25: TypedRetriever | None = None,
-        graph: TypedRetriever | None = None,
-        web: TypedRetriever | None = None,
+        adapters: Mapping[KnowledgeSource, KnowledgeAdapter] | None = None,
         report_degradation: DegradationReporter | None = None,
-        retriever_timeout: float = DEFAULT_RETRIEVER_TIMEOUT,
+        retriever_timeout: float | None = None,
         degradation_policy: RAGDegradationPolicy | None = None,
     ) -> None:
-        """Initialize RAG agent service with typed retrievers.
+        """Initialize the retrieval executor.
 
         Args:
-            vector: Vector similarity retriever (defaults to _vector_retrieve)
-            bm25: BM25 keyword retriever (defaults to _bm25_retrieve)
-            graph: Knowledge graph retriever (defaults to _graph_retrieve)
-            web: Web search retriever (defaults to _web_retrieve)
+            adapters: Overrides merged over ``build_default_adapters()``. Source
+                *selection* is the Knowledge Agent's job; this class only runs
+                what it was handed.
             report_degradation: Event reporter for degradation events (defaults to _discard_event)
-            retriever_timeout: Timeout in seconds for individual retrievers (default: 30.0, must be > 0)
-            degradation_policy: Policy for acceptable degradation (defaults to RequireAtLeastOnePolicy)
+            retriever_timeout: Timeout in seconds for individual retrievers; defaults to
+                KNOWLEDGE_SOURCE_TIMEOUT_MS so it stays under the knowledge stage ceiling
+            degradation_policy: Policy for acceptable degradation; defaults to the one
+                RETRIEVAL_MIN_SUCCESSFUL_SOURCES / RETRIEVAL_REQUIRED_SOURCES select
 
         Raises:
             ValueError: If retriever_timeout is not positive
         """
+        if retriever_timeout is None:
+            retriever_timeout = _default_retriever_timeout()
         if retriever_timeout <= 0:
             raise ValueError(f"retriever_timeout must be positive, got {retriever_timeout}")
         if retriever_timeout > 300:  # 5 minutes
@@ -262,17 +241,14 @@ class RAGAgentService:
                 stacklevel=2,
             )
 
-        self._vector = _vector_retrieve if vector is None else vector
-        self._bm25 = _bm25_retrieve if bm25 is None else bm25
-        self._graph = _graph_retrieve if graph is None else graph
-        self._web = _web_retrieve if web is None else web
+        self._adapters = {**build_default_adapters(), **dict(adapters or {})}
         # Fallback used only when no per-request reporter was installed via
         # set_degradation_reporter (e.g. direct construction in a test/script).
         # Fixed at construction time, never mutated -- see _current_degradation_reporter
         # for the actual per-request path, which is what the engine uses in production.
         self._default_report_degradation = _discard_event if report_degradation is None else report_degradation
         self._retriever_timeout = retriever_timeout
-        self._degradation_policy = RequireAtLeastOnePolicy() if degradation_policy is None else degradation_policy
+        self._degradation_policy = degradation_policy or _policy_from_settings()
 
     def set_degradation_reporter(self, reporter: DegradationReporter) -> None:
         """Install the degradation reporter for the current request.
@@ -289,284 +265,74 @@ class RAGAgentService:
         request: OrchestrationRequest,
         route: RouteDecision,
         plan: TaskPlan | None,
-    ) -> EvidenceBundle:
-        """Translate the legacy request contract and proxy it to the canonical service."""
+        strategy: KnowledgeStrategy,
+        scope: AccessScope,
+    ) -> ContextBundle:
+        """Execute the Knowledge Agent's strategy and enforce the degradation policy.
 
+        This class used to build its own strategy here -- always vector+BM25,
+        graph only for two routes, `rewrite=False` -- which silently overrode
+        whatever the Knowledge Agent had just decided. That is why `memory`,
+        `wiki` and `multimodal` were unreachable on the chat path however the
+        Knowledge Agent chose them, why query rewriting never ran, and why a
+        verifier retry re-ran the identical search: the retry query lives in the
+        strategy, and the strategy was thrown away.
+
+        Selection now belongs entirely to the Knowledge Agent. What stays here is
+        execution: bounding each source, running them, and deciding whether the
+        result is acceptable.
+        """
+
+        del plan
         if "rag" not in route.allowed_capabilities:
-            return EvidenceBundle()
+            return ContextBundle()
 
-        # An empty document scope means this caller may read no documents, so the
-        # document-backed retrievers are left out. Web results are not documents
-        # and carry no owner, so they stay available: short-circuiting the whole
-        # method here denied web search to anyone who had not uploaded a file.
-        #
-        # A *missing* scope (None) is deliberately still handed to them, and ends
-        # in a loud RetrievalFailureError: KnowledgeOrchestrator skips them as
-        # EmptyAccessScope and the degradation policy sees zero successes.
-        # Filtering them out here instead would turn "a caller bypassed the
-        # resolver" into a quiet empty result that reads as "no matches found".
-        document_scope = request.source_scope.allowed_sources
-        readable_documents = document_scope is None or bool(document_scope)
-
-        enabled: list[tuple[KnowledgeSource, TypedRetriever]] = []
-        if readable_documents:
-            enabled.extend((("vector", self._vector), ("bm25", self._bm25)))
-            if route.effective_route in {"graph", "hybrid"}:
-                enabled.append(("graph", self._graph))
-        if "web" in route.allowed_capabilities:
-            enabled.append(("web", self._web))
-        if not enabled:
-            return EvidenceBundle(route=route, plan=plan)
-
-        source_queries: dict[KnowledgeSource, list[str]] = {name: [] for name, _ in enabled}
-        for planned_request, max_retrievals in _retrieval_requests(request, plan, len(enabled)):
-            for name, _ in enabled[:max_retrievals]:
-                source_queries[name].append(planned_request.question)
-        selected = tuple((name, retriever) for name, retriever in enabled if source_queries[name])
-        if not selected:
-            return EvidenceBundle(route=route, plan=plan)
-
-        adapters = {
-            name: CallableKnowledgeAdapter(
-                name,
-                _legacy_adapter(name, retriever, request=request, route=route, task_plan=plan),
-            )
-            for name, retriever in selected
-        }
-        strategy = KnowledgeStrategy(
-            sources=tuple(
-                KnowledgeSourcePlan(
-                    source=name,
-                    queries=tuple(dict.fromkeys(source_queries[name])),
-                    top_k=6,
-                    timeout_ms=max(100, int(self._retriever_timeout * 1000)),
-                    required=name in {"vector", "bm25"},
+        bounded = strategy.model_copy(
+            update={
+                "sources": tuple(
+                    source.model_copy(
+                        update={"timeout_ms": min(source.timeout_ms, int(self._retriever_timeout * 1000))}
+                    )
+                    for source in strategy.sources
                 )
-                for name, _ in selected
-            ),
-            rewrite=False,
-            rerank=len(selected) > 1,
-            rationale="legacy RAG compatibility proxy",
+            }
         )
         reporter = _current_degradation_reporter.get() or self._default_report_degradation
-        context = await KnowledgeOrchestrator(adapters=adapters).retrieve(
-            strategy,
-            _compatibility_scope(request),
-            reporter,
-        )
+        # `enable_context_tracking` is enforced here rather than at the API edge:
+        # this is the one place that decides what retrieval is allowed to know
+        # about the session, so the flag cannot be honoured on one path and
+        # forgotten on another.
+        conversation = request.conversation if request.enable_context_tracking else ()
+        context = await KnowledgeOrchestrator(adapters=self._adapters).retrieve(bounded, scope, reporter, conversation)
+
         status = dict(context.diagnostics.get("source_status", {}))
-        failed = {str(name) for name, value in status.items() if value != "completed"}
-        successful = len(status) - len(failed)
-        if not self._degradation_policy.is_acceptable(successful, len(status), failed):
-            raise RetrievalFailureError(len(status), failed, successful)
-        return EvidenceBundle(
-            route=route,
-            plan=plan,
-            items=context.evidence,
-            diagnostics=context.diagnostics,
-        )
+        errors = dict(context.diagnostics.get("source_error_type", {}))
+        # A source that was never attempted is not a source that failed. The two
+        # look identical in `source_status` -- both read "skipped" -- and judging
+        # by that alone meant a user who has uploaded nothing had every document
+        # source counted as a failure, so their first question raised
+        # RetrievalFailureError and surfaced as a 500. An empty document scope is
+        # a routine state that must return quietly; see "User Data Isolation" in
+        # CLAUDE.md, which the API layer had no way to satisfy before this.
+        attempted = {name for name in status if str(errors.get(name, "")) not in NOT_ATTEMPTED}
+        if not attempted:
+            return context
+        failed = {str(name) for name in attempted if status[name] != "completed"}
+        successful = len(attempted) - len(failed)
+        if not self._degradation_policy.is_acceptable(successful, len(attempted), failed):
+            raise RetrievalFailureError(len(attempted), failed, successful)
+        return context
 
 
-def _legacy_adapter(
-    source: KnowledgeSource,
-    retriever: TypedRetriever,
-    *,
-    request: OrchestrationRequest,
-    route: RouteDecision,
-    task_plan: TaskPlan | None,
-):
-    """Adapt an injected legacy retriever without reimplementing orchestration."""
-
-    async def retrieve(source_plan: KnowledgeSourcePlan, scope: AccessScope) -> tuple:
-        del scope
-        bundles = await asyncio.gather(
-            *(
-                retriever(request.model_copy(update={"question": query}), route, task_plan)
-                for query in source_plan.queries
-            )
-        )
-        items = []
-        for bundle in bundles:
-            if not isinstance(bundle, EvidenceBundle):
-                raise TypeError(f"{source} retriever must return EvidenceBundle")
-            for item in bundle.items:
-                updates = {"retriever": source}
-                if source == "web":
-                    updates["layer"] = "web"
-                items.append(item.model_copy(update=updates))
-        return tuple(items)
-
-    return retrieve
-
-
-def _compatibility_scope(request: OrchestrationRequest) -> AccessScope:
-    """Build a fail-closed scope from the legacy request's already-authorized filters."""
-
-    actor = request.actor
-    user_id = str(actor.user_id if actor and actor.user_id else "legacy").strip()
-    tenant_id = str(actor.tenant_id if actor and actor.tenant_id else user_id).strip()
-    return AccessScope(
-        tenant_id=tenant_id,
-        user_id=user_id,
-        role=str(actor.role if actor and actor.role else "viewer"),
-        permissions=actor.permissions if actor else frozenset(),
-        document_ids=request.source_scope.document_ids or frozenset(),
-        allowed_sources=request.source_scope.allowed_sources or frozenset(),
-        acl_tags=request.source_scope.acl_tags or frozenset(),
-        allowed_fields=request.source_scope.allowed_fields or DEFAULT_CONTEXT_FIELDS,
-    )
-
-
-def _retrieval_requests(
-    request: OrchestrationRequest, plan: TaskPlan | None, available_retrievers: int
-) -> tuple[tuple[OrchestrationRequest, int], ...]:
-    """Build retrieval requests from plan tasks or use the original request.
-
-    Args:
-        request: Base orchestration request
-        plan: Optional task plan with retrieval budgets
-        available_retrievers: Number of available retrievers
-
-    Returns:
-        Tuple of (request, max_retrievers) pairs for each retrieval task.
-        Always returns at least one request (the original) if plan has no valid tasks.
-    """
-    if plan is None:
-        return ((request, available_retrievers),)
-
-    result = []
-    for task in plan.tasks:
-        if not task.retrieval_required:
-            continue
-        if task.budget.max_retrievals <= 0:
-            continue
-
-        # Use task prompt if provided and non-empty
-        task_question = request.question
-        if task.prompt and task.prompt.strip():
-            task_question = task.prompt
-
-        task_request = request.model_copy(update={"question": task_question})
-        max_retrievers = min(task.budget.max_retrievals, available_retrievers)
-        result.append((task_request, max_retrievers))
-
-    # Fallback: if plan has no valid retrieval tasks, use original request
-    if not result:
-        return ((request, available_retrievers),)
-
-    return tuple(result)
+# `_legacy_adapter`, `_compatibility_scope`, `_retrieval_requests` and the four
+# `_*_retrieve` thunks lived here to let this facade build its own restricted
+# source set. They were a second, narrower copy of `app/knowledge/adapters.py`
+# -- vector/BM25/graph/web only, no owner-aware wiki, memory or multimodal -- and
+# keeping both is what let the narrower one silently win. Selection is the
+# Knowledge Agent's job now and execution runs `build_default_adapters()`, so
+# there is one implementation of each source instead of two.
 
 
 async def _discard_event(event: ExecutionEvent) -> None:
     """Keep degradation optional until orchestration supplies a publisher."""
     del event
-
-
-def _get_allowed_sources(request: OrchestrationRequest) -> list[str] | None:
-    """Extract allowed sources from request, converting to list if present.
-
-    An *empty* scope means the caller may read nothing and must stay distinct
-    from a *missing* one: collapsing both to None (as this used to) turned "this
-    user has no documents" into an unrestricted search of every tenant's corpus.
-    A missing scope still returns None so the store raises rather than guesses --
-    after privacy_permission rewrites the request there is always a resolved
-    scope, so None can only mean a caller skipped the resolver.
-
-    Args:
-        request: Orchestration request with source scope
-
-    Returns:
-        List of allowed sources, or None when no scope was resolved at all
-    """
-    if request.source_scope.allowed_sources is None:
-        return None
-    return list(request.source_scope.allowed_sources)
-
-
-async def _bm25_retrieve(
-    request: OrchestrationRequest,
-    route: RouteDecision,
-    plan: TaskPlan | None,
-) -> EvidenceBundle:
-    """BM25 keyword-based retrieval."""
-    del route, plan
-    from app.retrievers.bm25_retriever import bm25_search
-
-    loop = asyncio.get_event_loop()
-    records = await loop.run_in_executor(
-        _get_retriever_pool(),
-        bm25_search,
-        request.question,  # query: str
-        6,  # k: int (default number of results)
-        _get_allowed_sources(request),  # allowed_sources: list[str] | None
-        # use_chinese_tokenizer: bool uses default True
-    )
-    return bundle_from_bm25_records(records)
-
-
-async def _vector_retrieve(
-    request: OrchestrationRequest,
-    route: RouteDecision,
-    plan: TaskPlan | None,
-) -> EvidenceBundle:
-    """Vector similarity retrieval."""
-    del route, plan
-    from app.retrievers.stores.vector import OwnerScope, similarity_search
-
-    loop = asyncio.get_event_loop()
-    matches = await loop.run_in_executor(
-        _get_retriever_pool(),
-        similarity_search,
-        request.question,  # query: str
-        None,  # k: int | None (use default)
-        _get_allowed_sources(request),  # allowed_sources: list[str] | None
-        # require_source_filter stays at its default: a request that reached
-        # retrieval without a resolved scope must raise, not read every corpus.
-        True,  # require_source_filter
-        OwnerScope.from_access_scope(_compatibility_scope(request)),  # owner
-    )
-    return bundle_from_vector_matches(matches)
-
-
-async def _graph_retrieve(
-    request: OrchestrationRequest,
-    route: RouteDecision,
-    plan: TaskPlan | None,
-) -> EvidenceBundle:
-    """Knowledge graph retrieval."""
-    del route, plan
-    from app.agents.rag.graph import run_graph_rag
-    from app.retrievers.stores.vector import OwnerScope
-
-    loop = asyncio.get_event_loop()
-    result = await loop.run_in_executor(
-        _get_retriever_pool(),
-        run_graph_rag,
-        request.question,
-        _get_allowed_sources(request),
-        request.source_scope.agent_class_hint,
-        None,  # retrieved_docs
-        None,  # enable_enhancements
-        OwnerScope.from_access_scope(_compatibility_scope(request)),  # owner
-    )
-    return bundle_from_legacy_payload(result, "graph", fallback_document_id=f"graph:{request.question}")
-
-
-async def _web_retrieve(
-    request: OrchestrationRequest,
-    route: RouteDecision,
-    plan: TaskPlan | None,
-) -> EvidenceBundle:
-    """Web search retrieval."""
-    del route, plan
-    from app.agents.rag.web import run_web_research
-
-    loop = asyncio.get_event_loop()
-    result = await loop.run_in_executor(
-        _get_retriever_pool(),
-        run_web_research,
-        request.question,
-        request.actor.user_id if request.actor else None,
-        request.session_id,
-    )
-    return bundle_from_legacy_payload(result, "web")

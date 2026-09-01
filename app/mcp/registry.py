@@ -42,6 +42,17 @@ class ToolRegistry:
             raise ValueError(f"tool already registered: {definition.tool_id}")
         self._tools[definition.tool_id] = (definition, executor)
 
+    def catalog(self, actor: RequestActor) -> tuple[ToolDefinition, ...]:
+        """The tools this actor may invoke, for a selector to choose among.
+
+        Filtered by the same authorization policy that gates invocation, so a
+        model is never shown a tool the caller could not run -- offering one and
+        then refusing it wastes a turn and leaks that the tool exists.
+        """
+        return tuple(
+            definition for definition, _ in self._tools.values() if self._authorization.allows(definition, actor)
+        )
+
     async def invoke(self, call: ToolCall, actor: RequestActor) -> ToolResult:
         """Evaluate all policy gates before the connector executor can run."""
         registered = self._tools.get(call.tool_id)
@@ -55,6 +66,17 @@ class ToolRegistry:
                 call,
                 actor,
                 ToolResult(tool_id=call.tool_id, status="failed", summary="scope denied"),
+                definition=definition,
+            )
+        # Validate before authorization spends an approval: arguments now come
+        # from a model choosing a tool, not from a regex whose capture group had
+        # the accepted shape baked into it.
+        argument_error = definition.validation_error(call.arguments)
+        if argument_error is not None:
+            return await self._finish(
+                call,
+                actor,
+                ToolResult(tool_id=call.tool_id, status="failed", summary=f"invalid arguments: {argument_error}"),
                 definition=definition,
             )
         approval = self._approvals.consume(call, actor) if definition.operation in _APPROVAL_OPERATIONS else None

@@ -20,9 +20,17 @@ def hybrid_search_with_diagnostics(
     dynamic_top_k: int | None = None,
     dynamic_vector_weight: float | None = None,
     dynamic_bm25_weight: float | None = None,
-    owner: OwnerScope | None = None,
+    *,
+    owner: OwnerScope | None,
 ) -> tuple[list[dict], dict]:
-    """Perform hybrid search with full diagnostics."""
+    """Perform hybrid search with full diagnostics.
+
+    ``owner`` is keyword-only and has no default: it reaches the store's own
+    ownership check, and every leak of it so far came from an intermediate
+    function that defaulted it to None.  A caller that genuinely has no identity
+    (the offline evaluation harness) has to write ``owner=None`` and be listed in
+    ``tests/security/test_no_unrestricted_retrieval.py``.
+    """
     with traced_span("retrieval.hybrid_search", {}):
         settings = get_settings()
         flags = strategy_flags()
@@ -126,17 +134,12 @@ def hybrid_search_with_diagnostics(
         return expanded, diagnostics
 
 
-def hybrid_search(query: str, allowed_sources: list[str] | None = None) -> list[dict]:
-    """Perform hybrid search and return results only."""
-    results, _ = hybrid_search_with_diagnostics(query, allowed_sources=allowed_sources)
-    return results
-
-
 def _safe_similarity_search(
     query: str,
     k: int,
     allowed_sources: list[str] | None = None,
-    owner: OwnerScope | None = None,
+    *,
+    owner: OwnerScope | None,
 ):
     """Vector search hop for hybrid retrieval; this module's patch point.
 
@@ -164,7 +167,8 @@ def _collect_candidates_for_current_module(
     dynamic_top_k: int | None = None,
     dynamic_vector_weight: float | None = None,
     dynamic_bm25_weight: float | None = None,
-    owner: OwnerScope | None = None,
+    *,
+    owner: OwnerScope | None,
 ) -> tuple[list[dict], dict]:
     """Collect candidates using this module's retrieval primitives.
 
@@ -191,32 +195,13 @@ def _collect_candidates_for_current_module(
     )
 
 
-def _collect_candidates(
-    query: str,
-    allowed_sources: list[str] | None = None,
-    vector_threshold: float | None = None,
-) -> tuple[list[dict], dict]:
-    """Backward-compatible wrapper for pre-refactor tests and scripts."""
-    settings = get_settings()
-    threshold = float(
-        vector_threshold
-        if vector_threshold is not None
-        else getattr(settings, "vector_similarity_threshold", 0.2) or 0.2
-    )
-    return _collect_candidates_for_current_module(
-        query,
-        allowed_sources=allowed_sources,
-        vector_threshold=threshold,
-        settings=settings,
-    )
-
-
-# Re-export clear function and legacy helpers for backward compatibility.
+# `hybrid_search` and `_collect_candidates` used to live here as convenience
+# wrappers. Both had no callers left and neither could take an owner, so they
+# were two ready-made ways back to an ownership-blind search; removed 2026-08-30
+# with the graph-fallback owner fix. Use `hybrid_search_with_diagnostics`.
 __all__ = [
-    "hybrid_search",
     "hybrid_search_with_diagnostics",
     "clear_retrieval_cache",
-    "_collect_candidates",
     "_expand_to_parent_context",
     "_safe_similarity_search",
     "similarity_search",

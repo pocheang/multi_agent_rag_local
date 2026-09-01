@@ -13,8 +13,6 @@ from app.agents.router.service import RouterAgentService
 from app.agents.synthesizer.service import SynthesizerAgentService
 from app.agents.tool.service import ToolAgentService
 from app.agents.verifier.service import VerifierAgentService
-from app.core.config import get_settings
-from app.knowledge.orchestrator import KnowledgeOrchestrator
 from app.orchestration.engine import OrchestrationServices
 from app.orchestration.finalization import FinalizationService
 from app.privacy.service import PrivacyService
@@ -32,7 +30,6 @@ class CoreCapabilities:
         default_factory=lambda: PlannerAgentService(decompose=default_llm_decompose)
     )
     typed_rag: RAGAgentService = field(default_factory=RAGAgentService)
-    typed_knowledge_orchestrator: KnowledgeOrchestrator = field(default_factory=KnowledgeOrchestrator)
     typed_tools: ToolAgentService = field(default_factory=ToolAgentService)
     typed_synthesizer: SynthesizerAgentService = field(default_factory=SynthesizerAgentService)
     typed_verifier: VerifierAgentService = field(default_factory=VerifierAgentService)
@@ -47,7 +44,6 @@ class CoreCapabilities:
         The event_reporter_binder allows the orchestration engine to push
         degradation events back to RAGAgentService during retrieval failures.
         """
-        settings = get_settings()
         return OrchestrationServices(
             router=self.typed_router.route,
             planner=self.typed_planner.plan,
@@ -59,9 +55,6 @@ class CoreCapabilities:
             verifier=self.typed_verifier.verify,
             clarifier=self.typed_clarifier.clarify,
             knowledge_agent=self.typed_knowledge.decide,
-            knowledge_orchestrator=(
-                self.typed_knowledge_orchestrator.retrieve if settings.knowledge_orchestrator_enabled else None
-            ),
             privacy=self.privacy,
             access_scope_resolver=self.access_scope_resolver,
             context=self.context,

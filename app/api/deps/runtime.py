@@ -3,29 +3,20 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from hashlib import sha256
 from typing import Any
 
 from fastapi import Depends, FastAPI, HTTPException, Request
 
-from app.agents.tool.factory import (
-    ToolAgent,
-    create_tool_agent,
-    get_disable_connector_tool_id,
-)
-from app.api.dependencies import _require_permission, _require_user, settings
-from app.domain.contracts import ToolResult
+from app.agents.tool.factory import ToolAgent, create_tool_agent
+from app.api.dependencies import _require_permission, _require_user
 from app.mcp.approvals import ApprovalStore
-from app.mcp.authorization import AuthorizationPolicy
-from app.mcp.contracts import ToolCall, ToolDefinition
 from app.mcp.gateway import MCPGateway
 from app.mcp.registry import ToolRegistry
+from app.mcp.runtime import get_tool_stack
+from app.orchestration.answer_stream import AnswerStreamStore, get_default_answer_stream_store
 from app.orchestration.execution_events import ExecutionEventStore, get_default_execution_event_store
 from app.orchestration.request import RequestActor
-from app.services.connectors.management import ConnectorManagementService, probe_http_connector
-from app.services.connectors.metadata_repository import ConnectorMetadataRepository
-from app.services.connectors.repository import CredentialRepository
-from app.services.connectors.service import ConnectorCredentialService
+from app.services.connectors.management import ConnectorManagementService
 
 
 @dataclass(frozen=True, slots=True)
@@ -37,55 +28,31 @@ class AppServices:
     gateway: MCPGateway
     connectors: ConnectorManagementService
     execution_events: ExecutionEventStore
+    answer_stream: AnswerStreamStore
     tool_agent: ToolAgent
 
 
 def build_app_services() -> AppServices:
-    """Build governed tools and connector services around shared application state."""
-    approvals = ApprovalStore()
-    # The same process-wide store RAGPipeline publishes into; a private
-    # instance here would leave the SSE endpoint blind to pipeline events.
-    execution_events = get_default_execution_event_store()
-    registry = ToolRegistry(authorization=AuthorizationPolicy(), approvals=approvals, execution_events=execution_events)
-    seed = str(settings.api_settings_encryption_key or "").strip()
-    if not seed:
-        raise RuntimeError("API_SETTINGS_ENCRYPTION_KEY is required for connector credentials")
-    credentials = ConnectorCredentialService(
-        CredentialRepository(),
-        encryption_key=sha256(seed.encode("utf-8")).digest(),
-    )
-    connectors = ConnectorManagementService(
-        ConnectorMetadataRepository(),
-        credentials,
-        probe=probe_http_connector,
-    )
-    gateway = MCPGateway(registry)
+    """Expose the process-wide governed tool stack through the FastAPI container.
 
-    async def disable_owned_connector(call: ToolCall, actor: RequestActor) -> ToolResult:
-        connector_id = next(
-            (argument.value for argument in call.arguments if argument.name == "connector_id"),
-            "",
-        )
-        if not actor.user_id or not connector_id:
-            return ToolResult(tool_id=call.tool_id, status="failed", summary="connector owner is required")
-        try:
-            connectors.disable(connector_id, actor.user_id)
-        except KeyError:
-            return ToolResult(tool_id=call.tool_id, status="failed", summary="owned connector not found")
-        return ToolResult(tool_id=call.tool_id, status="succeeded", summary="connector disabled")
-
-    registry.register(
-        ToolDefinition(tool_id=get_disable_connector_tool_id(), operation="write"),
-        disable_owned_connector,
-    )
-    tool_agent = create_tool_agent(gateway, connectors)
+    Everything here is *resolved*, not constructed. The stack this hands out is
+    the same one the RAG pipeline reaches through
+    ``app.mcp.runtime.get_tool_stack``: an approval token minted by a tool call
+    inside the pipeline has to be redeemable at
+    ``POST /api/v1/connectors/approvals/{token}``, which only holds if both
+    sides share one ``ApprovalStore``.
+    """
+    stack = get_tool_stack()
     return AppServices(
-        approvals=approvals,
-        tool_registry=registry,
-        gateway=gateway,
-        connectors=connectors,
-        execution_events=execution_events,
-        tool_agent=tool_agent,
+        approvals=stack.approvals,
+        tool_registry=stack.registry,
+        gateway=stack.gateway,
+        connectors=stack.connectors,
+        # The same process-wide store RAGPipeline publishes into; a private
+        # instance here would leave the SSE endpoint blind to pipeline events.
+        execution_events=get_default_execution_event_store(),
+        answer_stream=get_default_answer_stream_store(),
+        tool_agent=create_tool_agent(stack.gateway, stack.registry),
     )
 
 
@@ -127,6 +94,13 @@ def get_connector_service(
 ) -> ConnectorManagementService:
     """Inject owner-scoped connector management."""
     return services.connectors
+
+
+def get_answer_stream_store(
+    services: AppServices = Depends(require_app_services),
+) -> AnswerStreamStore:
+    """Inject the app-scoped redacted answer-draft stream."""
+    return services.answer_stream
 
 
 def get_execution_event_store(

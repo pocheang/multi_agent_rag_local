@@ -20,7 +20,10 @@ class ExecutionPolicy:
     require_answer_validation: bool = False
     require_quality_report: bool = False
     allow_planning: bool = True
-    allowed_routes: frozenset[str] = frozenset({"vector", "graph", "web", "react", "hybrid", "clarification"})
+    # No "clarification": needing to ask a question is carried by
+    # RouteDecision.clarification_fields, not by replacing the route, so a
+    # clarifiable question keeps whatever retrieval the router chose for it.
+    allowed_routes: frozenset[str] = frozenset({"vector", "graph", "web", "react", "hybrid"})
 
     @classmethod
     def for_profile(cls, profile: PipelineProfile | str) -> ExecutionPolicy:

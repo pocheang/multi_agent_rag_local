@@ -59,6 +59,10 @@ class Settings(BaseSettings):
     wiki_db_path_str: str = Field(default="./data/wiki/wiki.db", alias="WIKI_DB_PATH")
     wiki_generation_timeout_ms: int = Field(default=30_000, ge=100, le=120_000, alias="WIKI_GENERATION_TIMEOUT_MS")
     wiki_scan_limit: int = Field(default=500, ge=10, le=10_000, alias="WIKI_SCAN_LIMIT")
+    # Accumulated router-calibration outcomes. Runtime state, so it lives under
+    # data/ rather than in the tracked config/ file the calibrator used to write
+    # on every single request.
+    router_calibration_path_str: str = Field(default="./data/router_calibration.json", alias="ROUTER_CALIBRATION_PATH")
 
     parent_chunk_size: int = Field(default=1500, alias="PARENT_CHUNK_SIZE")
     parent_chunk_overlap: int = Field(default=200, alias="PARENT_CHUNK_OVERLAP")
@@ -144,6 +148,24 @@ class Settings(BaseSettings):
     slo_error_rate_percent_threshold: float = Field(default=5.0, alias="SLO_ERROR_RATE_PERCENT_THRESHOLD")
     slo_grounding_support_ratio_threshold: float = Field(default=0.6, alias="SLO_GROUNDING_SUPPORT_RATIO_THRESHOLD")
     consistency_guard_enabled: bool = Field(default=True, alias="CONSISTENCY_GUARD_ENABLED")
+    web_search_on_empty_corpus: bool = Field(default=True, alias="WEB_SEARCH_ON_EMPTY_CORPUS")
+    """Search the web when the caller has no documents to search instead.
+
+    A caller with an empty document scope cannot get an answer from local
+    retrieval -- there is nothing there -- so without this the only possible
+    outcome is the "no evidence" message, on every question, for every account
+    that has not uploaded anything yet. That is the state every new account
+    starts in.
+
+    It defaults on because the alternative is refusing a question the system
+    could answer, and because the question already reaches the same search
+    backend on the `web` route with no separate opt-in. It is a switch rather
+    than a constant because it is a *policy*: it sends the user's question to a
+    third party (DuckDuckGo, via `app/tools/web/search.py`), and a deployment
+    that must not reach the internet has to be able to say so in one place.
+    `run_web_research` redacts sensitive patterns from the question first.
+    """
+
     web_domain_allowlist: str = Field(
         default="gov.cn,gov,edu,org,nist.gov,cisa.gov,mitre.org,wikipedia.org,owasp.org,microsoft.com,openai.com",
         alias="WEB_DOMAIN_ALLOWLIST",
@@ -261,6 +283,38 @@ class Settings(BaseSettings):
     feature_flags: str = Field(default="", alias="FEATURE_FLAGS")  # name=on|off|pct:10
     feature_flag_seed: str = Field(default="feature", alias="FEATURE_FLAG_SEED")
     verifier_max_retries: int = Field(default=1, ge=0, le=1, alias="VERIFIER_MAX_RETRIES")
+    # How many tool hops one request may take. Each hop is a model call plus a
+    # governed invocation, and the whole loop shares one STAGE_TIMEOUT_TOOL_MS
+    # ceiling, so this bounds cost rather than latency.
+    tool_max_steps: int = Field(default=3, ge=1, le=8, alias="TOOL_MAX_STEPS")
+    # How much of retrieval has to succeed before an answer is worth attempting.
+    # 1 keeps the default "any source is enough"; a higher number, or a list of
+    # sources that must not fail, selects the stricter policies in
+    # app/agents/rag/service.py.
+    retrieval_min_successful_sources: int = Field(default=1, ge=1, le=8, alias="RETRIEVAL_MIN_SUCCESSFUL_SOURCES")
+    retrieval_required_sources: str = Field(default="", alias="RETRIEVAL_REQUIRED_SOURCES")
+    # Post-generation groundedness checking. Off by default: it is an extra LLM
+    # round trip per answer, which is a cost decision rather than a correctness
+    # one. It now actually works when switched on -- it used to verify against an
+    # empty source list, see app/agents/synthesizer/generation.py.
+    answer_fact_verification_enabled: bool = Field(default=False, alias="ANSWER_FACT_VERIFICATION_ENABLED")
+    # Orchestration stage ceilings. These bound a hang; they are not latency
+    # targets (the P95 target is seconds, see CLAUDE.md "Quality Metrics"). The
+    # previous values were tight enough that an ordinary slow LLM call tripped
+    # them, and a tripped stage was an unconditional 500. Read by
+    # app/orchestration/timeout_control.py::TimeoutConfig.from_settings.
+    stage_timeout_total_ms: int = Field(default=120_000, ge=5_000, le=600_000, alias="STAGE_TIMEOUT_TOTAL_MS")
+    stage_timeout_route_ms: int = Field(default=8_000, ge=500, le=120_000, alias="STAGE_TIMEOUT_ROUTE_MS")
+    stage_timeout_plan_ms: int = Field(default=5_000, ge=500, le=120_000, alias="STAGE_TIMEOUT_PLAN_MS")
+    stage_timeout_retrieval_ms: int = Field(default=15_000, ge=500, le=120_000, alias="STAGE_TIMEOUT_RETRIEVAL_MS")
+    stage_timeout_tool_ms: int = Field(default=10_000, ge=500, le=120_000, alias="STAGE_TIMEOUT_TOOL_MS")
+    stage_timeout_synthesis_ms: int = Field(default=30_000, ge=500, le=120_000, alias="STAGE_TIMEOUT_SYNTHESIS_MS")
+    stage_timeout_finalization_ms: int = Field(default=8_000, ge=500, le=120_000, alias="STAGE_TIMEOUT_FINALIZATION_MS")
+    stage_timeout_overhead_ms: int = Field(default=2_000, ge=0, le=60_000, alias="STAGE_TIMEOUT_OVERHEAD_MS")
+    # Wall-clock ceiling handed to the LLM HTTP client. Without one, a hung
+    # provider connection pins a pool thread forever: the stage timeout unblocks
+    # the event loop but cannot cancel the thread doing the blocking call.
+    llm_request_timeout_seconds: float = Field(default=60.0, ge=1.0, le=600.0, alias="LLM_REQUEST_TIMEOUT_SECONDS")
     langgraph_recursion_limit: int = Field(default=20, ge=12, le=100, alias="LANGGRAPH_RECURSION_LIMIT")
     planner_max_tasks: int = Field(default=8, ge=1, le=32, alias="PLANNER_MAX_TASKS")
     planner_max_depth: int = Field(default=4, ge=1, le=16, alias="PLANNER_MAX_DEPTH")
@@ -268,7 +322,6 @@ class Settings(BaseSettings):
     planner_max_tool_budget: int = Field(default=4, ge=0, le=32, alias="PLANNER_MAX_TOOL_BUDGET")
     knowledge_source_timeout_ms: int = Field(default=10_000, ge=100, le=120_000, alias="KNOWLEDGE_SOURCE_TIMEOUT_MS")
     knowledge_max_sources: int = Field(default=6, ge=1, le=8, alias="KNOWLEDGE_MAX_SOURCES")
-    knowledge_orchestrator_enabled: bool = Field(default=False, alias="KNOWLEDGE_ORCHESTRATOR_ENABLED")
     knowledge_context_token_budget: int = Field(
         default=8_000,
         ge=256,
@@ -352,6 +405,10 @@ class Settings(BaseSettings):
     @property
     def auth_sessions_path(self) -> Path:
         return Path(self.auth_sessions_file)
+
+    @property
+    def router_calibration_path(self) -> Path:
+        return Path(self.router_calibration_path_str)
 
     @property
     def app_db_path(self) -> Path:

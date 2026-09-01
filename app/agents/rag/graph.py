@@ -26,6 +26,8 @@ def _run_graph_rag_impl(
     agent_class: str | None = None,
     retrieved_docs: list[dict] | None = None,
     enable_enhancements: bool | None = None,
+    *,
+    owner: OwnerScope | None,
 ) -> dict:
     """
     Run Graph RAG with optional PDF-aware enhancements.
@@ -36,6 +38,9 @@ def _run_graph_rag_impl(
         agent_class: Agent class for automatic document filtering
         retrieved_docs: Retrieved documents for quality analysis (enables enhancements)
         enable_enhancements: Force enable/disable enhancements (default: auto based on config)
+        owner: Caller identity for the vector fallback's store-side metadata check.
+            Keyword-only and without a default on purpose: every owner leak on this
+            path came from an intermediate function that defaulted it to None.
 
     Returns:
         Dictionary containing:
@@ -61,8 +66,19 @@ def _run_graph_rag_impl(
     # Determine whether to use enhancements
     should_enhance = enable_enhancements if enable_enhancements is not None else settings.graph_rag_enhanced
 
-    # Use enhanced version when explicitly requested or when documents are provided
-    if should_enhance and retrieved_docs:
+    # Enhanced mode is a property of the *lookup* -- better entity normalization,
+    # alias matching, relation weighting -- and needs no documents at all.  Documents,
+    # when the orchestrator's second retrieval phase supplies them, only refine the
+    # quality estimate that picks the result limits.  Requiring them to enter this
+    # branch made the entire enhanced path unreachable: the one production caller
+    # (`app/knowledge/adapters.py::_retrieve_graph`) has no documents to pass, so
+    # `GRAPH_RAG_ENHANCED` was a switch wired to nothing.
+    #
+    # This branch reaches only graph_lookup_enhanced, never the vector store, so it
+    # needs no owner.  Failure and empty results still reach the vector fallback --
+    # `GraphRetrievalService.retrieve` applies it to both branches, keyed on whether
+    # graph evidence came back rather than on which implementation ran.
+    if should_enhance:
         return _run_enhanced_graph_rag(
             question=question,
             allowed_sources=allowed_sources,
@@ -73,12 +89,15 @@ def _run_graph_rag_impl(
     return _run_basic_graph_rag(
         question=question,
         allowed_sources=allowed_sources,
+        owner=owner,
     )
 
 
 def _run_basic_graph_rag(
     question: str,
     allowed_sources: list[str] | None = None,
+    *,
+    owner: OwnerScope | None,
 ) -> dict:
     """
     Basic graph RAG implementation without enhancements.
@@ -101,7 +120,7 @@ def _run_basic_graph_rag(
 
         # Fallback to vector RAG when graph fails
         logger.info("Falling back to vector RAG due to graph lookup error")
-        return _fallback_to_vector_rag(question, allowed_sources, error_type)
+        return _fallback_to_vector_rag(question, allowed_sources, error_type, owner=owner)
 
     # Extract results
     entities = graph_result.get("entities", [])
@@ -127,7 +146,7 @@ def _run_basic_graph_rag(
     if not has_results:
         logger.info("Graph RAG returned empty results for %s", question_ref(question))
         logger.info("Falling back to vector RAG due to empty graph results")
-        return _fallback_to_vector_rag(question, allowed_sources, "empty_results")
+        return _fallback_to_vector_rag(question, allowed_sources, "empty_results", owner=owner)
 
     return result
 
@@ -239,7 +258,8 @@ def _fallback_to_vector_rag(
     question: str,
     allowed_sources: list[str] | None,
     reason: str,
-    owner: OwnerScope | None = None,
+    *,
+    owner: OwnerScope | None,
 ) -> dict:
     """
     Fallback to vector RAG when graph RAG fails or returns empty results.
@@ -248,6 +268,13 @@ def _fallback_to_vector_rag(
         question: User query
         allowed_sources: Optional list of allowed document sources
         reason: Reason for fallback (error type or "empty_results")
+        owner: Caller identity, forwarded to the store's own metadata check.
+            This used to default to None and two of the three call sites relied
+            on the default, so the common fallback (Neo4j down, or an empty
+            graph result) searched with the source filter alone -- the owner
+            clause the store applies as an independent second check was simply
+            absent.  Keyword-only and defaultless so that dropping it is a
+            TypeError instead of a silent widening.
 
     Returns:
         Dictionary with vector RAG results and fallback metadata
@@ -299,7 +326,7 @@ class GraphRetrievalService:
         agent_class: str | None = None,
         retrieved_docs: list[dict] | None = None,
         enable_enhancements: bool | None = None,
-        owner: OwnerScope | None = None,
+        owner: OwnerScope | None,
     ) -> dict:
         result = _run_graph_rag_impl(
             question,
@@ -307,10 +334,11 @@ class GraphRetrievalService:
             agent_class=agent_class,
             retrieved_docs=retrieved_docs,
             enable_enhancements=enable_enhancements,
+            owner=owner,
         )
         if not result.get("fallback_used") and not self._has_graph_evidence(result):
             fallback_reason = str(result.get("error") or result.get("skipped_reason") or "empty_results")
-            fallback = _fallback_to_vector_rag(question, allowed_sources, fallback_reason, owner)
+            fallback = _fallback_to_vector_rag(question, allowed_sources, fallback_reason, owner=owner)
             for key in ("pdf_context", "skipped_reason", "error"):
                 if key in result:
                     fallback[key] = result[key]
@@ -355,7 +383,8 @@ def run_graph_rag(
     agent_class: str | None = None,
     retrieved_docs: list[dict] | None = None,
     enable_enhancements: bool | None = None,
-    owner: OwnerScope | None = None,
+    *,
+    owner: OwnerScope | None,
 ) -> dict:
     """Compatibility entry point forwarding to ``GraphRetrievalService``."""
     return GraphRetrievalService().retrieve(

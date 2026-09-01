@@ -2,16 +2,16 @@ import asyncio
 import json
 import logging
 import re
-from collections.abc import Collection, Iterable
+from collections.abc import Callable, Collection, Iterable, Mapping, Sequence
+from typing import Any
 
 from app.agents.synthesizer.citations import (
     citation_labels_from_contexts,
     normalize_answer_citations,
 )
+from app.agents.synthesizer.skills import skill_answer_template
 from app.agents.synthesizer.templates import (
-    get_answer_template,
     get_cot_reasoning_prompt,
-    infer_query_type,
 )
 from app.agents.validation.public import verify_generated_answer
 from app.core.config import get_settings
@@ -30,6 +30,10 @@ from app.services.runtime.bulkhead import bulkhead
 from app.services.runtime.request_context import deadline_exceeded, overload_mode_enabled
 
 logger = logging.getLogger(__name__)
+
+
+class _NoSourceDocuments(Exception):
+    """Verification has nothing to verify against; skip it rather than pass it."""
 
 
 __all__ = [
@@ -52,57 +56,14 @@ SIMILARITY_STOP_THRESHOLD = 0.92
 _TOKEN_RE = re.compile(r"[A-Za-z0-9_]+|[\u4e00-\u9fff]")
 
 
-def _parse_source_docs_from_contexts(
-    vector_context: str = "",
-    graph_context: str = "",
-    web_context: str = "",
-) -> list[dict]:
-    """
-    Parse source documents from context strings.
-
-    Extracts [doc_id:page] markers and associated content from contexts.
-
-    Args:
-        vector_context: Vector retrieval context
-        graph_context: Graph context
-        web_context: Web search context
-
-    Returns:
-        List of source document dicts with doc_id, page, content
-    """
-    source_docs = []
-
-    # Combine all contexts
-    all_context = f"{vector_context}\n{graph_context}\n{web_context}"
-
-    if not all_context.strip():
-        return source_docs
-
-    # Pattern: [doc_id:page] content
-    # Extract citation blocks
-    citation_pattern = r"\[([^\]]+)\]\s*([^\[]+)"
-    matches = re.findall(citation_pattern, all_context)
-
-    for citation, content in matches:
-        # Parse citation: doc1:p3 -> doc_id=doc1, page=p3
-        cit_match = re.match(r"(\w+):(\w+)", citation)
-        if not cit_match:
-            continue
-
-        doc_id = cit_match.group(1)
-        page = cit_match.group(2)
-        content_text = content.strip()
-
-        if content_text:
-            source_docs.append(
-                {
-                    "doc_id": doc_id,
-                    "page": page,
-                    "content": content_text,
-                }
-            )
-
-    return source_docs
+# `_parse_source_docs_from_contexts` used to live here: it reconstructed
+# structured source documents by regexing `[doc_id:page] content` back out of the
+# rendered context string. That form was retired when ContextBuilder moved to
+# `[E{k}] document=...`, so the regex matched nothing and fact verification --
+# whenever it was switched on -- verified an answer against an empty source list
+# and reported perfect groundedness. Callers now hand the structured evidence
+# straight through; a text round trip was never the right shape for data the
+# caller already had.
 
 
 def _build_prompt(
@@ -138,10 +99,12 @@ def _build_prompt_with_language(
 
     template_section = ""
     if include_evidence_guidance:
-        query_type = infer_query_type(question)
-        answer_template = get_answer_template(query_type)
+        # The skill selects the shape; it falls back to inferring one from the
+        # question for the skills that name none. One block, not two -- see
+        # app/agents/synthesizer/skills.py.
+        answer_template = skill_answer_template(skill_name, question)
         cot_prompt = get_cot_reasoning_prompt()
-        template_section = f"\n答案模板指导（Query Type: {query_type}）：\n{answer_template}\n\n{cot_prompt}\n"
+        template_section = f"\n答案模板指导（Skill: {skill_name}）：\n{answer_template}\n\n{cot_prompt}\n"
 
     return (
         f"{language_hint}"
@@ -171,6 +134,28 @@ def _evidence_review_prompt(allowed_labels: Collection[str]) -> str:
         "Allowed citation markers from retrieved evidence: "
         f"{markers}. Preserve only these exact markers and remove invented markers."
     )
+
+
+def _stream_content(model, system_prompt: str, prompt: str, on_token: Callable[[str], None]) -> str:
+    """Collect a streamed generation, handing each fragment to the caller.
+
+    Falls back to a single invoke if the provider cannot stream: a model without
+    streaming support should still produce an answer, just without the live view.
+    """
+    parts: list[str] = []
+    try:
+        for chunk in model.stream([("system", system_prompt), ("human", prompt)]):
+            text = str(getattr(chunk, "content", "") or "")
+            if text:
+                parts.append(text)
+                on_token(text)
+    except Exception as exc:
+        logger.warning("streaming generation unavailable, falling back to invoke: %s", type(exc).__name__)
+        parts.clear()
+    if parts:
+        return "".join(parts)
+    result = model.invoke([("system", system_prompt), ("human", prompt)])
+    return str(result.content if hasattr(result, "content") else result)
 
 
 def _build_generation_model(use_reasoning: bool, question: str):
@@ -328,6 +313,8 @@ def synthesize_answer(
     session_id: str = "",
     enable_fact_verification: bool = True,
     enable_self_review: bool | None = None,
+    source_documents: Sequence[Mapping[str, Any]] | None = None,
+    on_token: Callable[[str], None] | None = None,
 ) -> dict:
     """
     Synthesize answer with language detection and fact verification support.
@@ -343,6 +330,10 @@ def synthesize_answer(
         force_language: Force specific language ('zh' or 'en'), empty string for auto-detect
         session_id: Session identifier for analytics
         enable_fact_verification: Enable post-generation fact verification (Task 14)
+        source_documents: Structured evidence for fact verification. Required for
+            it to mean anything: without it there is nothing to verify against.
+        on_token: Called with each generated fragment. The caller is responsible
+            for redacting before showing anything -- see app/privacy/streaming.py.
         enable_self_review: Explicit review-policy override; self-review is
             opt-in only and capped at one round.
 
@@ -382,8 +373,11 @@ def synthesize_answer(
     try:
         with bulkhead("llm"):
             model = _build_generation_model(use_reasoning=use_reasoning, question=question)
-            result = model.invoke([("system", system_prompt), ("human", prompt)])
-        content = result.content if hasattr(result, "content") else str(result)
+            if on_token is None:
+                result = model.invoke([("system", system_prompt), ("human", prompt)])
+                content = result.content if hasattr(result, "content") else str(result)
+            else:
+                content = _stream_content(model, system_prompt, prompt, on_token)
         initial = str(content).strip()
         if not initial:
             return {
@@ -410,12 +404,10 @@ def synthesize_answer(
         verification_result = None
         if enable_fact_verification and final_answer != SYNTHESIS_FALLBACK_MESSAGE:
             try:
-                # Prepare source documents from contexts
-                source_docs = _parse_source_docs_from_contexts(
-                    vector_context=vector_context,
-                    graph_context=graph_context,
-                    web_context=web_context,
-                )
+                source_docs = list(source_documents or ())
+                if not source_docs:
+                    logger.info("Skipping fact verification: no structured source documents were supplied")
+                    raise _NoSourceDocuments
 
                 # ``synthesize_answer`` is synchronous. An async caller
                 # already owns the event loop, so nesting ``asyncio.run``
@@ -443,6 +435,8 @@ def synthesize_answer(
                             f"Issues: {verification_result.issues[:3]}"
                         )
 
+            except _NoSourceDocuments:
+                verification_result = None
             except Exception as e:
                 logger.warning(f"Fact verification failed: {e}")
                 verification_result = None

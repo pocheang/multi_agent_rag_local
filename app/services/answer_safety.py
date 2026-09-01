@@ -6,7 +6,9 @@ _PATTERNS = [
     re.compile(r"sk-[A-Za-z0-9]{16,}"),
     re.compile(r"AKIA[0-9A-Z]{16}"),
     re.compile(r"-----BEGIN (?:RSA|EC|OPENSSH|PRIVATE) KEY-----"),
-    re.compile(r"\b(?:password|passwd|token|secret)\s*[:=]\s*\S{4,}", flags=re.IGNORECASE),
+    # Bounded whitespace: see app/privacy/streaming.py for why an unbounded run
+    # makes safe incremental redaction impossible.
+    re.compile(r"\b(?:password|passwd|token|secret)\s{0,8}[:=]\s{0,8}\S{4,}", flags=re.IGNORECASE),
 ]
 
 

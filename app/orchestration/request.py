@@ -53,6 +53,9 @@ class OrchestrationRequest(ImmutableContract):
     enable_self_rag: bool = False
     enable_context_tracking: bool = True
     force_language: str = ""
+    # Present only on a resume: the run replays the approved tool call instead
+    # of asking the selector again. See app/mcp/approvals.py::approved_call.
+    approval_token: str | None = Field(default=None, min_length=24, max_length=256)
     request_id: str | None = None
     execution_id: str | None = None
     runtime_context: Any | None = Field(default=None, exclude=True)

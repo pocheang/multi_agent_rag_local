@@ -131,42 +131,108 @@ class LocalEvidenceChatModel:
             skill = "cyber_defense_hardening"
         return f'{{"route":"{route}","reason":"local_rule_router","skill":"{skill}"}}'
 
+    # A section ends where the next *named* section begins.
+    # `_build_prompt_with_language` writes exactly these labels, so they are
+    # listed rather than guessed at.
+    #
+    # Two earlier versions got this wrong in opposite directions. The original
+    # terminated only on labels ending in `上下文:`, so the last section ran to
+    # the end of the prompt and swallowed the answer template -- the model's own
+    # instructions came back as part of the answer. Replacing that with 'a short
+    # line ending in a colon' then cut the section at every piece of evidence,
+    # because `[E2] document=https:` reaches a colon within a few characters, so
+    # only the first excerpt survived and the rest of the retrieved evidence was
+    # silently discarded -- one paragraph and one reference for a four-source
+    # answer.
+    _SECTION_LABELS = (
+        "技能",
+        "用户问题",
+        "记忆上下文",
+        "向量检索上下文",
+        "图谱上下文",
+        "联网补充上下文",
+        "答案模板指导",
+    )
+    _SECTION_END = re.compile("\n\n(?=(?:" + "|".join(_SECTION_LABELS) + ")[^\n]{0,40}?[:：])")
+
     def _extract_section(self, text: str, label: str) -> str:
-        pattern = rf"{re.escape(label)}:\n(.*?)(?:\n\n[A-Za-z\u4e00-\u9fff]+上下文:|\n\n联网补充上下文:|\Z)"
-        match = re.search(pattern, text, flags=re.DOTALL)
-        return (match.group(1).strip() if match else "").strip()
+        match = re.search(rf"{re.escape(label)}[:：]\n", text)
+        if match is None:
+            return ""
+        rest = text[match.end() :]
+        end = self._SECTION_END.search(rest)
+        return rest[: end.start()].strip() if end else rest.strip()
+
+    @staticmethod
+    def _cited_excerpts(blocks: list[str]) -> list[tuple[str, str]]:
+        """Pair each evidence marker with its text, dropping the header line.
+
+        `ContextBuilder._render_item` writes `[E1] document=…; source=…; layer=…;
+        retriever=…` above each excerpt. That header is addressing metadata for
+        the pipeline, not prose, and echoing it into the answer is what produced
+        `1. [E1] document=https://… layer=web; retriever=web <content>`.
+        """
+        found: list[tuple[str, str]] = []
+        for block in blocks:
+            for match in re.finditer(r"\[(E\d+)\][^\n]*\n(.*?)(?=\n\[E\d+\]|\Z)", block, flags=re.DOTALL):
+                body = re.sub(r"\s+", " ", match.group(2)).strip()
+                if body:
+                    found.append((match.group(1), body))
+        return found
+
+    @staticmethod
+    def _lead_sentence(text: str, limit: int = 300) -> str:
+        """One sentence where the excerpt offers one, otherwise a clean cut.
+
+        Cutting mid-word reads as corruption rather than as a quotation, so the
+        fallback backs up to the last space.
+        """
+        for match in re.finditer(r"[.。!！?？](?:\s|$)", text):
+            if match.end() >= 40:
+                return text[: match.end()].strip()
+        if len(text) <= limit:
+            return text
+        cut = text.rfind(" ", 0, limit)
+        return text[: cut if cut > 40 else limit].rstrip() + "…"
 
     def _answer(self, payload: str) -> str:
-        question = self._extract_section(payload, "用户问题") or payload.splitlines()[0:1][0] if payload else ""
-        vector_context = self._extract_section(payload, "向量检索上下文")
-        graph_context = self._extract_section(payload, "图谱上下文")
-        web_context = self._extract_section(payload, "联网补充上下文")
-        evidence = [x for x in [vector_context, graph_context, web_context] if x and x != "无"]
-        if not evidence:
-            return (
-                "当前本地知识库没有检索到足够证据。你可以先上传 PDF、图片、Markdown 或 TXT 文档，"
-                "系统会写入 Chroma 向量库、BM25 语料和 Neo4j 图谱后再回答。"
+        """Compose an extractive answer that reads like an answer.
+
+        This backend cannot reason, so every sentence it emits is somebody
+        else's, and its whole job is to attribute them correctly. What it must
+        *not* do is narrate itself: the previous version opened with "基于当前本地
+        检索结果，我对「…」的回答如下", numbered the raw context blocks, echoed the
+        `[E1] document=…; layer=…; retriever=…` header of each, and closed with a
+        paragraph about configuring Ollama. None of that is an answer, and the
+        addressing metadata is not even prose.
+
+        It also emitted no `[E{k}]` markers of its own, so `output_filter` had
+        nothing to renumber into the reader-facing `[1]` and the reference list
+        it appends pointed at citations the text never made.
+        """
+        question = self._extract_section(payload, "用户问题")
+        blocks = [
+            block
+            for block in (
+                self._extract_section(payload, "向量检索上下文"),
+                self._extract_section(payload, "图谱上下文"),
+                self._extract_section(payload, "联网补充上下文"),
             )
-        snippets: list[str] = []
-        for block in evidence:
-            clean = re.sub(r"\s+", " ", block).strip()
-            if clean:
-                snippets.append(clean[:360])
-            if len(snippets) >= 4:
-                break
-        lines = [
-            f"基于当前本地检索结果，我对“{question}”的回答如下：",
-            "",
+            if block and block != "无"
         ]
-        for i, item in enumerate(snippets, 1):
-            lines.append(f"{i}. {item}")
-        lines.extend(
-            [
-                "",
-                "说明：当前使用 local 离线后端，会优先做证据摘录和基础归纳；配置 Ollama/OpenAI 后可获得更强的生成与推理能力。",
-            ]
-        )
-        return "\n".join(lines)
+        excerpts = self._cited_excerpts(blocks)
+        if not excerpts:
+            return (
+                "当前没有检索到可以支撑回答的证据。可以先上传 PDF、图片、Markdown 或 TXT 文档，或开启联网检索后再提问。"
+            )
+
+        # Paragraphs, each carrying the marker for the excerpt it came from --
+        # the shape `output_filter` renumbers and the shape a reader expects.
+        # No lead-in, no trailer: a note about which backend produced this
+        # belongs in the trace, not in every answer.
+        del question
+        paragraphs = [f"{self._lead_sentence(body)} [{marker}]" for marker, body in excerpts[:4]]
+        return "\n\n".join(paragraphs)
 
     def invoke(self, messages):
         system_text, human_text = self._message_text(messages)
@@ -534,6 +600,7 @@ def _build_chat_model_cached(
     anthropic_api_key: str,
     anthropic_base_url: str,
     max_tokens: int,
+    request_timeout_seconds: float = 60.0,
 ):
     if backend == "local":
         return LocalEvidenceChatModel(model="local-evidence", temperature=temperature, max_tokens=max_tokens)
@@ -545,6 +612,11 @@ def _build_chat_model_cached(
             "model": openai_model,
             "temperature": temperature,
             "streaming": True,  # Enable real-time streaming
+            # Without this the HTTP call has no ceiling. The orchestration stage
+            # timeout unblocks the event loop but cannot cancel the pool thread
+            # running a blocking invoke(), so a hung provider connection pinned a
+            # worker for the life of the process.
+            "timeout": request_timeout_seconds,
         }
         if openai_api_key:
             kwargs["api_key"] = openai_api_key
@@ -574,6 +646,7 @@ def _build_chat_model_cached(
             "model": anthropic_model,
             "temperature": temperature,
             "streaming": True,  # Enable real-time streaming
+            "timeout": request_timeout_seconds,  # see the OpenAI branch
         }
         if anthropic_api_key:
             kwargs["api_key"] = anthropic_api_key
@@ -590,6 +663,10 @@ def _build_chat_model_cached(
         "base_url": ollama_base_url,
         "temperature": temperature,
         "streaming": True,  # Enable real-time streaming
+        # ChatOllama takes no `timeout` of its own; this is the only way to bound
+        # the request. Without it a hung local server pins a pool thread for the
+        # life of the process, exactly as the hosted clients used to.
+        "client_kwargs": {"timeout": request_timeout_seconds},
     }
     if max_tokens > 0:
         kwargs["num_predict"] = max_tokens
@@ -653,6 +730,7 @@ def get_chat_model(temperature: float | None = None):
             anthropic_api_key=api_key if backend == "anthropic" else str(settings.anthropic_api_key or ""),
             anthropic_base_url=base_url if backend == "anthropic" else "",
             max_tokens=_safe_int(override.get("max_tokens"), 0),
+            request_timeout_seconds=float(settings.llm_request_timeout_seconds),
         )
     return _build_chat_model_cached(
         provider=str(settings.model_backend or ""),
@@ -667,6 +745,7 @@ def get_chat_model(temperature: float | None = None):
         anthropic_api_key=str(settings.anthropic_api_key or ""),
         anthropic_base_url="",
         max_tokens=0,
+        request_timeout_seconds=float(settings.llm_request_timeout_seconds),
     )
 
 
@@ -734,6 +813,7 @@ def get_reasoning_model(temperature: float | None = None):
             anthropic_api_key=api_key if backend == "anthropic" else str(settings.anthropic_api_key or ""),
             anthropic_base_url=base_url if backend == "anthropic" else "",
             max_tokens=_safe_int(override.get("max_tokens"), 0),
+            request_timeout_seconds=float(settings.llm_request_timeout_seconds),
         )
     backend = _normalize_backend(settings.reasoning_model_backend or settings.model_backend)
     return _build_chat_model_cached(
@@ -751,6 +831,7 @@ def get_reasoning_model(temperature: float | None = None):
         anthropic_api_key=str(settings.anthropic_api_key or ""),
         anthropic_base_url="",
         max_tokens=0,
+        request_timeout_seconds=float(settings.llm_request_timeout_seconds),
     )
 
 

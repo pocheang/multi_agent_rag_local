@@ -91,6 +91,9 @@ def test_module_globals_survive_a_collect_call():
         vector_threshold=0.99,
         settings=type("S", (), {"hybrid_rrf_k": 60, "reranker_top_n": 5})(),
         dynamic_top_k=1,
+        # This test is about module globals, not scoping; the owner is keyword-only
+        # with no default so that no retrieval path can omit it by accident.
+        owner=None,
     )
 
     after = (

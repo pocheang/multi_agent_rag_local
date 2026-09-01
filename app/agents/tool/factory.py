@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any, Protocol
 
-__all__ = ["ToolAgent", "create_tool_agent", "get_disable_connector_tool_id"]
+__all__ = ["ToolAgent", "create_tool_agent"]
 
 
 class ToolAgent(Protocol):
@@ -14,15 +14,14 @@ class ToolAgent(Protocol):
         """Invoke a bounded, explicitly requested tool operation."""
 
 
-def get_disable_connector_tool_id() -> str:
-    """Return the legacy connector-disable tool identifier."""
-    from app.agents.tool.service import DISABLE_CONNECTOR_TOOL_ID
+def create_tool_agent(gateway: Any, registry: Any) -> ToolAgent:
+    """Construct the governed tool agent around application-owned dependencies.
 
-    return DISABLE_CONNECTOR_TOOL_ID
-
-
-def create_tool_agent(gateway: Any, connectors: Any) -> ToolAgent:
-    """Construct the governed tool agent around application-owned dependencies."""
+    Takes the registry, not the connector service: the agent no longer
+    pre-checks connector ownership itself (the registered executor owns that
+    check), but it does need the registry's catalogue to tell a selector which
+    tools this actor may use.
+    """
     from app.agents.tool.service import ToolAgentService
 
-    return ToolAgentService(gateway, connectors)
+    return ToolAgentService(gateway, registry)

@@ -9,9 +9,10 @@ from typing import Annotated, Literal
 from fastapi import APIRouter, Depends, Path, Request
 from fastapi.responses import StreamingResponse
 
-from app.api.deps.runtime import get_execution_event_store, require_trace_actor
+from app.api.deps.runtime import get_answer_stream_store, get_execution_event_store, require_trace_actor
 from app.api.transport.errors import forbidden, not_found
 from app.domain.events import ExecutionEvent
+from app.orchestration.answer_stream import AnswerStreamStore
 from app.orchestration.execution_events import ExecutionEventStore
 from app.orchestration.request import RequestActor
 from app.services.observability.agent_execution_tracker import AgentExecutionTracker, AgentStep, ExecutionTrace
@@ -26,6 +27,17 @@ _STAGE_BY_AGENT: tuple[tuple[str, Literal["route", "plan", "rag", "tool", "synth
     ("tool", "tool"),
     ("synth", "synthesize"),
 )
+
+
+def serialize_answer_fragment(fragment: str) -> str:
+    """Serialize one already-redacted draft fragment for the SSE wire format.
+
+    A distinct event name so a client cannot mistake a draft for a finished
+    answer: these carry no citation numbering and no reference list, both of
+    which are decided in `output_filter` once the whole answer exists.
+    """
+    payload = json.dumps({"text": fragment}, ensure_ascii=False, separators=(",", ":"))
+    return f"event: answer_fragment\ndata: {payload}\n\n"
 
 
 def serialize_execution_event(event: ExecutionEvent) -> str:
@@ -62,6 +74,7 @@ async def stream_execution_events(
     request: Request,
     actor: RequestActor = Depends(require_trace_actor),
     event_store: ExecutionEventStore = Depends(get_execution_event_store),
+    answer_store: AnswerStreamStore = Depends(get_answer_stream_store),
 ) -> StreamingResponse:
     """Follow safe events for one execution until it reaches a terminal state."""
     trace = AgentExecutionTracker.get_instance().get_execution_trace(execution_id)
@@ -72,6 +85,7 @@ async def stream_execution_events(
     async def event_stream():
         legacy_offset = 0
         event_offset = 0
+        answer_offset = 0
         while True:
             current_trace = AgentExecutionTracker.get_instance().get_execution_trace(execution_id)
             if current_trace is None:
@@ -84,6 +98,12 @@ async def stream_execution_events(
             for event in events:
                 yield serialize_execution_event(event)
             event_offset += len(events)
+            # Same subscription, same access check: a client watching the trace is
+            # already watching the draft.
+            fragments = answer_store.since(execution_id, answer_offset)
+            for fragment in fragments:
+                yield serialize_answer_fragment(fragment)
+            answer_offset += len(fragments)
             if current_trace.status in {"completed", "failed"}:
                 yield serialize_execution_event(
                     ExecutionEvent(

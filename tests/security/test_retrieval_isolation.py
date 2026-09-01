@@ -19,7 +19,8 @@ from typing import Any
 
 import pytest
 
-from app.orchestration.request import OrchestrationRequest, RequestActor, RequestScope
+from app.domain.knowledge import AccessScope, KnowledgeSourcePlan, KnowledgeStrategy
+from app.services.security.access_scope import DEFAULT_CONTEXT_FIELDS
 
 ALICE_DOC = "/uploads/alice/notes.pdf"
 BOB_DOC = "/uploads/bob/salary.pdf"
@@ -161,7 +162,9 @@ def test_hybrid_vector_hop_refuses_to_search_unscoped(collection):
     from app.retrievers.hybrid.retriever import _safe_similarity_search
 
     with pytest.raises(ValueError, match="allowed_sources is required"):
-        _safe_similarity_search("compensation", k=6, allowed_sources=None)
+        # owner=None spelled out: this test is about the source filter, and the
+        # hop now refuses to let a caller omit the owner by accident.
+        _safe_similarity_search("compensation", k=6, allowed_sources=None, owner=None)
     assert collection.calls == []
 
 
@@ -176,86 +179,73 @@ def test_a_signature_error_does_not_degrade_into_a_global_search(monkeypatch, co
     monkeypatch.setattr(retriever, "similarity_search", _rejects_the_filter)
 
     with pytest.raises(TypeError):
-        retriever._safe_similarity_search("compensation", k=6, allowed_sources=[ALICE_DOC])
+        retriever._safe_similarity_search("compensation", k=6, allowed_sources=[ALICE_DOC], owner=None)
+
+
+# The vector hop the live path actually uses is `app/knowledge/adapters.py`.
+# These used to exercise `RAGAgentService._vector_retrieve`, a second, narrower
+# copy of the same adapter; when selection moved to the Knowledge Agent that copy
+# stopped running, and a test pinned to code nothing calls is how the citation
+# bug (`[E1]` reaching the browser) survived a green suite.
+
+
+def _scope(*sources: str, user: str = "alice") -> AccessScope:
+    return AccessScope(
+        tenant_id=user,
+        user_id=user,
+        role="viewer",
+        allowed_sources=frozenset(sources),
+        allowed_fields=DEFAULT_CONTEXT_FIELDS,
+    )
+
+
+def _plan(top_k: int = 6) -> KnowledgeSourcePlan:
+    return KnowledgeSourcePlan(
+        source="vector",
+        queries=("compensation review",),
+        top_k=top_k,
+        timeout_ms=5_000,
+        required=True,
+    )
 
 
 @pytest.mark.asyncio
-async def test_vector_retrieve_refuses_a_request_with_no_resolved_scope(collection):
-    """An OrchestrationRequest carrying no scope must retrieve nothing.
+async def test_the_vector_adapter_honours_a_resolved_scope(collection):
+    """The ordinary path still retrieves, and only the caller's own documents."""
+    from app.knowledge.adapters import _retrieve_vector
 
-    `RAGAgentService.retrieve` short-circuits an explicitly *empty* scope; a
-    *missing* one used to fall through to an unrestricted search of every
-    tenant's corpus. After privacy_permission rewrites the request there is
-    always a resolved scope, so reaching here without one means a caller skipped
-    the resolver -- which must fail loudly rather than read everything.
-    """
-    from app.agents.rag import service as rag_service
-    from app.domain.contracts import RouteDecision
+    items = await _retrieve_vector(_plan(), _scope(ALICE_DOC))
 
-    request = OrchestrationRequest(
-        question="compensation review",
-        actor=RequestActor(user_id="alice", tenant_id="alice", role="viewer"),
-        source_scope=RequestScope(),
-    )
-    route = RouteDecision(
-        route="vector",
-        reason="test",
-        confidence=1.0,
-        requires_plan=False,
-        allowed_capabilities=frozenset({"rag"}),
-    )
+    assert {item.source for item in items} == {ALICE_DOC}
 
-    with pytest.raises(ValueError, match="allowed_sources is required"):
-        await rag_service._vector_retrieve(request, route, None)
+
+@pytest.mark.asyncio
+async def test_the_vector_adapter_returns_nothing_for_a_user_with_no_documents(collection):
+    """An empty scope must stay distinct from a missing one: nothing, not everything.
+
+    The orchestrator skips the source before reaching here, so this is the second
+    of two independent guards -- the adapter itself must not widen either."""
+    from app.knowledge.adapters import _retrieve_vector
+
+    items = await _retrieve_vector(_plan(), _scope(user="carol"))
+
+    assert items == ()
     assert collection.calls == []
 
 
 @pytest.mark.asyncio
-async def test_vector_retrieve_honours_a_resolved_scope(collection):
-    """The ordinary path still retrieves, and only the caller's own documents."""
-    from app.agents.rag import service as rag_service
-    from app.domain.contracts import RouteDecision
+async def test_the_orchestrator_skips_the_vector_source_on_an_empty_scope(collection):
+    """The first of the two guards: a source with nothing to search is not run."""
+    from app.knowledge.adapters import build_default_adapters
+    from app.knowledge.orchestrator import KnowledgeOrchestrator, discard_trace
 
-    request = OrchestrationRequest(
-        question="compensation review",
-        actor=RequestActor(user_id="alice", tenant_id="alice", role="viewer"),
-        source_scope=RequestScope(allowed_sources=frozenset({ALICE_DOC})),
-    )
-    route = RouteDecision(
-        route="vector",
-        reason="test",
-        confidence=1.0,
-        requires_plan=False,
-        allowed_capabilities=frozenset({"rag"}),
+    strategy = KnowledgeStrategy(sources=(_plan(),), rewrite=False, rationale="test")
+    context = await KnowledgeOrchestrator(adapters=build_default_adapters()).retrieve(
+        strategy, _scope(user="carol"), discard_trace
     )
 
-    bundle = await rag_service._vector_retrieve(request, route, None)
-
-    assert {item.source for item in bundle.items} == {ALICE_DOC}
-
-
-@pytest.mark.asyncio
-async def test_vector_retrieve_returns_nothing_for_a_user_with_no_documents(collection):
-    """An empty scope must stay distinct from a missing one: nothing, not everything."""
-    from app.agents.rag import service as rag_service
-    from app.domain.contracts import RouteDecision
-
-    request = OrchestrationRequest(
-        question="compensation review",
-        actor=RequestActor(user_id="carol", tenant_id="carol", role="viewer"),
-        source_scope=RequestScope(allowed_sources=frozenset()),
-    )
-    route = RouteDecision(
-        route="vector",
-        reason="test",
-        confidence=1.0,
-        requires_plan=False,
-        allowed_capabilities=frozenset({"rag"}),
-    )
-
-    bundle = await rag_service._vector_retrieve(request, route, None)
-
-    assert bundle.items == ()
+    assert context.evidence == ()
+    assert context.diagnostics["source_status"]["vector"] == "skipped"
     assert collection.calls == []
 
 

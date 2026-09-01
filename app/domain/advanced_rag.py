@@ -2,7 +2,7 @@
 Data models for advanced RAG techniques.
 """
 
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field, field_validator
 
@@ -64,6 +64,14 @@ class SubQueryResult(BaseModel):
     )
 
 
+class PendingApprovalView(BaseModel):
+    """A governed action produced but not performed, awaiting confirmation."""
+
+    tool_id: str = Field(..., description="Registered id of the governed tool")
+    token: str = Field(..., description="Confirm at POST /api/v1/connectors/approvals/{token}")
+    summary: str = Field("", description="What the action would do")
+
+
 class AdvancedRAGResult(BaseModel):
     """Complete result from advanced RAG processing."""
 
@@ -71,6 +79,16 @@ class AdvancedRAGResult(BaseModel):
     decomposed_query: DecomposedQuery | None = Field(None, description="Decomposed query (if decomposition was used)")
     sub_query_results: list[SubQueryResult] = Field(..., description="Results from each sub-query")
     final_answer: str = Field(..., description="Final synthesized answer")
+    status: Literal["complete", "pending_approval"] = Field(
+        "complete",
+        description=(
+            "'pending_approval' means the answer is complete but a governed action the user "
+            "asked for is waiting on their confirmation and has NOT been performed."
+        ),
+    )
+    pending_approval: PendingApprovalView | None = Field(
+        None, description="The governed action awaiting confirmation, when status is 'pending_approval'"
+    )
     answer_quality: AnswerQuality | None = Field(
         None, description="Quality evaluation of final answer (if Self-RAG enabled)"
     )
