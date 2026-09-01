@@ -11,6 +11,7 @@
     "lint": "eslint . --max-warnings 25",
     "lint:fix": "eslint . --fix",
     "lint:design": "node scripts/check-design-scale.mjs",
+    "screenshots": "node scripts/screenshots.mjs",
     "format": "prettier --write \"src/**/*.{ts,tsx,css}\"",
     "format:check": "prettier --check \"src/**/*.{ts,tsx,css}\"",
     "type-check": "tsc -b --noEmit"
@@ -51,6 +52,7 @@
     "eslint-plugin-react-refresh": "^0.5.4",
     "globals": "^14.0.0",
     "jsdom": "^26.1.0",
+    "playwright": "^1.62.1",
     "prettier": "^3.9.6",
     "purgecss": "^8.0.0",
     "tailwindcss": "^4.3.3",

@@ -165,3 +165,42 @@
     min-height: 48px;
   }
 }
+
+/* --------------------------------------------
+   The floating controls versus the drawer
+
+   Found by the screenshot run, not by a test: with the drawer open on a phone,
+   the three floating buttons (z-index 10002) sit on top of it (z-index 1000).
+   The section toggle at x 259-303 covered the sidebar's own Collapse button at
+   236-301, and the hamburger covered the brand mark.
+
+   Two of them act on the chat surface, which the drawer is currently covering,
+   so operating them there means nothing -- they go away until it closes. The
+   hamburger stays, because it is what closes the drawer, and the header makes
+   room for it rather than sliding underneath.
+   -------------------------------------------- */
+
+/* The same reservation on wide screens. The strip was only made on mobile,
+   and the screenshot run showed why that was half a fix: the chat window
+   scrolls under the floating row at every width, so on desktop the monkey
+   covered the first message's Delete button and the hamburger sat on the
+   sidebar's brand mark. Anything at the top of the scroll area passes beneath
+   them; 52px of a 900px viewport is the price of it not doing so. */
+.page-shell .main {
+  padding-top: 68px;
+}
+
+/* Down, not right -- the same correction the mobile drawer needed. Insetting
+   from the left pushes the brand block into the Collapse button on the other
+   end of the same row; the row above it is empty. */
+.page-shell .sidebar-shell {
+  padding-top: 56px;
+}
+
+@media (max-width: 1080px) {
+  body:has(.sidebar.open) .topbar-actions-right,
+  body:has(.sidebar.open) .section-toggle-btn {
+    display: none;
+  }
+
+}
