@@ -59,8 +59,8 @@ persisting messages, conversation context was filled but never read, the query
 endpoint never returned its execution_id, the `graph` route never queried the
 graph, and 184 modules (~13,000 lines) had zero importers. All were fixed or
 deleted; `app/` went from 583 to 371 Python files and Settings from 261 to 216
-fields. Those are what the audit left behind, not a ceiling — today it is 374 files and
-236 settings fields (2026-09-01). See `docs/superpowers/plans/2026-08-29-backend-full-audit-remediation.md`
+fields. Those are what the audit left behind, not a ceiling — today it is 379 files and
+249 settings fields (2026-09-01). See `docs/superpowers/plans/2026-08-29-backend-full-audit-remediation.md`
 for the plan, what was deliberately left dormant, and what remains open.
 
 ### Frontend
@@ -676,9 +676,17 @@ An AST census on 2026-09-01 found **47 live keys** outside `Settings`: 2 in the 
 2 in the request middleware (one of them `STRICT_CSP`, which picks the Content-Security-Policy),
 5 in an admin endpoint, 2 duplicated in the Self-RAG evaluator, 37 behind the helper
 functions in `app/agents/shared/config.py`, plus 5 in a module with no importers at all.
-The first nine were folded into `Settings` the same day and the dead module deleted; the
-37 are frozen by a ratchet and migrate in batches. See
-`docs/superpowers/plans/2026-09-01-configuration-management.md`.
+**All of them are gone**, and `app/` now contains no environment read outside the allowlist
+below. See `docs/superpowers/plans/2026-09-01-configuration-management.md`.
+
+The 37 did not all deserve migrating, which is the more useful half of that pass: **20 had
+no reader anywhere** and were deleted rather than carried into `Settings` — including
+`CASCADE_USE_FOR_VALIDATION`, whose branch logged "is retired" and then did the same thing
+either way. Thirteen became fields. The four `ANSWER_WEIGHT_*` scoring weights stayed in
+`app/agents/shared/config.py` as plain literals: they are one scheme that has to sum to 1.0,
+and four independently settable knobs that must agree is a footgun, not a feature. Migrating
+a constant nothing reads would have made the configuration surface bigger and no more
+configurable.
 
 **Precedence is declared once**, by the source order in
 `Settings.settings_customise_sources`:
@@ -797,10 +805,11 @@ in the console". That function's limit is worth knowing: a value already read in
 module-level constant is not revisited, so the legacy constant block keeps its start-up
 values until the process restarts.
 
-`tests/core/test_config_has_one_source.py` keeps it that way, in two parts: an AST guard
-that every direct environment read in `app/` is in an allowlist keyed on
-`path::enclosing_function` **with a reason**, and a ratchet on the legacy constant block
-that may shrink and never grow. Four reads are legitimately exempt and stay:
+`tests/core/test_config_has_one_source.py` keeps it that way: an AST guard that every
+direct environment read in `app/` is in an allowlist keyed on `path::enclosing_function`
+**with a reason**. It carried a ratchet over the legacy constant block as well until that
+block was emptied; a guard that guards nothing is one more thing to read and no protection,
+so it went with it. These reads are legitimately exempt and stay:
 `resolve_runtime_env_file` (it chooses the settings file, so it cannot live in it),
 `remote_config._bootstrap` (the same chicken-and-egg one layer out: it configures the source
 that supplies `Settings`, which is also why `NACOS_PASSWORD` never becomes a field),
@@ -1037,7 +1046,7 @@ A third makes it three. Do not add a pixel-diff CI gate for the reason above, an
 
 `tests/` was cleared ahead of the v0.7 rewrite and is being rebuilt incrementally: each bug
 fix lands with the regression test that would have caught it, rather than as a separate
-back-filling effort. As of 2026-09-01 there are 520 tests covering the chat round trip,
+back-filling effort. As of 2026-09-01 there are 519 tests covering the chat round trip,
 conversation context, graph routing, clarification, the async load guard, engine reuse,
 answer safety, reader-facing citation numbering, stage-timeout degradation, the governed
 tool stack with its multi-step loop and approve-then-resume cycle, retrieval

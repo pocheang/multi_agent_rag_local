@@ -8,9 +8,9 @@ import time
 from collections.abc import Mapping, Sequence
 from typing import Any
 
-from app.agents.shared.config import NLI_MAX_CHECKS, NLI_MODEL_NAME
 from app.agents.validation.models import CascadeLevel, CascadeResult, RuleBasisIssue, ValidationRequest
 from app.agents.validation.rules import extract_dates, extract_numbers, numbers_match
+from app.core.config import get_settings
 
 logger = logging.getLogger(__name__)
 
@@ -18,7 +18,13 @@ logger = logging.getLogger(__name__)
 class NLIValidator:
     """Validate answer sentences against normalized source evidence."""
 
-    def __init__(self, *, model_name: str = NLI_MODEL_NAME, max_checks: int = NLI_MAX_CHECKS) -> None:
+    def __init__(self, *, model_name: str | None = None, max_checks: int | None = None) -> None:
+        # Resolved on call rather than bound as a default: a default argument is
+        # evaluated once at import, which is what made these two unreachable by
+        # the render step and by the configuration centre.
+        settings = get_settings()
+        model_name = settings.nli_model_name if model_name is None else model_name
+        max_checks = settings.nli_max_checks if max_checks is None else max_checks
         self.model_name = model_name
         self.max_checks = max_checks
         self._model: Any | None = None

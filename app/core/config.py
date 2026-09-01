@@ -139,6 +139,25 @@ class Settings(BaseSettings):
     self_rag_quality_threshold: float = Field(default=0.7, alias="SELF_RAG_QUALITY_THRESHOLD")
     request_metrics_maxlen: int = Field(default=1000, alias="REQUEST_METRICS_MAXLEN")
     strict_csp: bool = Field(default=False, alias="STRICT_CSP")
+
+    # Migrated out of `app/agents/shared/config.py` on 2026-09-01, where they
+    # were module constants read with `os.getenv` at import time -- settable
+    # only as exported environment variables, and invisible to the render step
+    # and to the configuration centre. Every one of them is read on the request
+    # path through `app/agents/validation/`.
+    answer_approve_threshold: float = Field(default=0.80, alias="ANSWER_APPROVE_THRESHOLD")
+    answer_flag_threshold: float = Field(default=0.60, alias="ANSWER_FLAG_THRESHOLD")
+    hallucination_high_risk_threshold: float = Field(default=0.30, alias="HALLUCINATION_HIGH_RISK_THRESHOLD")
+    nli_model_name: str = Field(default="cross-encoder/nli-MiniLM2-L6-H768", alias="NLI_MODEL_NAME")
+    nli_max_checks: int = Field(default=5, alias="NLI_MAX_CHECKS")
+    cascade_enable_level1: bool = Field(default=True, alias="CASCADE_ENABLE_LEVEL1")
+    cascade_enable_level2: bool = Field(default=False, alias="CASCADE_ENABLE_LEVEL2")
+    cascade_enable_level3: bool = Field(default=True, alias="CASCADE_ENABLE_LEVEL3")
+    cascade_enable_level4: bool = Field(default=True, alias="CASCADE_ENABLE_LEVEL4")
+    cascade_level1_timeout_ms: int = Field(default=10, alias="CASCADE_LEVEL1_TIMEOUT_MS")
+    cascade_level2_timeout_ms: int = Field(default=3000, alias="CASCADE_LEVEL2_TIMEOUT_MS")
+    cascade_level3_timeout_ms: int = Field(default=75, alias="CASCADE_LEVEL3_TIMEOUT_MS")
+    cascade_level4_timeout_ms: int = Field(default=3000, alias="CASCADE_LEVEL4_TIMEOUT_MS")
     retrieval_cache_enabled: bool = Field(default=True, alias="RETRIEVAL_CACHE_ENABLED")
     retrieval_cache_ttl_seconds: int = Field(default=45, alias="RETRIEVAL_CACHE_TTL_SECONDS")
     retrieval_cache_max_items: int = Field(default=256, alias="RETRIEVAL_CACHE_MAX_ITEMS")

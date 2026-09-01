@@ -12,35 +12,9 @@ Design principles:
 5. Pydantic models for complex configuration objects
 """
 
-import os
 from typing import Final
 
 from pydantic import BaseModel, Field, field_validator
-
-# ============================================================================
-# Environment Variable Helpers
-# ============================================================================
-
-
-def _get_bool_env(key: str, default: bool) -> bool:
-    """Get boolean from environment variable."""
-    return os.getenv(key, str(default)).lower() in ("true", "1", "yes")
-
-
-def _get_float_env(key: str, default: float) -> float:
-    """Get float from environment variable."""
-    return float(os.getenv(key, str(default)))
-
-
-def _get_int_env(key: str, default: int) -> int:
-    """Get integer from environment variable."""
-    return int(os.getenv(key, str(default)))
-
-
-def _get_str_env(key: str, default: str) -> str:
-    """Get string from environment variable."""
-    return os.getenv(key, default)
-
 
 # ============================================================================
 # Vector RAG Configuration (3 constants)
@@ -133,29 +107,18 @@ WHY: Most queries need citation-backed answers."""
 # ============================================================================
 
 # Route Validation Thresholds
-ROUTE_HIGH_CONFIDENCE_THRESHOLD: Final[float] = _get_float_env("ROUTE_HIGH_CONFIDENCE_THRESHOLD", 0.85)
-ROUTE_MEDIUM_CONFIDENCE_THRESHOLD: Final[float] = _get_float_env("ROUTE_MEDIUM_CONFIDENCE_THRESHOLD", 0.60)
-ROUTE_LOW_CONFIDENCE_THRESHOLD: Final[float] = _get_float_env("ROUTE_LOW_CONFIDENCE_THRESHOLD", 0.40)
 
 # Retrieval Quality Weights (WHY: Weighted fusion of retrieval quality dimensions)
-RETRIEVAL_WEIGHT_COVERAGE: Final[float] = _get_float_env("RETRIEVAL_WEIGHT_COVERAGE", 0.30)
-RETRIEVAL_WEIGHT_RELEVANCE: Final[float] = _get_float_env("RETRIEVAL_WEIGHT_RELEVANCE", 0.40)
-RETRIEVAL_WEIGHT_DIVERSITY: Final[float] = _get_float_env("RETRIEVAL_WEIGHT_DIVERSITY", 0.15)
-RETRIEVAL_WEIGHT_COMPLETENESS: Final[float] = _get_float_env("RETRIEVAL_WEIGHT_COMPLETENESS", 0.15)
-RETRIEVAL_SAMPLE_TOP_K: Final[int] = _get_int_env("RETRIEVAL_SAMPLE_TOP_K", 3)
 
 # Answer Validation Weights (WHY: Factuality weighted highest as citation-first system)
-ANSWER_WEIGHT_FACTUALITY: Final[float] = _get_float_env("ANSWER_WEIGHT_FACTUALITY", 0.40)
-ANSWER_WEIGHT_CITATION: Final[float] = _get_float_env("ANSWER_WEIGHT_CITATION", 0.25)
-ANSWER_WEIGHT_QUALITY: Final[float] = _get_float_env("ANSWER_WEIGHT_QUALITY", 0.25)
-ANSWER_WEIGHT_SAFETY: Final[float] = _get_float_env("ANSWER_WEIGHT_SAFETY", 0.10)
+ANSWER_WEIGHT_FACTUALITY: Final[float] = 0.40
+ANSWER_WEIGHT_CITATION: Final[float] = 0.25
+ANSWER_WEIGHT_QUALITY: Final[float] = 0.25
+ANSWER_WEIGHT_SAFETY: Final[float] = 0.10
 
 # Hallucination Detection (WHY: High risk threshold triggers confidence penalty)
-HALLUCINATION_HIGH_RISK_THRESHOLD: Final[float] = _get_float_env("HALLUCINATION_HIGH_RISK_THRESHOLD", 0.30)
 
 # Answer Approval Thresholds
-ANSWER_APPROVE_THRESHOLD: Final[float] = _get_float_env("ANSWER_APPROVE_THRESHOLD", 0.80)
-ANSWER_FLAG_THRESHOLD: Final[float] = _get_float_env("ANSWER_FLAG_THRESHOLD", 0.60)
 
 
 # ============================================================================
@@ -163,39 +126,11 @@ ANSWER_FLAG_THRESHOLD: Final[float] = _get_float_env("ANSWER_FLAG_THRESHOLD", 0.
 # WHY: Factual consistency checking via cross-encoder model
 # ============================================================================
 
-NLI_MODEL_NAME: Final[str] = _get_str_env("NLI_MODEL_NAME", "cross-encoder/nli-MiniLM2-L6-H768")
-"""Pre-trained NLI model for entailment checking."""
-
-NLI_MAX_CHECKS: Final[int] = _get_int_env("NLI_MAX_CHECKS", 5)
-"""Maximum number of NLI checks per answer (performance vs quality tradeoff)."""
-
 
 # ============================================================================
 # Validation Cascade Configuration (9 constants)
 # WHY: Four-level cascade from fast rules to deep LLM validation
 # ============================================================================
-
-CASCADE_ENABLE_LEVEL1: Final[bool] = _get_bool_env("CASCADE_ENABLE_LEVEL1", True)
-"""Level 1: Fast rule-based validation (<10ms)."""
-
-CASCADE_ENABLE_LEVEL2: Final[bool] = _get_bool_env("CASCADE_ENABLE_LEVEL2", False)
-"""Level 2: NLI cross-encoder hallucination check, gates NLIValidator in
-app/agents/validation/cascade.py (disabled by default)."""
-
-CASCADE_ENABLE_LEVEL3: Final[bool] = _get_bool_env("CASCADE_ENABLE_LEVEL3", True)
-"""Level 3: citation-completeness check, gates CitationValidator in
-app/agents/validation/cascade.py (~75ms budget, enabled by default)."""
-
-CASCADE_ENABLE_LEVEL4: Final[bool] = _get_bool_env("CASCADE_ENABLE_LEVEL4", True)
-"""Level 4: Deep LLM validation (~3000ms)."""
-
-CASCADE_LEVEL1_TIMEOUT_MS: Final[int] = _get_int_env("CASCADE_LEVEL1_TIMEOUT_MS", 10)
-CASCADE_LEVEL2_TIMEOUT_MS: Final[int] = _get_int_env("CASCADE_LEVEL2_TIMEOUT_MS", 3000)
-CASCADE_LEVEL3_TIMEOUT_MS: Final[int] = _get_int_env("CASCADE_LEVEL3_TIMEOUT_MS", 75)
-CASCADE_LEVEL4_TIMEOUT_MS: Final[int] = _get_int_env("CASCADE_LEVEL4_TIMEOUT_MS", 3000)
-
-CASCADE_USE_FOR_VALIDATION: Final[bool] = _get_bool_env("CASCADE_USE_FOR_VALIDATION", True)
-"""Enable cascade validation in answer validation flow."""
 
 
 # ============================================================================
@@ -203,25 +138,6 @@ CASCADE_USE_FOR_VALIDATION: Final[bool] = _get_bool_env("CASCADE_USE_FOR_VALIDAT
 # WHY: Weighted fusion of quality scores from all validators
 # ============================================================================
 
-QUALITY_WEIGHT_ROUTE: Final[float] = _get_float_env("QUALITY_WEIGHT_ROUTE", 0.10)
-QUALITY_WEIGHT_RETRIEVAL: Final[float] = _get_float_env("QUALITY_WEIGHT_RETRIEVAL", 0.30)
-QUALITY_WEIGHT_ANSWER_FACT: Final[float] = _get_float_env("QUALITY_WEIGHT_ANSWER_FACT", 0.45)
-"""Factuality weighted highest - citation-first principle."""
-
-QUALITY_WEIGHT_ANSWER_QUALITY: Final[float] = _get_float_env("QUALITY_WEIGHT_ANSWER_QUALITY", 0.10)
-QUALITY_WEIGHT_CITATION: Final[float] = _get_float_env("QUALITY_WEIGHT_CITATION", 0.05)
-
-QUALITY_HIGH_THRESHOLD: Final[float] = _get_float_env("QUALITY_HIGH_THRESHOLD", 0.85)
-QUALITY_MEDIUM_THRESHOLD: Final[float] = _get_float_env("QUALITY_MEDIUM_THRESHOLD", 0.70)
-QUALITY_LOW_THRESHOLD: Final[float] = _get_float_env("QUALITY_LOW_THRESHOLD", 0.50)
-
-
-# ============================================================================
-# Context Tracker Configuration (4 constants)
-# WHY: Multi-turn conversation context management
-# ============================================================================
-
-"""Maximum conversation turns to retain in context."""
 
 """Summarize context every N turns to prevent memory overflow."""
 
@@ -234,16 +150,6 @@ QUALITY_LOW_THRESHOLD: Final[float] = _get_float_env("QUALITY_LOW_THRESHOLD", 0.
 # Timeout Configuration (3 constants)
 # WHY: Prevent indefinite blocking in validation stages
 # ============================================================================
-
-ROUTE_VALIDATOR_TIMEOUT_MS: Final[int] = _get_int_env("ROUTE_VALIDATOR_TIMEOUT_MS", 500)
-"""Timeout for route validation stage."""
-
-RETRIEVAL_QUALITY_TIMEOUT_MS: Final[int] = _get_int_env("RETRIEVAL_QUALITY_TIMEOUT_MS", 200)
-"""Timeout for retrieval quality scoring stage."""
-
-MAX_TOTAL_TIME_MS: Final[int] = _get_int_env("MAX_TOTAL_TIME_MS", 30000)
-"""Overall orchestration timeout (30 seconds default).
-WHY: Prevent requests from hanging indefinitely."""
 
 
 # ============================================================================

@@ -14,19 +14,19 @@ surface, including `GET /api/advanced-rag/config`, which reported an
 (`QUERY_DECOMPOSE_ENABLED`) defaulted to on. An admin page reporting something
 other than the running configuration is worse than no page.
 
-Two guards, because there are two shapes of the problem:
+A direct `os.getenv` / `os.environ` read anywhere in `app/` must be in `ALLOWED`,
+with a reason. The allowlist is keyed on `path::function` rather than a line
+number: keying it on a line makes it fail on any edit *above* an exempt call,
+which trains readers to re-point the entry instead of asking whether a real
+escape appeared.
 
-1. `test_no_module_reads_the_environment_directly` -- a direct `os.getenv` /
-   `os.environ` read anywhere in `app/` must be in `ALLOWED`, with a reason. The
-   allowlist is keyed on `path::function` rather than a line number: keying it on
-   a line makes it fail on any edit *above* an exempt call, which trains readers
-   to re-point the entry instead of asking whether a real escape appeared.
-
-2. `test_the_legacy_constant_block_does_not_grow` -- `app/agents/shared/config.py`
-   reaches the environment through four helpers, so the AST sees four call sites
-   and not the 37 keys behind them. That block is a ratchet, in the shape this
-   repository already uses for `KNOWN_OFFENDERS` and the frontend design scale:
-   it may shrink, never grow.
+This began as a guard plus a ratchet, because `app/agents/shared/config.py`
+reached the environment through four helper functions and the AST saw four call
+sites rather than the 37 keys behind them. That block holds no environment reads
+at all as of 2026-09-01 -- 20 of those constants had no reader anywhere and were
+deleted, 13 became `Settings` fields, and the four scoring weights became plain
+literals -- so the ratchet had nothing left to ratchet and went with it. A guard
+that guards nothing is one more thing to read and no protection.
 """
 
 from __future__ import annotations
@@ -51,16 +51,7 @@ ALLOWED: dict[str, str] = {
     "app/api/application/lifespan.py::lifespan": "conda environment diagnostics",
     "app/api/deps/admin.py::_runtime_diagnostics_summary": "conda environment diagnostics",
     "app/api/deps/auth.py::_resolve_pytest_header_user": "test-run detection",
-    # The legacy constant block; bounded by the ratchet below.
-    "app/agents/shared/config.py::_get_bool_env": "legacy constant block (ratcheted)",
-    "app/agents/shared/config.py::_get_float_env": "legacy constant block (ratcheted)",
-    "app/agents/shared/config.py::_get_int_env": "legacy constant block (ratcheted)",
-    "app/agents/shared/config.py::_get_str_env": "legacy constant block (ratcheted)",
 }
-
-# Frozen count of env-backed constants in the legacy block. May only go down.
-LEGACY_CONSTANT_BUDGET = 37
-LEGACY_BLOCK = APP / "agents" / "shared" / "config.py"
 
 
 class _EnvReads(ast.NodeVisitor):
@@ -132,25 +123,4 @@ def test_no_module_reads_the_environment_directly() -> None:
         "centre cannot set them:\n  " + "\n  ".join(offenders) + "\n"
         "Add a `Settings` field with the same alias and read it through `get_settings()`, "
         "or add an entry to ALLOWED saying why this one has to bypass Settings."
-    )
-
-
-def test_the_legacy_constant_block_does_not_grow() -> None:
-    """`app/agents/shared/config.py` may shed env-backed constants, never gain them."""
-
-    tree = ast.parse(LEGACY_BLOCK.read_text(encoding="utf-8"))
-    helpers = {"_get_bool_env", "_get_float_env", "_get_int_env", "_get_str_env"}
-    count = sum(
-        1
-        for node in ast.walk(tree)
-        if isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id in helpers
-    )
-    assert count <= LEGACY_CONSTANT_BUDGET, (
-        f"{count} env-backed constants, budget {LEGACY_CONSTANT_BUDGET}. A new configuration "
-        "value belongs in Settings, not in this block."
-    )
-    # A ratchet only holds if it is tightened as the block shrinks, so an
-    # improvement that leaves the budget behind fails too.
-    assert count == LEGACY_CONSTANT_BUDGET, (
-        f"{count} constants remain, below the frozen {LEGACY_CONSTANT_BUDGET}. Lower LEGACY_CONSTANT_BUDGET to {count}."
     )

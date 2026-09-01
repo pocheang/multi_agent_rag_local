@@ -12,7 +12,6 @@ from __future__ import annotations
 import asyncio
 import pathlib
 import threading
-import time
 
 from app.agents.shared import cache as router_cache
 from app.agents.shared.cache import _TTLCache, cached_router_decision, clear_router_decision_cache
@@ -94,12 +93,22 @@ def test_it_works_inside_a_running_loop_too():
 # --- the store itself --------------------------------------------------------
 
 
-def test_entries_expire():
+def test_entries_expire(monkeypatch):
+    """Driven by a fake clock, not by sleeping.
+
+    This used to set a 50ms TTL and sleep 60ms. Under a loaded suite the *first*
+    read could already land past the expiry, so the test failed intermittently on
+    the assertion before the sleep -- which reads as "the cache expired something
+    it should not have" rather than "the machine was busy".
+    """
+
+    now = 1000.0
+    monkeypatch.setattr(router_cache.time, "monotonic", lambda: now)
     store = _TTLCache(max_size=8, ttl_seconds=0.05)
     store.set("k", "v")
 
     assert store.get("k") == "v"
-    time.sleep(0.06)
+    now += 0.06
     assert store.get("k") is None
 
 

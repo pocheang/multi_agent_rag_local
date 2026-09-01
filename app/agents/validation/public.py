@@ -7,22 +7,10 @@ from collections.abc import Mapping, Sequence
 from typing import Any
 
 from app.agents.shared.config import (
-    ANSWER_APPROVE_THRESHOLD,
-    ANSWER_FLAG_THRESHOLD,
     ANSWER_WEIGHT_CITATION,
     ANSWER_WEIGHT_FACTUALITY,
     ANSWER_WEIGHT_QUALITY,
     ANSWER_WEIGHT_SAFETY,
-    CASCADE_ENABLE_LEVEL1,
-    CASCADE_ENABLE_LEVEL2,
-    CASCADE_ENABLE_LEVEL3,
-    CASCADE_ENABLE_LEVEL4,
-    CASCADE_LEVEL1_TIMEOUT_MS,
-    CASCADE_LEVEL2_TIMEOUT_MS,
-    CASCADE_LEVEL3_TIMEOUT_MS,
-    CASCADE_LEVEL4_TIMEOUT_MS,
-    CASCADE_USE_FOR_VALIDATION,
-    HALLUCINATION_HIGH_RISK_THRESHOLD,
 )
 from app.agents.shared.quality_models import (
     AnswerIssue,
@@ -52,6 +40,7 @@ from app.agents.validation.rules import (
 from app.agents.validation.rules import (
     safety_score as _safety_check,
 )
+from app.core.config import get_settings
 
 logger = logging.getLogger(__name__)
 
@@ -65,18 +54,17 @@ def _get_validation_cascade() -> ValidationCascade:
     if _validation_cascade is not None:
         return _validation_cascade
     _cascade_load_attempted = True
-    if not CASCADE_USE_FOR_VALIDATION:
-        logger.info("CASCADE_USE_FOR_VALIDATION is retired; using the single validation entry")
+    settings = get_settings()
     _validation_cascade = ValidationCascade(
         config={
-            "level1_timeout_ms": CASCADE_LEVEL1_TIMEOUT_MS,
-            "level2_timeout_ms": CASCADE_LEVEL2_TIMEOUT_MS,
-            "level3_timeout_ms": CASCADE_LEVEL3_TIMEOUT_MS,
-            "level4_timeout_ms": CASCADE_LEVEL4_TIMEOUT_MS,
-            "enable_level1": CASCADE_ENABLE_LEVEL1,
-            "enable_level2": CASCADE_ENABLE_LEVEL2,
-            "enable_level3": CASCADE_ENABLE_LEVEL3,
-            "enable_level4": CASCADE_ENABLE_LEVEL4,
+            "level1_timeout_ms": settings.cascade_level1_timeout_ms,
+            "level2_timeout_ms": settings.cascade_level2_timeout_ms,
+            "level3_timeout_ms": settings.cascade_level3_timeout_ms,
+            "level4_timeout_ms": settings.cascade_level4_timeout_ms,
+            "enable_level1": settings.cascade_enable_level1,
+            "enable_level2": settings.cascade_enable_level2,
+            "enable_level3": settings.cascade_enable_level3,
+            "enable_level4": settings.cascade_enable_level4,
             "enforce_minimum_length": True,
         }
     )
@@ -118,6 +106,7 @@ async def verify_generated_answer(
 
 
 def _to_public_result(cascade: ValidationCascadeResult) -> AnswerValidationResult:
+    settings = get_settings()
     factuality = cascade.confidence_score
     hallucination_risk = 1.0 - factuality
     overall_score = (
@@ -126,16 +115,16 @@ def _to_public_result(cascade: ValidationCascadeResult) -> AnswerValidationResul
         + cascade.answer_quality * ANSWER_WEIGHT_QUALITY
         + cascade.safety_score * ANSWER_WEIGHT_SAFETY
     )
-    if hallucination_risk > HALLUCINATION_HIGH_RISK_THRESHOLD:
+    if hallucination_risk > settings.hallucination_high_risk_threshold:
         overall_score *= 0.7
 
     critical = any(issue.severity == "critical" for issue in cascade.all_issues)
     if critical:
         overall_score = 0.0
         action = "regenerate"
-    elif overall_score >= ANSWER_APPROVE_THRESHOLD:
+    elif overall_score >= settings.answer_approve_threshold:
         action = "approve"
-    elif overall_score >= ANSWER_FLAG_THRESHOLD:
+    elif overall_score >= settings.answer_flag_threshold:
         action = "flag"
     else:
         action = "regenerate"
