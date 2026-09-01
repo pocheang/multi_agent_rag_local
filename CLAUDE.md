@@ -115,7 +115,43 @@ The system has **3 primary components** and **3 optional components**:
 
 **Optional (route-dependent)**:
 4. **Planner** - Task decomposition for complex queries
-5. **Tool Runner** - Governed connector actions. Today this means one action: disabling a connected integration by name, matched via regex against the raw question (`app/agents/tool/service.py`). Multi-hop/ReAct-style tool reasoning is not implemented; an earlier unreachable implementation (`app/agents/tool/react.py`) was removed on 2026-08-29.
+5. **Tool Runner** - Governed connector actions, selected by a model from a
+   schema-declared catalogue (`app/agents/tool/selector.py` + `service.py`,
+   reworked 2026-08-30). One action is registered today (disabling an owned
+   integration). Selection is **multi-step**: select → invoke → observe → repeat,
+   bounded by `TOOL_MAX_STEPS` (default 3) and by the shared
+   `STAGE_TIMEOUT_TOOL_MS` ceiling. The loop stops on anything other than a clean
+   success — an `approval_required` result means the action has *not* happened,
+   so planning a next step on top of it would be reasoning from a false premise —
+   and it stops if the model repeats a call it already made.
+
+   **The selector is deliberately blind to retrieved content.** Its inputs are
+   the user's question, the conversation, and the tool catalogue; it takes no
+   `EvidenceBundle`/`ContextBundle`, and `ToolRunner` no longer receives evidence
+   either, so there is no argument to pass by mistake. Retrieved chunks are
+   attacker-controllable the moment one user can put a document where another
+   user's query will retrieve it, and a model that chose tools from them would
+   put this system in the middle of the lethal trifecta. While selection was a
+   regex over the question this was true by accident;
+   `tests/security/test_tool_selection_is_evidence_blind.py` makes it a property.
+   If a tool ever genuinely needs retrieved content, that is a deliberate change
+   with its own threat model.
+
+   **Feeding results back re-opens that question one layer down**, which is what
+   `ToolRisk == "open_world"` now answers: such a tool reaches content this
+   system does not control, so its summary is somebody else's writing and
+   contributes only its id and status to the next decision, never its text
+   (`app/agents/tool/service.py::_observation`). Every tool registered today
+   composes its own summary, so today they all contribute it.
+
+   Arguments come from a model now, so `ToolDefinition.parameters` (name,
+   required, `max_length`, `pattern`) is the only thing between it and the
+   executor; `ToolRegistry.invoke` validates against it before spending an
+   approval round trip, and `ToolRegistry.catalog(actor)` only offers tools the
+   actor is authorized to run.
+
+   A `write` tool always returns `approval_required` on its first call; the
+   caller confirms and re-sends with the token. See "Governed tool stack" below.
 6. **Finalizer** - Quality validation and safety checks
 
 ### Pipeline Profile
@@ -137,7 +173,7 @@ OrchestrationEngine
 1. Router → determines query type and route
 2. Planner → (optional) decomposes complex queries
 3. Retriever → gathers evidence from vector/BM25/graph/web
-4. Tool Runner → (optional) executes tools for react route
+4. Tool Runner → (optional) multi-step governed tool loop, react route only
 5. Synthesizer → generates answer with inline citations
 6. Finalizer → (optional) validates quality and safety
    ↓
@@ -160,7 +196,60 @@ PipelineResult → returned to caller
    validation cascade reached through the verifier. There is no content-moderation/toxicity
    filter and no bias-detection implementation.
 
-**Citation-First Principle**: Factual claims must include inline citations `[doc_id:page]` during generation.
+**Skills shape the answer** (wired 2026-08-31). The router picks one of nine skills per
+query and `RouteDecision.skill` has always carried the choice, but nothing read it:
+`SynthesizerAgentService` hardcoded `answer_with_citations`, and `skill_name` reached the
+model as a bare header line with no content behind it.
+
+`app/agents/synthesizer/skills.py` is the one place that decides what a skill means, and it
+**selects** a template rather than adding one. `templates.py` already infers a *query type*
+from the question by keyword and puts its template in the prompt; a parallel set of skill
+templates would have put two competing answer shapes in front of the model. Skill and query
+type answer the same question, and the skill is the better answer — an LLM read the whole
+question, `infer_query_type` matches a keyword list. So:
+
+- six skills have a shape of their own (`timeline_builder`, `web_fact_check`,
+  `incident_response_playbook`, `cyber_attack_analysis`, `cyber_defense_hardening`,
+  `pdf_text_reader`);
+- `compare_entities` maps onto the existing `COMPARISON_TEMPLATE`, which means an
+  LLM-detected comparison now reaches it even when the wording carries none of the keywords
+  — the same "the route is an instruction, not a hint" reasoning as on the retrieval side;
+- `answer_with_citations` and `ai_knowledge_assistant` state no shape and keep today's
+  question-based inference, as does an unrecognised skill.
+
+Every authored template teaches the internal `[E{k}]` marker, never `[1]`: `output_filter`
+renumbers after DLP settles which citations survive, so a template teaching reader-facing
+numbers would teach the model to invent numbering the pipeline then overwrites.
+`tests/agents/synthesizer/test_skill_templates.py` checks the three sets partition
+`VALID_SKILLS`, so a skill added to the router without guidance fails the suite.
+
+**Citation-First Principle**: Factual claims must carry an inline citation during
+generation. Two marker formats are involved and they are not interchangeable:
+
+- `[E1]`, `[E2]` … are the **internal** evidence markers. `ContextBuilder` renders one in
+  front of each excerpt (`app/knowledge/context.py::_render_item`), the prompts teach that
+  form, and `normalize_answer_citations` allow-lists it, so `[E{k}]` always names an exact
+  position in the evidence list.
+- `[1]`, `[2]` … are what the **reader** sees. `output_filter`
+  (`app/orchestration/langgraph/nodes.py`) rewrites the internal markers via
+  `number_evidence_markers` and appends the numbered reference list, so entry *n* is what
+  `[n]` in the text points at.
+
+The rewrite happens in `output_filter` and nowhere earlier, because that is the first stage
+that knows which citations survive DLP: a marker whose evidence the filter dropped is
+removed rather than left pointing at nothing. It used to live only in
+`SynthesizerAgentService.synthesize()`, which the LangGraph path never calls, so `[E1]`
+reached the browser verbatim with no legend.
+
+Numbering is by **first appearance in the answer**, not retrieval order, and two excerpts
+that render as the same reference line (same `source`, same `page`) share one number.
+`EvidenceBundle.items` comes back from `output_filter` in that same order, which is what
+lets `RAGPipeline` set `PipelineCitation.marker` by enumeration.
+
+`EvidenceRef.version` is optional on purpose, mirroring `EvidenceItem.version`: web results
+and graph context are real evidence with no version to point at. Requiring one there meant
+every marker aimed at them was silently dropped, so a web-routed answer returned no
+citations at all and finished `degraded`.
 
 **Dormant by design (2026-08-29)**: the following exist and are reachable but are
 switched off on the live request path. Turning any of them on is a cost/latency
@@ -168,16 +257,117 @@ decision, not a bug fix — do not "fix" them by flipping the flag.
 
 - **Fact verification and self-review**: `app/agents/synthesizer/service.py` calls
   `synthesize_answer(..., enable_fact_verification=False, enable_self_review=False)`.
-- **KnowledgeOrchestrator as top-level retrieval assembler**:
-  `KNOWLEDGE_ORCHESTRATOR_ENABLED` defaults to false, so retrieval goes through
-  `RAGAgentService`, which delegates to the same orchestrator internally.
-- **Router confidence calibration**: `ENABLE_CALIBRATION` defaults to false, so
-  `config/router_calibration.json` is not read.
-- **Clarification round caps**: hardcoded per intent in
-  `app/agents/clarification/rules.py::_MAX_ROUNDS`; there is no env override.
+  Fact verification is now switchable without a code edit
+  (`ANSWER_FACT_VERIFICATION_ENABLED`, default false) **and works when switched
+  on**: the synthesizer passes it the structured evidence directly. It used to
+  rebuild source documents by regexing `[doc_id:page]` out of the rendered
+  context -- a form retired when ContextBuilder moved to `[E{k}]` -- so it
+  verified every answer against an empty list and reported perfect groundedness.
+  With no source documents it now skips rather than passing vacuously.
+- **Router confidence calibration**: `ENABLE_CALIBRATION` defaults to false, and
+  turning it on now does something. The loop was closed on 2026-08-30:
+  `_record_routing_outcome` (in the verifier node) feeds `record_routing_feedback`,
+  which previously had no caller anywhere. Only outcomes *attributable to routing*
+  are recorded -- retrieval finding nothing is the route's fault, retrieval finding
+  plenty and the verifier approving is to its credit, and a degraded answer that
+  had evidence is somebody else's failure and records nothing.
+  `RouteDecision.raw_confidence` exists to carry the pre-calibration value that
+  far; feeding the calibrated one back would train the calibrator on its own
+  output. Accumulated outcomes live at `ROUTER_CALIBRATION_PATH` under `data/`,
+  seeded once from the tracked `config/router_calibration.json`, and are flushed
+  every 20 records -- the calibrator used to rewrite that tracked file
+  synchronously on every request.
+- **Clarification round caps**: derived from the number of fields each intent
+  actually has questions for (`rules.py::_REQUIRED_FIELDS`), not hand-written.
+  The old table said 7 for `rag_design`, which has four fields, so the cap could
+  never be reached and the UI promised three rounds that do not exist.
+- **Enhanced graph lookup**: `GRAPH_RAG_ENHANCED` defaults false, so the graph route uses
+  `app/tools/graph/core.py::graph_lookup`. Until 2026-08-31 the switch was not dormant but
+  *broken* — `_run_graph_rag_impl` required `retrieved_docs` to enter the enhanced branch and
+  the one production caller had none, so all 495 lines of `app/agents/rag/enhanced_graph.py`
+  were unreachable. It now works, and staying off is a cost decision: the enhanced lookup
+  loops per entity (up to 5 neighbor queries + 3 path queries) where the basic one batches,
+  so it trades roughly 3 Neo4j round-trips for up to 9 in exchange for better entity
+  normalization, alias matching, quality-adaptive limits, and a low-quality skip that falls
+  back to vector. Turning it on also turns on two-phase retrieval — see Retrieval Strategy.
+  `ClarificationAgentService` advances the round when it *asks*; the session
+  store used to be the only thing that advanced it, and only when the user
+  answered, so a caller that re-asked without answering looped forever.
 
 **Note**: Quality validation is controlled by `ExecutionPolicy`, not by per-profile
 settings — see Pipeline Profile above.
+
+### Governed tool stack
+
+`app/mcp/runtime.py::get_tool_stack()` builds the approval store, registry,
+gateway and connector service **once per process**, lazily. Both the FastAPI
+container (`app/api/deps/runtime.py`) and the RAG pipeline
+(`ToolAgentService`, resolved at call time so `CoreCapabilities()` stays cheap)
+resolve that one stack.
+
+Sharing is a correctness requirement, not a performance one: `ToolRegistry`
+mints an approval token into *its* `ApprovalStore` and
+`POST /api/v1/connectors/approvals/{token}` redeems it from whichever store the
+FastAPI dependency hands out. Two stores means a token that can never be
+redeemed. Before 2026-08-30 the API built its own stack and the pipeline had
+none at all, so every pipeline tool call returned "tool system not initialized".
+
+`ToolAgentService` resolves the stack on first *use* rather than at
+construction: `CoreCapabilities` builds it by `default_factory`, and eager
+construction would demand `API_SETTINGS_ENCRYPTION_KEY` of every test and script
+that touches capabilities. Do not inject it via `RAGPipeline(tool_agent=…)`
+either — that sets `_uses_default_capabilities` False and rebuilds the LangGraph
+workflow per request (~20ms of synchronous CPU on the event loop).
+
+**Approval is resumed by replay, not by checkpoint restore** (2026-08-30). A
+`write` tool returns `approval_required` with a token; the run finishes normally
+and `PipelineResult.status` becomes `pending_approval`. The client confirms at
+`POST /api/v1/connectors/approvals/{token}` and then **re-sends the same query
+with `approval_token`**. That second run re-executes from the top and its tool
+stage replays the approved call.
+
+Replay rather than a LangGraph checkpointer, on purpose: re-running means
+`privacy_permission` **re-resolves** the caller's access scope instead of
+restoring one captured before the pause. Permissions can change while a human
+looks at a confirmation dialog, and a checkpoint restore would have replayed the
+stale scope silently. It also avoids a new persistence store, conversation-scoped
+thread semantics, and TTL cleanup. The cost is one extra retrieval + synthesis,
+only on the approval path. **The `checkpointer` parameter on
+`OrchestrationEngine`/`build_workflow` is still never passed and this design does
+not need it — do not assume that path works.**
+
+Resume does **not** re-run tool selection: `ApprovalStore.approved_call` rebuilds
+the exact call from the approval record. A model re-reading the same question is
+not obliged to choose the same call, and the approval has to authorize the action
+the user was shown.
+
+`_call_fingerprint` no longer includes `execution_id`. It used to, which made a
+token structurally unredeemable — every chat turn is a new execution, so the
+retry's fingerprint could never equal the approved call's. Approval still binds
+to one actor, is single-use, and expires in 5 minutes.
+
+Before this the loop was broken in three independent places: the frontend
+approved a token and then only cleared its panel, `OrchestrationRequest` had no
+field to carry a token back, and the fingerprint could not match.
+
+**Connector storage is persisted** (2026-08-30). `ConnectorMetadataRepository`
+and `CredentialRepository` were process-local dicts, which was survivable only
+while the tool path could not execute anything: a restart silently emptied every
+user's integrations, and a connector configured on one worker was invisible to
+the next. Both are now SQLite tables in `APP_DB_PATH`, following the store
+pattern the rest of the app uses (own connection per call, schema on
+construction) rather than a shared pool, which this codebase deliberately does
+not have.
+
+Both tables carry `owner_id REFERENCES users(user_id) ON DELETE CASCADE`, so a
+deleted account cannot leave behind an encrypted secret. `create` relies on the
+primary key rather than read-compare-write under a lock, which only ever made
+the race single-process.
+
+**The encryption key now has to outlive the process too.** Ciphertext is what
+gets stored, so persisting it does not widen what a database read exposes — but
+rotating or regenerating `API_SETTINGS_ENCRYPTION_KEY` turns stored credentials
+from *absent* into *undecryptable*.
 
 ### User Data Isolation
 
@@ -221,6 +411,25 @@ owner; `tests/security/test_no_unrestricted_retrieval.py` enumerates them via AS
 the two genuinely caller-less ones in a documented allowlist. A partial guard would be
 worse than none.
 
+**The owner must survive every hop, not just the call site** (fixed 2026-08-30). The AST
+guard only sees direct `similarity_search` calls, so it passed the whole time the graph
+route was reaching the store through `run_graph_rag → _fallback_to_vector_rag →
+run_vector_rag → hybrid_search_with_diagnostics → _safe_similarity_search`. Every hop wrote
+`owner=owner`, which satisfies an AST check — but `_fallback_to_vector_rag` declared
+`owner: OwnerScope | None = None` and two of its three callers relied on that default. Neo4j
+is optional and an empty graph result is routine, so the *common* fallback searched with the
+source filter alone and no ownership clause.
+
+The fix is a shape, not a patch: on every function between a request and the store, `owner`
+is **keyword-only with no default**, so omitting it is a `TypeError` rather than a silent
+widening. `similarity_search` itself is the one exemption — it is where "no owner" is
+interpreted. Two guards keep it that way: `test_no_retrieval_helper_defaults_its_owner_away`
+(no `owner=None` default anywhere upstream) and
+`test_no_module_passes_a_null_owner_without_saying_why` (writing `owner=None` requires an
+`OWNERLESS_CALL_SITES` entry). `hybrid_search()` and `_collect_candidates()` were deleted in
+the same pass: both were callerless and neither could take an owner, so each was a
+ready-made way back to an ownership-blind search.
+
 Documents are addressed by `document_id`, not filename: two users routinely hold a
 `report.pdf`, so `/documents/{filename}` refuses whenever the name is ambiguous and
 `/documents/by-id/{document_id}` is the form the frontend uses. A `?source=` query
@@ -236,6 +445,87 @@ BM25 IDF is negative for a term present in most documents, so in a small scope (
 now a routine case) every term scores below zero and matching documents get dropped. A
 negative `bm25_score` in the output is normal and harmless: RRF fuses on rank, not score.
 
+### Knowledge Agent and retrieval execution
+
+Source selection and retrieval execution are separate jobs, and since 2026-08-30
+they are separated properly. `KnowledgeAgentService.decide` picks the sources;
+`RAGAgentService.retrieve(request, route, plan, strategy, scope)` runs exactly
+that strategy through `KnowledgeOrchestrator` with `build_default_adapters()`.
+
+Before this, `RAGAgentService` built a strategy of its own -- always vector+BM25,
+graph on two routes, `rewrite=False` -- which silently overrode the one the
+Knowledge Agent had just produced. Three consequences, all fixed together:
+`memory`, `wiki` and `multimodal` were unreachable on the chat path however the
+Agent chose them; query rewriting never ran; and a verifier retry re-ran the
+identical search, because the retry query lives in the strategy.
+
+**The route is an instruction, not a hint.** `_knowledge_hints` translates each
+route into the sources it implies and `KnowledgeAgentService` includes them
+unconditionally. Consulting only keywords is what let a `graph` route degrade to
+vector+BM25 whenever the wording carried no relationship words.
+
+**Web has two independent authorizations.** The router choosing the `web` route
+*is* permission to search the web; `use_web_fallback` additionally allows a
+freshness-driven web search on routes that did not ask for it. Requiring the flag
+for both meant its default (False on every chat request) removed web search from
+the web route itself.
+
+There is one retrieval path. `KNOWLEDGE_ORCHESTRATOR_ENABLED` used to switch
+between two, and the default sent every request through the branch that
+discarded the strategy.
+
+`FinalAnswer.evidence` is the full authorized retrieval set and
+`FinalAnswer.cited_evidence` is the cited subset in citation-number order. They
+were the same list, which made `PipelineResult.contexts` and `citations`
+duplicates and hid every retrieved chunk the model chose not to cite.
+
+### Multi-turn follow-ups
+
+A follow-up question is completed before it is retrieved on, not after (wired 2026-08-31).
+`request.conversation` used to reach only the synthesizer and the tool selector, neither of
+which retrieves: the router saw only `request.question`, the Knowledge Agent used it
+verbatim as the retrieval query, and `build_rewrite_queries` took a query with no history.
+So "成本呢？" ran a vector search on those three characters and the synthesizer had to
+answer from evidence fetched for the wrong query — a failure that reads as poor retrieval.
+
+The completion happens in the rewrite step the repository already had:
+`KnowledgeOrchestrator._rewrite_once` → `build_rewrite_queries` → `_llm_rewrite`, which was
+missing only the conversation argument. With history present the rewriter switches to a
+standalone-question prompt; with none it keeps its original wording-only prompt, so a first
+turn costs nothing new. `QUERY_REWRITE_WITH_LLM` still gates the LLM call and still defaults
+false — turning it on is the cost decision, and it is now a switch that does something (see
+Caller deadlines: `_llm_rewrite` could not run at all before `request_context` was opened
+for the workflow).
+
+**The original question always survives.** `_with_queries` merges it in ahead of the
+variants, so a wrong completion adds a bad query rather than replacing the good one — the
+model is guessing what the user meant and can guess wrong. `primary_query` (what reranking
+scores against) is read before the merge and stays the question as asked.
+
+`enable_context_tracking` finally has a meaning, and it is enforced in one place per
+consumer: `RAGAgentService.retrieve` decides what retrieval may know about the session, and
+`SynthesizerAgentService.synthesize_candidate` decides what generation may. Off means
+neither sees it.
+
+**`app/services/context_management.py` is deliberately not on this path.** Those 642 lines
+implement the older rule-based alternative (pronoun → entity), and it decides a question
+needs resolving by substring-matching a fixed pronoun list. Both directions fail on ordinary
+Chinese: the most common follow-up shape drops the subject entirely, leaving nothing to
+match ("成本呢？"), while 那/这 are substrings of ordinary words and particles, so a
+self-contained question gets a stale entity substituted into it ("那延迟呢"). It also carries
+a hardcoded company gazetteer and a process-local per-session dict. It keeps its one real
+reader, the session-export endpoint, where an entity and topic list is a reasonable product;
+`tests/knowledge/test_followup_rewriting.py` pins both failure directions so reviving it
+stays a deliberate choice.
+
+**The API sends turns, not a blob.** `POST /api/advanced-rag/query` used to collapse the
+session into one `system` message holding a pre-rendered memory block. Synthesis could live
+with that; rewriting cannot, because completing a follow-up means knowing what the previous
+turn asked. The block still leads the sequence — it also carries the long-term memories the
+raw turns do not — and `_render_turns` skips it when building the rewrite prompt so the same
+rounds are not shown twice in two formats. One consequence of the old shape: the
+`max_turns=12` bound in `_render_conversation` was dead, because there was only ever one turn.
+
 ### Retrieval Strategy
 
 **Hybrid Retrieval** ([app/retrievers/hybrid/retriever.py](app/retrievers/hybrid/retriever.py)):
@@ -243,8 +533,74 @@ negative `bm25_score` in the output is normal and harmless: RRF fuses on rank, n
 - **BM25 search**: Jieba tokenization → Rank-BM25
 - **Fusion**: Reciprocal Rank Fusion (RRF)
 - **Graph retrieval**: runs for both the `graph` and `hybrid` routes (fixed 2026-08-29; `graph` previously degraded silently to vector+BM25)
+- **Two-phase retrieval** (added 2026-08-31): `KnowledgeOrchestrator` runs sources in one
+  `asyncio.gather` because they are independent. An adapter that implements
+  `PriorEvidenceAdapter` declares it is not, and gets a second phase fed the first phase's
+  evidence. `GraphKnowledgeAdapter` is the only one, and it asks for that phase **only when
+  `GRAPH_RAG_ENHANCED` is on** — with the switch off there is no reader for the prior
+  evidence, so the deferral would buy nothing and cost the overlap.
+
+  The cost is real: a deferred source's duration lands on the critical path instead of
+  hiding under the others. Phase two therefore inherits what is *left* of
+  `STAGE_TIMEOUT_RETRIEVAL_MS` rather than a fresh copy of its plan timeout — otherwise two
+  phases could take `phase_one + phase_two` and trip the stage ceiling, turning a sharper
+  graph lookup into a degraded stage, which is strictly worse than the plain lookup it
+  replaced.
+
+  **Prior evidence tunes retrieval; it must never widen it.** What crosses into
+  `run_graph_rag` is a quality *score* over the retrieved text plus page/format metadata.
+  `run_graph_rag_with_pdf_context` does not read entities out of the documents to query
+  with, and `allowed_sources`/`owner` remain the ones `privacy_permission` resolved. So a
+  document that argues for its own importance can buy itself a larger `max_neighbors` and
+  nothing else. Do not extend this to letting document text choose which entities to look
+  up: that is retrieved content steering retrieval, and the author of a retrieved document
+  is not always the person asking — the same reasoning that keeps tool selection blind to
+  evidence.
+
+  Phase outcomes are reassembled **by index, not by source name**: `KnowledgeStrategy.sources`
+  carries no uniqueness constraint, and downstream `zip(source_plans, outcomes, strict=True)`
+  reads `plan.required` off the pair, so keying on the source would misattribute a failure.
+  A failed source contributes no prior evidence — a timed-out source has no results, not zero
+  results, and feeding its silence to the quality estimator reads as a poor corpus.
+
+  `app/agents/rag/cache.py` was rewritten in the same pass. It memoizes pure functions over
+  in-memory text, but wrapped an *async* cache by calling `asyncio.get_event_loop()` and
+  `run_until_complete`. `run_graph_rag` reaches it from `asyncio.to_thread`, where
+  `get_event_loop()` raises and the fallback installs a private, never-closed loop per pool
+  worker — and an `asyncio.Lock` driven from several loops serializes nothing. The mirror
+  failure waited on the main thread, where `run_until_complete` on a *running* loop raises.
+  Neither ever fired because nothing reached the code. It is a plain synchronous TTL+LRU now;
+  do not reconnect it to `app/services/caching/`, which exists for values worth a network
+  round trip and is what made an in-memory memo look like it needed a loop.
 - **Reranking**: BGE-Reranker-V2-M3 (top 5 results)
-- **Dynamic Top-K**: A complexity-adaptive calculator exists (`app/retrievers/hybrid/adaptive_params.py`, effective range ~6-16 results) but applies only inside `candidate_collection.py`. The knowledge-node path used for ordinary chat queries hardcodes `top_k=6` per source (`app/agents/rag/service.py`), so `DYNAMIC_RETRIEVAL_ENABLED` and the `DYNAMIC_*_CAP` settings do not affect it.
+- **Retrieval width** (wired to the chat path 2026-08-31): how wide a search is now depends
+  on the question and on the plan, and both decisions live in `KnowledgeAgentService` —
+  the Agent shapes a search, the orchestrator executes it.
+
+  `app/knowledge/width.py` holds the one complexity definition (long query / comparison
+  wording / multiple question marks, 0-3) and two call sites scale different bases from it:
+  the Knowledge Agent grows `TOP_K` (4) and `RERANKER_TOP_N` (5), the legacy hybrid path
+  grows `VECTOR_TOP_K`/`BM25_TOP_K` (6). Keeping the bases apart matters — borrowing the
+  hybrid default would have widened every *simple* query too, which is a different decision
+  from making complex ones wider. It moved out of `app/retrievers/hybrid/adaptive_params.py`
+  because the Knowledge Agent must not import a retriever; `app/retrievers/hybrid/`
+  re-exports `adaptive_retrieval_params` under its old name.
+
+  Reranking widens with the search: `KnowledgeStrategy.rerank_top_n` (None means use the
+  setting) exists because feeding the reranker more candidates while holding its output
+  size fixed just discards the extra ones. Before this, `DYNAMIC_RETRIEVAL_ENABLED` and the
+  `DYNAMIC_*_CAP` settings only reached `candidate_collection.py`, which the chat path does
+  not use, so every source got a flat `TOP_K` however complex the question was.
+
+  **`TaskBudget.max_retrievals` bounds the source *count*, not the width.** The planner
+  derives it as 2 (the required local pair) + 1 for a hybrid route + 1 for web — a count of
+  retrieval calls, which is exactly the source list `_rule_strategy` builds. It used to be
+  summed, checked against `PLANNER_MAX_RETRIEVAL_BUDGET`, and dropped. The ceiling is now
+  spent in the planner's own order (required pair → sources the *route* hinted → keyword
+  matches): truncating in discovery order spent the web slot on `multimodal`, because the
+  keyword rules append `web` last. A plan totalling zero is a plan with no retrieval task
+  (a pure tool call), which is the absence of an instruction rather than an instruction to
+  search less, so the service ceiling stands.
 
 ### Configuration System
 
@@ -272,7 +628,8 @@ before treating any configured value as active.
 **Database**: SQLite only. Each store opens its own `sqlite3` connection
 (`app/services/auth/auth_service.py`, `app/services/sessions/history.py`,
 `app/services/sessions/metadata_db.py`, `app/services/prompts/store.py`,
-`app/wiki/store.py`, `app/retrievers/stores/vector.py`). There is no shared connection
+`app/wiki/store.py`, `app/retrievers/stores/vector.py`,
+`app/services/connectors/{metadata_repository,repository}.py`). There is no shared connection
 pool and no PostgreSQL support: an async SQLAlchemy pool existed but was never used by
 any business code and was removed on 2026-08-29, along with the `asyncpg`/`aiosqlite`
 dependencies and `DATABASE_URL`.
@@ -347,16 +704,83 @@ misled readers. The chat endpoint moved to `public/query.py`, the SSE endpoint t
 
 **Note**: The `app/agents/` directory name is historical - it houses components, not autonomous agents.
 
+### Frontend styling (adopted 2026-08-31)
+
+**New and changed UI is written in Tailwind; the 73 hand-written stylesheets are
+migrated as they are touched, never in bulk.** A wholesale rewrite would churn every
+file in the app to fix a problem that is mostly cosmetic, and would discard visual
+behaviour that was tuned against real screenshots.
+
+**The cascade has an order now**, declared once in `styles/main.css`:
+
+```
+theme      Tailwind's token layer
+legacy     the 73 hand-written stylesheets, being migrated away
+components component-local CSS imported from a .tsx
+design     core/elevation.css and core/surfaces.css
+utilities  Tailwind
+```
+
+This is the thing that makes incremental adoption possible at all. Before it, every
+hand-written sheet was *unlayered*, and unlayered rules beat every layer regardless of
+specificity — so a Tailwind class written in a component silently lost to the CSS it was
+meant to replace. That is why the codebase had four `tw:` class names against 1288
+`className` attributes, and why none of the four did anything.
+
+`styles/tailwind.css` is a stub: `@source` cannot be nested inside an import, so the
+Tailwind directives live at the root of `main.css`. Without `@source`, importing
+`tailwindcss/utilities.css` on its own emits **zero bytes** — `@import "tailwindcss"` is
+what normally carries source detection, and this project does not use that form.
+
+**Shape and depth come from a scale**, defined in `styles/core/elevation.css` and mirrored
+into `@theme` so they exist as utilities:
+
+| | token | utility |
+|---|---|---|
+| buttons, inputs, chips | `--shape-control` (8px) | `tw:rounded-control` |
+| cards, rows, panels | `--shape-card` (12px) | `tw:rounded-card` |
+| large containers, modals | `--shape-panel` (16px) | `tw:rounded-panel` |
+| badges, avatars | `--shape-pill` | `tw:rounded-pill` |
+| resting / hover / overlay | `--elev-1..3` | `tw:shadow-elev-1..3` |
+
+`npm run lint:design` is a **ratchet**, not a ban: `scripts/design-scale-baseline.json`
+freezes each file's current count of off-scale literals (135 radii, 194 shadows at the
+time of writing). A file may improve, never regress, and a new file starts at zero. Same
+shape as `KNOWN_OFFENDERS` on the Python side. Re-freeze with `--write` only for values
+that genuinely are not on the scale — a chart bar, a scrollbar thumb — and say why.
+
+**Variants belong to the component, not to a stylesheet.** `animatedButtonVariants.ts`
+exists because `groups.css` styled `.tiny-btn.danger` and `.tiny-btn.secondary`, class
+names nothing has ever emitted (the component produces `animated-btn-lite--danger`). The
+colour rule never matched, an unconditional white background above it did, and every
+Delete button rendered white on white — contrast 1.0, a blank rectangle beside every
+message, shipped and unnoticed. A `cva()` table makes the accepted values a type and the
+emitted classes a value; a template literal cannot be checked by anything. Its classes are
+still the hand-written ones on purpose — moving them to utilities is a later step that can
+happen one variant at a time inside that file, without touching a call site.
+
+**What this does not fix.** Of the eight defects found in this pass, tooling would have
+prevented five: the class-name drift, the eight competing radii, a `var(--primary)` that
+was never defined (transparent button, silent), the specificity fights, and missing
+`aria-expanded` / `aria-pressed`. It would not have prevented the two that cost the most
+time — a sidebar with `min-height: 100vh` and `overflow: auto` (an unbounded box cannot
+scroll, so the *document* scrolled instead) and a composer occupying 68% of a phone
+viewport. Those are a box-model reasoning error and a design judgement. Reach for the
+tooling for consistency and contracts; it buys nothing on either of those.
+
 ### Testing Strategy
 
 `tests/` was cleared ahead of the v0.7 rewrite and is being rebuilt incrementally: each bug
 fix lands with the regression test that would have caught it, rather than as a separate
-back-filling effort. As of 2026-08-30 there are 174 tests covering the chat round trip,
+back-filling effort. As of 2026-08-31 there are 430 tests covering the chat round trip,
 conversation context, graph routing, clarification, the async load guard, engine reuse,
-answer safety, retrieval module-global isolation, and a guard that every Settings field has
-a reader.
+answer safety, reader-facing citation numbering, stage-timeout degradation, the governed
+tool stack with its multi-step loop and approve-then-resume cycle, retrieval
+module-global isolation, connector persistence, streaming redaction, two-phase retrieval,
+complexity- and plan-driven retrieval width, caller deadlines, skill-shaped synthesis,
+follow-up completion, and a guard that every Settings field has a reader.
 
-`tests/security/` (112 of those) pins the user-data isolation invariants — see
+`tests/security/` (147 of those) pins the user-data isolation invariants — see
 `docs/superpowers/plans/2026-08-29-user-data-isolation.md`. That plan is complete
 (phases 0-4) and all 8 of its `xfail(strict=True)` markers are cleared; keep using the same
 pattern for a new gap, so a fix that makes the test pass fails the suite until the marker
@@ -368,14 +792,27 @@ It is currently empty.
 User questions must not reach the logs: `question_ref()`
 (`app/services/observability/log_safety.py`) gives a stable digest instead, and
 `tests/security/test_no_question_text_in_logs.py` enumerates every `logger.*` call via AST
-to keep it that way. Truncating (`question[:50]`) does not count as redaction.
+to keep it that way. Truncating (`question[:50]`) does not count as redaction. Its
+allowlist is keyed on `path::enclosing_function`; keying it on a line number made it
+fail on any edit *above* an exempt call, which trains readers to re-point the entry
+instead of asking whether a real leak appeared.
+
+`test_streaming_redaction.py` tests the property, not the examples: for eight secret shapes
+it asserts the streamed output equals the final redaction at *every* split offset, and that
+what was already emitted is always a prefix of the final redaction. A chunk boundary is the
+only thing that distinguishes streaming DLP from the batch kind, so a fixed set of chunk
+sizes would test the wrong thing.
 
 `pytest` is configured in `pyproject.toml` (`testpaths = ["tests"]`, strict asyncio mode).
 CI runs it on every push and pull request (`.github/workflows/ci.yml`), together with ruff
 and an OpenAPI endpoint census that fails if a refactor silently drops routers.
 
 The frontend has vitest tests too (`frontend/src/**/*.test.ts`, run by the `frontend` CI
-job). `storeReset.test.ts` covers the Zustand `reset()` that App.tsx calls on logout and on
+job). `pendingApproval.test.ts` pins that a governed action awaiting confirmation travels
+with the question that produced it: ChatPage first tracked the question in a ref every
+`ask` call site had to remember to set, and the clarification-complete path did not, so
+confirming after a clarified query would have re-sent a stale question.
+`storeReset.test.ts` covers the Zustand `reset()` that App.tsx calls on logout and on
 any identity change: the stores outlive a logout, so a field added to a store but forgotten
 in its `INITIAL_STATE` would show the next person on a shared browser the previous user's
 data. The test discovers fields rather than listing them, so it catches that drift.
@@ -390,12 +827,82 @@ varies by version. Count OpenAPI operations instead; the current baseline is 151
 - **Do not commit** files in `.gitignore`: `internal_docs/`, `.env`, `data/chroma/`, logs
 - **Document organization**: Use `docs/development/daily-logs/YYYY-MM-DD/` for daily work logs (create manually).
 - **Bilingual system**: UI and responses support Chinese/English. Language detection is automatic via `language_analytics.py` (100% Chinese or 100% English, no mixing)
-- **SSE streaming**: Execution-trace events are served by `app/api/routes/public/orchestration.py`
-  (`GET /api/v1/orchestration/executions/{execution_id}/events`). The query endpoint returns
-  `metadata.execution_id`, which the client uses to subscribe. The stream replays a finished
-  run's stage events; it is not a token-level answer stream.
+- **SSE streaming**: One subscription
+  (`GET /api/v1/orchestration/executions/{execution_id}/events`, served by
+  `app/api/routes/public/orchestration.py`) carries two event names. The query endpoint
+  returns `metadata.execution_id`, which the client uses to subscribe.
+  - `execution_event` — stage events, replayed from the tracker and `ExecutionEventStore`.
+  - `answer_fragment` — the answer as it is written (added 2026-08-31, audit #14b).
+    `SynthesizerAgentService._generate_streaming` publishes into the process-wide
+    `AnswerStreamStore` (`app/orchestration/answer_stream.py`), bound to the execution by a
+    ContextVar for the same reason the event store is: the engine is cached and shared, so
+    instance state would file one request's fragments under another's id.
+
+  **Fragments are a draft, and a separate event name so a client cannot mistake one for a
+  finished answer.** They carry no citation numbering and no reference list — `output_filter`
+  decides both, after the whole answer exists and after DLP has settled which citations
+  survive — and internal `[E{k}]` markers are stripped rather than rendered. The frontend
+  shows the draft in a `local-assistant-stream` bubble and replaces it with the answer from
+  the query response.
+
+  **Nothing unredacted may enter that store.** `StreamingRedactor`
+  (`app/privacy/streaming.py`) releases only text whose redaction cannot still change: it
+  holds back a margin, cuts at whitespace, and confirms `redact(raw[:b])` is still a prefix
+  of `redact(raw[:b + margin])` before releasing — a secret like `password = hunter2` begins
+  *before* a boundary and crosses it, so a margin at the tail alone is not enough. What was
+  emitted is tracked as a string rather than a length, because redaction changes lengths and
+  offset arithmetic desyncs. Both redaction pattern sets had their whitespace quantifiers
+  bounded (`\s*` → `\s{0,8}`) so a partial buffer cannot make a pattern scan unboundedly.
 - **Retry logic**: Retrieval retries retain their existing fallback policy; answer regeneration is capped at one retry per request
 - **Circuit breaker**: Opens after 5 consecutive failures, closes after 60s cooldown
+- **Stage timeouts and degradation** (reworked 2026-08-30): stage ceilings live in
+  `Settings.stage_timeout_*` (read by `TimeoutConfig.from_settings`), not in a module
+  constant. They bound a *hang*; they are not latency targets, which is why they sit well
+  above the P95 target above — the previous hardcoded values (a 2s router covering up to
+  three LLM calls, a 5s synthesis) fired on ordinary traffic. A tripped ceiling used to be
+  an unconditional 500; now `_run_stage(..., on_timeout=…)` supplies what the run continues
+  with, and the stage reports a `failed` event whose `failure_reason` reaches the caller
+  through `execution_metadata.workflow_diagnostics`. **`privacy_permission` and
+  `output_filter` deliberately have no `on_timeout`** — skipping scope resolution or output
+  DLP is a hole, not a degradation — and they are listed in
+  `timeout_control.MANDATORY_STAGES`, which exempts them from the total-budget gate so an
+  exhausted budget upstream cannot squeeze the output filter out.
+- **Caller deadlines** (wired 2026-08-31): `POST /api/advanced-rag/query` takes an optional
+  `timeout_ms`, which becomes `PipelineRequest.deadline_at` and reaches
+  `ExecutionBudget(config, deadline_at=…)`. It **narrows** `remaining_ms()` and never extends
+  it, so a deadline beyond `STAGE_TIMEOUT_TOTAL_MS` does nothing and a caller cannot pin a
+  worker by asking for an hour. The wire format is relative and the contract absolute on
+  purpose: two clocks need not agree, but a budget consumed across stages must not be
+  re-derived at each one. The offset is measured once and everything after it runs on
+  `perf_counter`, so an NTP correction cannot move a live request's budget; a naive datetime
+  is read as UTC. `MANDATORY_STAGES` still applies — an aggressive deadline is not a way to
+  buy out of scope resolution or output DLP. Before this the field was accepted, forwarded
+  through `PipelineRequest`, and read by nobody.
+
+  The same wiring opens `request_context` around the workflow, which is what
+  `app/services/runtime/request_context.py` exists for and what nothing on the request path
+  had ever set. Three helpers check that deadline themselves: the synthesizer's self-review
+  and fact-verification exits (both dormant), and `rule_rewrite._llm_rewrite`, which treats
+  `remaining_seconds() is None` as "no time left" — so `QUERY_REWRITE_WITH_LLM` was a switch
+  that could not turn anything on.
+- **Verifier retry affordability**: a retry replays knowledge + synthesis + verification
+  (`TimeoutConfig.retry_round_ms`). The verifier now downgrades `retry_retrieval` to
+  `degraded` when the remaining budget cannot fund all three, instead of starting a round
+  that the total-budget check kills — which turned a merely degraded answer into a failed
+  request.
+- **`ExecutionBudget.check_budget` had never fired** (fixed 2026-08-30): it tested
+  `has_budget()`, whose `required_ms=0` default reduces it to `remaining_ms() >= 0`, and
+  `remaining_ms` already clamps at 0. Exhaustion still surfaced, but as the next stage being
+  clamped to a 0ms ceiling and cancelled — which reads in a trace as "that stage was slow"
+  rather than "the request ran out of time".
+- **LLM request timeout**: `Settings.llm_request_timeout_seconds` is passed to the OpenAI and
+  Anthropic chat clients. Without it a hung provider connection pinned a pool thread for the
+  life of the process: an `asyncio` stage timeout unblocks the event loop but cannot cancel
+  the thread inside a blocking `invoke()`. `ChatOllama` takes no equivalent parameter and is
+  still uncapped.
+- **Per-source vs per-stage timeouts**: `RAGAgentService`'s per-source bound derives from
+  `KNOWLEDGE_SOURCE_TIMEOUT_MS` so it stays under `STAGE_TIMEOUT_RETRIEVAL_MS`. It used to be
+  a hardcoded 30s under a 10s stage ceiling, so the inner bound could never fire.
 - **Admin ops benchmark/replay corpus** (fixed 2026-08-30): `POST /admin/ops/benchmark/run` and
   `POST /admin/ops/replay/run` run their queries under the requesting admin's identity. They used to
   pass no actor at all, and every query died in the pipeline's first node — `privacy_permission`
@@ -413,6 +920,13 @@ varies by version. Count OpenAPI operations instead; the current baseline is 151
   a corpus-agnostic starter: it exercises pipeline latency and route branches, but grounding and
   citation numbers only mean something once the queries match documents actually in the corpus.
 - **Session management**: Frontend supports session rename and pin features (added 2026-08-16). See `docs/development/daily-logs/2026-08-16/` for implementation details.
+- **Clarification does not decide retrieval** (2026-08-30): missing fields ride on
+  `RouteDecision.clarification_fields`, not on a substitute `route="clarification"`.
+  The router used to return early with that route *before the LLM router ran*, and
+  its `allowed_capabilities={"rag"}` removed graph and web from every
+  comparison-shaped question -- which mattered most where it was least visible,
+  since interactive clarification cannot happen inside the pipeline and the run
+  continued with the original question on a route nothing had chosen for it.
 - **Clarification System** (added 2026-08-17, revised 2026-08-29): Dynamic clarification based on intent complexity, capped at 0-7 rounds depending on intent (`rag_design`: 7, `document_comparison`: 5, others: 5, already-complete: 0). Key services: `app/agents/clarification/service.py` and `rules.py`, wired as both the LangGraph `clarification` node and the resumable `/api/v1/clarification/check` HTTP endpoint (`app/api/routes/public/clarification.py`) — the two share one implementation. Questions exist in Chinese and English (`_QUESTIONS_ZH` / `_QUESTIONS_EN`), selected from `force_language` or the query's script. Inside the pipeline the clarifier has no collected context and therefore always asks; the node logs that and continues with the original query rather than failing the request — interactive clarification belongs to the HTTP endpoint.
 - **State management**: Frontend uses Zustand for global state, not Redux or Context API
 
