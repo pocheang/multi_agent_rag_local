@@ -1,0 +1,167 @@
+/* ============================================
+   Chat density and small-screen corrections
+
+   Loaded last so it can tighten what the feature stylesheets set, without
+   rewriting them. Everything here was measured rather than guessed:
+
+   - the composer took 313px of a 900px desktop viewport (35%) and 550px of an
+     812px phone viewport (68%), leaving the conversation less room than the
+     box used to ask for it;
+   - `.section-toggle-btn` is `position: fixed; bottom: 20px; right: 20px`,
+     which is exactly where the submit button is, so the two overlapped;
+   - below 680px `.composer-heading-row` switches to a column, making the
+     header *taller* on the screens with the least room;
+   - the keyboard hint advertised Ctrl / Cmd on devices with no such key.
+   ============================================ */
+
+/* --------------------------------------------
+   Vertical budget
+   -------------------------------------------- */
+
+.page-shell .composer-controls {
+  margin-top: 10px;
+}
+
+.page-shell .composer-hint {
+  margin-top: 6px;
+  padding: 2px 2px;
+  font-size: 12px;
+}
+
+.page-shell .quick-actions {
+  margin-top: 8px;
+}
+
+/* --------------------------------------------
+   The floating section toggle
+
+   Stacked under the overflow menu instead of pinned to the bottom-right
+   corner: the composer grows and shrinks with its content, so any fixed
+   bottom offset collides with it at some size. Icon-only, with the label
+   carried by `title`/`aria-label`, so it stays out of the way of the
+   conversation at every width.
+   -------------------------------------------- */
+
+.section-toggle-btn {
+  /* The same row as the overflow menu (which sits at top 16, right 16), not
+     below it: a second row would land on the conversation, and the reserved
+     top strip only covers one. */
+  top: 16px;
+  right: 72px;
+  bottom: auto;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 12px;
+  font-size: 18px;
+  overflow: hidden;
+}
+
+.section-toggle-btn > span:not(.icon) {
+  /* Visually hidden, still announced. */
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* --------------------------------------------
+   Reference lists
+
+   A citation URL is one unbroken token; without this it either overflows its
+   card or forces a horizontal scrollbar on the whole conversation.
+   -------------------------------------------- */
+
+.page-shell .bubble a,
+.page-shell .bubble li {
+  overflow-wrap: anywhere;
+}
+
+/* --------------------------------------------
+   Touch and small screens
+   -------------------------------------------- */
+
+@media (pointer: coarse) {
+  /* No Ctrl or Cmd key to press. */
+  .page-shell .btn-shortcut {
+    display: none;
+  }
+}
+
+@media (max-width: 768px) {
+  .page-shell .main {
+    /* The top strip is reserved for the two floating buttons. Padding on the
+       scroll container itself does not work: it scrolls away with the content,
+       so message text still passed under the buttons on the way up. */
+    padding: 68px 12px calc(8px + env(safe-area-inset-bottom, 0px));
+  }
+
+  .page-shell .composer-panel {
+    padding: 10px 12px;
+    border-radius: 14px;
+  }
+
+  /* The label repeats the textarea's own placeholder, and the drag-and-drop
+     hint beside it describes an interaction a touch screen does not have.
+     Both are restored above this breakpoint. */
+  .page-shell .composer-heading-row,
+  .page-shell .composer-hint {
+    display: none;
+  }
+
+  .page-shell .composer-main {
+    gap: 8px;
+  }
+
+  .page-shell .composer-controls {
+    margin-top: 8px;
+    gap: 8px;
+  }
+
+  /* One scrolling row rather than a wrapping block: wrapped chips grew the
+     composer by a line for every extra suggestion. */
+  .page-shell .quick-actions {
+    margin-top: 8px;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    scrollbar-width: none;
+    padding-bottom: 2px;
+  }
+
+  .page-shell .quick-actions::-webkit-scrollbar {
+    display: none;
+  }
+
+  .page-shell .quick-action-btn {
+    flex: none;
+    white-space: nowrap;
+  }
+
+  /* Still a comfortable touch target; it was 58px. */
+  .page-shell .composer-controls > button {
+    min-height: 46px;
+  }
+
+  .page-shell .composer-panel textarea {
+    min-height: 64px;
+  }
+
+}
+
+@media (max-width: 768px) and (max-height: 700px) {
+  /* Landscape phones: the conversation is what is scarce here. */
+  .page-shell .quick-actions {
+    display: none;
+  }
+
+  .page-shell .composer-panel textarea {
+    min-height: 48px;
+  }
+}

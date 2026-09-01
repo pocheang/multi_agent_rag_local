@@ -1,0 +1,199 @@
+/* ============================================
+   Light theme - contrast corrections
+
+   A WCAG audit of the rendered page found 75 text nodes below the AA
+   threshold of 4.5:1, and they share one cause. The feature stylesheets were
+   written against dark surfaces -- `citations.css` paints its card
+   `rgba(15, 23, 42, 0.95)`, `composer/layout.css` paints a near-black
+   gradient -- and the light theme replaced those backgrounds without
+   replacing the foreground colours that had been chosen to sit on them. Pale
+   blue on near-black reads; the same pale blue on pale blue does not.
+
+   Values here are stated as ratios against the surface they actually land on,
+   measured rather than assumed. `--chat-*` is this theme's own vocabulary.
+   ============================================ */
+
+:root[data-theme="light"] .page-shell {
+  /* #94A3B8 on white is 2.56:1 -- a placeholder weight being used for
+     timestamps, role labels and status text. #64748B is 4.76:1. The paler
+     value stays available as `--chat-text-faint` for genuine placeholders,
+     where the contrast minimum does not apply. */
+  --chat-text-muted: #64748b;
+  --chat-text-faint: #94a3b8;
+
+  /* #3B82F6 on white is 3.68:1. Links are body-size text and need AA. */
+  --chat-link: #1d4ed8;
+  --chat-link-hover: #1e40af;
+}
+
+/* --------------------------------------------
+   Citations
+
+   `[1] https://…` markers were #93bbff on a #F2F6FF panel: 1.80:1, which is
+   why the reference list looked like it was fading out.
+   -------------------------------------------- */
+
+:root[data-theme="light"] .page-shell .citation-card strong {
+  color: #1e3a8a;
+}
+
+:root[data-theme="light"] .page-shell .citation-card .markdown a,
+:root[data-theme="light"] .page-shell .bubble .markdown a {
+  color: var(--chat-link);
+}
+
+:root[data-theme="light"] .page-shell .citation-card .markdown a:hover,
+:root[data-theme="light"] .page-shell .bubble .markdown a:hover {
+  color: var(--chat-link-hover);
+  border-bottom-color: currentColor;
+}
+
+/* --------------------------------------------
+   Sidebar
+
+   All of these inherited the dark theme's muted tone.
+   -------------------------------------------- */
+
+:root[data-theme="light"] .page-shell .session-meta,
+:root[data-theme="light"] .page-shell .sidebar-user-role,
+:root[data-theme="light"] .page-shell .muted,
+:root[data-theme="light"] .page-shell .sidebar-module-status,
+:root[data-theme="light"] .page-shell .sidebar-group-action,
+:root[data-theme="light"] .page-shell .composer-drop-hint {
+  color: var(--chat-text-muted);
+}
+
+/* #5B8CFF on #F8FAFC is 3.02:1, and this is a 9px uppercase label -- the size
+   where contrast matters most, not least. */
+:root[data-theme="light"] .page-shell .sidebar-brand-kicker {
+  color: #4338ca;
+}
+
+:root[data-theme="light"] .page-shell .session-create-icon {
+  color: #1d4ed8;
+}
+
+/* White on #3B82F6 is 3.68:1. A darker fill carries white text at 11px. */
+:root[data-theme="light"] .page-shell .session-count {
+  background: #1d4ed8;
+  color: #ffffff;
+}
+
+/* --------------------------------------------
+   Placeholders keep the pale tone deliberately
+
+   A placeholder is a hint about an empty field, not content, and darkening it
+   makes an empty input look filled.
+   -------------------------------------------- */
+
+:root[data-theme="light"] .page-shell .composer-panel textarea::placeholder,
+:root[data-theme="light"] .page-shell input::placeholder {
+  color: var(--chat-text-faint);
+}
+
+/* --------------------------------------------
+   Second pass
+
+   The first pass took 75 failures to 21. What remained were near-misses on
+   *tinted* surfaces -- #64748B clears 4.5 on white but only reaches 4.07 on
+   the lavender chip backgrounds -- plus three elements the first selectors
+   did not reach.
+   -------------------------------------------- */
+
+:root[data-theme="light"] .page-shell {
+  /* Clears AA on white (7.5:1) and on the tinted chips (6.3:1) alike, so one
+     value is correct on every surface it lands on rather than on most. */
+  --chat-text-muted: #475569;
+}
+
+/* `--primary` is not a token this project defines, so the button's declared
+   background resolved to nothing: a transparent box with `color: white` on a
+   near-white page. Only the emoji was ever visible. Matched to the overflow
+   menu it now sits beside. */
+.section-toggle-btn {
+  background: rgba(30, 41, 59, 0.95);
+  color: #ffffff;
+  border: 1px solid rgba(148, 163, 184, 0.3);
+  backdrop-filter: blur(12px);
+  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.28);
+}
+
+.section-toggle-btn:hover {
+  background: rgba(30, 41, 59, 1);
+}
+
+/* The active session carries a higher-specificity rule of its own, so the
+   badge has to be corrected in both states or the selected row keeps the
+   3.68:1 fill. */
+:root[data-theme="light"] .page-shell .session-count,
+:root[data-theme="light"] .page-shell .session-item.active .session-count,
+:root[data-theme="light"] .page-shell .session-item:hover .session-count {
+  background: #1d4ed8;
+  color: #ffffff;
+}
+
+/* Bare spans inside the workbench cards -- no class to target, so they are
+   reached through the card. */
+:root[data-theme="light"] .page-shell .pdf-kpi-card span,
+:root[data-theme="light"] .page-shell .sidebar-module-card span {
+  color: var(--chat-text-muted);
+}
+
+/* #6366F1 on #EEF2FF is 3.99:1. */
+:root[data-theme="light"] .page-shell .sidebar-module-card strong,
+:root[data-theme="light"] .page-shell .mode-card strong {
+  color: #3730a3;
+}
+
+/* --------------------------------------------
+   Third pass: the last of them, by real class name
+
+   `.sidebar-module-status` did not pick up the token because its own rule
+   hardcodes a colour; `Sessions` / `Workbench` are unclassed spans inside
+   `.sidebar-group-title`; `Auto Router` sits in `.agent-mode-card`, not the
+   module card the second pass guessed at. Selectors read off the live DOM
+   rather than inferred from the markup.
+   -------------------------------------------- */
+
+:root[data-theme="light"] .page-shell .sidebar-group-title,
+:root[data-theme="light"] .page-shell .sidebar-group-title span {
+  color: var(--chat-text-muted);
+}
+
+:root[data-theme="light"] .page-shell .sidebar-module-status,
+:root[data-theme="light"] .page-shell .sidebar-module-toggle .sidebar-module-status {
+  color: #334155;
+}
+
+:root[data-theme="light"] .page-shell .agent-mode-card strong {
+  color: #3730a3;
+}
+
+:root[data-theme="light"] .page-shell .session-create-icon {
+  color: #1e3a8a;
+}
+
+/* --------------------------------------------
+   Fourth pass: state selectors and the suggestion chips
+
+   `.agent-mode-card.active` and `.session-create-btn:hover` carry their own
+   colours at a higher specificity than the element selectors above, so the
+   corrected value has to name the state too. The quick-action chips sit at
+   4.34 -- readable, but below AA at 12.5px.
+   -------------------------------------------- */
+
+:root[data-theme="light"] .page-shell .agent-mode-card strong,
+:root[data-theme="light"] .page-shell .agent-mode-card.active strong,
+:root[data-theme="light"] .page-shell .agent-mode-card.active span {
+  color: #312e81;
+}
+
+:root[data-theme="light"] .page-shell .session-create-btn .session-create-icon,
+:root[data-theme="light"] .page-shell .session-create-btn:hover .session-create-icon {
+  color: #172554;
+}
+
+:root[data-theme="light"] .page-shell .quick-action-btn,
+:root[data-theme="light"] .page-shell .quick-actions .animated-btn-lite {
+  color: #334155;
+}

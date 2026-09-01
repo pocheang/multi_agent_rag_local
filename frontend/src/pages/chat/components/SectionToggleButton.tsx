@@ -14,6 +14,8 @@ export function SectionToggleButton({ sectionsHidden, onToggle }: Props) {
       className="section-toggle-btn"
       onClick={onToggle}
       title={sectionsHidden ? t("components.chat.showSections") : t("components.chat.hideSections")}
+      aria-label={sectionsHidden ? t("components.chat.showSections") : t("components.chat.hideSections")}
+      aria-pressed={sectionsHidden}
     >
       <span className="icon" aria-hidden="true">
         {sectionsHidden ? "👁️" : "🙈"}

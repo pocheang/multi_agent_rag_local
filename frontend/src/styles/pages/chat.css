@@ -5,7 +5,11 @@
 .page-shell {
   display: grid;
   grid-template-columns: 280px 1fr;
-  min-height: 100vh;
+  /* Exactly the viewport, not at least it: the shell is a frame, and the only
+     thing inside it that scrolls is the message list. */
+  height: 100vh;
+  height: 100dvh;
+  overflow: hidden;
   background: var(--bg);
   position: relative;
 }
@@ -116,8 +120,8 @@
 .page-shell .main {
   position: sticky;
   top: 0;
-  height: 100vh;
-  max-height: 100vh;
+  height: 100dvh;
+  max-height: 100dvh;
   padding: 16px 24px;
   display: flex;
   flex-direction: column;

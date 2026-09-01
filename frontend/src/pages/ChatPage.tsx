@@ -4,6 +4,7 @@ import {
   type AgentClassHint,
 } from "@/pages/chat/constants";
 import type { Props } from "@/pages/chat/types";
+import type { PendingApproval } from "@/types/api";
 import { useChatStore } from "@/stores/useChatStore";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { PromptDialog } from "@/components/PromptDialog";
@@ -40,6 +41,15 @@ import "@/styles/pages/chat-entry.css";
 
 export function ChatPage({ user, onLogout, onUserRefresh }: Props) {
   const [executionId, setExecutionId] = useState<string | null>(null);
+  // A governed action the last run produced but did not perform, paired with the
+  // question that produced it: confirming re-sends that question with the
+  // approved token, which is the run that actually executes the action. The pair
+  // arrives together from the run itself, so no `ask` call site has to remember
+  // to record it.
+  const [pendingApproval, setPendingApproval] = useState<{
+    approval: PendingApproval;
+    question: string;
+  } | null>(null);
   const [sessionManagementOpen, setSessionManagementOpen] = useState(false);
   const permissionUser: UserIdentity | null = user;
   const { sectionsHidden, toggleSections } = useSectionToggle();
@@ -163,6 +173,8 @@ export function ChatPage({ user, onLogout, onUserRefresh }: Props) {
     setQuestion,
     onExecutionId: setExecutionId,
     onCreditsChanged: onUserRefresh,
+    onPendingApproval: (approval, question) =>
+      setPendingApproval(approval ? { approval, question } : null),
   });
 
   // Clarification logic extracted to custom hook
@@ -347,7 +359,40 @@ export function ChatPage({ user, onLogout, onUserRefresh }: Props) {
             onNavigateToArchitecture={() => window.location.href = '/app/architecture'}
           />
 
-          <ChatRuntimePanels executionId={executionId} />
+          <ChatRuntimePanels
+            executionId={executionId}
+            pendingApproval={pendingApproval?.approval ?? null}
+            onApproved={async (token) => {
+              const question = pendingApproval?.question;
+              setPendingApproval(null);
+              if (!question) return;
+              await messageActions.ask({
+                question,
+                isSending: false,
+                sessionId: currentSessionId || undefined,
+                approvalToken: token,
+              });
+            }}
+            onDismissApproval={() => setPendingApproval(null)}
+            onDraft={(text) => {
+              if (!text) return;
+              // Only the in-flight bubble; the completed message keeps whatever
+              // the query response settled on.
+              setMessages((prev) => {
+                const index = prev.findIndex(
+                  (message) => message.message_id === "local-assistant-stream" && !message.content,
+                );
+                // Returning `prev` unchanged lets React bail out of the render.
+                // Mapping unconditionally builds a new array every time, so
+                // every fragment re-rendered the whole message list even when
+                // there was no streaming bubble to write into.
+                if (index === -1) return prev;
+                const next = [...prev];
+                next[index] = { ...next[index], content: text };
+                return next;
+              });
+            }}
+          />
 
           {clarification && clarification.action === "NEED_CLARIFICATION" && clarification.clarification && (
             <ClarificationPrompt

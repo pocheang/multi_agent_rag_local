@@ -14,7 +14,29 @@
 .page-shell .sidebar {
   display: flex;
   flex-direction: column;
-  min-height: 100vh;
+  /* Bounded, not `min-height`. The sidebar already asks for `overflow-y: auto`,
+     but overflow only scrolls a box whose height is constrained -- with
+     `min-height` it simply grew to fit its content (1685px against a 900px
+     viewport), stretched the grid row, and made the *document* scroll instead
+     of the message list. The sessions list then scrolled off the top of the
+     window along with everything else.
+
+     `100dvh` rather than `100vh`: on mobile browsers the URL bar makes `vh`
+     taller than what is actually visible, which is exactly how a fixed drawer
+     ends up with its footer under the chrome. */
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  height: 100dvh;
+  max-height: 100dvh;
+  overflow: hidden;
+}
+
+/* The one scroller inside the sidebar; the sidebar itself must not scroll, or
+   the brand header and account footer scroll away with the session list. */
+.page-shell .sidebar-shell {
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
 .page-shell .sidebar-shell {
