@@ -710,6 +710,11 @@ process environment, which for a deployment means `environment:` in
 | `NACOS_TIMEOUT_MS` | `3000` | per fetch |
 | `NACOS_POLL_INTERVAL_MS` | `30000` | how long a console edit takes to reach a running process |
 
+`scripts/create_admin.py` creates the local development administrator, because until
+2026-09-01 there was no account with the `admin` role at all and the admin surface could not
+be opened by anyone. It is a fixture: the password comes from `ADMIN_PASSWORD` or is
+generated and printed once, and is never written to a file in the repository.
+
 `scripts/verify_config_centre.py` drives the **real** SDK against a stub server with no
 container, and is the thing to run after touching the adapter or bumping the pin: a fake
 client answers whatever shape it is asked for, so the unit tests cannot catch this

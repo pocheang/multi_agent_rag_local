@@ -20,11 +20,18 @@ import type { ConfigField } from "@/types/api";
  * is only a convenience: the browser is not where that rule can be enforced.
  */
 
+/**
+ * Measured in the browser rather than chosen by eye. `--text-tertiary` on
+ * `--bg-tertiary` is 2.56:1 -- below the 4.5:1 small text needs -- and
+ * `--bg-tertiary` is pure white in the light theme, so the pill was invisible
+ * against the row. This column is the reason the page exists; it cannot be the
+ * hardest thing on it to read.
+ */
 const LAYER_STYLES: Record<ConfigField["layer"], string> = {
   environment: "tw:bg-warning-light tw:text-warning",
   "config-centre": "tw:bg-accent-soft tw:text-accent",
-  "runtime-file": "tw:bg-bg-tertiary tw:text-text-secondary",
-  default: "tw:bg-bg-tertiary tw:text-text-tertiary",
+  "runtime-file": "tw:bg-bg-secondary tw:text-text-secondary tw:border tw:border-border-light",
+  default: "tw:bg-bg-secondary tw:text-text-secondary tw:border tw:border-border-light",
 };
 
 function asInputValue(value: ConfigField["value"]): string {
