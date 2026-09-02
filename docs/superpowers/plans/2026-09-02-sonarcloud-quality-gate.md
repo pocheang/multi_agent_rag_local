@@ -4,20 +4,38 @@
 SonarCloud 上 revision `5e60933`（当前 HEAD，分析时间 2026-09-02 05:58 UTC）的真实数据重写。
 第一版有一条结论是错的，见第 5 节。
 
-## 0.0 执行进度（2026-09-02，分支 `fix/sonar-step-1`）
+## 0.0 执行进度（2026-09-02，已并入 main）
+
+**两个评级都到 B 了**（`75bfbeff` 的分析）。新代码只剩 7 条 LOW bug 和 4 条 LOW vulnerability，
+全部是 LOW——这正是 B 的定义。Gate 仍是 ERROR，因为它要求 A。
 
 | 步骤 | 状态 | commit |
 |---|---|---|
-| 第 1 步：`main.css` / `.sort()` / 两处 `usedforsecurity` | 完成 | `28818595` |
-| 第 2 步：供应链 `--only-binary` / `--ignore-scripts` | 完成 | `f2d44a10` |
+| 第 1 步：`main.css` / `.sort()` / 两处 `usedforsecurity` | 完成，D → C | `28818595` |
+| 第 2 步：供应链 `--only-binary` / `--ignore-scripts` | 完成 | `f2d44a10` `816871a9` `95d26228` |
 | 第 3 步：日志与输入收窄 | 完成 | `3cca16db` `d3c6ccd9` |
-| 第 4 步：Sonar 裁决 | **未开始**，需要 SonarCloud 权限 |
-| 第 5 步：`typescript:S1082` × 7 的 a11y 决定 | **未决定** |
+| C → B：float 比较、自比较断言、`_resolve_query_file` | 完成，Reliability → B | `73795eff` |
+| C → B：依赖锁 | 完成，Security → B | `80e3676f` `75bfbeff` |
+| 第 4 步：Sonar 裁决（剩 11 条 LOW） | **未开始**，需要 SonarCloud 权限 |
+| 第 5 步：`typescript:S1082` × 7 的 a11y 决定 | **未决定**，B 与 A 之间只剩它 |
 | New Code 基线 | **未改**，需要 SonarCloud 界面 |
 
-第 3 步的产出超出了原计划，因为读代码读出了两件计划里没有的事：那套 CSRF 是空转的（见第 3 节
-`S2245`），以及 `legacy_service.py` 没有任何消费者（见第 4 节 `S2083`）。两个模块连同它们的
-`Settings` 字段一起删了。
+**做出来的东西超出了原计划，因为读代码读出了计划里没有的事**：那套 CSRF 是空转的（第 3 节
+`S2245`）、`legacy_service.py` 没有任何消费者（第 4 节 `S2083`）、CI 的 editable 安装是多余的
+（第 3 节供应链）。三样连同它们的 `Settings` 字段一起删了。
+
+**这一轮 CI 挂了三次，三次的教训是同一个**：
+
+1. workflow YAML 没引号，`: ` 让 GitHub 读不了文件——**CI 一个 job 都没跑**，而 run 显示成
+   `failure`，看上去像测试挂了。守卫：`tests/core/test_ci_workflow_is_loadable.py`。
+2. `jieba` 没有 wheel，`--only-binary :all:` 装不上。我之前说"验证过"，但那是在一个**已经装满依赖
+   的环境**里跑 dry-run，pip 全程回答 already satisfied，从没去找过分发包。
+3. `forbiddenfruit`（`blockbuster` 的依赖）也没有 wheel——**同一个问题的第二个实例，又用一次红色
+   构建才发现**。守卫：`scripts/check_lock_wheels.py` 一次问完整个锁，`make lock` 会跑它。
+
+写那个脚本本身还有第四个教训：第一版精确匹配解释器 tag，报出九个"没有 wheel"的包，其中七个是错的
+——stable ABI 的 wheel 声明的是**最低**解释器（`cp39-abi3` 在 3.11 上能装）。九个看起来都合理的答案，
+七个是错的，而照着改会把 `--no-binary` 扩大到半棵依赖树。
 
 ## 0. 线上实况
 
