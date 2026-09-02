@@ -143,8 +143,8 @@ class QueryDecomposer:
             logger.info(f"Decomposed into {len(sub_queries)} sub-queries: {sub_queries}")
             return sub_queries
 
-        except Exception as e:
-            logger.error(f"Error decomposing query: {e}")
+        except Exception:
+            logger.exception("Error decomposing query")
             return [query]
 
     def _parse_sub_queries(self, response: str) -> list[str]:

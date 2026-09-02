@@ -90,7 +90,7 @@ def classify_intent_with_llm(question: str) -> dict:
         logger.warning("Failed to extract JSON from LLM response: %s", question_ref(content))
         return _fallback_classification(question)
     except Exception as error:
-        logger.error(f"LLM intent classification failed: {error}", exc_info=True)
+        logger.exception(f"LLM intent classification failed: {error}")
         return _fallback_classification(question)
 
 

@@ -288,7 +288,7 @@ def reset_vector_store_from_records(records: list[dict]):
         except (RuntimeError, ValueError) as e:
             logger.warning(f"vector_store_reset_delete_failed: {e}", exc_info=True)
         except Exception as e:
-            logger.error(f"Unexpected error deleting vector store collection: {e}", exc_info=True)
+            logger.exception(f"Unexpected error deleting vector store collection: {e}")
         _get_vector_store_cached.cache_clear()
         store = get_vector_store()
         documents = [

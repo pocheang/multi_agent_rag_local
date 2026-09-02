@@ -102,7 +102,7 @@ class WebActivityDataManager:
                 "backup_size": backup_path.stat().st_size,
             }
         except Exception as e:
-            logger.error(f"Backup failed: {e}")
+            logger.exception("Backup failed")
             return {"success": False, "message": str(e), "file_count": 0}
 
     def archive_old_logs(self, days: int = 30) -> dict:
@@ -151,7 +151,7 @@ class WebActivityDataManager:
             except ValueError:
                 logger.warning(f"Skip file with invalid date format: {log_file}")
             except Exception as e:
-                logger.error(f"Failed to archive {log_file}: {e}")
+                logger.exception(f"Failed to archive {log_file}")
                 failed_files.append({"file": str(log_file), "error": str(e)})
 
         return {
@@ -192,7 +192,7 @@ class WebActivityDataManager:
             except ValueError:
                 pass
             except Exception as e:
-                logger.error(f"Failed to delete {log_file}: {e}")
+                logger.exception(f"Failed to delete {log_file}")
                 failed_files.append({"file": str(log_file), "error": str(e)})
 
         # 清理归档文件
@@ -209,7 +209,7 @@ class WebActivityDataManager:
             except ValueError:
                 pass
             except Exception as e:
-                logger.error(f"Failed to delete {archive_file}: {e}")
+                logger.exception(f"Failed to delete {archive_file}")
                 failed_files.append({"file": str(archive_file), "error": str(e)})
 
         return {
@@ -247,7 +247,7 @@ class WebActivityDataManager:
                     logger.info(f"Deleted backup: {backup_file.name}")
 
             except Exception as e:
-                logger.error(f"Failed to delete backup {backup_file}: {e}")
+                logger.exception(f"Failed to delete backup {backup_file}")
                 failed_backups.append({"file": str(backup_file), "error": str(e)})
 
         return {
@@ -287,7 +287,7 @@ class WebActivityDataManager:
             return {"success": True, "restored_count": len(restored_files), "files": restored_files}
 
         except Exception as e:
-            logger.error(f"Restore failed: {e}")
+            logger.exception("Restore failed")
             return {"success": False, "message": str(e)}
 
     def get_storage_info(self) -> dict:

@@ -515,7 +515,7 @@ class AgentExecutionTracker:
                 logger.info("Cleanup task cancelled")
                 raise
             except Exception as e:
-                logger.error(f"Error in cleanup loop: {e}", exc_info=True)
+                logger.exception(f"Error in cleanup loop: {e}")
 
     async def stop_periodic_cleanup(self) -> None:
         """Stop background cleanup task."""

@@ -15,7 +15,7 @@ def load_pdf_text(path: Path) -> list[Document]:
         loader = PyPDFLoader(str(path))
         return loader.load()
     except Exception as e:
-        logger.error(f"PyPDF loading failed for {path.name}: {e}", exc_info=True)
+        logger.exception(f"PyPDF loading failed for {path.name}: {e}")
         return []
 
 
@@ -57,7 +57,7 @@ def load_pdf_enhanced(
         logger.warning("Enhanced loader not available (%s); falling back to docling without cleaning", e)
         return load_pdf_with_docling(path, by_page)
     except Exception as e:
-        logger.error(f"Enhanced loading failed for {path.name}: {e}", exc_info=True)
+        logger.exception(f"Enhanced loading failed for {path.name}: {e}")
         logger.warning("Falling back to docling for %s; cleaning and table merging will not run", path.name)
         return load_pdf_with_docling(path, by_page)
 
@@ -107,7 +107,7 @@ def load_pdf_with_docling(path: Path, by_page: bool = True) -> list[Document]:
             logger.warning(f"No content extracted from {path.name} using Docling")
         return docs
     except Exception as e:
-        logger.error(f"Docling conversion failed for {path.name}: {e}", exc_info=True)
+        logger.exception(f"Docling conversion failed for {path.name}: {e}")
         return []
 
 

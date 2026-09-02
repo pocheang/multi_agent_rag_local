@@ -50,8 +50,8 @@ class TableExtractor:
 
             logger.info(f"Extracted {len(tables)} tables from {pdf_path.name}")
 
-        except Exception as e:
-            logger.error(f"Error extracting tables from {pdf_path}: {e}")
+        except Exception:
+            logger.exception(f"Error extracting tables from {pdf_path}")
             raise
 
         return tables
@@ -108,15 +108,15 @@ class TableExtractor:
 
                             tables.append(table_content)
 
-                        except Exception as e:
-                            logger.error(f"Error processing table {table_index} on page {page_num}: {e}")
+                        except Exception:
+                            logger.exception(f"Error processing table {table_index} on page {page_num}")
                             continue
 
         except ImportError:
-            logger.error("pdfplumber not installed. Install with: pip install pdfplumber")
+            logger.exception("pdfplumber not installed. Install with: pip install pdfplumber")
             raise
-        except Exception as e:
-            logger.error(f"pdfplumber extraction error: {e}")
+        except Exception:
+            logger.exception("pdfplumber extraction error")
             raise
 
         return tables
@@ -176,12 +176,12 @@ class TableExtractor:
 
                             tables.append(table_content)
 
-                        except Exception as e:
-                            logger.error(f"Error processing table {table_index} on page {page_num + 1}: {e}")
+                        except Exception:
+                            logger.exception(f"Error processing table {table_index} on page {page_num + 1}")
                             continue
 
         except Exception as e:
-            logger.error(f"PyMuPDF extraction error: {e}", exc_info=True)
+            logger.exception(f"PyMuPDF extraction error: {e}")
             raise
 
         return tables
@@ -249,8 +249,8 @@ class TableExtractor:
 
             return " ".join(summary_parts)
 
-        except Exception as e:
-            logger.error(f"Error generating table summary: {e}")
+        except Exception:
+            logger.exception("Error generating table summary")
             return f"Table with {len(df)} rows and {len(df.columns)} columns."
 
     def parse_table_to_dataframe(self, table: TableContent) -> pd.DataFrame:
@@ -276,8 +276,8 @@ class TableExtractor:
         try:
             df = self.parse_table_to_dataframe(table)
             return df.to_markdown(index=False)
-        except Exception as e:
-            logger.error(f"Error formatting table as markdown: {e}")
+        except Exception:
+            logger.exception("Error formatting table as markdown")
             return f"[Table {table.table_id} on page {table.page_number}]"
 
     def format_table_as_text(self, table: TableContent, max_rows: int = 10) -> str:
@@ -308,8 +308,8 @@ class TableExtractor:
 
             return "\n".join(lines)
 
-        except Exception as e:
-            logger.error(f"Error formatting table as text: {e}")
+        except Exception:
+            logger.exception("Error formatting table as text")
             return f"[Table {table.table_id}]"
 
     async def index_table(self, table: TableContent, collection_name: str = "table_summaries") -> None:
@@ -349,8 +349,8 @@ class TableExtractor:
 
             logger.info(f"Indexed table {table.table_id} in collection {collection_name}")
 
-        except Exception as e:
-            logger.error(f"Error indexing table {table.table_id}: {e}")
+        except Exception:
+            logger.exception(f"Error indexing table {table.table_id}")
             raise
 
     async def extract_tables_batch(
@@ -374,8 +374,8 @@ class TableExtractor:
             try:
                 tables = await self.extract_tables_from_pdf(pdf_path, doc_id)
                 results[doc_id] = tables
-            except Exception as e:
-                logger.error(f"Error extracting tables from {pdf_path}: {e}")
+            except Exception:
+                logger.exception(f"Error extracting tables from {pdf_path}")
                 results[doc_id] = []
 
         return results

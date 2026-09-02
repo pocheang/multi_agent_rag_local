@@ -98,7 +98,7 @@ def decrypt_api_settings_payload(payload: dict[str, Any], key: bytes, audit_logg
         out["api_key"] = ""
     except Exception as e:
         # Unexpected decryption error
-        logger.error(f"Unexpected error decrypting API key: {e}")
+        logger.exception("Unexpected error decrypting API key")
         if audit_logger:
             try:
                 audit_logger.log(

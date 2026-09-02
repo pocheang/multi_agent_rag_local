@@ -93,7 +93,7 @@ def extract_charts_from_pdf(path: Path, use_vision: bool = True, vision_model: s
                     docs.append(doc)
 
     except Exception as e:
-        logger.error(f"PDF chart extraction failed for {path.name}: {e}", exc_info=True)
+        logger.exception(f"PDF chart extraction failed for {path.name}: {e}")
         return docs
 
     return docs

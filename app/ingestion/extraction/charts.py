@@ -61,7 +61,7 @@ def _resize_image_if_needed(image_bytes: bytes, max_size_bytes: int = MAX_IMAGE_
         return resized_bytes
 
     except Exception as e:
-        logger.error(f"Image resize failed: {e}", exc_info=True)
+        logger.exception(f"Image resize failed: {e}")
         # Return original if resize fails
         return image_bytes
 
@@ -103,8 +103,8 @@ def detect_chart_in_image(image_bytes: bytes) -> dict[str, any]:
         # In production, use a trained model
         return {"is_chart": True, "chart_type": "unknown", "confidence": 0.6, "width": width, "height": height}
 
-    except Exception as e:
-        logger.error(f"Chart detection failed: {e}")
+    except Exception:
+        logger.exception("Chart detection failed")
         return {"is_chart": False, "chart_type": None, "confidence": 0.0}
 
 
@@ -139,7 +139,7 @@ def extract_chart_data_with_vision(
             return {"error": f"Unsupported model: {model}"}
 
     except Exception as e:
-        logger.error(f"Chart extraction failed: {e}", exc_info=True)
+        logger.exception(f"Chart extraction failed: {e}")
         return {"error": str(e)}
 
 
@@ -248,10 +248,10 @@ Format your response as JSON:
             return {"description": content, "raw_response": True}
 
     except ImportError:
-        logger.error("OpenAI library not installed")
+        logger.exception("OpenAI library not installed")
         return {"error": "OpenAI library not installed"}
     except Exception as e:
-        logger.error(f"OpenAI extraction failed: {e}", exc_info=True)
+        logger.exception(f"OpenAI extraction failed: {e}")
         return {"error": str(e)}
 
 
@@ -309,10 +309,10 @@ Format your response as JSON."""
             return {"description": content, "raw_response": True}
 
     except ImportError:
-        logger.error("Anthropic library not installed")
+        logger.exception("Anthropic library not installed")
         return {"error": "Anthropic library not installed"}
     except Exception as e:
-        logger.error(f"Anthropic extraction failed: {e}", exc_info=True)
+        logger.exception(f"Anthropic extraction failed: {e}")
         return {"error": str(e)}
 
 

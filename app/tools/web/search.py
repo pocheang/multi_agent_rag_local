@@ -89,7 +89,7 @@ def search_web(query: str, max_results: int = 5, timeout: int = 10) -> list[dict
                 )
         logger.debug("Web search returned %d results for %s", len(results), question_ref(query))
     except Exception as e:
-        logger.error(f"Web search failed: {type(e).__name__}: {str(e)}")
+        logger.exception(f"Web search failed: {type(e).__name__}: {str(e)}")
         raise
 
     return results

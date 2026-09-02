@@ -84,8 +84,8 @@ class ChartAnalyzer:
             logger.info(f"Analyzed chart {chart_id}: {chart_type}")
             return chart_content
 
-        except Exception as e:
-            logger.error(f"Error analyzing chart from {image.image_id}: {e}")
+        except Exception:
+            logger.exception(f"Error analyzing chart from {image.image_id}")
             return None
 
     async def _is_chart_image(self, image: ImageContent) -> bool:
@@ -161,8 +161,8 @@ class ChartAnalyzer:
 
             return description
 
-        except Exception as e:
-            logger.error(f"Error generating chart description: {e}")
+        except Exception:
+            logger.exception("Error generating chart description")
             return image.description  # Fallback to existing description
 
     def _create_chart_analysis_prompt(self, chart_type: str) -> str:
@@ -211,8 +211,8 @@ class ChartAnalyzer:
 
             return response.choices[0].message.content or "[No description generated]"
 
-        except Exception as e:
-            logger.error(f"Vision API error: {e}")
+        except Exception:
+            logger.exception("Vision API error")
             raise
 
     def _extract_title_from_description(self, description: str) -> str | None:
@@ -369,8 +369,8 @@ class ChartAnalyzer:
 
             logger.info(f"Indexed chart {chart.chart_id} in collection {collection_name}")
 
-        except Exception as e:
-            logger.error(f"Error indexing chart {chart.chart_id}: {e}")
+        except Exception:
+            logger.exception(f"Error indexing chart {chart.chart_id}")
             raise
 
     @staticmethod

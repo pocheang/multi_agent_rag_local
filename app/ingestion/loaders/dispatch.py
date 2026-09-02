@@ -52,8 +52,8 @@ def _extract_charts_once(path: Path, settings) -> list[Document]:
         if chart_docs:
             logger.info(f"Extracted {len(chart_docs)} charts from {path.name}")
         return chart_docs
-    except Exception as e:
-        logger.error(f"Chart extraction failed for {path.name}: {e}")
+    except Exception:
+        logger.exception(f"Chart extraction failed for {path.name}")
         return []
 
 

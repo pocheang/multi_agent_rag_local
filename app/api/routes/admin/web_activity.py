@@ -83,8 +83,8 @@ async def get_web_activity_stats(
         alerts = check_and_alert(analysis["summary"])
         if alerts:
             logger.warning(f"Triggered {len(alerts)} alerts")
-    except Exception as e:
-        logger.error(f"Alert check failed: {e}")
+    except Exception:
+        logger.exception("Alert check failed")
     return analysis
 
 

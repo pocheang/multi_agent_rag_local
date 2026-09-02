@@ -24,13 +24,12 @@ def _load_cross_encoder():
     except ImportError as e:
         logger.warning(f"sentence-transformers not installed: {e}")
         return None
-    except (OSError, ValueError) as e:
-        logger.error(
+    except (OSError, ValueError):
+        logger.exception(
             f"Reranker model '{settings.reranker_model_name}' not found locally. "
             f"Please download it first:\n"
             f"  from sentence_transformers import CrossEncoder\n"
-            f"  CrossEncoder('{settings.reranker_model_name}')\n"
-            f"Error: {e}"
+            f"  CrossEncoder('{settings.reranker_model_name}')"
         )
         return None
     except RuntimeError as e:
@@ -130,7 +129,7 @@ def rerank_with_diagnostics(
             "reranker_fallback_reason": f"prediction_error:{type(e).__name__}",
         }
     except Exception as e:
-        logger.error(f"Unexpected reranker error: {e}, falling back to lexical reranking")
+        logger.exception(f"Unexpected reranker error: {e}, falling back to lexical reranking")
         return _lexical_fallback_rerank(query, candidates, top_n=limit), {
             "reranker_backend": "lexical",
             "reranker_fallback_reason": f"prediction_error:{type(e).__name__}",

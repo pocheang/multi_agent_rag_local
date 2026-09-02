@@ -45,8 +45,8 @@ class BatchProcessor:
                 try:
                     batch_result = await process_func(batch)
                     results.extend(batch_result)
-                except Exception as e:
-                    logger.error(f"Error processing batch {i}: {e}")
+                except Exception:
+                    logger.exception(f"Error processing batch {i}")
                     # Continue with next batch
 
         return results

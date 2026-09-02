@@ -99,7 +99,7 @@ Feedback: [brief explanation]"""
                 )
 
             except Exception as e:
-                logger.error(f"Error evaluating document relevance: {e}")
+                logger.exception("Error evaluating document relevance")
                 # Default to medium relevance on error
                 relevance_scores.append(
                     RelevanceScore(
@@ -168,7 +168,7 @@ Feedback: [brief explanation]"""
             )
 
         except Exception as e:
-            logger.error(f"Error evaluating answer quality: {e}")
+            logger.exception("Error evaluating answer quality")
             # Return default quality on error
             return AnswerQuality(
                 score=0.5,

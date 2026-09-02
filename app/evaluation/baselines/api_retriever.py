@@ -73,8 +73,8 @@ class SimpleRetriever:
                 retrieved_docs=retrieved_docs,
                 latency_ms=latency_ms,
             )
-        except Exception as exc:
-            logger.error(f"Retrieval failed for query '{query}': {exc}")
+        except Exception:
+            logger.exception(f"Retrieval failed for query '{query}'")
             latency_ms = (time.time() - start_time) * 1000
             return RetrievalResult(query_id=query_id, query=query, retrieved_docs=[], latency_ms=latency_ms)
 

@@ -179,8 +179,8 @@ class WebActivityAlertSystem:
                         self.rules.append(rule)
 
                 logger.info(f"Loaded alert config from {self.config_path}")
-            except Exception as e:
-                logger.error(f"Failed to load alert config: {e}")
+            except Exception:
+                logger.exception("Failed to load alert config")
 
     def check_metrics(self, metrics: dict) -> list[Alert]:
         """
@@ -252,8 +252,8 @@ class WebActivityAlertSystem:
                     self._send_webhook_alert(alert)
                 elif channel == AlertChannel.SLACK:
                     self._send_slack_alert(alert)
-            except Exception as e:
-                logger.error(f"Failed to send alert via {channel}: {e}")
+            except Exception:
+                logger.exception(f"Failed to send alert via {channel}")
 
     def _send_log_alert(self, alert: Alert):
         """通过日志发送告警"""

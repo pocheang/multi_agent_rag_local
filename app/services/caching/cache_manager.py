@@ -201,8 +201,8 @@ class RedisCache(CacheBackend):
             except ImportError:
                 logger.warning("redis not installed, Redis cache disabled")
                 return None
-            except Exception as e:
-                logger.error(f"Error connecting to Redis: {e}")
+            except Exception:
+                logger.exception("Error connecting to Redis")
                 return None
         return self._client
 
@@ -219,8 +219,8 @@ class RedisCache(CacheBackend):
 
             # Deserialize JSON
             return json.loads(value)
-        except Exception as e:
-            logger.error(f"Error getting from Redis: {e}")
+        except Exception:
+            logger.exception("Error getting from Redis")
             return None
 
     async def set(self, key: str, value: Any, ttl: int | None = None) -> None:
@@ -234,8 +234,8 @@ class RedisCache(CacheBackend):
             # Serialize to JSON
             serialized = json.dumps(value)
             await client.setex(self._key(key), ttl, serialized)
-        except Exception as e:
-            logger.error(f"Error setting in Redis: {e}")
+        except Exception:
+            logger.exception("Error setting in Redis")
 
     async def delete(self, key: str) -> None:
         """Delete key from Redis."""
@@ -245,8 +245,8 @@ class RedisCache(CacheBackend):
 
         try:
             await client.delete(self._key(key))
-        except Exception as e:
-            logger.error(f"Error deleting from Redis: {e}")
+        except Exception:
+            logger.exception("Error deleting from Redis")
 
     async def clear(self) -> None:
         """Clear only keys owned by this cache namespace."""
@@ -258,8 +258,8 @@ class RedisCache(CacheBackend):
             keys = [key async for key in client.scan_iter(match=f"{self.namespace}:*")]
             if keys:
                 await client.delete(*keys)
-        except Exception as e:
-            logger.error(f"Error clearing Redis: {e}")
+        except Exception:
+            logger.exception("Error clearing Redis")
 
     async def clear_prefix(self, prefix: str) -> None:
         """Clear keys belonging to one cache namespace."""
@@ -271,8 +271,8 @@ class RedisCache(CacheBackend):
             keys = [key async for key in client.scan_iter(match=self._key(f"{prefix}:*"))]
             if keys:
                 await client.delete(*keys)
-        except Exception as e:
-            logger.error(f"Error clearing Redis prefix {prefix}: {e}")
+        except Exception:
+            logger.exception(f"Error clearing Redis prefix {prefix}")
 
     async def exists(self, key: str) -> bool:
         """Check if key exists in Redis."""
@@ -282,8 +282,8 @@ class RedisCache(CacheBackend):
 
         try:
             return await client.exists(self._key(key)) > 0
-        except Exception as e:
-            logger.error(f"Error checking existence in Redis: {e}")
+        except Exception:
+            logger.exception("Error checking existence in Redis")
             return False
 
     async def close(self) -> None:
@@ -291,8 +291,8 @@ class RedisCache(CacheBackend):
         if self._client is not None:
             try:
                 await self._client.aclose()
-            except Exception as e:
-                logger.error(f"Error closing Redis connection: {e}")
+            except Exception:
+                logger.exception("Error closing Redis connection")
             finally:
                 self._client = None
 

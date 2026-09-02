@@ -84,7 +84,7 @@ def run_parallel_web_research(questions: list[str], max_workers: int = 3, timeou
                 results.append(result)
                 logger.info("Parallel search completed for %s", question_ref(question))
             except Exception as e:
-                logger.error("Parallel search failed for %s: %s", question_ref(question), e)
+                logger.exception("Parallel search failed for %s: %s", question_ref(question), e)
                 results.append(
                     {
                         "context": "",

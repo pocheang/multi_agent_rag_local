@@ -169,11 +169,10 @@ def ingest_paths(
                             f"Graph extraction completed with {extraction_errors} errors. "
                             f"Successfully inserted {count_triplets} triplets."
                         )
-                except Exception as e:
-                    logger.error(
-                        f"Failed to batch insert {len(triplets_to_insert)} triplets to Neo4j: {e}. "
-                        f"Graph features may be incomplete.",
-                        exc_info=True,
+                except Exception:
+                    logger.exception(
+                        f"Failed to batch insert {len(triplets_to_insert)} triplets to Neo4j. "
+                        f"Graph features may be incomplete."
                     )
             elif extraction_errors > 0:
                 logger.warning(
@@ -181,7 +180,7 @@ def ingest_paths(
                     f"Check document format and extraction settings."
                 )
         except Exception as e:
-            logger.error(f"Unexpected error during graph ingestion: {e}", exc_info=True)
+            logger.exception(f"Unexpected error during graph ingestion: {e}")
         finally:
             client.close()
 

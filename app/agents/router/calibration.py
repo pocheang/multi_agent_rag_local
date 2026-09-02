@@ -195,8 +195,8 @@ def save_calibration_data(data: CalibrationData, config_path: Path | None = None
         with open(config_path, "w") as f:
             json.dump(data.to_dict(), f, indent=2)
         logger.debug(f"Saved calibration data to {config_path}")
-    except OSError as e:
-        logger.error(f"Failed to save calibration data to {config_path}: {e}")
+    except OSError:
+        logger.exception(f"Failed to save calibration data to {config_path}")
 
 
 def update_calibration_data(data: CalibrationData, raw_confidence: float, was_correct: bool) -> None:

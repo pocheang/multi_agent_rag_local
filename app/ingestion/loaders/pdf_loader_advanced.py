@@ -87,7 +87,7 @@ def load_pdf_advanced(
             processed_docs.append(processed_doc)
 
         except Exception as e:
-            logger.error(f"Advanced processing failed for page {metadata.get('page', '?')}: {e}", exc_info=True)
+            logger.exception(f"Advanced processing failed for page {metadata.get('page', '?')}: {e}")
             # Keep original document on error
             processed_docs.append(doc)
 

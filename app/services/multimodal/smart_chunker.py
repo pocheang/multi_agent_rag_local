@@ -93,8 +93,8 @@ class SmartChunker:
 
             return chunks
 
-        except Exception as e:
-            logger.error(f"Error chunking document {pdf_path}: {e}")
+        except Exception:
+            logger.exception(f"Error chunking document {pdf_path}")
             raise
 
     async def _extract_sections(self, pdf_path: Path, doc_id: str) -> list[Section]:
@@ -178,8 +178,8 @@ class SmartChunker:
                 logger.warning(f"No sections detected in {pdf_path.name}, using page-based chunking")
                 sections = await self._fallback_page_chunking(pdf_path, doc_id)
 
-        except Exception as e:
-            logger.error(f"Error extracting sections: {e}")
+        except Exception:
+            logger.exception("Error extracting sections")
             raise
 
         return sections
@@ -243,7 +243,7 @@ class SmartChunker:
                     sections.append(section)
 
         except Exception as e:
-            logger.error(f"Error in fallback chunking: {e}", exc_info=True)
+            logger.exception(f"Error in fallback chunking: {e}")
             raise
 
         return sections

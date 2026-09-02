@@ -108,8 +108,8 @@ class WebActivityLogger:
                 f.write(json.dumps(log_entry, ensure_ascii=False) + "\n")
 
             logger.debug(f"Logged web search activity for user {user_id}")
-        except Exception as e:
-            logger.error(f"Failed to write activity log: {e}")
+        except Exception:
+            logger.exception("Failed to write activity log")
 
     def get_logs(
         self,
@@ -157,8 +157,8 @@ class WebActivityLogger:
                                     continue
 
                                 logs.append(entry)
-                except Exception as e:
-                    logger.error(f"Failed to read log file {log_file}: {e}")
+                except Exception:
+                    logger.exception(f"Failed to read log file {log_file}")
 
             current += timedelta(days=1)
 

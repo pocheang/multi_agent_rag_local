@@ -71,7 +71,7 @@ def redis_client(settings):
         logger.warning(f"Redis connection failed: {e}")
         _REDIS_CLIENT = None
     except Exception as e:
-        logger.error(f"Unexpected Redis error: {e}", exc_info=True)
+        logger.exception(f"Unexpected Redis error: {e}")
         _REDIS_CLIENT = None
     return _REDIS_CLIENT
 
@@ -107,8 +107,8 @@ def clear_retrieval_cache() -> None:
     except (ImportError, AttributeError) as e:
         logger.debug(f"Cache clear skipped: {e}")
         return
-    except Exception as e:
-        logger.error(f"Unexpected error clearing cache: {e}")
+    except Exception:
+        logger.exception("Unexpected error clearing cache")
         return
 
 

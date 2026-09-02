@@ -149,9 +149,9 @@ class AutoIngestWatcher:
                 # Ingestion failed, keep last seen signature so unchanged file can retry later
                 logger.warning(f"Failed to ingest {path}: {e}")
                 self._indexed_signatures.pop(str(path.resolve()), None)
-            except Exception as e:
+            except Exception:
                 # Unexpected error during ingestion
-                logger.error(f"Unexpected error ingesting {path}: {e}")
+                logger.exception(f"Unexpected error ingesting {path}")
                 self._indexed_signatures.pop(str(path.resolve()), None)
 
         return {"discovered": discovered, "ready": len(ready_paths), "ingested": ingested}

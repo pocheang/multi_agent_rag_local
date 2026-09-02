@@ -100,13 +100,13 @@ class Neo4jClient:
                     try:
                         return session.run(simpler_query, **params)
                     except Exception as retry_error:
-                        logger.error("Simpler query also failed: %s", retry_error)
+                        logger.exception("Simpler query also failed: %s", retry_error)
                         # Fall through to original execution attempt
 
         try:
             return session.run(cypher, **params)
-        except (CypherSyntaxError, ClientError) as e:
-            logger.error("Cypher query execution failed: %s", e)
+        except (CypherSyntaxError, ClientError):
+            logger.exception("Cypher query execution failed")
             logger.debug("Failed query: %s", cypher)
 
             # Try simpler query on execution failure
@@ -118,7 +118,7 @@ class Neo4jClient:
                     try:
                         return session.run(simpler_query, **params)
                     except Exception as retry_error:
-                        logger.error("Simpler query also failed: %s", retry_error)
+                        logger.exception("Simpler query also failed: %s", retry_error)
 
             raise
 

@@ -127,14 +127,14 @@ class ImageProcessor:
 
                             images.append(image_content)
 
-                        except Exception as e:
-                            logger.error(f"Error extracting image {img_index} from page {page_num + 1}: {e}")
+                        except Exception:
+                            logger.exception(f"Error extracting image {img_index} from page {page_num + 1}")
                             continue
 
                 logger.info(f"Extracted {len(images)} images from {pdf_path.name}")
 
         except Exception as e:
-            logger.error(f"Error processing PDF {pdf_path}: {e}", exc_info=True)
+            logger.exception(f"Error processing PDF {pdf_path}: {e}")
             raise
 
         return images
@@ -190,8 +190,8 @@ class ImageProcessor:
 
         except PermissionError:
             raise
-        except Exception as e:
-            logger.error(f"Error generating description for {image.image_id}: {e}")
+        except Exception:
+            logger.exception(f"Error generating description for {image.image_id}")
             return f"[Image on page {image.page_number}]"
 
     def _detect_image_type_hint(self, image: ImageContent) -> str:
@@ -261,8 +261,8 @@ class ImageProcessor:
 
             return response.choices[0].message.content or "[No description generated]"
 
-        except Exception as e:
-            logger.error(f"GPT-4V API error: {e}")
+        except Exception:
+            logger.exception("GPT-4V API error")
             raise
 
     async def _call_claude_vision(self, image_base64: str, prompt: str) -> str:
@@ -295,8 +295,8 @@ class ImageProcessor:
 
             return response.content[0].text if response.content else "[No description generated]"
 
-        except Exception as e:
-            logger.error(f"Claude Vision API error: {e}")
+        except Exception:
+            logger.exception("Claude Vision API error")
             raise
 
     async def perform_ocr(self, image: ImageContent) -> str:
@@ -330,8 +330,8 @@ class ImageProcessor:
 
         except PermissionError:
             raise
-        except Exception as e:
-            logger.error(f"OCR error for {image.image_id}: {e}")
+        except Exception:
+            logger.exception(f"OCR error for {image.image_id}")
             return ""
 
     async def _ocr_tesseract(self, pil_image: Image.Image) -> str:
@@ -349,10 +349,10 @@ class ImageProcessor:
             return text.strip()
 
         except ImportError:
-            logger.error("pytesseract not installed. Install with: pip install pytesseract")
+            logger.exception("pytesseract not installed. Install with: pip install pytesseract")
             return ""
-        except Exception as e:
-            logger.error(f"Tesseract OCR error: {e}")
+        except Exception:
+            logger.exception("Tesseract OCR error")
             return ""
 
     async def _ocr_paddleocr(self, pil_image: Image.Image) -> str:
@@ -382,10 +382,10 @@ class ImageProcessor:
             return "\n".join(text_lines)
 
         except ImportError:
-            logger.error("paddleocr not installed. Install with: pip install paddlepaddle paddleocr")
+            logger.exception("paddleocr not installed. Install with: pip install paddlepaddle paddleocr")
             return ""
-        except Exception as e:
-            logger.error(f"PaddleOCR error: {e}")
+        except Exception:
+            logger.exception("PaddleOCR error")
             return ""
 
     async def process_images_batch(
@@ -433,8 +433,8 @@ class ImageProcessor:
                     img.metadata["visual_embedding_backend"] = embedding.backend
                     img.metadata["visual_embedding_fallback_reason"] = embedding.fallback_reason or ""
 
-                except Exception as e:
-                    logger.error(f"Error processing image {img.image_id}: {e}")
+                except Exception:
+                    logger.exception(f"Error processing image {img.image_id}")
 
                 return img
 
@@ -563,8 +563,8 @@ class ImageProcessor:
 
             logger.info(f"Indexed image {image.image_id} in collection {collection_name}")
 
-        except Exception as e:
-            logger.error(f"Error indexing image {image.image_id}: {e}")
+        except Exception:
+            logger.exception(f"Error indexing image {image.image_id}")
             raise
 
 

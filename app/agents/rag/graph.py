@@ -302,7 +302,7 @@ def _fallback_to_vector_rag(
             "vector_rag_result": vector_result,
         }
     except Exception as e:
-        logger.error("Vector RAG fallback also failed: %s", e, exc_info=True)
+        logger.exception("Vector RAG fallback also failed: %s", e)
         return {
             "context": "",
             "entities": [],

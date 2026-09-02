@@ -116,8 +116,8 @@ class MultiModalRetriever:
 
             return fused
 
-        except Exception as e:
-            logger.error(f"Multi-modal retrieval error: {e}")
+        except Exception:
+            logger.exception("Multi-modal retrieval error")
             raise
 
     async def retrieve_evidence(
@@ -178,8 +178,8 @@ class MultiModalRetriever:
 
             return retrieval_results
 
-        except Exception as e:
-            logger.error(f"Text retrieval error: {e}")
+        except Exception:
+            logger.exception("Text retrieval error")
             return []
 
     async def _retrieve_images(self, query: str, top_k: int, **kwargs: Any) -> list[RetrievalResult]:
@@ -230,8 +230,8 @@ class MultiModalRetriever:
             visual_results = await self._retrieve_visual_images(query, top_k, **kwargs)
             return _merge_image_results(retrieval_results, visual_results, top_k)
 
-        except Exception as e:
-            logger.error(f"Image retrieval error: {e}")
+        except Exception:
+            logger.exception("Image retrieval error")
             return []
 
     async def _retrieve_visual_images(
@@ -323,8 +323,8 @@ class MultiModalRetriever:
 
             return retrieval_results
 
-        except Exception as e:
-            logger.error(f"Table retrieval error: {e}")
+        except Exception:
+            logger.exception("Table retrieval error")
             return []
 
     async def _retrieve_charts(self, query: str, top_k: int, **kwargs: Any) -> list[RetrievalResult]:
@@ -370,8 +370,8 @@ class MultiModalRetriever:
 
             return retrieval_results
 
-        except Exception as e:
-            logger.error(f"Chart retrieval error: {e}")
+        except Exception:
+            logger.exception("Chart retrieval error")
             return []
 
     def _reciprocal_rank_fusion(
@@ -523,14 +523,14 @@ class MultiModalRetriever:
 
                     results_by_modality[modality] = retrieval_results
 
-                except Exception as e:
-                    logger.error(f"Error retrieving {modality} for doc {doc_id}: {e}")
+                except Exception:
+                    logger.exception(f"Error retrieving {modality} for doc {doc_id}")
                     results_by_modality[modality] = []
 
             return results_by_modality
 
-        except Exception as e:
-            logger.error(f"Error in retrieve_by_doc_id: {e}")
+        except Exception:
+            logger.exception("Error in retrieve_by_doc_id")
             raise
 
 

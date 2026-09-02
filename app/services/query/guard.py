@@ -302,7 +302,7 @@ class QueryLoadGuard:
                     try:
                         current_waiting = int(client.get(waiting_key) or 0)
                         if current_waiting > self._max_waiting * 2:
-                            logger.error(f"Resetting corrupted waiting counter: {current_waiting}")
+                            logger.exception(f"Resetting corrupted waiting counter: {current_waiting}")
                             client.set(waiting_key, 0, ex=max(5, self._window_seconds))
                     except Exception as reset_error:
                         logger.warning(f"Failed to reset waiting counter: {reset_error}")
@@ -317,7 +317,7 @@ class QueryLoadGuard:
                     try:
                         current_inflight = int(client.get(inflight_key) or 0)
                         if current_inflight > self._max_concurrent * 2:
-                            logger.error(f"Resetting corrupted inflight counter: {current_inflight}")
+                            logger.exception(f"Resetting corrupted inflight counter: {current_inflight}")
                             client.set(inflight_key, 0, ex=max(5, self._window_seconds))
                     except Exception as reset_error:
                         logger.warning(f"Failed to reset inflight counter: {reset_error}")

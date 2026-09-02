@@ -457,14 +457,14 @@ def synthesize_answer(
 
         return result_dict
 
-    except (RuntimeError, ValueError) as e:
-        logger.error(f"Synthesis failed: {e}")
+    except (RuntimeError, ValueError):
+        logger.exception("Synthesis failed")
         return {
             "answer": SYNTHESIS_FALLBACK_MESSAGE,
             "detected_language": detected_language,
         }
     except Exception as e:
-        logger.error(f"Unexpected error in synthesis: {e}", exc_info=True)
+        logger.exception(f"Unexpected error in synthesis: {e}")
         return {
             "answer": SYNTHESIS_FALLBACK_MESSAGE,
             "detected_language": detected_language,

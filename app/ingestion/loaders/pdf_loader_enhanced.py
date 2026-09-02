@@ -117,5 +117,5 @@ def load_pdf_enhanced(
         logger.warning(f"Docling not available: {e}")
         return []
     except Exception as e:
-        logger.error(f"Enhanced PDF processing failed for {path.name}: {e}", exc_info=True)
+        logger.exception(f"Enhanced PDF processing failed for {path.name}: {e}")
         return []
