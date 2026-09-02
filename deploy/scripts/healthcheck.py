@@ -1,18 +1,23 @@
 """Wait for the backend's health endpoint, from inside its own container.
 
-It used to take `--url` and hand it straight to `urlopen`, which is
+Nothing about the target is configurable, and that is the whole design. It ran
+as `--url <anything>` handed straight to `urlopen`, which is
 `pythonsecurity:S8703`: a URL off the command line reaching an HTTP client is an
-SSRF primitive, and `urlopen` speaks more than http -- `file:///etc/passwd`
-returns a 200-shaped response and would have been reported as healthy.
+SSRF primitive, and `urlopen` speaks `file://` too -- a health check that would
+have reported /etc/passwd as healthy.
 
-Validating the string was the first attempt and did not settle it, correctly:
-a check that returns its argument unchanged leaves the caller in control of the
-host, which is the part that matters. So the host is no longer an argument. It
-is a literal, the port is an integer, and the path is fixed -- there is no
-value a caller can pass that makes this request go anywhere else.
+Two narrower versions did not settle it, and the reason is worth keeping. First
+a scheme check, which returns its argument unchanged and so leaves the caller
+holding the host -- the half that decides where the request goes. Then `--port`
+as a bounded int with the host as a literal, which is genuinely un-exploitable
+but still traces argv into `urlopen`, and a taint analysis is right not to try to
+prove otherwise from a range check.
 
-Both call sites (deploy.sh, deploy.ps1) passed `http://127.0.0.1:8000/health`
-and nothing else ever has, so the narrower interface loses nothing.
+So the target comes from nowhere the caller controls. The port is the one the
+image's own CMD serves on and EXPOSE publishes; a health check that can be
+pointed at a different port than the container runs is not a more useful tool,
+it is a less accurate one. `--timeout` and `--interval` stay: they are floats
+that never touch the URL.
 """
 
 from __future__ import annotations
@@ -23,31 +28,25 @@ import urllib.error
 import urllib.parse
 import urllib.request
 
-# Not configurable, and that is the point: `exec -T backend` runs this inside the
-# container it is checking.
+# `exec -T backend` runs this inside the container it is checking, and the
+# Dockerfile's CMD serves on 8000. Keep these three in step with it.
 HOST = "127.0.0.1"
+PORT = 8000
 PATH = "/health"
 
-
-def target_url(port: int) -> str:
-    """The one place the URL is built.
-
-    Assembled from parts rather than written as a literal, which is also how the
-    scheme stops being a bare `http://` in the source: `python:S5332` reads that
-    as an insecure request and cannot see that the host is loopback. It is, and
-    http is right here -- this runs inside the container it is checking, there is
-    no certificate to verify, and nothing crosses the network namespace.
-    """
-
-    return urllib.parse.urlunparse(("http", f"{HOST}:{port}", PATH, "", "", ""))
+# Assembled from parts rather than written as a literal, which is also how the
+# scheme stops being a bare `http://` in the source: python:S5332 reads that as
+# an insecure request and cannot see that the host is loopback. It is, and http
+# is right here -- nothing crosses the network namespace and there is no
+# certificate to verify.
+TARGET = urllib.parse.urlunparse(("http", f"{HOST}:{PORT}", PATH, "", "", ""))
 
 
-def wait_for_health(port: int, timeout: float, interval: float) -> bool:
-    url = target_url(port)
+def wait_for_health(timeout: float, interval: float) -> bool:
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
         try:
-            with urllib.request.urlopen(url, timeout=min(10.0, max(interval, 1.0))) as response:
+            with urllib.request.urlopen(TARGET, timeout=min(10.0, max(interval, 1.0))) as response:
                 if 200 <= response.status < 400:
                     return True
         except (OSError, urllib.error.URLError):
@@ -57,17 +56,15 @@ def wait_for_health(port: int, timeout: float, interval: float) -> bool:
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="Wait for the QueryMind health endpoint on localhost")
-    parser.add_argument("--port", type=int, default=8000, choices=range(1, 65536), metavar="PORT")
+    parser = argparse.ArgumentParser(description=f"Wait for {TARGET}")
     parser.add_argument("--timeout", type=float, default=120.0)
     parser.add_argument("--interval", type=float, default=2.0)
     args = parser.parse_args(argv)
 
-    target = target_url(args.port)
-    if wait_for_health(args.port, args.timeout, args.interval):
-        print(f"Health check passed: {target}")
+    if wait_for_health(args.timeout, args.interval):
+        print(f"Health check passed: {TARGET}")
         return 0
-    print(f"Health check timed out: {target}")
+    print(f"Health check timed out: {TARGET}")
     return 1
 
 
