@@ -51,14 +51,21 @@ def get_bucket_for_confidence(confidence: float) -> str:
         Bucket name (e.g., "0.7-0.8")
     """
     # Clamp to valid range
-    confidence = max(0.5, min(1.0, confidence))
+    confidence = max(CONFIDENCE_BUCKETS[0][0], min(CONFIDENCE_BUCKETS[-1][1], confidence))
 
-    for low, high in CONFIDENCE_BUCKETS:
-        if low <= confidence < high or (confidence == 1.0 and high == 1.0):
+    # Each bucket is half-open except the last, whose upper bound has to be
+    # inclusive or the clamped maximum belongs to no bucket at all. Saying that
+    # positionally rather than as `confidence == 1.0 and high == 1.0` keeps it
+    # true if the table ever stops ending at 1.0 -- that spelling sent the top
+    # value to the *lowest* bucket via the fallback below the moment it did.
+    last = len(CONFIDENCE_BUCKETS) - 1
+    for index, (low, high) in enumerate(CONFIDENCE_BUCKETS):
+        if low <= confidence < high or (index == last and confidence <= high):
             return f"{low}-{high}"
 
-    # Fallback to lowest bucket
-    return "0.5-0.6"
+    # Unreachable while the table is contiguous; kept so a gap in it degrades
+    # to a bucket rather than to an exception.
+    return f"{CONFIDENCE_BUCKETS[0][0]}-{CONFIDENCE_BUCKETS[0][1]}"
 
 
 @dataclass
@@ -128,17 +135,21 @@ class CalibrationData:
             name: CalibrationBucket.from_dict(bucket_data) for name, bucket_data in data.get("buckets", {}).items()
         }
 
-        # Ensure all expected buckets exist with proper boundaries
+        # Boundaries belong to the bucketing scheme, not to the accumulated
+        # data: the bucket's own name encodes them, so a persisted pair can only
+        # ever agree with the table or be wrong. Taking them from the table
+        # unconditionally replaces a guess -- "these are still 0.5/1.0, so the
+        # file must predate storing them" -- which could not tell an absent
+        # boundary from a genuine one, and needed a special case for the first
+        # bucket to paper over that.
         for low, high in CONFIDENCE_BUCKETS:
             bucket_name = f"{low}-{high}"
-            if bucket_name not in buckets:
+            bucket = buckets.get(bucket_name)
+            if bucket is None:
                 buckets[bucket_name] = CalibrationBucket(low=low, high=high)
             else:
-                # Update boundaries if missing (for backward compatibility)
-                if buckets[bucket_name].low == 0.5 and buckets[bucket_name].high == 1.0:
-                    if bucket_name != "0.5-0.6":  # Unless it's actually the first bucket
-                        buckets[bucket_name].low = low
-                        buckets[bucket_name].high = high
+                bucket.low = low
+                bucket.high = high
 
         return cls(buckets=buckets, version=data.get("version", "1.0"))
 

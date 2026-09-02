@@ -24,13 +24,34 @@ logger = logging.getLogger(__name__)
 
 _EVALUATION_ROOT = Path("data/evaluation").resolve()
 _RUN_ID_PATTERN = re.compile(r"^[A-Za-z0-9_-]{1,128}$")
+_QUERY_FILE_NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,127}\.json")
 
 
 def _resolve_query_file(query_file: str) -> str:
-    candidate = Path(str(query_file or "")).resolve()
-    if candidate.suffix.lower() != ".json" or not candidate.is_relative_to(_EVALUATION_ROOT):
-        raise bad_request("query_file must be a JSON file under data/evaluation")
-    return str(candidate)
+    """Name a file inside the evaluation directory. Never accept a path.
+
+    The previous form built a path out of the caller's string and then checked
+    where it had landed. That was correct, but only because the check was: the
+    API accepted an absolute path to anywhere on the filesystem and relied on
+    `is_relative_to` to turn it down afterwards, which is the shape that leaves
+    nothing between a caller and the disk if the check is ever edited.
+
+    Now the caller chooses *which* file and never *where*: a name, matched
+    against an allow-list pattern, joined under a root it cannot influence.
+
+    A separator is rejected rather than stripped. Silently reading
+    `/etc/passwd.json` as `data/evaluation/passwd.json` would be safe and
+    confusing -- the caller asked for something this endpoint will not do, and
+    should be told so. The parameter's default changed with it, from a path to
+    the bare name; nothing sends the old form.
+    """
+
+    name = str(query_file or "")
+    if "/" in name or "\\" in name:
+        raise bad_request("query_file must be a file name, not a path")
+    if not _QUERY_FILE_NAME.fullmatch(name):
+        raise bad_request("query_file must name a JSON file in data/evaluation")
+    return str(_EVALUATION_ROOT / name)
 
 
 router = APIRouter(prefix="/api/evaluation", tags=["evaluation"])
@@ -40,7 +61,7 @@ router = APIRouter(prefix="/api/evaluation", tags=["evaluation"])
 class RunEvaluationRequest(BaseModel):
     system: SystemName
     queries: list[str] | None = None  # Optional: specific query IDs
-    query_file: str = "data/evaluation/demo_queries.json"
+    query_file: str = "demo_queries.json"
 
 
 class RunEvaluationResponse(BaseModel):
@@ -53,7 +74,7 @@ class RunEvaluationResponse(BaseModel):
 
 class CompareSystemsRequest(BaseModel):
     systems: list[SystemName]
-    query_file: str = "data/evaluation/demo_queries.json"
+    query_file: str = "demo_queries.json"
 
 
 class EvaluationMetricsResponse(BaseModel):
@@ -93,7 +114,7 @@ def get_retriever(system_name: SystemName):
 def list_queries(
     request: Request,
     user: dict[str, Any] = Depends(_require_user),
-    query_file: str = "data/evaluation/demo_queries.json",
+    query_file: str = "demo_queries.json",
     category: str | None = None,
     difficulty: str | None = None,
 ):

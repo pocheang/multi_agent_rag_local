@@ -290,5 +290,14 @@ def test_an_ownerless_search_keys_separately_from_an_owned_one(recorded_cache_ke
 
 
 def test_the_same_owner_reuses_its_cache_entry(recorded_cache_keys):
-    """Guards against keying on something that varies per call."""
-    assert _search("alice", recorded_cache_keys) == _search("alice", recorded_cache_keys)
+    """Guards against keying on something that varies per call.
+
+    The two owner ids are distinct objects with equal content, because the key
+    has to be derived from what the owner *is* and not from the object carrying
+    it -- an `OwnerScope` is built fresh per request, so identity would make
+    every request a miss while still passing a same-literal comparison.
+    """
+    alice = "".join(["ali", "ce"])  # joined, not concatenated: literals get folded
+
+    assert alice is not "alice"  # noqa: F632 -- identity is the point here
+    assert _search("alice", recorded_cache_keys) == _search(alice, recorded_cache_keys)

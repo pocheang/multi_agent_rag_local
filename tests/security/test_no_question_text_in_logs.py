@@ -141,8 +141,18 @@ def test_the_allowlist_is_not_stale():
 
 
 def test_the_same_question_yields_the_same_handle():
-    """Correlating a request across log lines is the property worth keeping."""
-    assert question_ref("what is my salary") == question_ref("what is my salary")
+    """Correlating a request across log lines is the property worth keeping.
+
+    The two questions are built separately so they are distinct objects with
+    equal content. Passing the same literal twice would also pass if the handle
+    were keyed on identity or memoised per object, and neither of those survives
+    the trip between processes that this property exists for.
+    """
+    asked = "what is my salary"
+    asked_again = "".join(["what is my ", "salary"])  # joined, not concatenated: literals get folded
+
+    assert asked is not asked_again, "the interpreter folded these; the test would prove less"
+    assert question_ref(asked) == question_ref(asked_again)
 
 
 def test_different_questions_yield_different_handles():
