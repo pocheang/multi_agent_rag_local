@@ -21,23 +21,34 @@ SonarCloud 上 revision `5e60933`（当前 HEAD，分析时间 2026-09-02 05:58 
 | 第 4 步：Sonar 裁决 | **不再需要**——11 条 LOW 全部按事实修掉，没有一条是标掉的 |
 | New Code 基线 | **不再需要改**——Gate 已经在当前基线（2026-07-27，163 个 commit）下绿了 |
 
-**没有用到任何 Sonar 后台裁决**，这一点值得记：原计划里"标 FP / won't fix"的十一条，逐条读下去
-之后每一条都有真修法，其中三条读出了告警本身没说的问题（空转的 CSRF、无消费者的 auth 模块、
-一个到达 Redis glob 的查询参数）。**扫描器指出的位置，和缺陷所在的位置，经常不是同一处。**
+**没有用到任何 Sonar 后台裁决。** 原计划里"标 FP / won't fix"的每一条，逐条读下去之后都有真修法，
+其中五条读出了告警本身没说的问题：
+
+| 告警说的 | 实际是什么 |
+|---|---|
+| `Math.random` 熵不足 | 一整套从未执行的 CSRF：中间件要一个没有任何路由 set 过的 cookie |
+| 路径由用户数据构造 | 一个没有任何消费者的 auth 模块 |
+| 日志记录用户可控数据 | 一个 admin 查询参数直达 Redis glob（`*` 清空所有 namespace） |
+| 硬编码凭据 `"password_reset"` | `slowapi` 从不是依赖，**八个 admin 端点的限流全是空转**——创建管理员、重置密码都没有限流 |
+| `pip install` 没锁版本 | 两份 requirements 是各自独立的 compile，可能对同一个传递依赖给出不同版本 |
+
+**扫描器擅长说去哪里看，不擅长说哪里错了。** 这是逐条读的理由，也是不轻信任何一条的理由。
 
 **做出来的东西超出了原计划，因为读代码读出了计划里没有的事**：那套 CSRF 是空转的（第 3 节
 `S2245`）、`legacy_service.py` 没有任何消费者（第 4 节 `S2083`）、CI 的 editable 安装是多余的
 （第 3 节供应链）。三样连同它们的 `Settings` 字段一起删了。
 
-**最终状态（`28a93fab`）：Quality Gate 绿，五个条件全部通过，两个评级 A。**
+**最终状态（`5c38825b`）：Gate 绿，新代码和全量全部 A。CI 绿。**
 
 ```
-new_reliability_rating   1  A     新代码 bug           0
-new_security_rating      1  A     新代码 vulnerability  0
-new_maintainability      1  A
+                    新代码   全量
+reliability_rating    A       A      bug              0
+security_rating       A       A      vulnerability    0
+maintainability       A              security hotspot 0
 ```
 
-全量：bug 32 → **6**，vulnerability 31 → **8**，code smell 802 → 800。CI 绿。
+起点是 41 bugs / 31 vulnerabilities、两个评级 D。**没有用到任何一次 Sonar 后台裁决**——
+原计划里"标 FP / won't fix"的每一条，读下去之后都有真修法，其中五条读出了告警本身没说的问题。
 
 （中间在 B 停过一轮，见下面第 4、5 条教训——从 B 到 A 要求归零，所以那 11 条 LOW 是逐条修掉的，
 不是标掉的：三条日志换成摘要引用、一条缓存前缀在两端收窄、一条 URL 检测合并成一个定义，
