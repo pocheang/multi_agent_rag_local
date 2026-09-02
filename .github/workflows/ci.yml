@@ -37,7 +37,12 @@ jobs:
         run: ruff format --check .
 
       - name: Install package
-        run: 'pip install --only-binary :all: -e ".[dev]"'
+        # jieba is exempted because it publishes no wheel at all -- not for
+        # this platform, for any (`from versions: none`). Its setup.py does
+        # therefore run. That is a named, single-package hole rather than
+        # dropping the protection for the other forty dependencies, every one
+        # of which resolves to a wheel.
+        run: 'pip install --only-binary :all: --no-binary jieba -e ".[dev]"'
 
       - name: Endpoint census
         # Guards against a refactor silently dropping routers. Counts OpenAPI

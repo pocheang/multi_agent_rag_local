@@ -16,7 +16,7 @@ COPY pyproject.toml ./
 
 # Install Python dependencies
 RUN pip install --no-cache-dir --only-binary :all: --upgrade pip && \
-    pip install --no-cache-dir --only-binary :all: -e .
+    pip install --no-cache-dir --only-binary :all: --no-binary jieba -e .
 
 # Production stage
 FROM python:3.11-slim
