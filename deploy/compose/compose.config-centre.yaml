@@ -19,13 +19,37 @@
 # 127.0.0.1 so it is never reachable from outside the host without a deliberate
 # tunnel.
 #
-# Generate them once, keep them out of the repository:
+# ## Bringing it up, in full
 #
-#   export NACOS_AUTH_TOKEN=$(openssl rand -base64 32)      # >= 32 bytes
-#   export NACOS_AUTH_IDENTITY_KEY=$(openssl rand -hex 8)
-#   export NACOS_AUTH_IDENTITY_VALUE=$(openssl rand -hex 16)
+# 1. Generate the three secrets. Keep them out of the repository:
 #
-# Then change the console's admin password on first login.
+#      export NACOS_AUTH_TOKEN=$(openssl rand -base64 32)      # >= 32 bytes
+#      export NACOS_AUTH_IDENTITY_KEY=$(openssl rand -hex 8)
+#      export NACOS_AUTH_IDENTITY_VALUE=$(openssl rand -hex 16)
+#      export NACOS_PASSWORD='<the console password you are about to set>'
+#
+#    The base compose file needs its own secrets to interpolate, so source the
+#    generated ones too:
+#
+#      set -a; . ../../.runtime/generated-secrets.env; set +a
+#
+# 2. Start it:
+#
+#      docker compose -f compose.yaml -f compose.config-centre.yaml up -d nacos
+#
+# 3. **Create the console account.** With NACOS_AUTH_ENABLE=true and the
+#    embedded store, the user table starts *empty* -- logging in as nacos/nacos
+#    fails with "User nacos not found", which reads like a wrong password and is
+#    not. Nacos 2.4 bootstraps the first administrator through a one-time
+#    endpoint:
+#
+#      curl -X POST "http://127.0.0.1:8848/nacos/v1/auth/users/admin" -d "password=$NACOS_PASSWORD"
+#
+# 4. Seeding documents is optional. A data id nobody has published yet simply
+#    contributes nothing -- `RemoteSettingsSource` treats a missing document as
+#    "no values here", not as an error -- so the application starts against an
+#    empty configuration centre and takes its values from the lower layers. The
+#    admin page can then create keys as they are edited.
 #
 # ## Pointing the application at it
 #

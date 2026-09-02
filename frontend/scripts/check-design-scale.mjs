@@ -8,11 +8,13 @@
  * says "not more than yesterday".
  *
  * Deliberately a ratchet rather than a hard ban: `src/**\/*.css` still holds
- * 141 off-scale radii and 194 literal shadows, and rewriting them in one pass
- * would churn every file in the app to fix a cosmetic problem. Instead each
- * file's current count is frozen in `design-scale-baseline.json`; a file may
- * improve, never regress, and a *new* file starts at zero. The same shape the
- * Python suite already uses for `KNOWN_OFFENDERS`.
+ * hundreds of off-scale radii and literal shadows, and rewriting them in one
+ * pass would churn every file in the app to fix a cosmetic problem. Instead each
+ * file's current count is frozen in `design-scale-baseline.json` -- which is the
+ * only place the totals are stated, so this comment cannot drift out of date
+ * with them; run the script to see today's numbers. A file may improve, never
+ * regress, and a *new* file starts at zero. The same shape the Python suite
+ * already uses for `KNOWN_OFFENDERS`.
  *
  * On the scale:  var(--shape-*) / var(--elev-*), or 8, 12, 16, 999px.
  * Off it:        any other literal.
