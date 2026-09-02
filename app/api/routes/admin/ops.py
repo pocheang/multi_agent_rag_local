@@ -13,6 +13,7 @@ from fastapi import APIRouter, Depends, Request
 from fastapi.responses import Response
 
 from app.api import dependencies as api_dependencies
+from app.api.application.config_reload import ConfigWriteRefused, write_config_values
 from app.api.dependencies import (
     _audit,
     _check_chroma_ready,
@@ -32,11 +33,11 @@ from app.api.dependencies import (
 from app.api.routes.internal.pipeline_contract import execute_standard_compatibility
 from app.api.transport.errors import bad_request, service_unavailable
 from app.api.transport.middleware import get_request_metrics
+from app.core.config import get_settings
 from app.pipeline.contracts import PipelineUser
 from app.services.models.config_store import get_global_model_settings, public_global_model_settings
 from app.services.observability.log_buffer import list_log_levels, reset_logger_levels, set_logger_level
 from app.services.runtime.runtime_ops import (
-    apply_replay_autotune,
     build_ops_alerts,
     build_ops_overview,
     build_runtime_snapshot,
@@ -44,6 +45,7 @@ from app.services.runtime.runtime_ops import (
     probe_neo4j_ready,
     read_benchmark_trends,
     read_replay_trends,
+    recommend_replay_autotune,
     run_benchmark,
     run_replay,
     system_resource_snapshot,
@@ -381,22 +383,43 @@ def admin_ops_autotune(payload: dict[str, Any], request: Request, user: dict[str
     target_p95 = float(payload.get("target_p95_ms", 3000) or 3000)
     target_grounding = float(payload.get("target_grounding", 0.65) or 0.65)
     try:
-        latest, patch = apply_replay_autotune(
+        latest, patch = recommend_replay_autotune(
             target_p95=target_p95,
             target_grounding=target_grounding,
-            settings=settings,
+            settings=get_settings(),
         )
     except ValueError as exc:
         raise bad_request(str(exc))
+
+    # The recommendation is applied the same way an administrator's edit is, so
+    # it lands in a configuration layer and survives the next reload. It used to
+    # be assigned onto the live Settings object, where it did neither -- and the
+    # response said "applied_patch" either way.
+    written: list[str] = []
+    refusal: str | None = None
+    if patch:
+        try:
+            written = write_config_values({key: str(value) for key, value in patch.items()})
+        except ConfigWriteRefused as exc:
+            refusal = str(exc)
+
+    applied = bool(written)
     _audit(
         request,
         action="admin.ops.autotune",
         resource_type="admin",
-        result="success",
+        result="success" if applied or not patch else "failure",
         user=user,
-        detail=f"patch={patch}",
+        detail=f"patch={patch} applied={applied} refusal={refusal}",
     )
-    return {"ok": True, "latest": latest, "applied_patch": patch}
+    return {
+        "ok": True,
+        "latest": latest,
+        "recommended_patch": patch,
+        "applied": applied,
+        "data_id": written,
+        "reason": refusal,
+    }
 
 
 @router.post("/replay/run", status_code=202)

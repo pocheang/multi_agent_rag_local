@@ -124,3 +124,25 @@ def test_validate_rejects_a_value_of_the_wrong_type():
 
     with pytest.raises(ValueError, match="TOP_K"):
         validate_values({"TOP_K": "fifteen"})
+
+
+def test_no_editable_field_claims_a_restart_it_does_not_need():
+    """`requires_restart=False` across the board is a claim, and it was audited.
+
+    Every editable field's consumer either calls `get_settings()` per use, or is
+    held by an object `RAGPipeline` builds per request, or is rebuilt by
+    `apply_config_reload()`. The one exception was the retrieval cache, which
+    bakes its TTL in at construction and lives in a module global; the reload
+    clears it now rather than the page carrying a caveat.
+
+    This test does not re-derive that -- it cannot. It fails if someone marks a
+    field as needing a restart without also saying so on the page, and it is the
+    place to record the audit's date so the next person knows how stale it is.
+    """
+
+    marked = [field.alias for field in EDITABLE if field.requires_restart]
+    assert marked == [], (
+        f"{marked} claim a restart. Either the reload should cover them -- see "
+        "app/api/application/config_reload.py::apply_config_reload -- or this "
+        "assertion should be relaxed and the audit date in its docstring moved."
+    )

@@ -25,6 +25,7 @@ import pytest
 from fastapi import HTTPException
 from starlette.requests import Request
 
+from app.api.application import config_reload
 from app.api.routes.admin import config as admin_config
 from app.core import remote_config
 from app.core.remote_config import RemoteConfigSettings
@@ -85,7 +86,9 @@ def _centre(monkeypatch):
     )
     monkeypatch.setattr(admin_config, "remote_config_enabled", lambda: True)
     monkeypatch.setattr(admin_config, "RemoteDocuments", lambda *a, **k: documents)
-    monkeypatch.setattr(admin_config, "apply_config_reload", lambda: None)
+    monkeypatch.setattr(config_reload, "remote_config_enabled", lambda: True)
+    monkeypatch.setattr(config_reload, "RemoteDocuments", lambda *a, **k: documents)
+    monkeypatch.setattr(config_reload, "apply_config_reload", lambda: None)
     return documents
 
 
@@ -104,6 +107,7 @@ def test_saving_without_a_configuration_centre_is_refused(monkeypatch):
     """Better than writing to a file the console cannot make the process read."""
 
     monkeypatch.setattr(admin_config, "remote_config_enabled", lambda: False)
+    monkeypatch.setattr(config_reload, "remote_config_enabled", lambda: False)
     payload = admin_config.ConfigValues(values={"TOP_K": "9"})
 
     with pytest.raises(HTTPException) as excinfo:
@@ -219,7 +223,7 @@ def test_a_successful_save_reloads_the_runtime(monkeypatch, _centre):
 
     monkeypatch.delenv("TOP_K", raising=False)
     reloaded: list[bool] = []
-    monkeypatch.setattr(admin_config, "apply_config_reload", lambda: reloaded.append(True))
+    monkeypatch.setattr(config_reload, "apply_config_reload", lambda: reloaded.append(True))
     payload = admin_config.ConfigValues(values={"TOP_K": "9"}, data_id="querymind-retrieval")
 
     admin_config.admin_save_config(payload, _request(), ADMIN)
@@ -261,13 +265,14 @@ def test_the_real_document_store_satisfies_what_the_endpoint_calls(monkeypatch):
     )
     root = Path(tempfile.mkdtemp(prefix="querymind-endpoint-"))
     monkeypatch.setattr(remote_config, "SNAPSHOT_ROOT", root)
-    monkeypatch.setattr(admin_config, "remote_config_enabled", lambda: True)
-    monkeypatch.setattr(
-        admin_config,
-        "RemoteDocuments",
-        lambda *a, **k: remote_config.RemoteDocuments(client=FakeClient(), config=config),
-    )
-    monkeypatch.setattr(admin_config, "apply_config_reload", lambda: None)
+    for module in (admin_config, config_reload):
+        monkeypatch.setattr(module, "remote_config_enabled", lambda: True)
+        monkeypatch.setattr(
+            module,
+            "RemoteDocuments",
+            lambda *a, **k: remote_config.RemoteDocuments(client=FakeClient(), config=config),
+        )
+    monkeypatch.setattr(config_reload, "apply_config_reload", lambda: None)
     monkeypatch.delenv("TOP_K", raising=False)
 
     try:

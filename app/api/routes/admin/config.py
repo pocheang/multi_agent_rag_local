@@ -18,12 +18,12 @@ from typing import Any
 from fastapi import APIRouter, Depends, Request
 from pydantic import BaseModel, Field
 
-from app.api.application.config_reload import apply_config_reload
+from app.api.application.config_reload import ConfigWriteRefused, write_config_values
 from app.api.dependencies import _audit, _require_permission, _require_user
 from app.api.transport.errors import bad_request
 from app.core.config import get_settings
-from app.core.config_schema import describe, validate_values
-from app.core.remote_config import RemoteDocuments, parse_properties, remote_config_enabled
+from app.core.config_schema import describe
+from app.core.remote_config import RemoteDocuments, remote_config_enabled
 
 logger = logging.getLogger(__name__)
 
@@ -68,76 +68,34 @@ def admin_save_config(payload: ConfigValues, request: Request, user: dict[str, A
     _require_permission(user, "admin:ops_manage", request, "admin")
     if not payload.values:
         raise bad_request("no values to save")
-    if not remote_config_enabled():
-        raise bad_request("no configuration centre is configured; set NACOS_ENABLED and restart")
 
     try:
-        accepted = validate_values(payload.values)
-    except ValueError as exc:
+        written = write_config_values(payload.values, payload.data_id)
+    except ConfigWriteRefused as exc:
         _audit(
             request,
             action="admin.config.save",
             resource_type="admin",
             result="failure",
             user=user,
-            detail=f"rejected: {'; '.join(sorted(payload.values))}",
+            detail=f"refused: {'; '.join(sorted(payload.values))}",
         )
         raise bad_request(str(exc)) from exc
 
-    current = {row["alias"]: row for row in describe(get_settings())}
-    pinned = sorted(alias for alias in accepted if not current.get(alias, {}).get("editable_here", True))
-    if pinned:
-        raise bad_request(f"pinned in the process environment, so the console cannot change them: {', '.join(pinned)}")
-
-    documents = RemoteDocuments()
-    known = documents.config.data_ids
-    if payload.data_id is not None and payload.data_id not in known:
-        raise bad_request(f"unknown data id: {payload.data_id}")
-
-    current = {data_id: parse_properties(text) for data_id, text in documents.all().items()}
-    fallback = payload.data_id or known[-1]
-
-    # Each key goes back to the document that already defines it. Writing
-    # everything to one document instead puts the same key in two places, where
-    # the later id silently wins -- so the page would show a value from one
-    # document, the edit would land in another, and the two would drift apart.
-    # A key nothing defines yet goes to the fallback, which is the last id
-    # precisely because later ids override earlier ones.
-    routed: dict[str, dict[str, str]] = {}
-    for alias, value in accepted.items():
-        target = payload.data_id
-        if target is None:
-            owning = [data_id for data_id in known if alias in current.get(data_id, {})]
-            target = owning[-1] if owning else fallback
-        routed.setdefault(target, {})[alias] = value
-
-    written: list[str] = []
-    for data_id, changes in routed.items():
-        merged = {**current.get(data_id, {}), **changes}
-        try:
-            published = documents.publish(data_id, merged)
-        except Exception as exc:
-            logger.exception("admin config: publish failed for %s", data_id)
-            raise bad_request(f"the configuration centre rejected the write: {exc}") from exc
-        if not published:
-            raise bad_request(f"the configuration centre did not accept the write to {data_id}")
-        written.append(data_id)
-
-    apply_config_reload()
     _audit(
         request,
         action="admin.config.save",
         resource_type="admin",
         result="success",
-        resource_id=",".join(sorted(written)),
+        resource_id=",".join(written),
         user=user,
-        detail=f"changed: {', '.join(sorted(accepted))}",
+        detail=f"changed: {', '.join(sorted(payload.values))}",
     )
     return {
         "ok": True,
-        "data_id": sorted(written),
-        "changed": sorted(accepted),
-        "fields": describe(get_settings(), documents),
+        "data_id": written,
+        "changed": sorted(payload.values),
+        "fields": describe(get_settings(), RemoteDocuments() if remote_config_enabled() else None),
     }
 
 

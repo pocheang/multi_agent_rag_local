@@ -797,6 +797,19 @@ from synchronous `Settings()` construction, reachable from a request handler via
 `reload_settings()`. Driving it there means `asyncio.run` (which raises inside a running loop)
 or a private loop per call, the exact defect already fixed twice in this repository.
 
+**There is one way configuration changes at runtime**, `write_config_values()`, and both the
+admin page and the replay autotuner go through it. The autotuner used to assign its patch
+onto the live `Settings` object instead — which failed twice over: the change belonged to no
+layer, so it was lost at the next reload, and the page's "which layer did this come from"
+column had no way to know. It now recommends, and applying inherits every refusal, including
+the one for a value the process environment pins.
+
+`requires_restart` is `False` on every editable field, and that is an audited claim rather
+than a default: each consumer either reads `get_settings()` per use, or is held by an object
+`RAGPipeline` builds per request, or is rebuilt by the reload. The retrieval cache was the
+one exception — it bakes its TTL in at construction and lives in a module global — so the
+reload clears it rather than the page carrying a caveat.
+
 A change pushed from the console and the admin endpoint's reload run the **same** sequence,
 `app/api/application/config_reload.py::apply_config_reload()`. A watcher that cleared its own
 subset of caches would be a second, quieter definition of "reloaded", and the difference
@@ -1046,7 +1059,7 @@ A third makes it three. Do not add a pixel-diff CI gate for the reason above, an
 
 `tests/` was cleared ahead of the v0.7 rewrite and is being rebuilt incrementally: each bug
 fix lands with the regression test that would have caught it, rather than as a separate
-back-filling effort. As of 2026-09-01 there are 519 tests covering the chat round trip,
+back-filling effort. As of 2026-09-01 there are 526 tests covering the chat round trip,
 conversation context, graph routing, clarification, the async load guard, engine reuse,
 answer safety, reader-facing citation numbering, stage-timeout degradation, the governed
 tool stack with its multi-step loop and approve-then-resume cycle, retrieval

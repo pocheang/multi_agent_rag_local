@@ -2,6 +2,18 @@
 
 状态：全部四个阶段完成（2026-09-01），并在真实 Nacos 2.4.3 上跑通。
 
+### 收尾修复（2026-09-01）
+
+- **第四个配置写入者已消除。** `runtime_ops.apply_replay_autotune` 曾直接原地改活的 `Settings`
+  （`top_k`、`max_context_chunks`、`rank_feature_enabled`、`dynamic_retrieval_enabled`），
+  从 `POST /admin/ops/autotune` 可达。那个改动不属于任何一层，所以下次重载就丢；而配置页的
+  "来源层"那一列——页面存在的全部理由——无从知道值是哪来的。接口的响应还叫 `applied_patch`。
+  现在它改名 `recommend_replay_autotune` 且不改任何东西，应用走 `write_config_values()`，
+  和管理员的编辑同一条路、同样的拒绝规则。**这条路径此前零测试覆盖，现在有 6 个。**
+- **`requires_restart` 全部核实过。** 29 个字段逐个查了绑定点：要么每次调用读 `get_settings()`，
+  要么挂在 `RAGPipeline` 每请求新建的对象上，要么由重载重建。唯一例外是检索缓存——它在首次构造时
+  把 TTL 烘死且存在模块级全局里——所以让 `apply_config_reload()` 清它，而不是在页面上加个警告。
+
 ## 1. 目标与非目标
 
 ### 目标

@@ -541,10 +541,20 @@ def run_replay(
     return entry
 
 
-def apply_replay_autotune(
+def recommend_replay_autotune(
     *, target_p95: float, target_grounding: float, settings: Any
 ) -> tuple[dict[str, Any], dict[str, Any]]:
-    """Apply the existing in-memory retrieval tuning policy to the latest replay trend."""
+    """Compute the retrieval tuning the latest replay trend argues for. Changes nothing.
+
+    This used to assign the patch straight onto the live `Settings` object, which
+    failed twice over: the change was lost at the next reload, since it belonged
+    to no configuration layer, and the admin page's "which layer did this value
+    come from" column had no way to know. Applying is the caller's job now, and
+    there is exactly one way to do it -- `write_config_values`.
+
+    Renamed rather than quietly emptied, so any caller still expecting the old
+    behaviour fails loudly instead of silently doing nothing.
+    """
     trends = read_replay_trends(limit=1)
     if not trends:
         raise ValueError("no replay trends found; run replay first")
@@ -560,15 +570,7 @@ def apply_replay_autotune(
         patch["RANK_FEATURE_ENABLED"] = True
         patch["DYNAMIC_RETRIEVAL_ENABLED"] = True
     if not patch:
-        return latest, {"status": "no_change"}
-    if "TOP_K" in patch:
-        settings.top_k = int(patch["TOP_K"])
-    if "MAX_CONTEXT_CHUNKS" in patch:
-        settings.max_context_chunks = int(patch["MAX_CONTEXT_CHUNKS"])
-    if "RANK_FEATURE_ENABLED" in patch:
-        settings.rank_feature_enabled = bool(patch["RANK_FEATURE_ENABLED"])
-    if "DYNAMIC_RETRIEVAL_ENABLED" in patch:
-        settings.dynamic_retrieval_enabled = bool(patch["DYNAMIC_RETRIEVAL_ENABLED"])
+        return latest, {}
     return latest, patch
 
 

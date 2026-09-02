@@ -66,6 +66,9 @@ EDITABLE: tuple[EditableField, ...] = (
     EditableField("RANK_FEATURE_ENABLED", "retrieval", "Source and freshness weighting during fusion."),
     EditableField("RETRIEVAL_CACHE_ENABLED", "retrieval", "Reuse recent identical retrievals."),
     EditableField("RETRIEVAL_CACHE_TTL_SECONDS", "retrieval", "How long a cached retrieval stays valid."),
+    # Editable because the replay autotuner writes it, and everything that
+    # changes configuration at runtime goes through the same allowlist.
+    EditableField("MAX_CONTEXT_CHUNKS", "retrieval", "Excerpts handed to the model after retrieval."),
     # --- query understanding -------------------------------------------------
     EditableField("QUERY_REWRITE_ENABLED", "query", "Rewrite the query before retrieving."),
     EditableField(
