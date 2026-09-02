@@ -20,6 +20,13 @@
  *
  * Then:  npm run screenshots
  *
+ * On a machine that has never run this, install the browser first:
+ *   npx playwright install chromium
+ * `npm ci --ignore-scripts` is what CI and the frontend image use now, and
+ * Playwright downloads its browser from a postinstall hook -- so the package
+ * arrives without one. The download is cached per user, not per checkout, so
+ * this is a once-per-machine step, not a once-per-clone one.
+ *
  * Credentials come from the environment so nothing usable is committed:
  *   SHOT_USER, SHOT_PASSWORD   (default: the local walkthrough account)
  *   SHOT_BASE                  (default: http://localhost:5173)

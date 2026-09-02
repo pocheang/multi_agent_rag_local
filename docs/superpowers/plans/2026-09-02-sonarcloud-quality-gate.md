@@ -212,7 +212,13 @@ Gate 仍然红，但两个评级各上一档，而且这一步没有任何行为
 
 **第 2 步 · 一个 commit + 一次完整 CI —— 供应链**
 
-CI 与两个 Dockerfile 的 `--only-binary` / `--ignore-scripts`。消掉 4 条新代码 + 5 条全量。
+CI 与两个 Dockerfile 的 `--only-binary` / `--ignore-scripts`。消掉 **3 条新代码 + 6 条全量**：
+`S8541` × 4（gh 2 + docker 2）和 `S6505` × 2（gh 1 + docker 1）。
+
+**`S8544` 不在其中**——它说的是"依赖没有锁定解析结果"，只有 lock 文件能消掉它，`--only-binary`
+不行。所以 `githubactions:S8544` × 1 和 `docker:S8544` × 2 会连同 `text:S8565` 一起留到 lock 文件那一轮。
+（第一版这里写的是"消掉 4 条新代码"，把 `S8544` 算了进去，是错的。）
+
 合之前必须看到 CI 全绿，并且确认 Playwright 那一条的处理方式。
 
 **第 3 步 · 一个 commit —— 日志与输入收窄**
