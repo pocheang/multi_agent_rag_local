@@ -132,6 +132,17 @@ include = ["app*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+# `app` is imported from the checkout, not from an installed distribution, so
+# the root has to be on sys.path. `python -m pytest` puts it there and the
+# `pytest` console script does not, which is a difference nobody should have to
+# know: stating it here makes both work.
+#
+# It was invisible until 2026-09-02 because a stale editable install from an
+# older name for this project -- __editable__.multi_agent_local_rag-0.3.3.pth --
+# was still wiring the repository into site-packages on the machine it was
+# tested on. Uninstalling the current package proved nothing while that
+# remained, and CI, which has neither, failed at collection.
+pythonpath = ["."]
 asyncio_mode = "strict"
 asyncio_default_fixture_loop_scope = "function"
 
