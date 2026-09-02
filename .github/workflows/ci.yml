@@ -28,7 +28,7 @@ jobs:
         # picked up every new release, so the formatter changed without anyone
         # touching the code -- which is how four green-locally commits failed
         # here in a row.
-        run: pip install --only-binary :all: "ruff==0.16.5"
+        run: 'pip install --only-binary :all: "ruff==0.16.5"'
 
       - name: Lint
         run: ruff check .
@@ -37,7 +37,7 @@ jobs:
         run: ruff format --check .
 
       - name: Install package
-        run: pip install --only-binary :all: -e ".[dev]"
+        run: 'pip install --only-binary :all: -e ".[dev]"'
 
       - name: Endpoint census
         # Guards against a refactor silently dropping routers. Counts OpenAPI

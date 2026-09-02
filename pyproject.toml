@@ -100,6 +100,10 @@ dev = [
   "pytest-cov>=4.1.0",
   "pytest-xdist>=3.5.0",
   "reportlab>=4.0.0",
+  # Declared rather than borrowed from langchain's transitive tree: the
+  # workflow-parses test is the one thing standing between a mistyped YAML and
+  # a CI run that reports failure without running anything.
+  "pyyaml>=6.0",
   # Pinned exactly, not floored. CI installed the newest ruff on every run, so
   # its formatter changed under the repository: four consecutive runs failed
   # `ruff format --check` on commits that were clean locally, with no code
