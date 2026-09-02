@@ -85,7 +85,19 @@ def _item(retriever: str) -> EvidenceItem:
 
 
 def _service(**adapters) -> RAGAgentService:
-    return RAGAgentService(adapters={name: CallableKnowledgeAdapter(name, fn) for name, fn in adapters.items()})
+    """Build a service whose named sources are the given fakes.
+
+    `RAGAgentService` merges its argument *over* `build_default_adapters()`, so a
+    source that is simply not named here keeps its real adapter and reaches real
+    infrastructure. Passing `None` is how a test says "this deployment has no
+    such store", which is what produces `AdapterNotConfigured`.
+    """
+
+    return RAGAgentService(
+        adapters={
+            name: (CallableKnowledgeAdapter(name, fn) if fn is not None else None) for name, fn in adapters.items()
+        }
+    )
 
 
 def _retrieve(service: RAGAgentService, scope: AccessScope, *sources: str):
@@ -132,14 +144,24 @@ class TestARealFailureStillRaises:
 
     def test_a_failure_alongside_a_scope_skip_is_still_judged(self) -> None:
         """Mixed case: the graph store is not configured (never attempted) and
-        vector threw (attempted, failed). The verdict must come from vector."""
+        vector threw (attempted, failed). The verdict must come from vector.
+
+        `graph=None` states the absence rather than relying on it. Leaving graph
+        out of the map did not remove it -- the service merges over
+        `build_default_adapters()` -- so the real adapter ran, reached whatever
+        Neo4j the machine had, fell back to a real vector search on failure, and
+        the source's verdict came out different on different machines. This test
+        passed locally and failed on CI for that reason, which is the worst kind
+        of test: one whose subject is the environment.
+        """
+
         with pytest.raises(RetrievalFailureError):
             _retrieve(
-                _service(vector=_broken, bm25=_broken),
+                _service(vector=_broken, bm25=_broken, graph=None),
                 _scope("/uploads/alice/notes.pdf"),
                 "vector",
                 "bm25",
-                "graph",  # no adapter -> AdapterNotConfigured -> not attempted
+                "graph",
             )
 
     def test_partial_success_is_still_acceptable(self) -> None:
