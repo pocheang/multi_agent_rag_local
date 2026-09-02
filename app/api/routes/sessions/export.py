@@ -17,6 +17,7 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
 from app.api.dependencies import _history_store_for_user, _require_user, _require_valid_session_id
+from app.api.transport.errors import error_responses
 from app.core.config import get_settings
 from app.services.sessions.export import (
     ConflictStrategy,
@@ -78,7 +79,7 @@ class ImportResponse(BaseModel):
 # ============================================================================
 
 
-@router.post("/{session_id}/export")
+@router.post("/{session_id}/export", responses=error_responses(404, 500))
 async def export_session(
     session_id: str,
     request: ExportRequest,
@@ -166,7 +167,7 @@ async def export_session(
         raise HTTPException(status_code=500, detail="Export failed")
 
 
-@router.post("/import", response_model=ImportResponse)
+@router.post("/import", response_model=ImportResponse, responses=error_responses(400, 409, 413, 500))
 async def import_session(
     file: UploadFile = File(..., description="Exported session file (JSON or ZIP)"),
     conflict_strategy: ConflictStrategy = "skip",

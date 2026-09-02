@@ -26,6 +26,7 @@ from app.api.schemas import (
 from app.api.transport.errors import (
     bad_request,
     conflict,
+    error_responses,
     internal_error,
     not_found,
     rate_limited,
@@ -294,7 +295,7 @@ def document_index_health(request: Request, user: dict[str, Any] = Depends(_requ
     return report
 
 
-@router.post("/upload", response_model=UploadResponse)
+@router.post("/upload", response_model=UploadResponse, responses=error_responses(413))
 async def upload_files(
     request: Request,
     files: list[UploadFile] = File(...),

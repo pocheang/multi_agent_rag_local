@@ -15,6 +15,7 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException, Query
 
 from app.api.deps.auth import require_admin
+from app.api.transport.errors import error_responses
 from app.services.observability.agent_execution_tracker import AgentExecutionTracker
 
 logger = logging.getLogger(__name__)
@@ -26,7 +27,7 @@ router = APIRouter(
 )
 
 
-@router.get("/stats")
+@router.get("/stats", responses=error_responses(500))
 async def get_agent_quality_stats() -> dict[str, Any]:
     """
     Get comprehensive agent quality statistics for dashboard.
@@ -91,7 +92,7 @@ async def get_agent_quality_stats() -> dict[str, Any]:
         raise HTTPException(status_code=500, detail=f"Failed to retrieve agent quality statistics: {str(e)}")
 
 
-@router.get("/agents/{agent_name}")
+@router.get("/agents/{agent_name}", responses=error_responses(404, 500))
 async def get_agent_details(
     agent_name: str,
 ) -> dict[str, Any]:
@@ -136,7 +137,7 @@ async def get_agent_details(
         raise HTTPException(status_code=500, detail=f"Failed to retrieve agent details: {str(e)}")
 
 
-@router.get("/timeline")
+@router.get("/timeline", responses=error_responses(500))
 async def get_execution_timeline(
     hours: int = Query(default=24, ge=1, le=168, description="Number of hours to include"),
 ) -> dict[str, Any]:
@@ -187,7 +188,7 @@ async def get_execution_timeline(
         raise HTTPException(status_code=500, detail=f"Failed to retrieve execution timeline: {str(e)}")
 
 
-@router.get("/errors")
+@router.get("/errors", responses=error_responses(500))
 async def get_error_distribution() -> dict[str, Any]:
     """
     Get error distribution statistics.
@@ -231,7 +232,7 @@ async def get_error_distribution() -> dict[str, Any]:
         raise HTTPException(status_code=500, detail=f"Failed to retrieve error distribution: {str(e)}")
 
 
-@router.post("/clear")
+@router.post("/clear", responses=error_responses(500))
 async def clear_agent_stats() -> dict[str, str]:
     """
     Clear all agent execution statistics.

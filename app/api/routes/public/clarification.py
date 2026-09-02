@@ -15,6 +15,7 @@ from app.api.dependencies import (
     _require_user,
     _require_valid_session_id,
 )
+from app.api.transport.errors import error_responses
 from app.domain.contracts import ClarificationContext, ClarificationQuestion
 from app.orchestration.request import OrchestrationRequest, RequestActor, RequestScope
 from app.services.security.rbac import Permission
@@ -49,7 +50,7 @@ class ClarificationResponse(BaseModel):
     resume_token: str | None = Field(None, description="Signed resume correlation token when configured")
 
 
-@router.post("/check", response_model=ClarificationResponse)
+@router.post("/check", response_model=ClarificationResponse, responses=error_responses(409, 422))
 async def check_clarification(
     req: ClarificationCheckRequest,
     request: Request,
@@ -205,7 +206,7 @@ async def check_clarification(
     )
 
 
-@router.post("/reset/{session_id}")
+@router.post("/reset/{session_id}", responses=error_responses(404))
 async def reset_clarification(
     session_id: str,
     request: Request,
@@ -238,7 +239,7 @@ async def reset_clarification(
     return {"status": "success", "message": "Clarification context reset"}
 
 
-@router.get("/context/{session_id}")
+@router.get("/context/{session_id}", responses=error_responses(404))
 async def get_clarification_context(
     session_id: str,
     request: Request,

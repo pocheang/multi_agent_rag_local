@@ -25,6 +25,7 @@ from app.api.dependencies import (
 from app.api.schemas import AuthCredentials, AuthLoginResponse, AuthUser
 from app.api.transport.errors import (
     bad_request,
+    error_responses,
     internal_error,
     not_found,
     not_implemented,
@@ -76,7 +77,7 @@ def register(req: AuthCredentials, request: Request):
     return AuthUser(**user)
 
 
-@router.post("/login", response_model=AuthLoginResponse)
+@router.post("/login", response_model=AuthLoginResponse, responses=error_responses(429))
 def login(req: AuthCredentials, request: Request, response: Response):
     ip = _client_ip(request)
     username_key = normalize_string(req.username, lowercase=True) or "unknown"

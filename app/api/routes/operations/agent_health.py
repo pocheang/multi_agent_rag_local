@@ -13,6 +13,7 @@ from fastapi import APIRouter, Depends, HTTPException
 
 from app.api.deps.auth import require_admin
 from app.api.routes.internal.path_params import ExecutionId
+from app.api.transport.errors import error_responses
 from app.services.legacy_agent_health import (
     available_agent_health_checks,
     get_agent_config_values,
@@ -26,7 +27,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v1/agents", tags=["agent-health"])
 
 
-@router.get("/health", dependencies=[Depends(require_admin)])
+@router.get("/health", dependencies=[Depends(require_admin)], responses=error_responses(500))
 async def check_all_agents_health() -> dict[str, Any]:
     """
     Check health status of all agents.
@@ -66,7 +67,7 @@ async def check_all_agents_health() -> dict[str, Any]:
         raise HTTPException(status_code=500, detail="Agent health check failed")
 
 
-@router.get("/{agent_name}/health", dependencies=[Depends(require_admin)])
+@router.get("/{agent_name}/health", dependencies=[Depends(require_admin)], responses=error_responses(404, 500))
 async def check_agent_health(agent_name: str) -> dict[str, Any]:
     """
     Check health status of a specific agent.
@@ -99,7 +100,7 @@ async def check_agent_health(agent_name: str) -> dict[str, Any]:
         raise HTTPException(status_code=500, detail="Agent health check failed")
 
 
-@router.get("/status", dependencies=[Depends(require_admin)])
+@router.get("/status", dependencies=[Depends(require_admin)], responses=error_responses(500))
 async def get_agent_execution_status() -> dict[str, Any]:
     """
     Get agent execution statistics (legacy endpoint).
@@ -139,7 +140,7 @@ async def get_agent_execution_status() -> dict[str, Any]:
         raise HTTPException(status_code=500, detail="Failed to get execution status")
 
 
-@router.get("/trace/{execution_id}", dependencies=[Depends(require_admin)])
+@router.get("/trace/{execution_id}", dependencies=[Depends(require_admin)], responses=error_responses(404, 500))
 async def get_execution_trace(execution_id: ExecutionId) -> dict[str, Any]:
     """
     Get detailed execution trace for a specific query.
@@ -188,7 +189,7 @@ async def get_execution_trace(execution_id: ExecutionId) -> dict[str, Any]:
         raise HTTPException(status_code=500, detail="Failed to get execution trace")
 
 
-@router.get("/config", dependencies=[Depends(require_admin)])
+@router.get("/config", dependencies=[Depends(require_admin)], responses=error_responses(500))
 async def get_agent_config() -> dict[str, Any]:
     """
     Get current agent configuration.

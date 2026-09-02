@@ -6,6 +6,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, Query
 
 from app.api.deps.auth import require_admin
+from app.api.transport.errors import error_responses
 from app.services.caching import CACHE_PREFIX_PATTERN, get_cache_manager
 from app.services.optimization.memory_manager import MemoryManager, optimize_memory
 from app.services.performance.monitor import get_monitor
@@ -48,7 +49,7 @@ async def get_metrics():
     return {"success": True, "data": monitor.get_all_stats()}
 
 
-@router.get("/cache/stats")
+@router.get("/cache/stats", responses=error_responses(503))
 async def get_cache_stats():
     """Get cache statistics."""
     cache_manager = get_cache_manager()
@@ -59,7 +60,7 @@ async def get_cache_stats():
     return {"success": True, "data": cache_manager.get_stats()}
 
 
-@router.post("/cache/clear")
+@router.post("/cache/clear", responses=error_responses(503))
 async def clear_cache(prefix: CachePrefix = None):
     """Clear cache (all or specific prefix).
 
@@ -87,7 +88,7 @@ async def get_memory_stats():
     return {"success": True, "data": stats}
 
 
-@router.post("/memory/optimize")
+@router.post("/memory/optimize", responses=error_responses(500))
 async def run_memory_optimization():
     """Run memory optimization (garbage collection)."""
     try:
@@ -98,7 +99,7 @@ async def run_memory_optimization():
         raise HTTPException(status_code=500, detail="Memory optimization failed")
 
 
-@router.get("/memory/large-objects")
+@router.get("/memory/large-objects", responses=error_responses(500))
 async def get_large_objects(min_size_mb: float = 1.0, limit: int = 10):
     """Get large objects in memory.
 

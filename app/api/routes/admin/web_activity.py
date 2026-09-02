@@ -10,6 +10,7 @@ from pydantic import BaseModel
 
 from app.api.dependencies import _require_user
 from app.api.deps.auth import require_admin
+from app.api.transport.errors import error_responses
 from app.services.legacy_web_activity import (
     check_and_alert,
     get_activity_analyzer,
@@ -60,6 +61,12 @@ class UserStats(BaseModel):
 
 
 def parse_date(date_str: str | None) -> datetime | None:
+    """Parse an ISO date, or reject it.
+
+    Raises 400, which is why every route below that calls this declares it:
+    the failure belongs to the endpoint a client called, not to the helper.
+    """
+
     if not date_str:
         return None
     try:
@@ -68,7 +75,7 @@ def parse_date(date_str: str | None) -> datetime | None:
         raise HTTPException(status_code=400, detail=f"Invalid date format: {date_str}")
 
 
-@router.get("/stats", response_model=StatsResponse)
+@router.get("/stats", response_model=StatsResponse, responses=error_responses(400))
 async def get_web_activity_stats(
     start_date: str | None = Query(None, description="å¼€å§‹æ—¥æœŸ (ISO format: YYYY-MM-DD)"),
     end_date: str | None = Query(None, description="ç»“æŸæ—¥æœŸ (ISO format: YYYY-MM-DD)"),
@@ -88,7 +95,7 @@ async def get_web_activity_stats(
     return analysis
 
 
-@router.get("/report")
+@router.get("/report", responses=error_responses(400))
 async def get_web_activity_report(
     start_date: str | None = Query(None, description="å¼€å§‹æ—¥æœŸ (YYYY-MM-DD)"),
     end_date: str | None = Query(None, description="ç»“æŸæ—¥æœŸ (YYYY-MM-DD)"),
@@ -104,7 +111,7 @@ async def get_web_activity_report(
     return {"report": report}
 
 
-@router.get("/logs")
+@router.get("/logs", responses=error_responses(400))
 async def get_web_activity_logs(
     start_date: str | None = Query(None, description="å¼€å§‹æ—¥æœŸ (YYYY-MM-DD)"),
     end_date: str | None = Query(None, description="ç»“æŸæ—¥æœŸ (YYYY-MM-DD)"),
@@ -118,7 +125,7 @@ async def get_web_activity_logs(
     return {"total": len(logs), "offset": offset, "limit": limit, "logs": logs[offset : offset + limit]}
 
 
-@router.get("/top-websites", response_model=list[WebsiteStats])
+@router.get("/top-websites", response_model=list[WebsiteStats], responses=error_responses(400))
 async def get_top_websites(
     start_date: str | None = Query(None, description="å¼€å§‹æ—¥æœŸ (YYYY-MM-DD)"),
     end_date: str | None = Query(None, description="ç»“æŸæ—¥æœŸ (YYYY-MM-DD)"),
@@ -128,7 +135,7 @@ async def get_top_websites(
     return analysis["top_websites"][:limit]
 
 
-@router.get("/top-users", response_model=list[UserStats])
+@router.get("/top-users", response_model=list[UserStats], responses=error_responses(400))
 async def get_top_users(
     start_date: str | None = Query(None, description="å¼€å§‹æ—¥æœŸ (YYYY-MM-DD)"),
     end_date: str | None = Query(None, description="ç»“æŸæ—¥æœŸ (YYYY-MM-DD)"),
@@ -151,7 +158,7 @@ async def get_hourly_distribution(
     }
 
 
-@router.get("/export")
+@router.get("/export", responses=error_responses(400))
 async def export_logs(
     start_date: str | None = Query(None, description="å¼€å§‹æ—¥æœŸ (YYYY-MM-DD)"),
     end_date: str | None = Query(None, description="ç»“æŸæ—¥æœŸ (YYYY-MM-DD)"),

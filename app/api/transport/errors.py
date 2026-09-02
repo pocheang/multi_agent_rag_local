@@ -1,6 +1,41 @@
-"""Common error response helpers for FastAPI routes."""
+"""Common error response helpers for FastAPI routes.
+
+The helpers below *raise* the errors; `error_responses` *declares* them, so the
+OpenAPI document says what a route can return. Those were separate facts until
+2026-09-02: a route raising `conflict(...)` documented only its 200, and the
+generated document told a client the call could not fail -- `python:S8415`.
+
+One place for the descriptions, because fifty-three route decorators writing
+their own would be fifty-three chances to describe the same 400 differently.
+"""
+
+from typing import Any
 
 from fastapi import HTTPException
+
+_ERROR_DESCRIPTIONS: dict[int, str] = {
+    400: "The request was rejected by validation.",
+    401: "Authentication is required.",
+    403: "The caller lacks the required permission.",
+    404: "No such resource, or none visible to this caller.",
+    409: "The request conflicts with the current state of the resource.",
+    413: "The payload exceeds the configured limit.",
+    422: "The request body did not match the expected schema.",
+    429: "Rate limit exceeded; retry after the interval in the Retry-After header.",
+    500: "The request failed for a reason the caller cannot act on.",
+    501: "Not implemented.",
+    503: "A dependency this endpoint needs is unavailable; retry later.",
+}
+
+
+def error_responses(*status_codes: int) -> dict[int | str, dict[str, Any]]:
+    """Declare the failures a route can return, for the OpenAPI document.
+
+    404 and 403 deliberately describe *visibility* rather than existence: the
+    document should not promise a caller that a resource it cannot see exists.
+    """
+
+    return {code: {"description": _ERROR_DESCRIPTIONS[code]} for code in sorted(set(status_codes))}
 
 
 def not_found(resource: str = "Resource") -> HTTPException:

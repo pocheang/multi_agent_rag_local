@@ -15,6 +15,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
 from app.api.dependencies import _require_user, _require_valid_session_id
+from app.api.transport.errors import error_responses
 from app.services.sessions.search import (
     SearchQuery,
     SessionSearchService,
@@ -137,7 +138,7 @@ def _metadata_to_response(metadata: SessionMetadata) -> MetadataResponse:
 # ============================================================================
 
 
-@router.post("/{session_id}/metadata", response_model=MetadataResponse)
+@router.post("/{session_id}/metadata", response_model=MetadataResponse, responses=error_responses(400, 500))
 def update_session_metadata(
     session_id: str,
     request: UpdateMetadataRequest,
@@ -183,7 +184,7 @@ def update_session_metadata(
         raise HTTPException(status_code=500, detail="Failed to update metadata")
 
 
-@router.get("/{session_id}/metadata", response_model=MetadataResponse)
+@router.get("/{session_id}/metadata", response_model=MetadataResponse, responses=error_responses(404))
 def get_session_metadata(session_id: str, user: dict[str, Any] = Depends(_require_user)):
     """
     Get session metadata.
@@ -200,7 +201,7 @@ def get_session_metadata(session_id: str, user: dict[str, Any] = Depends(_requir
     return _metadata_to_response(metadata)
 
 
-@router.delete("/{session_id}/metadata")
+@router.delete("/{session_id}/metadata", responses=error_responses(404))
 def delete_session_metadata(session_id: str, user: dict[str, Any] = Depends(_require_user)):
     """
     Delete session metadata.
@@ -218,7 +219,9 @@ def delete_session_metadata(session_id: str, user: dict[str, Any] = Depends(_req
     return {"message": "Metadata deleted successfully", "session_id": session_id}
 
 
-@router.post("/{session_id}/metadata/extract-tags", response_model=MetadataResponse)
+@router.post(
+    "/{session_id}/metadata/extract-tags", response_model=MetadataResponse, responses=error_responses(404, 500)
+)
 def extract_auto_tags(
     session_id: str,
     request: ExtractTagsRequest,
@@ -246,7 +249,7 @@ def extract_auto_tags(
         raise HTTPException(status_code=500, detail="Failed to extract tags")
 
 
-@router.post("/search", response_model=SearchResponse)
+@router.post("/search", response_model=SearchResponse, responses=error_responses(400, 500))
 def search_sessions(request: SearchSessionsRequest, user: dict[str, Any] = Depends(_require_user)):
     """
     Search and filter sessions.
