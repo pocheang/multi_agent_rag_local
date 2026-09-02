@@ -34,7 +34,6 @@ from app.api.schemas import (
 )
 from app.api.transport.errors import bad_request, not_found
 from app.services.observability.log_buffer import list_captured_logs
-from app.services.security.admin_rate_limit import get_limiter, get_rate_limit
 from app.services.security.admin_security import (
     check_admin_role_change,
     check_self_modification,
@@ -45,7 +44,6 @@ from app.services.security.admin_security import (
 )
 
 router = APIRouter(prefix="/admin", tags=["admin"])
-limiter = get_limiter()
 
 
 def _audit_detail(**fields: Any) -> str:
@@ -68,7 +66,6 @@ def _audit_detail(**fields: Any) -> str:
 
 
 @router.get("/users", response_model=list[AdminUserSummary])
-@limiter.limit(get_rate_limit("list_users"))
 def admin_list_users(request: Request, user: dict[str, Any] = Depends(_require_user)):
     """List all users (admin only)."""
     _require_permission(user, "admin:user_manage", request, "admin")
@@ -77,7 +74,6 @@ def admin_list_users(request: Request, user: dict[str, Any] = Depends(_require_u
 
 
 @router.post("/users/{user_id}/credits/add", response_model=AdminUserSummary)
-@limiter.limit(get_rate_limit("credit_add"))
 def admin_add_user_credits(
     user_id: str,
     req: AdminCreditAddRequest,
@@ -117,7 +113,6 @@ def admin_page(request: Request, user: dict[str, Any] = Depends(_require_user)):
 
 
 @router.patch("/users/{user_id}/role", response_model=AdminUserSummary)
-@limiter.limit(get_rate_limit("role_update"))
 def admin_update_user_role(
     user_id: str, req: AdminRoleUpdateRequest, request: Request, user: dict[str, Any] = Depends(_require_user)
 ):
@@ -151,7 +146,6 @@ def admin_update_user_role(
 
 
 @router.post("/users/create-admin", response_model=AdminUserSummary)
-@limiter.limit(get_rate_limit("admin_create"))
 def admin_create_user_as_admin(
     req: AdminCreateAdminRequest, request: Request, user: dict[str, Any] = Depends(_require_user)
 ):
@@ -208,7 +202,6 @@ def admin_create_user_as_admin(
 
 
 @router.post("/users/{user_id}/reset-approval-token", response_model=AdminUserSummary)
-@limiter.limit(get_rate_limit("approval_token_reset"))
 def admin_reset_user_approval_token(
     user_id: str,
     req: AdminResetApprovalTokenRequest,
@@ -271,7 +264,6 @@ def admin_reset_user_approval_token(
 
 
 @router.post("/users/{user_id}/reset-password", response_model=AdminUserSummary)
-@limiter.limit(get_rate_limit("password_reset"))
 def admin_reset_user_password(
     user_id: str,
     req: AdminResetPasswordRequest,
@@ -327,7 +319,6 @@ def admin_reset_user_password(
 
 
 @router.patch("/users/{user_id}/status", response_model=AdminUserSummary)
-@limiter.limit(get_rate_limit("status_update"))
 def admin_update_user_status(
     user_id: str, req: AdminStatusUpdateRequest, request: Request, user: dict[str, Any] = Depends(_require_user)
 ):
@@ -397,7 +388,6 @@ def admin_update_user_classification(
 
 
 @router.get("/audit-logs", response_model=list[AuditLogEntry])
-@limiter.limit(get_rate_limit("audit_logs"))
 def admin_list_audit_logs(
     request: Request,
     limit: int = 200,
