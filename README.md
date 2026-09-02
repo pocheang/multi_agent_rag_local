@@ -12,28 +12,37 @@ Built with FastAPI, React, LangGraph, and hybrid retrieval
 
 ## ✨ Features
 
-### Multi-Agent Orchestration
-- 🎯 **11 Specialized Agents** - Router, Vector RAG, Graph RAG, ReAct, Web Research, Quality Assurance
-- 🔄 **LangGraph Workflow** - Stateful execution with conditional routing and retry logic
-- 🎨 **Adaptive Planning** - Dynamic strategy selection based on query complexity
+### Pipeline
+- 🎯 **Three components always run** - Router (intent and route), Retriever (hybrid search),
+  Synthesizer (citation-first generation)
+- 🔀 **Three more when the route asks for them** - Planner, a governed Tool Runner, and a
+  Finalizer that validates the answer
+- 🔄 **LangGraph workflow** - Stateful execution with per-stage timeouts that degrade rather
+  than fail the request
 
-### Advanced Retrieval
-- 🔍 **Hybrid Search** - Vector (BGE-M3) + BM25 + RRF fusion
-- 📊 **Graph RAG** - Neo4j knowledge graph for entity relationship queries
-- 🔁 **Reranking** - BGE-Reranker-V2-M3 for precision optimization
-- 🌐 **Web Fallback** - External search when local knowledge insufficient
+### Retrieval
+- 🔍 **Hybrid search** - Vector (BGE-M3) + BM25, fused by Reciprocal Rank Fusion
+- 📊 **Graph retrieval** - Neo4j for relationship questions, optional; the system runs
+  without it
+- 🔁 **Reranking** - BGE-Reranker-V2-M3, widened with the question's complexity
+- 🌐 **Web search** - On the web route, and as a freshness fallback when enabled
+- 🔒 **Scoped, not filtered** - Retrieval is bounded by the caller's access scope before it
+  runs, and a missing scope raises rather than searching every tenant's corpus
 
-### Quality Assurance
-- ✅ **5-Layer Defense** - Route validation, retrieval quality, answer validation, score fusion, context tracking
-- 📝 **Citation-First** - Every claim backed by source references `[doc_id:page]`
-- 🛡️ **Hallucination Detection** - Pattern-based checks for dates, numbers, entities
-- 📈 **Quality Metrics** - Router accuracy 99%, hallucination rate <10%, citation completeness 96%
+### Answers
+- 📝 **Citation-first** - Claims carry an inline marker during generation; readers see
+  `[1]`, `[2]` numbered by first appearance, with a reference list
+- 🛡️ **Validation** - Citation completeness, NLI entailment, and sentence-level grounding
+  that hedges claims the evidence does not support
+- 🔐 **Output DLP** - Secrets are redacted from finalized answers and from the streamed
+  draft, at every chunk boundary
 
-### Production Ready
-- 🔐 **Security** - JWT authentication, RBAC, encrypted API keys
+### Operations
+- 🔑 **Security** - JWT authentication, RBAC, encrypted stored credentials
+- ⚙️ **Configuration** - One schema (`Settings`), one precedence chain, an optional Nacos
+  configuration centre, and an admin page that shows which layer each value came from
 - 📊 **Monitoring** - Prometheus metrics, Grafana dashboards, structured logging
-- 🐳 **Docker Support** - One-command deployment with health checks
-- ⚙️ **Configuration Governance** - Centralized config in `config/`, runtime profiles
+- 🐳 **Docker** - Compose stack with health checks
 
 ---
 
@@ -44,13 +53,15 @@ Built with FastAPI, React, LangGraph, and hybrid retrieval
 - **Python 3.11+**
 - **Node.js 18+** (for frontend)
 - **Conda** (recommended for environment management)
-- **PostgreSQL** (for user/session management)
-- **Neo4j** (optional, for Graph RAG)
+- **Neo4j** (optional, for graph retrieval)
+
+No external database is required: users, sessions, prompts and connector metadata all live
+in SQLite under `data/`.
 
 ### Docker Deployment (Recommended)
 
 ```bash
-# 1. Set your API key
+# 1. Set your API key (optional -- MODEL_BACKEND=local needs none)
 export OPENAI_API_KEY="your-api-key"
 
 # 2. Deploy with one command
@@ -82,21 +93,34 @@ conda activate rag-local
 pip install -e .
 ```
 
-**3. Configure environment:**
+**3. Configure:**
 
 ```bash
-# Copy template
-cp config/env/development.env.example .env
+# Render the runtime configuration. A root .env is NOT read -- app/core/config.py
+# reads .runtime/{APP_ENV}.env, which this generates from config/env/ + config/profiles/.
+make config-render ENV=development PROFILE=balanced
 
-# Edit .env with your API keys
-# Required: OPENAI_API_KEY or ANTHROPIC_API_KEY
-# Optional: NEO4J_URI, REDIS_URL
+# ...or without make, which Windows checkouts often lack:
+conda run -n rag-local python deploy/scripts/config.py render   --environment development --profile balanced --output .runtime/development.env
 ```
 
-**4. Initialize database:**
+Nothing else is required to start. The default `MODEL_BACKEND=local` runs an offline
+stand-in with no API key and no Ollama, so the app comes up on a fresh checkout. To use a
+real model, export the key as a **real environment variable** — the rendered file is read
+into settings without being exported, so keys placed there reach the application but not
+anything that reads `os.environ` directly:
 
 ```bash
-python scripts/init_db.py
+export OPENAI_API_KEY=sk-...
+```
+
+The database needs no initialisation step: every store creates its own SQLite schema on
+first use, under `data/`.
+
+**4. Create a local administrator** (optional, for the admin pages):
+
+```bash
+python scripts/create_admin.py     # prints a generated password once
 ```
 
 **5. Start backend:**
@@ -131,22 +155,6 @@ npm run dev
 > the v0.7 rewrite and are being regenerated against the new architecture. Until they land,
 > [CLAUDE.md](CLAUDE.md) is the accurate description of how the system works today.
 
-### Documentation Structure
-```
-docs/
-├── getting-started/      # Installation and setup
-├── user-guide/          # End-user guides
-├── architecture/        # System design and architecture
-├── features/            # Feature-specific guides
-├── development/         # Developer documentation
-├── operations/          # Deployment and operations
-├── reference/           # API, configuration, FAQ
-├── releases/            # Release notes and history
-└── zh-CN/               # Chinese documentation
-```
-
-**Full Documentation:** [docs/README.md](docs/README.md)
-
 ---
 
 ## 🏗️ Architecture
@@ -154,49 +162,53 @@ docs/
 ### System Overview
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                       User Interface                         │
-│                    (React + TypeScript)                      │
-└────────────────────┬────────────────────────────────────────┘
-                     │ HTTP/SSE
-┌────────────────────▼────────────────────────────────────────┐
-│                    FastAPI Backend                           │
-│  ┌──────────────────────────────────────────────────────┐   │
-│  │            LangGraph State Machine                   │   │
-│  │  ┌─────────────────────────────────────────────┐    │   │
-│  │  │  Router Agent → Route Validator Agent       │    │   │
-│  │  └──────────────┬──────────────────────────────┘    │   │
-│  │                 │                                    │   │
-│  │  ┌──────────────▼──────────────────────────────┐    │   │
-│  │  │  Retrieval Layer (4 agents)                 │    │   │
-│  │  │  • Vector RAG  • Graph RAG                  │    │   │
-│  │  │  • ReAct       • Web Research               │    │   │
-│  │  └──────────────┬──────────────────────────────┘    │   │
-│  │                 │                                    │   │
-│  │  ┌──────────────▼──────────────────────────────┐    │   │
-│  │  │  Quality Assurance (5 agents)               │    │   │
-│  │  │  • Retrieval Quality  • Answer Validator    │    │   │
-│  │  │  • Context Tracker    • Quality Orchestrator│    │   │
-│  │  │  • Synthesis Agent                          │    │   │
-│  │  └─────────────────────────────────────────────┘    │   │
-│  └──────────────────────────────────────────────────────┘   │
-└────────────────────┬────────────────────────────────────────┘
-                     │
-    ┌────────────────┼────────────────┐
-    │                │                │
-┌───▼────┐    ┌─────▼─────┐    ┌────▼─────┐
-│ChromaDB│    │PostgreSQL │    │  Neo4j   │
-│(Vector)│    │  (Users)  │    │ (Graph)  │
-└────────┘    └───────────┘    └──────────┘
+┌──────────────────────────────────────────────────────────────┐
+│                       React + TypeScript                     │
+└───────────────────────────┬──────────────────────────────────┘
+                            │ HTTP + SSE
+┌───────────────────────────▼──────────────────────────────────┐
+│                       FastAPI backend                        │
+│  ┌────────────────────────────────────────────────────────┐  │
+│  │                  LangGraph workflow                    │  │
+│  │                                                        │  │
+│  │   privacy_permission   resolves the caller's scope     │  │
+│  │          ↓             and rewrites the request        │  │
+│  │   router               intent, route, skill            │  │
+│  │          ↓                                             │  │
+│  │   planner              optional: decomposition         │  │
+│  │          ↓                                             │  │
+│  │   knowledge            vector + BM25 (+ graph, web,    │  │
+│  │          ↓             memory, wiki, multimodal)       │  │
+│  │   tool                 optional: governed tool loop    │  │
+│  │          ↓             select → invoke → observe       │  │
+│  │   synthesizer          citation-first generation       │  │
+│  │          ↓                                             │  │
+│  │   verifier             optional: validate, maybe retry │  │
+│  │          ↓                                             │  │
+│  │   output_filter        DLP, then citation numbering    │  │
+│  └────────────────────────────────────────────────────────┘  │
+└───────────────────────────┬──────────────────────────────────┘
+                            │
+        ┌───────────────────┼───────────────────┐
+        │                   │                   │
+   ┌────▼─────┐      ┌──────▼──────┐     ┌──────▼──────┐
+   │ ChromaDB │      │   SQLite    │     │    Neo4j    │
+   │ (vectors)│      │(users, etc.)│     │  (optional) │
+   └──────────┘      └─────────────┘     └─────────────┘
 ```
+
+`privacy_permission` and `output_filter` have no timeout fallback on purpose:
+skipping scope resolution or output DLP is a hole, not a degradation.
 
 ### Key Components
 
-- **11 Specialized Agents** - Each with specific responsibilities
-- **LangGraph State Machine** - Orchestrates multi-agent workflow
-- **Hybrid Retrieval** - Vector + BM25 + Graph search
-- **Quality Assurance** - 5-layer validation and scoring
-- **Configuration Governance** - Centralized `config/` directory
+- **Six components** - three always on the path, three the route may add. The
+  `app/agents/` directory name is historical; these are components, not autonomous agents.
+- **LangGraph workflow** - one graph, one profile, per-stage budgets
+- **Hybrid retrieval** - vector + BM25 fused by RRF, graph and web where the route asks
+- **Answer validation** - citations, NLI entailment, sentence grounding, output DLP
+- **Configuration** - one schema in `app/core/config.py`, layered sources, optional
+  configuration centre
 
 **Detailed Architecture:** [CLAUDE.md](CLAUDE.md) — kept current with the code rather than alongside it.
 
@@ -206,25 +218,26 @@ docs/
 
 ### Tech Stack
 
+Pins live in `pyproject.toml` and `frontend/package.json`; these are the majors.
+
 **Backend:**
-- FastAPI 0.109+ (API framework)
-- LangGraph 0.0.20+ (Agent orchestration)
-- LangChain 0.1.0+ (LLM integration)
-- ChromaDB 0.4.18+ (Vector store)
-- Neo4j 5.0+ (Graph database, optional)
-- PostgreSQL 14+ (User/session management)
+- FastAPI 0.138+ (API framework)
+- LangGraph 0.2+ / LangChain 0.3+ (orchestration and LLM integration)
+- ChromaDB 0.5+ (vector store)
+- Neo4j 5.24+ (graph, optional)
+- SQLite (users, sessions, prompts, connectors — no external database)
 
 **Frontend:**
-- React 18.2+
-- TypeScript 5.0+
-- Vite 5.0+
-- Ant Design 5.0+
+- React 18.3 + TypeScript 5.9 + Vite 6
+- Zustand (state), i18next (zh/en), Tailwind v4 alongside the stylesheets it is
+  replacing
 
-**AI Models:**
-- OpenAI GPT-4/GPT-5
-- Anthropic Claude Opus/Sonnet
-- Sentence-Transformers (embeddings)
-- BGE-Reranker (reranking)
+**Models:**
+- OpenAI (default `gpt-5.5`), Anthropic, or Ollama
+- `MODEL_BACKEND=local` — the default on a fresh checkout — uses an offline
+  stand-in with no LLM at all, so the app runs with no API key. Quality figures
+  describe the LLM path, not this one.
+- Sentence-Transformers BGE-M3 (embeddings), BGE-Reranker-V2-M3 (reranking)
 
 ### Setup Development Environment
 
@@ -245,11 +258,11 @@ pip install -e ".[dev]"  # Includes dev dependencies
 **2. Configure:**
 
 ```bash
-# Copy development config
-cp config/env/development.env.example .env
-
-# Edit .env with your settings
+make config-render ENV=development PROFILE=balanced
 ```
+
+Local overrides go in `config/env/development.env` (gitignored); the render step prefers it
+over the committed `.example`.
 
 **3. Run tests:**
 
@@ -325,7 +338,8 @@ config/
 Key environment variables:
 
 ```bash
-# Required
+# Only when you want a real model. With MODEL_BACKEND=local, the default, none
+# of these is required.
 OPENAI_API_KEY=sk-...              # OpenAI API key
 # OR
 ANTHROPIC_API_KEY=sk-ant-...       # Anthropic API key
@@ -335,8 +349,7 @@ NEO4J_URI=bolt://localhost:7687    # Neo4j connection
 NEO4J_USER=neo4j
 NEO4J_PASSWORD=password
 
-POSTGRES_URL=postgresql://...      # PostgreSQL connection
-REDIS_URL=redis://localhost:6379   # Redis (optional)
+REDIS_URL=redis://localhost:6379   # Redis, optional cache backend
 
 # API Settings
 API_SETTINGS_ENCRYPTION_KEY=...    # For encrypting stored API keys
@@ -346,30 +359,56 @@ API_SETTINGS_ENCRYPTION_KEY=...    # For encrypting stored API keys
 
 ## 📊 Performance
 
-### Benchmarks (v0.6.0)
+### Targets
 
-| Metric | Value | Target |
-|--------|-------|--------|
-| Router Accuracy | 99.0% | >98% ✅ |
-| Retrieval Precision@5 | 92.7% | >90% ✅ |
-| Hallucination Rate | 8.0% | <10% ✅ |
-| Citation Completeness | 96.0% | >95% ✅ |
-| P95 Latency | 3.8s | <4s ✅ |
-| System Availability | 99.8% | >99.5% ✅ |
+These are the thresholds the project holds itself to, not measurements. This
+table used to print six figures as though they had been measured; nothing in the
+repository backed them, so they are stated as what they are.
 
-**Performance Guide:** see the Quality Metrics and stage-timeout sections of [CLAUDE.md](CLAUDE.md).
+| Metric | Target |
+|--------|--------|
+| Router accuracy | >95% |
+| Retrieval Precision@5 | >0.85 |
+| Citation completeness | >90% |
+| P95 latency, standard query | <5s |
+
+Two things worth knowing before quoting any number:
+
+- Every figure describes the **LLM path**. `MODEL_BACKEND=local`, the default on a
+  fresh checkout, has no model in the loop at all — it routes by keyword and
+  assembles an answer from the retrieved excerpts. Quality metrics mean nothing
+  there.
+- Measuring is a first-class operation, not a spreadsheet: `POST /admin/ops/benchmark/run`
+  runs the query set at `config/eval/benchmark_queries.txt` (or `data/eval/` if you
+  place one there) **under the requesting administrator's identity**, so it measures
+  the corpus that administrator can actually see. The shipped set is
+  corpus-agnostic: it exercises latency and route branches, but grounding and
+  citation figures only mean something once the queries match documents you have
+  ingested.
+
+**Timeouts and degradation:** the stage-budget sections of [CLAUDE.md](CLAUDE.md). Stage
+ceilings bound a hang; they are not latency targets, which is why they sit well above the
+figures here.
 
 ---
 
 ## 🔒 Security
 
-- ✅ No hardcoded secrets
-- ✅ Environment-based configuration
-- ✅ JWT authentication with bcrypt
-- ✅ RBAC (Role-Based Access Control)
-- ✅ API key encryption
-- ✅ Input validation and sanitization
-- ✅ CORS protection
+- **Passwords** — PBKDF2-HMAC-SHA256 at 600,000 iterations (OWASP 2023), per-user salt
+- **Sessions** — JWT, with RBAC on every admin surface
+- **Stored credentials** — encrypted at rest with `API_SETTINGS_ENCRYPTION_KEY`, which must
+  outlive the process: rotating it turns stored credentials from absent into undecryptable
+- **User data isolation** — retrieval is *scoped before it runs*, not filtered afterwards. A
+  missing access scope raises rather than searching every tenant's corpus, and the store
+  checks each chunk's own owner metadata as a second, independent gate
+- **Output DLP** — secrets are redacted from finalized answers and from the streamed draft,
+  verified at every chunk boundary
+- **Logs** — user questions never reach them; a stable digest is logged instead, enforced by
+  an AST guard over every logging call
+- **Tool selection is blind to retrieved content** — a document cannot talk the model into
+  running a tool
+
+These are properties with tests behind them: `tests/security/` holds 154 of the suite's 528.
 
 **Security Policy:** [SECURITY.md](SECURITY.md)
 
