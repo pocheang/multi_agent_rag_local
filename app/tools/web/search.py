@@ -1,10 +1,14 @@
 import logging
+import threading
 
 from ddgs import DDGS
 
 from app.services.observability.log_safety import question_ref
 
 logger = logging.getLogger(__name__)
+
+# See `search_web`: concurrent DDGS construction wedges the process.
+_CLIENT_LOCK = threading.Lock()
 
 
 def _resolve_ddgs_eagerly() -> None:
@@ -57,7 +61,24 @@ def search_web(query: str, max_results: int = 5, timeout: int = 10) -> list[dict
     results: list[dict] = []
 
     try:
-        with DDGS(timeout=timeout) as ddgs:
+        # Constructing a client is serialized; searching is not.
+        #
+        # `DDGS()` builds a `primp.Client` (a Rust HTTP client) which calls back
+        # into Python logging on the way up. Two threads doing that at once
+        # wedged the process: py-spy showed two workers parked in
+        # `ddgs/http_client.py::__init__` at `logging.getLogger`, and the main
+        # thread stuck in `Thread.start()`, with the whole server answering
+        # nothing -- `/health` included -- at zero CPU.
+        #
+        # Resolving ddgs's lazy import at module load (below) was necessary and
+        # not sufficient: the import race is one way in, and concurrent
+        # construction is another. The cause lives inside a third-party Rust
+        # client, so this holds the construction under one lock rather than
+        # pretending to fix it there. The search itself runs outside the lock,
+        # so several queries still overlap; only the constructor is one-at-a-time.
+        with _CLIENT_LOCK:
+            client = DDGS(timeout=timeout)
+        with client as ddgs:
             for item in ddgs.text(query, max_results=max_results, region="wt-wt", safesearch="moderate"):
                 results.append(
                     {

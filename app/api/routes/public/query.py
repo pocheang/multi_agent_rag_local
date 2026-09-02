@@ -9,6 +9,7 @@ from typing import Any
 from fastapi import APIRouter, Depends, Request
 from pydantic import BaseModel, Field
 
+from app.agents.rag.service import RetrievalFailureError
 from app.agents.shared.config import get_vector_rag_config
 from app.api.dependencies import (
     _build_memory_context_for_session,
@@ -23,7 +24,7 @@ from app.api.dependencies import (
 from app.api.deps.auth import require_admin
 from app.api.deps.documents import _allowed_sources_for_user
 from app.api.routes.internal.pipeline_contract import retrieval_summary
-from app.api.transport.errors import internal_error
+from app.api.transport.errors import internal_error, service_unavailable
 from app.core.config import get_settings
 from app.domain.advanced_rag import (
     AdvancedRAGResult,
@@ -43,6 +44,7 @@ from app.pipeline.contracts import (
 from app.pipeline.profiles import PipelineProfile
 from app.pipeline.rag_pipeline import RAGPipeline
 from app.services.observability.agent_execution_tracker import AgentExecutionTracker
+from app.services.observability.log_safety import question_ref
 from app.services.query.decomposer import DEFAULT_MAX_SUB_QUERIES
 
 logger = logging.getLogger(__name__)
@@ -299,6 +301,24 @@ async def _run_self_rag_evaluation(
         return None, []
 
 
+def _retrieval_failure(exc: BaseException) -> RetrievalFailureError | None:
+    """Find a `RetrievalFailureError` under whatever wrapped it.
+
+    `run_with_timeout` re-raises every stage failure as `StageExecutionError`,
+    keeping the original on `__cause__`, and LangGraph may wrap that again. A
+    handler that matched only the bare type therefore never fired -- the first
+    version of this fix did exactly that and still returned 500.
+    """
+
+    seen: set[int] = set()
+    while exc is not None and id(exc) not in seen:
+        if isinstance(exc, RetrievalFailureError):
+            return exc
+        seen.add(id(exc))
+        exc = exc.__cause__ or exc.__context__
+    return None
+
+
 async def _process_advanced_rag_query_impl(
     request_data: AdvancedRAGRequest,
     request: Request,
@@ -401,10 +421,28 @@ async def _process_advanced_rag_query_impl(
         )
         tracker.complete_execution(execution_id, result.model_dump())
         return result
-    except Exception as e:
-        tracker.fail_execution(execution_id, str(e))
-        logger.exception("Error processing advanced RAG query")
-        raise internal_error("Unable to process advanced query")
+    except Exception as exc:
+        retrieval_failure = _retrieval_failure(exc)
+        if retrieval_failure is None:
+            tracker.fail_execution(execution_id, str(exc))
+            logger.exception("Error processing advanced RAG query")
+            raise internal_error("Unable to process advanced query") from exc
+
+        # Every retriever that ran, failed. That is a dependency being down --
+        # most often the web search, which is the *only* source when the caller
+        # has no documents -- not a defect in this service, and answering it with
+        # a bare 500 threw away the one thing the caller could act on. A closely
+        # related case was fixed once already: a caller with an empty corpus had
+        # every document source counted as failed, and their first question
+        # surfaced as a 500 (see `RAGAgentService.retrieve`). This is the other
+        # half of it.
+        tracker.fail_execution(execution_id, str(exc))
+        failed = ", ".join(sorted(retrieval_failure.failed_retrievers)) or "unknown"
+        logger.warning("Retrieval failed for every source (%s) on %s", failed, question_ref(request_data.query))
+        raise service_unavailable(
+            f"No evidence could be retrieved: every source failed ({failed}). "
+            "This is usually a transient upstream failure; retrying often works."
+        ) from exc
 
 
 @router.post("/query", response_model=AdvancedRAGResult)

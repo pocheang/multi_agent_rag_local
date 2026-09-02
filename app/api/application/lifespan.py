@@ -65,6 +65,25 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.warning(f"NLI model warmup failed (non-critical): {e}")
 
+    # Warm up the chat model client.
+    #
+    # `_build_chat_model_cached` imports its provider package (langchain_openai,
+    # langchain_ollama, ...) on first use, inside an `lru_cache` -- and lru_cache
+    # does not hold a lock across a miss, so two concurrent first requests both
+    # do the import and the construction. Doing it here means the first real user
+    # does not pay for it, and no two request threads race the same import. The
+    # lesson is the one `app/tools/web/search.py` records the hard way: an import
+    # that first happens on the request path is a latency and concurrency
+    # problem, not a startup optimization.
+    try:
+        from app.services.models.runtime import get_chat_model
+
+        logger.info("Warming up chat model client (backend=%s)...", settings.model_backend)
+        get_chat_model()
+        logger.info("✓ Chat model client ready")
+    except Exception as e:
+        logger.warning(f"Chat model warmup failed (non-critical): {e}")
+
     # Warm up reranker model
     if settings.enable_reranker:
         try:

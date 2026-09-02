@@ -1077,7 +1077,7 @@ A third makes it three. Do not add a pixel-diff CI gate for the reason above, an
 
 `tests/` was cleared ahead of the v0.7 rewrite and is being rebuilt incrementally: each bug
 fix lands with the regression test that would have caught it, rather than as a separate
-back-filling effort. As of 2026-09-02 there are 531 tests covering the chat round trip,
+back-filling effort. As of 2026-09-02 there are 538 tests covering the chat round trip,
 conversation context, graph routing, clarification, the async load guard, engine reuse,
 answer safety, reader-facing citation numbering, stage-timeout degradation, the governed
 tool stack with its multi-step loop and approve-then-resume cycle, retrieval
@@ -1233,6 +1233,24 @@ varies by version. Count OpenAPI operations instead; the current baseline is 151
   `remaining_ms` already clamps at 0. Exhaustion still surfaced, but as the next stage being
   clamped to a 0ms ceiling and cancelled — which reads in a trace as "that stage was slow"
   rather than "the request ran out of time".
+- **Concurrent `DDGS()` construction wedges the process, and one query does it.** The web
+  retriever builds a `primp.Client` (Rust) that calls back into Python logging on the way
+  up; two workers doing that at once parked in `ddgs/http_client.py::__init__` at
+  `logging.getLogger` while the main thread stuck in `Thread.start()`, and the server
+  answered nothing — `/health` included — at zero CPU. `app/tools/web/search.py` holds
+  construction under one lock and searches outside it. The cause is inside a third-party
+  Rust client, so this contains the symptom rather than pretending to fix it there.
+- **A stage failure reaches the API wrapped, twice.** `run_with_timeout` re-raises as
+  `StageExecutionError` with the original on `__cause__`, and LangGraph may wrap that again,
+  so `except SomeSpecificError` at an endpoint never fires — the first attempt at the fix
+  below did exactly that and still returned 500.
+  `app/api/routes/public/query.py::_retrieval_failure` walks the cause chain instead.
+- **Every retrieval source failing is a 503, not a 500** (fixed 2026-09-02). With an empty
+  corpus `vector` and `bm25` are *skipped*, so `web` is the only source that runs; when
+  DuckDuckGo throttled, half the queries returned `500 "Unable to process advanced query"`,
+  naming neither cause nor remedy. 500 says look at this service, 503 says look at what it
+  depends on, and only one of those was true. The sibling case — sources never attempted,
+  which must return quietly — was fixed earlier in `RAGAgentService.retrieve`.
 - **Lazy imports on the request path are a deadlock risk, not a startup optimization**
   (found 2026-09-02 by running one query). `from ddgs import DDGS` does not import ddgs:
   the name is a proxy whose metaclass runs `importlib.import_module` on the first *call*,
