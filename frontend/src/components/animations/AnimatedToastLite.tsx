@@ -65,7 +65,6 @@ export function AnimatedToastLite({ toast, index, onClose }: AnimatedToastLitePr
       } as React.CSSProperties}
       onMouseEnter={() => setIsPaused(true)}
       onMouseLeave={() => setIsPaused(false)}
-      onClick={handleClick}
       role="alert"
       aria-live="polite"
     >

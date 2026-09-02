@@ -14,6 +14,7 @@ import {
   ImportResponse,
 } from '../../services/sessionManagement';
 import './SessionExportImport.css';
+import { activateOnKey } from "@/lib/a11y";
 
 interface SessionExportImportProps {
   sessionId?: string; // For export
@@ -90,6 +91,8 @@ export const SessionExportImport: React.FC<SessionExportImportProps> = ({
   };
 
   // Drag and drop handlers
+  const openFilePicker = () => fileInputRef.current?.click();
+
   const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault();
     e.currentTarget.classList.add('drag-over');
@@ -216,10 +219,13 @@ export const SessionExportImport: React.FC<SessionExportImportProps> = ({
         {/* File Upload */}
         <div
           className="file-drop-zone"
+          role="button"
+          tabIndex={0}
           onDragOver={handleDragOver}
           onDragLeave={handleDragLeave}
           onDrop={handleDrop}
-          onClick={() => fileInputRef.current?.click()}
+          onClick={openFilePicker}
+          onKeyDown={activateOnKey(openFilePicker)}
         >
           <input
             ref={fileInputRef}

@@ -16,6 +16,7 @@ import {
 } from '../../services/sessionManagement';
 import { TagInput } from './TagInput';
 import './SessionSearch.css';
+import { activateOnKey } from "@/lib/a11y";
 
 interface SessionSearchProps {
   onSelectSession?: (sessionId: string) => void;
@@ -268,7 +269,10 @@ export const SessionSearch: React.FC<SessionSearchProps> = ({ onSelectSession })
               <div
                 key={result.session_id}
                 className="result-card"
+                role="button"
+                tabIndex={0}
                 onClick={() => handleResultClick(result.session_id)}
+                onKeyDown={activateOnKey(() => handleResultClick(result.session_id))}
               >
                 <div className="result-header">
                   <div className="result-session-id">{result.session_id}</div>

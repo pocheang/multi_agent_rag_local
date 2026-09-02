@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useId } from "react";
 import { useTranslation } from "react-i18next";
 
 type Props = {
@@ -23,6 +23,7 @@ export function ConfirmDialog({
   onCancel,
 }: Props) {
   const { t } = useTranslation();
+  const titleId = useId();
 
   useEffect(() => {
     if (!isOpen) return;
@@ -40,10 +41,20 @@ export function ConfirmDialog({
   if (!isOpen) return null;
 
   return (
-    <div className="confirm-dialog-overlay" onClick={onCancel}>
-      <div className="confirm-dialog" onClick={(e) => e.stopPropagation()}>
+    // The backdrop is scenery, not a control: role="presentation" says so, and
+    // dismissing on a click that landed on the backdrop itself replaces the
+    // inner stopPropagation handler that used to exist only to undo this one.
+    // Escape is wired above and is the keyboard route.
+    <div
+      className="confirm-dialog-overlay"
+      role="presentation"
+      onClick={(event) => {
+        if (event.target === event.currentTarget) onCancel();
+      }}
+    >
+      <div className="confirm-dialog" role="dialog" aria-modal="true" aria-labelledby={titleId}>
         <div className="confirm-dialog-header">
-          <h3 className="confirm-dialog-title">{title}</h3>
+          <h3 className="confirm-dialog-title" id={titleId}>{title}</h3>
         </div>
         <div className="confirm-dialog-body">
           <p className="confirm-dialog-message">{message}</p>
