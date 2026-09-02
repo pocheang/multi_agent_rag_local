@@ -16,16 +16,32 @@ SonarCloud 上 revision `5e60933`（当前 HEAD，分析时间 2026-09-02 05:58 
 | 第 3 步：日志与输入收窄 | 完成 | `3cca16db` `d3c6ccd9` |
 | C → B：float 比较、自比较断言、`_resolve_query_file` | 完成，Reliability → B | `73795eff` |
 | C → B：依赖锁 | 完成，Security → B | `80e3676f` `75bfbeff` |
-| 第 4 步：Sonar 裁决（剩 11 条 LOW） | **未开始**，需要 SonarCloud 权限 |
-| 第 5 步：`typescript:S1082` × 7 的 a11y 决定 | **未决定**，B 与 A 之间只剩它 |
-| New Code 基线 | **未改**，需要 SonarCloud 界面 |
+| B → A：日志摘要引用、缓存前缀、URL 定义合并 | 完成 | `4b90adaf` |
+| B → A：`typescript:S1082` × 7 的 a11y | 完成 | `28a93fab` |
+| 第 4 步：Sonar 裁决 | **不再需要**——11 条 LOW 全部按事实修掉，没有一条是标掉的 |
+| New Code 基线 | **不再需要改**——Gate 已经在当前基线（2026-07-27，163 个 commit）下绿了 |
+
+**没有用到任何 Sonar 后台裁决**，这一点值得记：原计划里"标 FP / won't fix"的十一条，逐条读下去
+之后每一条都有真修法，其中三条读出了告警本身没说的问题（空转的 CSRF、无消费者的 auth 模块、
+一个到达 Redis glob 的查询参数）。**扫描器指出的位置，和缺陷所在的位置，经常不是同一处。**
 
 **做出来的东西超出了原计划，因为读代码读出了计划里没有的事**：那套 CSRF 是空转的（第 3 节
 `S2245`）、`legacy_service.py` 没有任何消费者（第 4 节 `S2083`）、CI 的 editable 安装是多余的
 （第 3 节供应链）。三样连同它们的 `Settings` 字段一起删了。
 
-**最终状态（`62ff13ef`）**：两个评级 B，CI 绿。新代码 7 条 LOW bug + 4 条 LOW vulnerability，
-**没有一条在 LOW 以上**。全量 bug 32 → 13，vulnerability 31 → 12。
+**最终状态（`28a93fab`）：Quality Gate 绿，五个条件全部通过，两个评级 A。**
+
+```
+new_reliability_rating   1  A     新代码 bug           0
+new_security_rating      1  A     新代码 vulnerability  0
+new_maintainability      1  A
+```
+
+全量：bug 32 → **6**，vulnerability 31 → **8**，code smell 802 → 800。CI 绿。
+
+（中间在 B 停过一轮，见下面第 4、5 条教训——从 B 到 A 要求归零，所以那 11 条 LOW 是逐条修掉的，
+不是标掉的：三条日志换成摘要引用、一条缓存前缀在两端收窄、一条 URL 检测合并成一个定义，
+以及七条 a11y。）
 
 **这一轮 CI 挂了五次，五次的教训是同一个：相信了一个其实没有真正跑过的检查。**
 
