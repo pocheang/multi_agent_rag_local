@@ -14,7 +14,11 @@ whole lock at once takes about twenty seconds.
 Run it after `make lock`; `make lock` does. It queries PyPI, so it is not part of
 the test suite: a unit test that needs the network fails on a train.
 
-    python scripts/check_lock_wheels.py requirements/ci.txt requirements/runtime.txt
+    python scripts/check_lock_wheels.py
+
+It takes no arguments on purpose. The two locks are the only thing it has to
+read, and a path off the command line is a path this script would then open --
+which is what `pythonsecurity:S8707` said about its first version, correctly.
 """
 
 from __future__ import annotations
@@ -34,6 +38,9 @@ TARGET_MINOR = 11
 
 _PINNED = re.compile(r"^([A-Za-z0-9][A-Za-z0-9._-]*)==(\S+?)(?:\s|\\|$)", re.M)
 _CPYTHON = re.compile(r"^cp3(\d+)$")
+
+ROOT = Path(__file__).resolve().parents[1]
+LOCKS = (ROOT / "requirements" / "ci.txt", ROOT / "requirements" / "runtime.txt")
 
 
 def _platform_ok(platform: str) -> bool:
@@ -84,10 +91,10 @@ def _has_usable_wheel(name: str, version: str) -> bool | None:
     return False
 
 
-def main(paths: list[str]) -> int:
+def main() -> int:
     pinned: dict[str, str] = {}
-    for path in paths:
-        pinned.update(dict(_PINNED.findall(Path(path).read_text(encoding="utf-8"))))
+    for lock in LOCKS:
+        pinned.update(dict(_PINNED.findall(lock.read_text(encoding="utf-8"))))
 
     print(f"checking {len(pinned)} locked packages against PyPI for linux/cp311")
     with ThreadPoolExecutor(max_workers=16) as pool:
@@ -111,4 +118,4 @@ def main(paths: list[str]) -> int:
 
 
 if __name__ == "__main__":
-    raise SystemExit(main(sys.argv[1:] or ["requirements/ci.txt", "requirements/runtime.txt"]))
+    raise SystemExit(main())
