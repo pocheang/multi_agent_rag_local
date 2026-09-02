@@ -128,18 +128,36 @@ hashlib.md5(key_str.encode(), usedforsecurity=False)
 
 `text:S8565`（pyproject 没有 lock 文件）是更大的一步，独立议题，不建议塞进这轮。
 
-### `typescript:S2245` —— 三条里有一条是真的
+### `typescript:S2245` —— 已完成（2026-09-02），但修的不是告警指的那一行
 
-`frontend/src/lib/csrf.ts:23`：`crypto.getRandomValues` 不可用时，用 `Math.random` 生成 CSRF token 的回退分支。
-后端**确实**校验 `X-CSRF-Token`（`app/api/middleware/csrf.py`，在 `factory.py` 里注册为中间件），
-所以这个 token 是真的安全边界，不是装饰。
+`frontend/src/lib/csrf.ts:23` 是 `crypto.getRandomValues` 不可用时用 `Math.random` 生成 CSRF token 的
+回退分支。**第一反应"删掉回退分支并抛错"是错的**，因为它假定这个 token 有人校验。读了另一端之后：
 
-建议**删掉回退分支并抛错**。静默降级成一个可预测的 token，比拿不到 token 更糟——调用方以为自己受保护。
-而且目标浏览器（Vite + React 18）全都有 `crypto.getRandomValues`，这个分支实际上是死代码，
-删掉它同时消掉告警和一个假的安全承诺。
+- `CSRFProtectionMiddleware` 要一个 `session_id` cookie 才会走到校验，**全仓库没有任何路由 set 过它**
+  ——这个名字的全部出现就是中间件自己在读。所以 `if not session_id: return await call_next(request)`
+  接住了每一个请求，它下面的代码不可达。
+- 前端自己在浏览器里造 token，服务端从没 mint 过也没存过。**就算那个 cookie 存在，每个写请求都会 403。**
 
-另两条 `AnimatedToastLite.tsx:129`、`useChatActions.ts:84` 生成的是 toast 元素 id，非安全用途。
-换成 `crypto.randomUUID()` 一次性消掉，比标 FP 省事。
+给一个没人校验的值加熵，是照着告警的形状修而不是照着缺陷的形状修。
+
+真正在工作的是 `_enforce_cookie_csrf`（`app/api/utils/auth_helpers.py`），跑在每条路由都经过的
+`_resolve_authenticated_user` 里，而且它更窄也更对：只在**用 cookie 认证**时生效（跨站页面设不了
+`Authorization` 头，所以 Bearer 流量不需要 token 来证明什么），写方法要求 Origin 在白名单里，
+**没有 Origin 就拒绝**。最后这条是防护的全部，`tests/security/test_cookie_csrf.py` 把它钉住了。
+
+两套里空转的那套已删除（`3cca16db`），连带：`CSRF_ENABLED`（唯一读者就是注册那个中间件的那行，
+又一个背后没有东西的开关）、`enhanced_session.py` 整个模块（唯一生产入口是那个中间件；`auth_service`
+用的是另一个 `SessionManager`），以及它的 SessionStore 测试——那个"写失败却报告成功"的缺陷是真的，
+但在一个请求到不了的模块里。`RATE_LIMIT_CONFIG` / `get_client_ip` 移进 `rate_limit.py`，它们本来就不是
+CSRF 的事。
+
+在跑起来的应用里验证过，不只是测试：登录 POST 只带 `content-type` 出去，回来 401 invalid credentials。
+
+另两条 `AnimatedToastLite.tsx:129`、`useChatActions.ts:84` 生成的是 toast 元素 id，非安全用途，
+仍待处理——换成 `crypto.randomUUID()` 一次性消掉，比标 FP 省事。
+
+**这一条值得单独记**：Sonar 指着 `Math.random`，缺陷却在三层之外的另一端。扫描器能告诉你哪一行可疑，
+不能告诉你那一行有没有意义——读完整条链路才能。
 
 ### `pythonsecurity:S5145` × 6 —— 建议做成属性，而不是 8 个补丁
 
