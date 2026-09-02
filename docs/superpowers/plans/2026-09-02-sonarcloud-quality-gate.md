@@ -4,6 +4,21 @@
 SonarCloud 上 revision `5e60933`（当前 HEAD，分析时间 2026-09-02 05:58 UTC）的真实数据重写。
 第一版有一条结论是错的，见第 5 节。
 
+## 0.0 执行进度（2026-09-02，分支 `fix/sonar-step-1`）
+
+| 步骤 | 状态 | commit |
+|---|---|---|
+| 第 1 步：`main.css` / `.sort()` / 两处 `usedforsecurity` | 完成 | `28818595` |
+| 第 2 步：供应链 `--only-binary` / `--ignore-scripts` | 完成 | `f2d44a10` |
+| 第 3 步：日志与输入收窄 | 完成 | `3cca16db` `d3c6ccd9` |
+| 第 4 步：Sonar 裁决 | **未开始**，需要 SonarCloud 权限 |
+| 第 5 步：`typescript:S1082` × 7 的 a11y 决定 | **未决定** |
+| New Code 基线 | **未改**，需要 SonarCloud 界面 |
+
+第 3 步的产出超出了原计划，因为读代码读出了两件计划里没有的事：那套 CSRF 是空转的（见第 3 节
+`S2245`），以及 `legacy_service.py` 没有任何消费者（见第 4 节 `S2083`）。两个模块连同它们的
+`Settings` 字段一起删了。
+
 ## 0. 线上实况
 
 Quality Gate：**ERROR**。五个条件里三个通过：
@@ -154,12 +169,12 @@ CSRF 的事。
 在跑起来的应用里验证过，不只是测试：登录 POST 只带 `content-type` 出去，回来 401 invalid credentials。
 
 另两条 `AnimatedToastLite.tsx:129`、`useChatActions.ts:84` 生成的是 toast 元素 id，非安全用途，
-仍待处理——换成 `crypto.randomUUID()` 一次性消掉，比标 FP 省事。
+已换成 `crypto.randomUUID()`（`d3c6ccd9`）。`frontend/src/` 里现在没有 `Math.random` 了。
 
 **这一条值得单独记**：Sonar 指着 `Math.random`，缺陷却在三层之外的另一端。扫描器能告诉你哪一行可疑，
 不能告诉你那一行有没有意义——读完整条链路才能。
 
-### `pythonsecurity:S5145` × 6 —— 建议做成属性，而不是 8 个补丁
+### `pythonsecurity:S5145` × 6 —— 已完成（2026-09-02），两端都做了
 
 命中点（全量 8 条）：`agent_health.py:186`、`evaluation.py:161,236`、`cache_manager.py:266`、
 `agent_execution_tracker.py:103`、`guard.py:297,312`、`admin_token_tracker.py:76`。
@@ -179,7 +194,19 @@ CSRF 的事。
   （顺带把无效系统名从深处抛 HTTPException 变成一个 422），`agent_health.py` 的 `execution_id`
   在路由上校验成 UUID。
 
-优先收窄 `evaluation.py` 和 `agent_health.py`——这两个的输入来自 HTTP；其余走 filter + FP。
+两个都做了（`d3c6ccd9`）：
+
+- **边界**：`ExecutionId`（`app/api/routes/internal/path_params.py`）把路径参数限制成不含空白的字符类，
+  畸形 id 变成 422 而不是更深处的 404。**六条路由全部覆盖，不是 Sonar 点名的那一条。**第六条
+  （SSE 端点）是靠问 OpenAPI 文档找出来的而不是靠 grep——它写着 `max_length=128` 没有字符类，
+  看上去像是约束过了。测试用同样的方式发现路由，所以第七条加不进来。
+- **背后**：`install_control_character_escaping()` 装一个 `LogRecord` factory，在 record 构造时
+  转义 message 和 args 里的控制字符。一处顶八处，对每个 logger、每个 handler、以及还没写的调用点都成立。
+  **转义而不是删除**，这样注入的痕迹对读日志的人还是可见的。`exc_info` 故意不碰。
+- `evaluation.py` 的 `system: str` → `SystemName`（`Literal`），`SUPPORTED_SYSTEMS` 反过来从它派生。
+
+**Sonar 的污点分析看不见 record factory，所以这 8 条仍然会开着**，需要在第 4 步标 FP 并指向它。
+这里做的是性质，不是告警数字。
 
 ### 两条已核实为误报
 
@@ -195,7 +222,7 @@ CSRF 的事。
 
 | 规则 | 位置 | |
 |---|---|---|
-| `pythonsecurity:S2083` **BLOCKER** | `services/auth/legacy_service.py:63` | 已核实为误报：`_write_json` 的 `path` 来自 `settings.users_path` / `auth_sessions_path`，不来自用户输入。**但更该问的是这个模块要不要留**——`AuthService` 只在 `app/services/auth/__init__.py` 里被 re-export，`app/`、`tests/`、`scripts/` 里没有任何其它引用者。按仓库删无引用模块的先例，这是删除候选，删掉它这条告警也就没了 |
+| `pythonsecurity:S2083` **BLOCKER** | `services/auth/legacy_service.py:63` | **已删除模块（`d3c6ccd9`）**。告警本身是误报（`path` 来自 settings 不来自用户输入），但真正该问的问题是这个模块要不要留：`AuthService` 只在 `app/services/auth/__init__.py` 里被 re-export，全仓库没有任何消费者，认证跑的是 `AuthDBService`。连同两个 `Settings` 字段、两个路径 property 和两行启动 mkdir 一起删——本机的 `data/security/` 就是那个 mkdir 建出来的空目录，从没被写过。**按事实删掉，而不是标记掉。** |
 | `python:S2068` | `security/admin_rate_limit.py:55` | 误报：`"password_reset": "5/hour"` 是限流表的键 |
 | `docker:S6471` × 2 | `Dockerfile:22`、`Dockerfile.frontend:23` | 容器以 root 运行。真问题，属于部署加固，独立议题 |
 | `pythonsecurity:S8703/S8707` | `deploy/scripts/healthcheck.py:13`、`config.py:108` | Sonar 针对"LLM 驱动执行"的新规则，命中的是部署脚本的 CLI 参数，不在请求路径上 |
