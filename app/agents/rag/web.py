@@ -85,7 +85,9 @@ def _cached_search(question_hash: str, max_results: int) -> tuple:
 
 def _get_cache_key(question: str) -> str:
     """Generate cache key from question."""
-    return md5(question.encode("utf-8")).hexdigest()
+    # A cache key, not a security primitive -- said out loud so neither a reader
+    # nor a scanner has to guess which one it is.
+    return md5(question.encode("utf-8"), usedforsecurity=False).hexdigest()
 
 
 def _parse_allowlist(raw: str) -> list[str]:

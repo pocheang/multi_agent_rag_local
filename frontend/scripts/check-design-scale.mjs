@@ -64,7 +64,10 @@ function cssFiles(dir, acc = []) {
   return acc;
 }
 
-const files = cssFiles("src").sort();
+// Explicit comparator, not the default and not localeCompare: the baseline
+// file's key order has to be identical on every machine, and localeCompare
+// is locale-dependent.
+const files = cssFiles("src").sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
 const current = {};
 for (const file of files) {
   const counts = offScale(readFileSync(join(root, file), "utf8"));

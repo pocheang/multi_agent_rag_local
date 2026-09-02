@@ -28,6 +28,32 @@
 @import "tailwindcss/theme.css" layer(theme) prefix(tw);
 @import "tailwindcss/utilities.css" layer(utilities) prefix(tw);
 
+/* Every @import in this file sits above, because CSS requires them to precede
+   all rules except @charset and @layer statements -- and `@theme` below is a
+   rule. The component imports lived under it until 2026-09-02: invalid CSS
+   that worked only because Vite inlines them at build time. Order *within* a
+   layer still matters; order *between* them does not, since every import
+   names its layer explicitly. */
+
+/* Atomic shared components */
+@import "./components/buttons/index.css" layer(legacy);
+@import "./components/forms/index.css" layer(legacy);
+@import "./components/badges.css" layer(legacy);
+@import "./components/skeletons.css" layer(legacy);
+@import "./components/spinners.css" layer(legacy);
+
+/* Composite shared components */
+@import "./components/cards.css" layer(legacy);
+@import "./components/tables.css" layer(legacy);
+@import "./components/confirm-dialog.css" layer(legacy);
+@import "./components/clarification-prompt.css" layer(legacy);
+@import "./components/thinking-indicator.css" layer(legacy);
+
+/* The elevation language, then the surfaces that speak it. */
+@import "./core/elevation.css" layer(design);
+@import "./core/surfaces.css" layer(design);
+
+
 @theme inline {
   --color-bg: var(--bg);
   --color-bg-secondary: var(--bg-secondary);
@@ -88,20 +114,3 @@
 
 @source "../**/*.{ts,tsx}";
 
-/* Atomic shared components */
-@import "./components/buttons/index.css" layer(legacy);
-@import "./components/forms/index.css" layer(legacy);
-@import "./components/badges.css" layer(legacy);
-@import "./components/skeletons.css" layer(legacy);
-@import "./components/spinners.css" layer(legacy);
-
-/* Composite shared components */
-@import "./components/cards.css" layer(legacy);
-@import "./components/tables.css" layer(legacy);
-@import "./components/confirm-dialog.css" layer(legacy);
-@import "./components/clarification-prompt.css" layer(legacy);
-@import "./components/thinking-indicator.css" layer(legacy);
-
-/* The elevation language, then the surfaces that speak it. */
-@import "./core/elevation.css" layer(design);
-@import "./core/surfaces.css" layer(design);

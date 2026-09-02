@@ -343,7 +343,9 @@ class CacheManager:
         key_str = f"{prefix}:" + ":".join(f"{k}={v}" for k, v in sorted_items)
 
         # Hash for shorter keys
-        key_hash = hashlib.md5(key_str.encode()).hexdigest()
+        # A cache key, not a security primitive -- said out loud so neither a
+        # reader nor a scanner has to guess which one it is.
+        key_hash = hashlib.md5(key_str.encode(), usedforsecurity=False).hexdigest()
         return f"{prefix}:{key_hash}"
 
     async def get(self, prefix: str, default: Any = None, **kwargs) -> Any | None:

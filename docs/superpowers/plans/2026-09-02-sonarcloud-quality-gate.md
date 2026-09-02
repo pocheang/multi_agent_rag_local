@@ -1,140 +1,266 @@
 # SonarCloud Quality Gate 修复计划
 
-状态：已核实分类，未开始修复（2026-09-02）。
+状态：**第二版**（2026-09-02，核对过线上实况）。第一版的 P0 与 P1 已完成并生效；本版基于
+SonarCloud 上 revision `5e60933`（当前 HEAD，分析时间 2026-09-02 05:58 UTC）的真实数据重写。
+第一版有一条结论是错的，见第 5 节。
 
-## 0. 先说结论
+## 0. 线上实况
 
-Quality Gate 卡在**新代码**的两个评级：Reliability D、Security D（要求 ≥ A）。总量是
-41 bugs / 31 vulnerabilities / 803 code smells，其中"新代码"占 27 / 16 / 464。
+Quality Gate：**ERROR**。五个条件里三个通过：
 
-**"新代码"这个范围需要注意**：147 个 commit 刚合进 main，所以 Sonar 眼里几乎整个仓库都是新的。
-这些评级反映的是仓库的历史积累，不是这几天的改动质量。
+| 条件 | 阈值 | 实际 | |
+|---|---|---|---|
+| `new_maintainability_rating` | A | **A** | 通过 |
+| `new_duplicated_lines_density` | <= 3% | **0.8%** | 通过 |
+| `new_security_hotspots_reviewed` | 100% | **100%** | 通过 |
+| `new_reliability_rating` | A | **D** | 不通过 |
+| `new_security_rating` | A | **D** | 不通过 |
 
-**分类过的结论是：真正该修的远少于总数。** 我逐条核实过下面每一类，不是照搬扫描器输出——
-这一轮已经有三次是我自己的检查脚本误报，扫描器同样会错。
+总量 32 bugs / 31 vulnerabilities / 802 code smells；新代码 26 / 16 / 463。
+（第一版写的是 41 / 31 / 803，其中 P0 的 `python:S930` × 5 和 P1 的 5 条都已从清单消失——
+`f5449e07` 和 `5e609332` 两个 commit 确实生效了。）
 
-## 1. 已核实为真，且会在运行时炸（P0）
+**463 条 code smell 不影响 Quality Gate**：可维护性评级已经是 A。第一版第 5 节"不要追认知复杂度"
+的结论不变，现在有数据支撑——`python:S3776` × 60、`S1192` × 30 全部通过，追它们对灯的颜色没有任何影响。
 
-### `python:S930` × 5 —— PDF 的两个加载模式必然 TypeError
+## 1. 唯一需要先记住的机制
 
-`app/ingestion/loaders/dispatch.py:84,85,98,99,100` 用三个具名参数调用
-`load_pdf_enhanced`，而它的签名是 `(path: Path, by_page: bool = True)`，没有 `**kwargs`。
-
-实测确认：
+新代码评级不是加权平均，是**最严重的一条说了算**：
 
 ```
-TypeError: load_pdf_enhanced() got an unexpected keyword argument 'enable_cleaning'
+A = 该类型下没有任何未解决问题
+B = 最高为 LOW      C = 最高为 MEDIUM
+D = 最高为 HIGH     E = BLOCKER
 ```
 
-影响 `PDF_LOADER_MODE=docling_advanced` 和 `docling_enhanced` 两个模式。默认是 `pypdf`，
-所以不是每个人都会撞上——但谁一旦按文档切过去就立即崩，而且 `PDF_ENABLE_CLEANING` /
-`PDF_ENABLE_TABLE_MERGING` 这两个配置项**今天没有任何效果**，因为接收它们的函数根本不接受它们。
+现在两个 D 各自的来源小得出乎意料：
 
-修法有两个方向，需要先判断哪个是本意：
+- **Reliability D ← 恰好 1 条 HIGH**：`javascript:S2871`，`frontend/scripts/check-design-scale.mjs:67`
+- **Security D ← 恰好 2 条 HIGH**：`python:S4790`，`app/agents/rag/web.py:88` 与
+  `app/services/caching/cache_manager.py:346`
 
-- 如果 `load_pdf_enhanced` **应该**支持这些开关 → 给它加参数并透传到
-  `pdf_loader_enhanced.load_pdf_enhanced`；
-- 如果不该 → 删掉调用点的三个参数，并把那两个 Settings 字段一并处理（要么删，要么接到真正
-  读它们的地方）。**保留一个没有读者的配置项，正是配置治理那一轮反复清理的东西。**
+**三行代码就能把两个 D 变成 C。但 A 要求归零**——26 条 bug 和 16 条 vulnerability 里的每一条，
+都必须被修掉，或者在 Sonar 里以书面理由标为 won't fix / false positive。没有中间状态。
 
-落地时带一个测试：按签名调用，而不是断言"不抛异常"。
+这决定了计划的形状：**一半是改代码，一半是在 Sonar 里做有理由的裁决。**
 
-## 2. 已核实为真，小而便宜（P1）—— **已完成（2026-09-02）**
+## 2. 新代码 26 条 bug，逐条
 
-逐条核实后，这一组**12 条里只有 5 条是真的**，另外 7 条是误报或有意为之。这个比例本身值得记：
-照单全改会引入 7 个无谓的改动，其中至少两个会破坏正确的代码。
+| 规则 | 数量 | 位置 | 处置 |
+|---|---|---|---|
+| `css:S8778` | 12 | `styles/main.css:92-107` | **真修**（第一版判断错了，见第 5 节） |
+| `typescript:S1082` | 7 | 五个组件 | 需要决定，见下 |
+| `python:S1244` | 4 | `router/calibration.py:57,138` | won't fix，写理由 |
+| `python:S5863` | 2 | 两个测试 | won't fix，写理由 |
+| `javascript:S2871` | 1 | `check-design-scale.mjs:67` | **真修**，且是 Reliability D 的唯一来源 |
 
-**改掉的 5 条：**
+### `javascript:S2871` —— 一行，零风险
 
-| 位置 | 是什么 |
-|---|---|
-| `agent_execution_tracker.py:506` | `_cleanup_loop` 捕获 `CancelledError` 后 `break`，协程**正常结束**而非取消状态——`task.cancel()` 之后 `await task` 不抛异常，取消方分不出"照办了"和"自己跑完了" |
-| `enhanced_session.py` | `_save_file_sessions` 吞掉写入异常只打日志，`set()` 无论如何返回 `True`——**会话没存上，调用方却被告知成功**。对会话存储来说就是"登录不会存活但没人知道" |
-| `chunking/classification.py:58` | `text.lower().strip()` 结果被丢弃，下面所有检查读的都是原始 `text`。**删掉**而不是改成赋值：改成赋值会改变每个文档的分类结果，那是决定不是清理 |
-| `extraction/tables_nested.py:167` | 裸表达式 `lines[i + 1]`，什么也不做 |
-| `processing/coreference.py:96` | `recent_entities[-1] if recent_entities else None` 的 else 分支不可达——函数开头的守卫已经返回过了 |
+`cssFiles("src").sort()`。数组元素是字符串，默认字典序正是想要的，规则本身是冲着数字数组来的。
+但显式写比较函数是一行，还能顺手让排序不再依赖默认行为：
 
-**没改的 7 条，及理由：**
+```js
+const files = cssFiles("src").sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
+```
 
-- `python:S7497` 另一处（`stop_periodic_cleanup` 的 `except CancelledError: pass`）——**这是取消自己刚
-  cancel 的任务的标准写法**。在这里重新抛出会把取消传播进关闭流程，是错的。加了注释说明意图。
-- `python:S5863` × 2 —— `assert question_ref(x) == question_ref(x)` 和
-  `assert _search("alice") == _search("alice")`。规则假设"两边表达式相同"是笔误，但这里**表达式相同正是主题**：
-  测的是哈希的确定性和缓存的复用。
-- `python:S1244` × 4 —— `calibration.py` 里比较的是与字面量边界值（`== 1.0`、`== 0.5`）。改成 `math.isclose`
-  会改变分桶边界行为，收益为零。
+**不要用 `localeCompare`**——它依赖 locale，会让 `design-scale-baseline.json` 的键顺序在不同机器上不同，
+那正好是一个 ratchet 文件最不需要的性质。
 
-前两组应在 Sonar 里标记为 won't fix 并写明理由。**一个被压下去但写明原因的告警，好过一个为了让灯变绿而做的假修改。**
+### `typescript:S1082` × 7 —— 值得做，但不要为了灯去做
 
-有行为后果的两条带了测试（`tests/services/test_cancellation_and_session_truth.py`），并验证过去掉修复后会失败。
-另外三条是删除不可达代码，行为不变，没有可断言的新性质。
+`ConfirmDialog.tsx:43,44`、`PromptDialog.tsx:64,65`、`SessionExportImport.tsx:217`、
+`SessionSearch.tsx:268`、`AnimatedToastLite.tsx:61`。
 
-### 原始清单（供对照）
+第一版说"这是可访问性工作，应该和前端 a11y 一起排"。这个判断仍然对，但现在多了一条信息：
+**A 要求归零，所以不做这 7 条就到不了 A**。两条路，明说，不要含糊：排 a11y 工作，或者接受
+Reliability 停在 B。
 
-| 规则 | 位置 | 是什么 |
+看过代码之后有一条补充：`ConfirmDialog` / `PromptDialog` 命中的是遮罩层
+（`<div className="confirm-dialog-overlay" onClick={onCancel}>`）和它里面 `stopPropagation` 的容器，
+而 Esc 关闭**已经**在 `useEffect` 里接好了。所以这四条在行为上接近误报，正确的修法是把对话框换成原生
+`<dialog>`，或者给遮罩加 `role="presentation"`——**不是**给一个非交互的 div 套一个假的 `onKeyDown`。
+后者只是让扫描器闭嘴，同时给屏幕阅读器制造一个不存在的控件，比不做更糟。
+
+### `python:S1244` × 4 与 `python:S5863` × 2 —— 已核实为有意
+
+`calibration.py` 比较的是与字面量边界值（`== 1.0`、`== 0.5`），改成 `math.isclose` 会改变分桶边界行为；
+两个测试里"实际值与期望值是同一个表达式"正是主题（哈希的确定性、缓存的复用）。在 Sonar 里标 won't fix
+并写明理由。**一个被压下去但写明原因的告警，好过一个为了让灯变绿而做的假修改。**
+
+## 3. 新代码 16 条 vulnerability，逐条
+
+| 规则 | 数量 | 位置 | 处置 |
+|---|---|---|---|
+| `pythonsecurity:S5145` | 6 | 见下 | 部分收窄输入，部分 FP |
+| `githubactions:S8541/S8544/S6505` | 4 | `.github/workflows/ci.yml:31,40,72` | 真修，要跑 CI |
+| `python:S4790` | 2 | `rag/web.py:88`、`caching/cache_manager.py:346` | **真修**，Security D 的唯一来源 |
+| `typescript:S2245` | 2 | `csrf.ts:23`、两处 toast id | 一真一误 |
+| `pythonsecurity:S6549` | 1 | `operations/evaluation.py:30` | 已核实为误报 |
+| `python:S5332` | 1 | `chunking/metadata.py:62` | 已核实为误报 |
+
+### `python:S4790` × 2 —— 两行，把意图写进代码
+
+两处都是拿 md5 当缓存键，非加密用途。Python 3.9+ 有专门表达这个意图的参数，Sonar 也认它：
+
+```python
+# rag/web.py:88
+md5(question.encode("utf-8"), usedforsecurity=False)
+
+# caching/cache_manager.py:346
+hashlib.md5(key_str.encode(), usedforsecurity=False)
+```
+
+比标 FP 好：它把"这不是安全用途"写在代码里，而不是写在扫描器后台——后者只有登录进 SonarCloud 的人看得见。
+
+### 供应链 4 条 —— 改配置，但必须真跑一次 CI
+
+`pip install` 加 `--only-binary :all:`，`npm ci` 加 `--ignore-scripts`。Dockerfile 侧还有同源的
+`docker:S8541` × 2 / `S8544` × 2 / `S6505` × 1（不在新代码窗口内），一起改一次。
+
+两个风险写清楚，不要合了才发现：
+
+- `--only-binary :all:` 会让任何**只发 sdist** 的依赖装不上。已实测 `pip install --only-binary :all: -e .`
+  **能跑通**——pip 不会把这个开关套到本地 editable 的项目自身上，所以 `-e ".[dev]"` 那一行可以直接加。
+  但依赖的 wheel 供应在 CI（ubuntu / py3.11）上和本地不同，仍然要看一次 CI。
+- `npm ci --ignore-scripts` 会让需要 postinstall 的包失效。前端有 Playwright（`npm run screenshots`），
+  它的浏览器下载正是 postinstall——CI 不跑 screenshots 所以 CI 会绿，**但本地装完会缺浏览器**。
+  要么在 screenshots 的文档里补一句 `npx playwright install`，要么给那一步单独放行。
+
+`text:S8565`（pyproject 没有 lock 文件）是更大的一步，独立议题，不建议塞进这轮。
+
+### `typescript:S2245` —— 三条里有一条是真的
+
+`frontend/src/lib/csrf.ts:23`：`crypto.getRandomValues` 不可用时，用 `Math.random` 生成 CSRF token 的回退分支。
+后端**确实**校验 `X-CSRF-Token`（`app/api/middleware/csrf.py`，在 `factory.py` 里注册为中间件），
+所以这个 token 是真的安全边界，不是装饰。
+
+建议**删掉回退分支并抛错**。静默降级成一个可预测的 token，比拿不到 token 更糟——调用方以为自己受保护。
+而且目标浏览器（Vite + React 18）全都有 `crypto.getRandomValues`，这个分支实际上是死代码，
+删掉它同时消掉告警和一个假的安全承诺。
+
+另两条 `AnimatedToastLite.tsx:129`、`useChatActions.ts:84` 生成的是 toast 元素 id，非安全用途。
+换成 `crypto.randomUUID()` 一次性消掉，比标 FP 省事。
+
+### `pythonsecurity:S5145` × 6 —— 建议做成属性，而不是 8 个补丁
+
+命中点（全量 8 条）：`agent_health.py:186`、`evaluation.py:161,236`、`cache_manager.py:266`、
+`agent_execution_tracker.py:103`、`guard.py:297,312`、`admin_token_tracker.py:76`。
+
+逐个看过：写进日志的全部是**标识符**——`execution_id`、`user_id`、`system_name`、`user_key`、
+`token_hash[:8]`、缓存 `prefix`——不是 question 文本。仓库已有的 `question_ref` 守卫针对的是另一件事，
+这批不在它的射程内。
+
+真实风险是 CRLF 日志注入：调用方能控制的 id 里塞一个 `%0A`，就能在日志里伪造一整行。
+
+两个方向，建议都做：
+
+- **一个 `logging.Filter`，把格式化后 record 里的控制字符去掉。** 这是属性而不是补丁，
+  和仓库处理 `question_ref` 的方式同构。代价：Sonar 的污点分析看不见 filter，这 8 条仍然要手动标 FP
+  并在备注里指向它。
+- **在入口收窄输入**，这个 Sonar 认：`evaluation.py` 的 `system: str` 改成 `Literal[...]`
+  （顺带把无效系统名从深处抛 HTTPException 变成一个 422），`agent_health.py` 的 `execution_id`
+  在路由上校验成 UUID。
+
+优先收窄 `evaluation.py` 和 `agent_health.py`——这两个的输入来自 HTTP；其余走 filter + FP。
+
+### 两条已核实为误报
+
+- **`pythonsecurity:S6549`** `evaluation.py:30`。`_resolve_query_file` 已经在 `resolve()` 之后检查
+  `suffix == ".json"` 且 `is_relative_to(_EVALUATION_ROOT)`。这**正是**这条规则推荐的补救措施，
+  污点引擎没识别出来。标 FP，理由写 "containment check in the same function"。
+- **`python:S5332`** `chunking/metadata.py:62`。`"http://" in chunk_text` 是在检测**文档正文里**
+  有没有 URL，不是发请求。标 FP。
+
+## 4. 不在新代码窗口，但按严重性更该看
+
+这些不影响 Quality Gate，所以不要为了灯去动它们；但其中一条比上面很多条都重要。
+
+| 规则 | 位置 | |
 |---|---|---|
-| `python:S7497` × 2 | `observability/agent_execution_tracker.py:506,518` | 捕获 `asyncio.CancelledError` 后没有重新抛出——会把取消吞掉，任务无法被中断 |
-| `python:S2201` × 2 | `chunking/classification.py:58`、`extraction/tables_nested.py:167` | 调用了 `str.strip()` / `__getitem__` 却不用返回值，即这一行什么也没做 |
-| `python:S5863` × 2 | 测试里 | 断言的实际值和期望值是同一个表达式——**测试等于没测** |
-| `pythonbugs:S2583` | | 条件恒为真 |
-| `python:S3516` | `auth/enhanced_session.py:55` | 方法永远返回同一个值 |
-| `python:S1244` × 4 | | 浮点数相等比较 |
+| `pythonsecurity:S2083` **BLOCKER** | `services/auth/legacy_service.py:63` | 已核实为误报：`_write_json` 的 `path` 来自 `settings.users_path` / `auth_sessions_path`，不来自用户输入。**但更该问的是这个模块要不要留**——`AuthService` 只在 `app/services/auth/__init__.py` 里被 re-export，`app/`、`tests/`、`scripts/` 里没有任何其它引用者。按仓库删无引用模块的先例，这是删除候选，删掉它这条告警也就没了 |
+| `python:S2068` | `security/admin_rate_limit.py:55` | 误报：`"password_reset": "5/hour"` 是限流表的键 |
+| `docker:S6471` × 2 | `Dockerfile:22`、`Dockerfile.frontend:23` | 容器以 root 运行。真问题，属于部署加固，独立议题 |
+| `pythonsecurity:S8703/S8707` | `deploy/scripts/healthcheck.py:13`、`config.py:108` | Sonar 针对"LLM 驱动执行"的新规则，命中的是部署脚本的 CLI 参数，不在请求路径上 |
 
-这一组都是"读一眼就能判断对错"的，逐个看、逐个修，每个带一行断言。
+## 5. 第一版判断错了的一条：`css:S8778` × 12
 
-## 3. 供应链加固，改配置即可（P1）
+第一版的结论是"不适用，标 FP"，理由是"按这条告警去挪 `@import`，会破坏 `@layer` 顺序声明必须在前的结构"。
 
-`docker:S8541/S8544/S6505`、`githubactions:S8541/S8544/S6505`、`text:S8565` 共 8 条，说的是同一件事：
-安装依赖时没有锁定和禁用安装脚本。
+**这个理由不成立。** CSS 规范的原文是：`@import` 必须先于所有其它规则，**`@charset` 和 `@layer` 语句除外**。
+所以 `@layer theme, legacy, components, design, utilities;` 留在最前面，12 行 `@import` 移到它之后、
+`@theme inline { }` 之前，两个约束同时满足。
 
-- `pip install` 加 `--only-binary :all:`（阻止 sdist 执行 `setup.py`）
-- `npm ci` 加 `--ignore-scripts`（阻止 lifecycle 脚本）
-- 用 lock 文件固定解析结果
+**已实测**：按上述顺序改写 `main.css` 后 `npm run build`，`dist/assets/` 下 12 个 CSS 产物与改动前
+**逐字节相同**。零风险，一次 12 行的移动，消掉 26 条新代码 bug 里的 12 条。
 
-**与刚做完的 ruff 钉版本是同一个道理**：浮动的依赖既是安全面也是"构建会无故变红"的来源。
-注意 `--ignore-scripts` 可能影响需要构建步骤的包，要跑一次完整 CI 验证。
+细节：所有 `@import` 都显式带 `layer()`，层内相对顺序保持不变即可（`tokens → reset → utilities →
+components → elevation/surfaces`）；`@theme inline` 是块规则、`@source` 是语句规则，两者都必须留在
+`@import` 之后，这是移动的下界。
 
-## 4. 需要人判断，不能照单全改（P2）
+这条值得记：第一版把"我不想改"和"规范不允许改"混在了一起。判成不适用之前，应该先试着改一次再看产物。
 
-| 规则 | 数量 | 为什么要先判断 |
-|---|---|---|
-| `pythonsecurity:S5145` 记录用户可控数据 | 8 | 本仓库**已有**这条规则的守卫（`question_ref` + `tests/security/test_no_question_text_in_logs.py` 的 AST 检查）。命中的是 `agent_health.py`、`evaluation.py`、`cache_manager.py`、`guard.py`——要逐个看记的到底是什么字段，是真泄漏还是 Sonar 不认识这套脱敏 |
-| `pythonsecurity:S2083` 路径由用户数据构造 | 1 | `auth/legacy_service.py:63`。仓库在文档访问上有很强的作用域控制，这条要看是不是漏网，还是这个 legacy 模块本就该删 |
-| `python:S4790` 哈希是否安全 | 2 | `agents/rag/web.py:88` 等。多半是非加密用途的摘要（去重/缓存键），那样是安全的——但要确认，然后在 Sonar 里标记为 "won't fix" 并写明理由 |
-| `typescript:S2245` `Math.random` | 3 | 前端非安全用途多半没问题 |
-| `python:S5332` 用 HTTP 而非 HTTPS | 1 | 若是 localhost 则无妨 |
+## 6. 建议顺序
 
-**这一组的产出不一定是代码改动**，也可能是在 Sonar 里标记豁免并写清理由。一个被压下去但写明原因的
-告警，比一个为了让灯变绿而做的假修改要好。
+**第 1 步 · 一个 commit，约 30 分钟 —— 两个 D 变 C**
 
-## 5. 不要追的（P3）
+- `main.css` 移 12 行 `@import`（产物已验证逐字节相同）
+- `check-design-scale.mjs:67` 加比较函数
+- `web.py:88`、`cache_manager.py:346` 加 `usedforsecurity=False`
 
-- **`python:S3776` 认知复杂度 × ~35 条**。它们指向 `ingest.py`（71）、`splitter.py`（58）、
-  `routing.py`（49）这些确实复杂的函数。但"降低复杂度"是重构，不是修 bug；在一个正在往 v0.7
-  演进的代码库里，为了指标去拆函数会制造大量无意义的 diff，还会掩盖真实的改动。
-- **`python:S1192` 重复字面量**。同上。
-- **`typescript:S1082` 可点击元素缺少键盘可达性 × 8**。这个**值得做**，但它是可访问性工作，
-  应该和前端的 a11y 一起排，而不是塞进"让 Quality Gate 变绿"里。
+结果：新代码 bug 26 → 13，vulnerability 16 → 14；Reliability **D → C**，Security **D → C**。
+Gate 仍然红，但两个评级各上一档，而且这一步没有任何行为改变，不需要新测试。
 
-## 6. 已核实为**不成立**，不要修
+**第 2 步 · 一个 commit + 一次完整 CI —— 供应链**
 
-**`css:S8778` "Invalid position for @import rule" × 12**（`styles/main.css:92-107`）。
+CI 与两个 Dockerfile 的 `--only-binary` / `--ignore-scripts`。消掉 4 条新代码 + 5 条全量。
+合之前必须看到 CI 全绿，并且确认 Playwright 那一条的处理方式。
 
-规范上确实要求 `@import` 在样式规则之前，而这些在 `@theme { }` 块之后。但这个文件是 **Vite 的
-构建输入**，Vite 在打包时会把 `@import` 内联。已在 `dist/assets/*.css` 里确认那些组件样式
-（`confirm-dialog`、`thinking-indicator`、`skeleton`、`--elev-*`）**全部存在于构建产物中**。
+**第 3 步 · 一个 commit —— 日志与输入收窄**
 
-按这条告警去挪 `@import`，会破坏 `@layer` 顺序声明必须在前的结构——**那才会真的弄坏样式**。
-应在 Sonar 里标记为不适用，并写明理由。
+`evaluation.py` 的 `Literal`、`agent_health.py` 的 UUID 校验、删掉 CSRF 回退分支、
+控制字符 logging filter、两处 toast id 换 `crypto.randomUUID()`。
+CSRF 那条带一个测试：断言 `crypto` 缺失时抛错而不是返回弱 token。
 
-## 7. 建议的顺序
+**第 4 步 · 没有代码改动 —— 在 Sonar 里裁决，每条写理由**
 
-1. **P0**：`dispatch.py` 的 5 条 S930，含那两个没有读者的 Settings 字段。一个 commit。
-2. **P1**：第 2 节的 12 条小 bug，一个 commit；第 3 节的供应链加固，另一个 commit（要跑 CI 验证）。
-3. **P2**：逐条判断，产出可能是修改也可能是带理由的豁免。
-4. **P3**：不做，或另开与质量指标无关的议题。
+`S1244` × 4、`S5863` × 2、`S5332`、`S6549`、`S2083`、`S2068`、剩余 `S5145`、两条非安全的 `S2245`。
 
-做完 1–3 之后再看 Quality Gate。**它不一定会变绿**——新代码的评级由最严重的一条决定，而
-"新代码"目前几乎等于整个仓库。如果目标是让灯变绿而不是让代码变好，更合适的做法是把 Sonar 的
-**New Code 定义改成"自某个日期起"**，让它衡量此后的改动，而不是衡量一次 147 个 commit 的合并。
-那是一个项目设置，不是代码问题。
+**第 5 步 · 决定 `typescript:S1082` × 7**
+
+这是 A 与 B 之间唯一剩下的东西。要么排一轮真正的 a11y（原生 `<dialog>` / `role="presentation"` /
+真实键盘处理），要么接受 Reliability 停在 B 并写明。**不要套假的 `onKeyDown`。**
+
+## 7. New Code 的定义，以及两个配置观察
+
+新代码窗口的基线是 `previous_version`，日期 **2026-07-27**——"新代码"因此等于五周多、147 个 commit，
+几乎是整个仓库。评级衡量的是历史积累，不是最近的改动质量。
+
+如果目标是"让 Gate 反映此后的改动质量"，把 New Code 改成 `Number of days` 或指定参考分支是**正当的**，
+这是 Sonar 官方推荐的用法，不是作弊。如果目标是"把这批存量清干净"，就按第 6 节走。
+**两个目标不同，先选一个再动手。**
+
+另外两条，与上面的清单无关但值得知道：
+
+- 仓库里**没有** `sonar-project.properties`，走的是 SonarCloud 自动分析。想要 exclusions
+  （比如把 `tests/` 排除出某些规则）或者上传覆盖率，需要改成在 CI 里跑 scanner。
+- **现在完全没有覆盖率数据**（`coverage` 指标缺失）。当前 Gate 没有覆盖率条件，所以不受影响，
+  但 538 个测试跑出来的覆盖率没有进 Sonar，是白丢的信息。
+
+## 附录：第一版已完成的部分（保留记录）
+
+**P0 · `python:S930` × 5，`ingestion/loaders/dispatch.py`** —— `load_pdf_enhanced` 被用三个它不接受的
+具名参数调用，`PDF_LOADER_MODE=docling_advanced` / `docling_enhanced` 两个模式必然 `TypeError`，
+且 `PDF_ENABLE_CLEANING` / `PDF_ENABLE_TABLE_MERGING` 两个配置项当时没有任何效果。
+已在 `f5449e07` 修复：给包装函数加参数并透传。
+
+**P1 · 12 条里只有 5 条是真的**，已在 `5e609332` 修复。这个比例本身值得记：照单全改会引入 7 个无谓的改动，
+其中至少两个会破坏正确的代码。
+
+改掉的 5 条：`agent_execution_tracker.py:506`（吞掉 `CancelledError` 后 `break`，取消方分不出
+"照办了"和"自己跑完了"）、`enhanced_session.py`（写入失败仍返回 `True`，会话没存上却告知成功）、
+`chunking/classification.py:58`（`text.lower().strip()` 结果被丢弃——**删掉**而不是改成赋值，
+改成赋值会改变每个文档的分类结果，那是决定不是清理）、`extraction/tables_nested.py:167`（裸表达式）、
+`processing/coreference.py:96`（不可达分支）。有行为后果的两条带了测试
+（`tests/services/test_cancellation_and_session_truth.py`），并验证过去掉修复后会失败。
+
+没改的 7 条即本文第 2、3 节里标 won't fix 的那些，理由同上。
