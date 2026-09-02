@@ -428,7 +428,6 @@ class Settings(BaseSettings):
     cors_allow_methods: str = Field(default="*", alias="CORS_ALLOW_METHODS")
     cors_allow_headers: str = Field(default="*", alias="CORS_ALLOW_HEADERS")
     cors_allow_credentials: bool = Field(default=True, alias="CORS_ALLOW_CREDENTIALS")
-    csrf_enabled: bool = Field(default=True, alias="CSRF_ENABLED")
     rate_limit_enabled: bool = Field(default=True, alias="RATE_LIMIT_ENABLED")
 
     @property

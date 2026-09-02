@@ -8,8 +8,45 @@ from fastapi import Request
 from fastapi.responses import JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware
 
-from app.api.middleware.csrf import RATE_LIMIT_CONFIG, get_client_ip
 from app.services.auth.redis_rate_limit import get_rate_limiter
+
+# These two lived in middleware/csrf.py until that module was deleted on
+# 2026-09-02. They were never CSRF concerns -- this is the only consumer.
+RATE_LIMIT_CONFIG = {
+    "login": {
+        "path": "/auth/login",
+        "max_requests": 5,
+        "window_seconds": 60,
+    },
+    "register": {
+        "path": "/auth/register",
+        "max_requests": 3,
+        "window_seconds": 300,
+    },
+    "password_change": {
+        "path": "/auth/change-password",
+        "max_requests": 3,
+        "window_seconds": 300,
+    },
+}
+
+
+def get_client_ip(request: Request) -> str:
+    """Extract client IP address from request."""
+    # Check for proxy headers first
+    forwarded_for = request.headers.get("X-Forwarded-For", "").split(",")[0].strip()
+    if forwarded_for:
+        return forwarded_for
+
+    real_ip = request.headers.get("X-Real-IP", "").strip()
+    if real_ip:
+        return real_ip
+
+    # Fallback to direct connection IP
+    if request.client and request.client.host:
+        return request.client.host
+
+    return "unknown"
 
 
 class RateLimitMiddleware(BaseHTTPMiddleware):

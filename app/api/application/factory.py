@@ -7,7 +7,6 @@ from fastapi import FastAPI
 from app.api.application.lifespan import lifespan
 from app.api.application.router_registry import register_routers
 from app.api.application.static_files import StaticFilePaths, configure_static_files
-from app.api.middleware.csrf import CSRFProtectionMiddleware
 from app.api.middleware.rate_limit import RateLimitMiddleware
 from app.api.transport.middleware import request_timing_middleware
 
@@ -86,10 +85,12 @@ def create_app(settings_obj, static_paths: StaticFilePaths | None = None, static
     _configure_cors(app, settings_obj)
 
     # Add security middleware with Redis support
-    # CSRF protection (validates X-CSRF-Token header on state-changing requests)
-    csrf_enabled = getattr(settings_obj, "csrf_enabled", True)
-    if csrf_enabled:
-        app.add_middleware(CSRFProtectionMiddleware)
+    # No CSRF middleware here on purpose: CSRF is enforced in the auth
+    # dependency (_enforce_cookie_csrf), which is the only place that knows
+    # whether the request authenticated by cookie -- the one mode that is
+    # vulnerable to it. A middleware cannot know that before auth runs, which
+    # is why the one that used to sit here checked a cookie nothing set and
+    # waved every request through.
 
     # Rate limiting (prevents brute-force attacks on sensitive endpoints)
     # Now supports Redis for distributed deployments

@@ -19,7 +19,6 @@ import type {
 import { ApiError, authFetch, authRequest, getToken, parseOrThrow, safeParsePayload, toUrl } from "@/services/http/client";
 import { authApi } from "@/services/api/auth";
 import { buildGetRequest, buildPatchRequest, buildPostRequest, buildQueryString, encodePathParam } from "@/lib/api-helpers";
-import { addCsrfHeader } from "@/lib/csrf";
 
 type AdvancedQueryInput = {
   query: string;
@@ -179,7 +178,6 @@ export const documentApi = {
       const headers = new Headers();
       const token = getToken();
       if (token) headers.set("Authorization", `Bearer ${token}`);
-      addCsrfHeader(headers);
       headers.forEach((value, key) => xhr.setRequestHeader(key, value));
 
       xhr.upload.onprogress = (evt) => {

@@ -1,4 +1,3 @@
-import { requiresCsrfProtection, addCsrfHeader } from "@/lib/csrf";
 
 type Json = Record<string, unknown> | Array<unknown>;
 
@@ -164,11 +163,6 @@ async function fetchWithTimeout(path: string, init: RequestInit, options: Reques
     const token = getToken();
     if (token) {
       headers.set("Authorization", `Bearer ${token}`);
-    }
-
-    // Add CSRF protection for state-changing requests
-    if (requiresCsrfProtection(init.method || 'GET')) {
-      addCsrfHeader(headers);
     }
 
     return await fetch(toUrl(path), { ...init, headers, signal: composed.signal, credentials: "include" });

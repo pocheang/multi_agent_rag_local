@@ -1,6 +1,5 @@
 import type { AuthUser, LoginResponse } from "@/types/api";
 import { request, getToken, setToken as setTokenInternal } from "@/services/http/client";
-import { refreshCsrfToken, clearCsrfToken } from "@/lib/csrf";
 
 export const authApi = {
   async me() {
@@ -14,7 +13,6 @@ export const authApi = {
     });
     if (response.token) {
       setTokenInternal(response.token);
-      refreshCsrfToken(); // Generate new CSRF token on login
     }
     return response;
   },
@@ -30,8 +28,6 @@ export const authApi = {
       await request("/auth/logout", { method: "POST" });
     } catch {
       // ignore logout error
-    } finally {
-      clearCsrfToken(); // Clear CSRF token on logout
     }
   },
   async changePassword(oldPassword: string, newPassword: string) {
@@ -50,9 +46,6 @@ export const authApi = {
   },
   setToken(token: string) {
     setTokenInternal(token);
-    if (!token) {
-      clearCsrfToken(); // Clear CSRF token when clearing auth token
-    }
   },
   token() {
     return getToken();
