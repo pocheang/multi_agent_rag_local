@@ -1,4 +1,5 @@
 import type { ProviderCatalogEntry } from "@/types/api";
+import { normalizeModelTemperature } from "@/lib/model-temperature";
 import type { ApiConfig, Provider } from "./apiSettingsConstants";
 import { PROVIDER_DEFAULTS } from "./apiSettingsConstants";
 
@@ -30,7 +31,7 @@ export function buildApiPayload(config: ApiConfig) {
     api_key: config.apiKey.trim(),
     base_url: config.baseUrl.trim(),
     model: config.model.trim(),
-    temperature: clampNumber(Number(config.temperature), 0, 2),
+    temperature: normalizeModelTemperature(Number(config.temperature), 0.7),
     max_tokens: clampNumber(Number(config.maxTokens), 256, 131072),
   };
 }
@@ -48,19 +49,19 @@ export function applyProviderDefaults(provider: Provider, catalog?: ProviderCata
   };
 }
 
-export function parseApiResponse(response: any): ApiConfig {
+export function parseApiResponse(response: Record<string, unknown>): ApiConfig {
   return {
     provider: (response.provider || "local") as Provider,
     apiKey: "",
-    apiKeyMasked: response.api_key_masked || "",
-    baseUrl: response.base_url || "",
-    model: response.model || "",
-    temperature: Number(response.temperature ?? 0.7),
+    apiKeyMasked: String(response.api_key_masked || ""),
+    baseUrl: String(response.base_url || ""),
+    model: String(response.model || ""),
+    temperature: normalizeModelTemperature(Number(response.temperature), 0.7),
     maxTokens: Number(response.max_tokens ?? 2048),
     globalOverrideEnabled: !!response.global_override_enabled,
-    globalProvider: response.global_provider || "",
-    globalModel: response.global_model || "",
-    effectiveProvider: response.effective_provider || "",
-    effectiveModel: response.effective_model || "",
+    globalProvider: String(response.global_provider || ""),
+    globalModel: String(response.global_model || ""),
+    effectiveProvider: String(response.effective_provider || ""),
+    effectiveModel: String(response.effective_model || ""),
   };
 }

@@ -1,9 +1,14 @@
 name: querymind
 
 services:
+  # Only n8n uses this. The backend does not: it is SQLite-only
+  # (app/services/sessions/metadata_db.py), so postgres sits in the same opt-in
+  # profile rather than starting for everyone and gating the backend's startup
+  # on a database it never opens.
   postgres:
     image: postgres:16.4-alpine
     restart: unless-stopped
+    profiles: [with-n8n]
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-querymind}
       POSTGRES_USER: ${POSTGRES_USER:-querymind}
@@ -64,14 +69,18 @@ services:
       NEO4J_PASSWORD: ${NEO4J_PASSWORD}
       REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379/0
       CHROMA_PERSIST_DIR: /app/data/chroma
+      # No DATABASE_URL here on purpose. It used to be set to a
+      # postgresql+asyncpg:// URL that the application silently ignored --
+      # `_get_db_path` honours only `sqlite:///` and falls back to
+      # ./data/querymind.db for anything else, which the app_data volume
+      # persists. A deployment manifest that names a database nothing connects
+      # to is worse than one that names none.
     volumes:
       - chroma_data:/app/data/chroma
       - chunks_data:/app/data/chunks
       - app_data:/app/data
       - logs_data:/app/logs
     depends_on:
-      postgres:
-        condition: service_healthy
       neo4j:
         condition: service_healthy
       redis:

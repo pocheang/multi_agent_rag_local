@@ -2,8 +2,8 @@ import threading
 import uuid
 from typing import Any
 
-from app.services.alerting import resolve_signing_secret, sign_payload
 from app.services.auth.utils import iso, now
+from app.services.observability.alerting import resolve_signing_secret, sign_payload
 
 
 def classify_audit_event(action: str, result: str) -> tuple[str, str]:

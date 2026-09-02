@@ -2,6 +2,7 @@ import { useCallback } from "react";
 import type { IndexedFileSummary, PromptTemplate } from "@/types/api";
 import type { AgentClassHint } from "@/pages/chat/constants";
 import { isMobile } from "@/pages/chat/constants";
+import { useChatStore } from "@/stores/useChatStore";
 
 interface ChatActions {
   notify: (message: string, type: "success" | "info" | "warn" | "error") => void;
@@ -16,10 +17,6 @@ interface UseChatHelpersParams {
   canUploadAndManageDocs: boolean;
   pdfDocuments: IndexedFileSummary[];
   pdfTargetFile: string;
-  promptTitle: string;
-  promptContent: string;
-  editingPromptId: string | null;
-  useReasoning: boolean;
   setSidebarOpen: (open: boolean) => void;
   setAgentClassHint: (hint: AgentClassHint) => void;
   setQuestion: (question: string) => void;
@@ -31,10 +28,6 @@ export function useChatHelpers({
   canUploadAndManageDocs,
   pdfDocuments,
   pdfTargetFile,
-  promptTitle,
-  promptContent,
-  editingPromptId,
-  useReasoning,
   setSidebarOpen,
   setAgentClassHint,
   setQuestion,
@@ -89,18 +82,21 @@ export function useChatHelpers({
   );
 
   const savePrompt = useCallback(async () => {
+    const { promptTitle, promptContent, editingPromptId } = useChatStore.getState();
     await actions.savePrompt(promptTitle, promptContent, editingPromptId);
-  }, [actions, promptTitle, promptContent, editingPromptId]);
+  }, [actions]);
 
   const checkPrompt = useCallback(async () => {
-    await actions.checkPrompt(promptTitle, promptContent, useReasoning);
-  }, [actions, promptTitle, promptContent, useReasoning]);
+    const { promptTitle, promptContent } = useChatStore.getState();
+    await actions.checkPrompt(promptTitle, promptContent, true);
+  }, [actions]);
 
   const deletePrompt = useCallback(
     async (item: PromptTemplate) => {
+      const { editingPromptId } = useChatStore.getState();
       await actions.deletePrompt(item, editingPromptId);
     },
-    [actions, editingPromptId]
+    [actions]
   );
 
   return {

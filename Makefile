@@ -1,25 +1,17 @@
-.PHONY: install up ingest api cli test fe-install fe-dev fe-build quality-gate benchmark apply-rollback config-check config-render deploy deploy-dev deploy-monitoring
+.PHONY: install up api test lint fe-install fe-dev fe-build config-check config-render deploy deploy-dev deploy-monitoring
 
 install:
-	python -m venv .venv && . .venv/bin/activate && pip install -U pip && pip install -e .
+	conda run -n rag-local pip install -e ".[dev]"
+	conda run -n rag-local pre-commit install
 
 up:
 	docker compose up -d neo4j
 
-ingest:
-	python scripts/ingest.py
-
 api:
-	uvicorn app.api.main:app --host 0.0.0.0 --port 8000 --reload --reload-dir app --reload-include "*.py" --reload-exclude "data/*" --reload-exclude "artifacts/*" --reload-exclude "frontend/*"
-
-cli:
-	python scripts/query_cli.py "???????"
-
-test:
-	pytest -q
+	conda run --no-capture-output -n rag-local uvicorn app.api.main:app --host 0.0.0.0 --port 8000 --reload --reload-dir app --reload-include "*.py" --reload-exclude "data/*" --reload-exclude "artifacts/*" --reload-exclude "frontend/*"
 
 fe-install:
-	cd frontend && npm install
+	cd frontend && npm ci
 
 fe-dev:
 	cd frontend && npm run dev
@@ -27,14 +19,16 @@ fe-dev:
 fe-build:
 	cd frontend && npm run build
 
-quality-gate:
-	python scripts/ci_quality_gate.py --dataset data/eval/retrieval_eval.jsonl --min-recall 0.35 --report-md artifacts/quality-report.md
+test:
+	conda run --no-capture-output -n rag-local pytest -q
 
-benchmark:
-	python scripts/benchmark_pipeline.py --queries data/eval/benchmark_queries.txt
+lint:
+	conda run --no-capture-output -n rag-local ruff check .
+	conda run --no-capture-output -n rag-local ruff format --check .
 
-apply-rollback:
-	python scripts/apply_rollback_profile.py --profile artifacts/rollback.env --env-file .env
+# ingest/cli/quality-gate/benchmark/refactor-inventory/apply-rollback targets removed
+# 2026-08-28: relied on scripts/, cleared ahead of the v0.7 rewrite. `test` and `lint`
+# came back on 2026-08-29 when tests/ and CI were rebuilt.
 
 ENV ?= production
 PROFILE ?= balanced

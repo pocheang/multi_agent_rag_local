@@ -1,1 +1,1 @@
-﻿# Utility modules for the QueryMind API
+# Utility modules for the QueryMind API

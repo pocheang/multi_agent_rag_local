@@ -2,17 +2,14 @@ import { useEffect } from "react";
 import { Link } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import "@/styles/pages/landing-entry.css";
-import { ThemeToggle } from "@/components/ThemeToggle";
 import { LanguageToggle } from "@/components/LanguageToggle";
 import { DataFlowVisualization } from "@/components/DataFlowVisualization";
 
 interface LandingPageProps {
   isLoggedIn: boolean;
-  themeLabel: string;
-  onThemeToggle: () => void;
 }
 
-export function LandingPage({ isLoggedIn, themeLabel, onThemeToggle }: LandingPageProps) {
+export function LandingPage({ isLoggedIn }: LandingPageProps) {
   const { t, i18n } = useTranslation();
 
   useEffect(() => {
@@ -46,7 +43,6 @@ export function LandingPage({ isLoggedIn, themeLabel, onThemeToggle }: LandingPa
 
         <div className="landing-nav-actions">
           <LanguageToggle />
-          <ThemeToggle themeLabel={themeLabel} onThemeToggle={onThemeToggle} />
           {isLoggedIn ? (
             <Link to="/app" className="landing-nav-btn primary">
               {t("pages.landing.enterApp")}

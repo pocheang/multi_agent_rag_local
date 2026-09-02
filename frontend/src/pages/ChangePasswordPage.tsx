@@ -6,17 +6,11 @@ import { validatePassword } from "@/lib/validation";
 import { useFormState } from "@/hooks/useFormState";
 import { AuthInput } from "@/components/AuthInput";
 import { LanguageToggle } from "@/components/LanguageToggle";
-import { ThemeToggle } from "@/components/ThemeToggle";
 import { PasswordRequirements } from "@/components/PasswordRequirements";
 
 import "@/styles/pages/auth-entry.css";
 
-type Props = {
-  themeLabel: string;
-  onThemeToggle: () => void;
-};
-
-export function ChangePasswordPage({ themeLabel, onThemeToggle }: Props) {
+export function ChangePasswordPage() {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const [oldPassword, setOldPassword] = useState("");
@@ -58,7 +52,6 @@ export function ChangePasswordPage({ themeLabel, onThemeToggle }: Props) {
     <div className="auth-root">
       <div className="auth-toolbar">
         <LanguageToggle />
-        <ThemeToggle themeLabel={themeLabel} onThemeToggle={onThemeToggle} />
       </div>
 
       <main className="auth-card change-password-card">

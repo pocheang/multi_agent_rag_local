@@ -5,14 +5,12 @@
 @media (max-width: 1080px) {
   .page-shell .main {
     min-width: 0;
-    padding: 16px;
+    padding: 12px 16px;
   }
 
   .page-shell .chat-window {
-    min-height: min(58vh, 620px);
-    margin: 14px 0;
-    padding: 14px;
-    border-radius: 18px;
+    margin: 8px 0;
+    padding: 0;
   }
 
   .page-shell .panel {
@@ -22,12 +20,11 @@
 
 @media (max-width: 860px) {
   .page-shell .main {
-    padding: 12px;
+    padding: 10px 12px;
   }
 
   .page-shell .chat-window {
-    min-height: 52vh;
-    padding: 12px;
+    padding: 0;
   }
 
   .page-shell .bubble {

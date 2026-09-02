@@ -1,9 +1,12 @@
+import logging
 import os
 from functools import lru_cache
 from pathlib import Path
 
 from pydantic import Field
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic_settings import BaseSettings, PydanticBaseSettingsSource, SettingsConfigDict
+
+logger = logging.getLogger(__name__)
 
 
 def resolve_runtime_env_file() -> str | None:
@@ -23,6 +26,39 @@ class Settings(BaseSettings):
         env_file_encoding="utf-8",
         extra="ignore",
     )
+
+    @classmethod
+    def settings_customise_sources(
+        cls,
+        settings_cls: type[BaseSettings],
+        init_settings: PydanticBaseSettingsSource,
+        env_settings: PydanticBaseSettingsSource,
+        dotenv_settings: PydanticBaseSettingsSource,
+        file_secret_settings: PydanticBaseSettingsSource,
+    ) -> tuple[PydanticBaseSettingsSource, ...]:
+        """Declare the precedence, once, here.
+
+            init > real process environment > configuration centre > .runtime/*.env > defaults
+
+        The process environment sits *above* the configuration centre on
+        purpose: a deployment has to keep one way to pin a value that the
+        console cannot move. `MODEL_BACKEND=local` already depends on exactly
+        that, overriding persisted admin model settings.
+
+        `RemoteSettingsSource` returns `{}` unless `NACOS_ENABLED` is true, so
+        this costs an installation without a configuration centre one function
+        call and no import of the SDK.
+        """
+
+        from app.core.remote_config import RemoteSettingsSource
+
+        return (
+            init_settings,
+            env_settings,
+            RemoteSettingsSource(settings_cls),
+            dotenv_settings,
+            file_secret_settings,
+        )
 
     app_env: str = Field(default="dev", alias="APP_ENV")
     model_backend: str = Field(default="local", alias="MODEL_BACKEND")
@@ -52,6 +88,14 @@ class Settings(BaseSettings):
     data_dir: str = Field(default="./data/docs", alias="DATA_DIR")
     corpus_store_path: str = Field(default="./data/chunks/chunks.jsonl", alias="CORPUS_STORE_PATH")
     parent_store_path_str: str = Field(default="./data/chunks/parents.jsonl", alias="PARENT_STORE_PATH")
+    evidence_artifact_root: str = Field(default="./data/evidence", alias="EVIDENCE_ARTIFACT_ROOT")
+    wiki_db_path_str: str = Field(default="./data/wiki/wiki.db", alias="WIKI_DB_PATH")
+    wiki_generation_timeout_ms: int = Field(default=30_000, ge=100, le=120_000, alias="WIKI_GENERATION_TIMEOUT_MS")
+    wiki_scan_limit: int = Field(default=500, ge=10, le=10_000, alias="WIKI_SCAN_LIMIT")
+    # Accumulated router-calibration outcomes. Runtime state, so it lives under
+    # data/ rather than in the tracked config/ file the calibrator used to write
+    # on every single request.
+    router_calibration_path_str: str = Field(default="./data/router_calibration.json", alias="ROUTER_CALIBRATION_PATH")
 
     parent_chunk_size: int = Field(default=1500, alias="PARENT_CHUNK_SIZE")
     parent_chunk_overlap: int = Field(default=200, alias="PARENT_CHUNK_OVERLAP")
@@ -70,7 +114,6 @@ class Settings(BaseSettings):
     query_rewrite_enabled: bool = Field(default=True, alias="QUERY_REWRITE_ENABLED")
     query_rewrite_with_llm: bool = Field(default=False, alias="QUERY_REWRITE_WITH_LLM")
     query_decompose_enabled: bool = Field(default=True, alias="QUERY_DECOMPOSE_ENABLED")
-    query_rewrite_max_variants: int = Field(default=6, alias="QUERY_REWRITE_MAX_VARIANTS")
     query_expansion_enabled: bool = Field(default=True, alias="QUERY_EXPANSION_ENABLED")
     query_expansion_max_ratio: float = Field(default=3.0, alias="QUERY_EXPANSION_MAX_RATIO")
     rank_feature_enabled: bool = Field(default=True, alias="RANK_FEATURE_ENABLED")
@@ -83,26 +126,111 @@ class Settings(BaseSettings):
     dynamic_vector_top_k_cap: int = Field(default=16, alias="DYNAMIC_VECTOR_TOP_K_CAP")
     dynamic_bm25_top_k_cap: int = Field(default=16, alias="DYNAMIC_BM25_TOP_K_CAP")
     dynamic_reranker_top_n_cap: int = Field(default=10, alias="DYNAMIC_RERANKER_TOP_N_CAP")
+
+    # Folded in from module-level `os.getenv` reads on 2026-09-01.  Those were
+    # unreachable by the documented config flow: pydantic-settings loads
+    # `.runtime/{APP_ENV}.env` into Settings without exporting anything into the
+    # process environment, so a key read with `os.getenv` could only ever be set
+    # as a real exported variable -- and none of these appear in `config/env/`.
+    # Anything a config centre is meant to manage has to be a field here first.
+    enable_calibration: bool = Field(default=False, alias="ENABLE_CALIBRATION")
+    enable_web_route_downgrade: bool = Field(default=False, alias="ENABLE_WEB_ROUTE_DOWNGRADE")
+    self_rag_relevance_threshold: float = Field(default=0.6, alias="SELF_RAG_RELEVANCE_THRESHOLD")
+    self_rag_quality_threshold: float = Field(default=0.7, alias="SELF_RAG_QUALITY_THRESHOLD")
+    request_metrics_maxlen: int = Field(default=1000, alias="REQUEST_METRICS_MAXLEN")
+    strict_csp: bool = Field(default=False, alias="STRICT_CSP")
+
+    # Migrated out of `app/agents/shared/config.py` on 2026-09-01, where they
+    # were module constants read with `os.getenv` at import time -- settable
+    # only as exported environment variables, and invisible to the render step
+    # and to the configuration centre. Every one of them is read on the request
+    # path through `app/agents/validation/`.
+    answer_approve_threshold: float = Field(default=0.80, alias="ANSWER_APPROVE_THRESHOLD")
+    answer_flag_threshold: float = Field(default=0.60, alias="ANSWER_FLAG_THRESHOLD")
+    hallucination_high_risk_threshold: float = Field(default=0.30, alias="HALLUCINATION_HIGH_RISK_THRESHOLD")
+    nli_model_name: str = Field(default="cross-encoder/nli-MiniLM2-L6-H768", alias="NLI_MODEL_NAME")
+    nli_max_checks: int = Field(default=5, alias="NLI_MAX_CHECKS")
+    cascade_enable_level1: bool = Field(default=True, alias="CASCADE_ENABLE_LEVEL1")
+    cascade_enable_level2: bool = Field(default=False, alias="CASCADE_ENABLE_LEVEL2")
+    cascade_enable_level3: bool = Field(default=True, alias="CASCADE_ENABLE_LEVEL3")
+    cascade_enable_level4: bool = Field(default=True, alias="CASCADE_ENABLE_LEVEL4")
+    cascade_level1_timeout_ms: int = Field(default=10, alias="CASCADE_LEVEL1_TIMEOUT_MS")
+    cascade_level2_timeout_ms: int = Field(default=3000, alias="CASCADE_LEVEL2_TIMEOUT_MS")
+    cascade_level3_timeout_ms: int = Field(default=75, alias="CASCADE_LEVEL3_TIMEOUT_MS")
+    cascade_level4_timeout_ms: int = Field(default=3000, alias="CASCADE_LEVEL4_TIMEOUT_MS")
     retrieval_cache_enabled: bool = Field(default=True, alias="RETRIEVAL_CACHE_ENABLED")
     retrieval_cache_ttl_seconds: int = Field(default=45, alias="RETRIEVAL_CACHE_TTL_SECONDS")
     retrieval_cache_max_items: int = Field(default=256, alias="RETRIEVAL_CACHE_MAX_ITEMS")
-    # Adaptive cache TTL settings (tier-based and query-specific)
-    cache_ttl_fast_tier: int = Field(default=300, alias="CACHE_TTL_FAST_TIER")
-    cache_ttl_balanced_tier: int = Field(default=120, alias="CACHE_TTL_BALANCED_TIER")
-    cache_ttl_deep_tier: int = Field(default=60, alias="CACHE_TTL_DEEP_TIER")
-    cache_ttl_user_query: int = Field(default=180, alias="CACHE_TTL_USER_QUERY")
     circuit_breaker_enabled: bool = Field(default=True, alias="CIRCUIT_BREAKER_ENABLED")
-    circuit_breaker_fail_threshold: int = Field(default=3, alias="CIRCUIT_BREAKER_FAIL_THRESHOLD")
-    circuit_breaker_cooldown_seconds: int = Field(default=30, alias="CIRCUIT_BREAKER_COOLDOWN_SECONDS")
+    circuit_breaker_fail_threshold: int = Field(default=5, alias="CIRCUIT_BREAKER_FAIL_THRESHOLD")
+    circuit_breaker_cooldown_seconds: int = Field(default=60, alias="CIRCUIT_BREAKER_COOLDOWN_SECONDS")
     retrieval_cache_backend: str = Field(default="auto", alias="RETRIEVAL_CACHE_BACKEND")  # auto|memory|redis|off
     redis_url: str = Field(default="redis://localhost:6379/0", alias="REDIS_URL")
+
+    # Session metadata storage backend
+    session_metadata_backend: str = Field(default="database", alias="SESSION_METADATA_BACKEND")  # memory|database
+    long_term_memory_enabled: bool = Field(default=True, alias="LONG_TERM_MEMORY_ENABLED")
+    long_term_memory_max_items: int = Field(default=100, ge=1, le=10_000, alias="LONG_TERM_MEMORY_MAX_ITEMS")
+    memory_task_ttl_days: int = Field(default=30, ge=1, le=3650, alias="MEMORY_TASK_TTL_DAYS")
+    memory_stable_fact_ttl_days: int = Field(default=365, ge=1, le=3650, alias="MEMORY_STABLE_FACT_TTL_DAYS")
+
+    # Multi-modal Processing
+    enable_table_extraction: bool = Field(default=True, alias="ENABLE_TABLE_EXTRACTION")
+    enable_ocr: bool = Field(default=True, alias="ENABLE_OCR")
+    vision_model: str = Field(default="gpt-4-vision-preview", alias="VISION_MODEL")
+    max_image_tokens: int = Field(default=1000, alias="MAX_IMAGE_TOKENS")
+    ocr_engine: str = Field(default="tesseract", alias="OCR_ENGINE")  # tesseract|paddleocr
+    ocr_languages: str = Field(default="eng+chi_sim", alias="OCR_LANGUAGES")
+    multimodal_fusion_method: str = Field(default="rrf", alias="MULTIMODAL_FUSION_METHOD")  # rrf|weighted
+    visual_embedding_enabled: bool = Field(default=False, alias="VISUAL_EMBEDDING_ENABLED")
+    visual_embedding_backend: str = Field(default="colpali", alias="VISUAL_EMBEDDING_BACKEND")
+    image_weight: float = Field(default=0.3, alias="IMAGE_WEIGHT")
+    table_weight: float = Field(default=0.3, alias="TABLE_WEIGHT")
+    text_weight: float = Field(default=0.4, alias="TEXT_WEIGHT")
+
+    # Performance Optimization - Caching
+    cache_l2_enabled: bool = Field(default=False, alias="CACHE_L2_ENABLED")
+    cache_l1_size: int = Field(default=256, alias="CACHE_L1_SIZE")
+    cache_l1_ttl: int = Field(default=300, alias="CACHE_L1_TTL")  # 5 minutes
+    cache_l2_ttl: int = Field(default=3600, alias="CACHE_L2_TTL")  # 1 hour
+
+    # Performance Optimization - Database
+
+    # Performance Optimization - Retrieval
+
+    # Advanced Reasoning - Tool Runner
+
+    database_url: str = Field(default="sqlite:///./data/querymind.db", alias="DATABASE_URL")
+    sqlite_busy_timeout_seconds: float = Field(
+        default=10.0,
+        ge=1.0,
+        le=3600.0,
+        alias="SQLITE_BUSY_TIMEOUT_SECONDS",
+    )
+
     otel_tracing_enabled: bool = Field(default=True, alias="OTEL_TRACING_ENABLED")
     slo_p95_latency_ms_threshold: int = Field(default=3000, alias="SLO_P95_LATENCY_MS_THRESHOLD")
     slo_error_rate_percent_threshold: float = Field(default=5.0, alias="SLO_ERROR_RATE_PERCENT_THRESHOLD")
     slo_grounding_support_ratio_threshold: float = Field(default=0.6, alias="SLO_GROUNDING_SUPPORT_RATIO_THRESHOLD")
-    retrieval_profile: str = Field(default="advanced", alias="RETRIEVAL_PROFILE")  # baseline|advanced|safe
     consistency_guard_enabled: bool = Field(default=True, alias="CONSISTENCY_GUARD_ENABLED")
-    consistency_guard_similarity_threshold: float = Field(default=0.55, alias="CONSISTENCY_GUARD_SIMILARITY_THRESHOLD")
+    web_search_on_empty_corpus: bool = Field(default=True, alias="WEB_SEARCH_ON_EMPTY_CORPUS")
+    """Search the web when the caller has no documents to search instead.
+
+    A caller with an empty document scope cannot get an answer from local
+    retrieval -- there is nothing there -- so without this the only possible
+    outcome is the "no evidence" message, on every question, for every account
+    that has not uploaded anything yet. That is the state every new account
+    starts in.
+
+    It defaults on because the alternative is refusing a question the system
+    could answer, and because the question already reaches the same search
+    backend on the `web` route with no separate opt-in. It is a switch rather
+    than a constant because it is a *policy*: it sends the user's question to a
+    third party (DuckDuckGo, via `app/tools/web/search.py`), and a deployment
+    that must not reach the internet has to be able to say so in one place.
+    `run_web_research` redacts sensitive patterns from the question first.
+    """
+
     web_domain_allowlist: str = Field(
         default="gov.cn,gov,edu,org,nist.gov,cisa.gov,mitre.org,wikipedia.org,owasp.org,microsoft.com,openai.com",
         alias="WEB_DOMAIN_ALLOWLIST",
@@ -115,8 +243,6 @@ class Settings(BaseSettings):
     reranker_top_n: int = Field(default=5, alias="RERANKER_TOP_N")
 
     # LLM-powered features
-    enable_llm_intent_classification: bool = Field(default=True, alias="ENABLE_LLM_INTENT_CLASSIFICATION")
-    enable_query_rewrite: bool = Field(default=True, alias="ENABLE_QUERY_REWRITE")
     query_rewrite_max_variants: int = Field(default=3, alias="QUERY_REWRITE_MAX_VARIANTS")
 
     graph_extraction_mode: str = Field(default="llm", alias="GRAPH_EXTRACTION_MODE")
@@ -142,8 +268,6 @@ class Settings(BaseSettings):
     pdf_enable_formula_enrichment: bool = Field(
         default=False, alias="PDF_ENABLE_FORMULA_ENRICHMENT"
     )  # Formula semantics
-    pdf_enable_caching: bool = Field(default=True, alias="PDF_ENABLE_CACHING")  # Cache processing results
-    pdf_parallel_workers: int = Field(default=4, alias="PDF_PARALLEL_WORKERS")  # Parallel processing workers
 
     sessions_dir: str = Field(default="./data/sessions", alias="SESSIONS_DIR")
     uploads_dir: str = Field(default="./data/uploads", alias="UPLOADS_DIR")
@@ -176,23 +300,10 @@ class Settings(BaseSettings):
     query_rate_limit_max_attempts: int = Field(default=30, alias="QUERY_RATE_LIMIT_MAX_ATTEMPTS")
     query_rate_limit_window_seconds: int = Field(default=60, alias="QUERY_RATE_LIMIT_WINDOW_SECONDS")
     # Role-based rate limiting (v0.4.5+)
-    query_rate_limit_admin: int = Field(default=100, alias="QUERY_RATE_LIMIT_ADMIN")
-    query_rate_limit_premium: int = Field(default=60, alias="QUERY_RATE_LIMIT_PREMIUM")
-    query_rate_limit_user: int = Field(default=30, alias="QUERY_RATE_LIMIT_USER")
     query_guard_backend: str = Field(default="auto", alias="QUERY_GUARD_BACKEND")  # auto|memory|redis
     query_max_concurrent: int = Field(default=24, alias="QUERY_MAX_CONCURRENT")
     query_max_waiting: int = Field(default=120, alias="QUERY_MAX_WAITING")
     query_acquire_timeout_ms: int = Field(default=3000, alias="QUERY_ACQUIRE_TIMEOUT_MS")
-    query_request_timeout_ms: int = Field(default=20000, alias="QUERY_REQUEST_TIMEOUT_MS")
-    query_overload_inflight_threshold: int = Field(default=20, alias="QUERY_OVERLOAD_INFLIGHT_THRESHOLD")
-    query_overload_waiting_threshold: int = Field(default=60, alias="QUERY_OVERLOAD_WAITING_THRESHOLD")
-    query_result_cache_backend: str = Field(default="auto", alias="QUERY_RESULT_CACHE_BACKEND")  # auto|memory|redis|off
-    query_result_cache_ttl_seconds: int = Field(default=45, alias="QUERY_RESULT_CACHE_TTL_SECONDS")
-    query_result_cache_max_items: int = Field(default=512, alias="QUERY_RESULT_CACHE_MAX_ITEMS")
-    query_result_session_ttl_seconds: int = Field(default=300, alias="QUERY_RESULT_SESSION_TTL_SECONDS")
-    stream_replay_cache_ttl_seconds: int = Field(default=600, alias="STREAM_REPLAY_CACHE_TTL_SECONDS")
-    stream_replay_cache_max_events: int = Field(default=1200, alias="STREAM_REPLAY_CACHE_MAX_EVENTS")
-    stream_heartbeat_seconds: float = Field(default=8.0, alias="STREAM_HEARTBEAT_SECONDS")
     shadow_queue_workers: int = Field(default=2, alias="SHADOW_QUEUE_WORKERS")
     shadow_queue_maxsize: int = Field(default=200, alias="SHADOW_QUEUE_MAXSIZE")
     synthesis_refine_max_rounds: int = Field(default=5, alias="SYNTHESIS_REFINE_MAX_ROUNDS")
@@ -210,6 +321,14 @@ class Settings(BaseSettings):
     alert_webhook_url: str = Field(default="", alias="ALERT_WEBHOOK_URL")
     alert_webhook_allowlist: str = Field(default="", alias="ALERT_WEBHOOK_ALLOWLIST")  # csv domains
     alert_min_interval_seconds: int = Field(default=60, alias="ALERT_MIN_INTERVAL_SECONDS")
+    alert_slack_webhook_url: str = Field(default="", alias="ALERT_SLACK_WEBHOOK_URL")
+    alert_email_smtp_host: str = Field(default="", alias="ALERT_EMAIL_SMTP_HOST")
+    alert_email_smtp_port: int = Field(default=587, alias="ALERT_EMAIL_SMTP_PORT")
+    alert_email_smtp_username: str = Field(default="", alias="ALERT_EMAIL_SMTP_USERNAME")
+    alert_email_smtp_password: str = Field(default="", alias="ALERT_EMAIL_SMTP_PASSWORD")
+    alert_email_use_tls: bool = Field(default=True, alias="ALERT_EMAIL_USE_TLS")
+    alert_email_from: str = Field(default="", alias="ALERT_EMAIL_FROM")
+    alert_email_to: str = Field(default="", alias="ALERT_EMAIL_TO")  # csv recipients
     response_signing_enabled: bool = Field(default=True, alias="RESPONSE_SIGNING_ENABLED")
     response_signing_secret: str = Field(default="", alias="RESPONSE_SIGNING_SECRET")
     response_signing_active_kid: str = Field(default="v1", alias="RESPONSE_SIGNING_ACTIVE_KID")
@@ -228,12 +347,61 @@ class Settings(BaseSettings):
     quota_mode: str = Field(default="user", alias="QUOTA_MODE")  # user|business_unit
     feature_flags: str = Field(default="", alias="FEATURE_FLAGS")  # name=on|off|pct:10
     feature_flag_seed: str = Field(default="feature", alias="FEATURE_FLAG_SEED")
-    query_retry_enabled: bool = Field(default=True, alias="QUERY_RETRY_ENABLED")
-    query_retry_max_attempts: int = Field(default=2, alias="QUERY_RETRY_MAX_ATTEMPTS")
-    query_retry_base_delay_ms: int = Field(default=120, alias="QUERY_RETRY_BASE_DELAY_MS")
-    perf_gate_max_p95_ms: int = Field(default=4000, alias="PERF_GATE_MAX_P95_MS")
-    perf_gate_max_error_rate_percent: float = Field(default=5.0, alias="PERF_GATE_MAX_ERROR_RATE_PERCENT")
-    admin_create_approval_token: str = Field(default="", alias="ADMIN_CREATE_APPROVAL_TOKEN")
+    verifier_max_retries: int = Field(default=1, ge=0, le=1, alias="VERIFIER_MAX_RETRIES")
+    # How many tool hops one request may take. Each hop is a model call plus a
+    # governed invocation, and the whole loop shares one STAGE_TIMEOUT_TOOL_MS
+    # ceiling, so this bounds cost rather than latency.
+    tool_max_steps: int = Field(default=3, ge=1, le=8, alias="TOOL_MAX_STEPS")
+    # How much of retrieval has to succeed before an answer is worth attempting.
+    # 1 keeps the default "any source is enough"; a higher number, or a list of
+    # sources that must not fail, selects the stricter policies in
+    # app/agents/rag/service.py.
+    retrieval_min_successful_sources: int = Field(default=1, ge=1, le=8, alias="RETRIEVAL_MIN_SUCCESSFUL_SOURCES")
+    retrieval_required_sources: str = Field(default="", alias="RETRIEVAL_REQUIRED_SOURCES")
+    # Post-generation groundedness checking. Off by default: it is an extra LLM
+    # round trip per answer, which is a cost decision rather than a correctness
+    # one. It now actually works when switched on -- it used to verify against an
+    # empty source list, see app/agents/synthesizer/generation.py.
+    answer_fact_verification_enabled: bool = Field(default=False, alias="ANSWER_FACT_VERIFICATION_ENABLED")
+    # Orchestration stage ceilings. These bound a hang; they are not latency
+    # targets (the P95 target is seconds, see CLAUDE.md "Quality Metrics"). The
+    # previous values were tight enough that an ordinary slow LLM call tripped
+    # them, and a tripped stage was an unconditional 500. Read by
+    # app/orchestration/timeout_control.py::TimeoutConfig.from_settings.
+    stage_timeout_total_ms: int = Field(default=120_000, ge=5_000, le=600_000, alias="STAGE_TIMEOUT_TOTAL_MS")
+    stage_timeout_route_ms: int = Field(default=8_000, ge=500, le=120_000, alias="STAGE_TIMEOUT_ROUTE_MS")
+    stage_timeout_plan_ms: int = Field(default=5_000, ge=500, le=120_000, alias="STAGE_TIMEOUT_PLAN_MS")
+    stage_timeout_retrieval_ms: int = Field(default=15_000, ge=500, le=120_000, alias="STAGE_TIMEOUT_RETRIEVAL_MS")
+    stage_timeout_tool_ms: int = Field(default=10_000, ge=500, le=120_000, alias="STAGE_TIMEOUT_TOOL_MS")
+    stage_timeout_synthesis_ms: int = Field(default=30_000, ge=500, le=120_000, alias="STAGE_TIMEOUT_SYNTHESIS_MS")
+    stage_timeout_finalization_ms: int = Field(default=8_000, ge=500, le=120_000, alias="STAGE_TIMEOUT_FINALIZATION_MS")
+    stage_timeout_overhead_ms: int = Field(default=2_000, ge=0, le=60_000, alias="STAGE_TIMEOUT_OVERHEAD_MS")
+    # Wall-clock ceiling handed to the LLM HTTP client. Without one, a hung
+    # provider connection pins a pool thread forever: the stage timeout unblocks
+    # the event loop but cannot cancel the thread doing the blocking call.
+    llm_request_timeout_seconds: float = Field(default=60.0, ge=1.0, le=600.0, alias="LLM_REQUEST_TIMEOUT_SECONDS")
+    langgraph_recursion_limit: int = Field(default=20, ge=12, le=100, alias="LANGGRAPH_RECURSION_LIMIT")
+    planner_max_tasks: int = Field(default=8, ge=1, le=32, alias="PLANNER_MAX_TASKS")
+    planner_max_depth: int = Field(default=4, ge=1, le=16, alias="PLANNER_MAX_DEPTH")
+    planner_max_retrieval_budget: int = Field(default=16, ge=1, le=128, alias="PLANNER_MAX_RETRIEVAL_BUDGET")
+    planner_max_tool_budget: int = Field(default=4, ge=0, le=32, alias="PLANNER_MAX_TOOL_BUDGET")
+    knowledge_source_timeout_ms: int = Field(default=10_000, ge=100, le=120_000, alias="KNOWLEDGE_SOURCE_TIMEOUT_MS")
+    knowledge_max_sources: int = Field(default=6, ge=1, le=8, alias="KNOWLEDGE_MAX_SOURCES")
+    knowledge_context_token_budget: int = Field(
+        default=8_000,
+        ge=256,
+        le=128_000,
+        alias="KNOWLEDGE_CONTEXT_TOKEN_BUDGET",
+    )
+    knowledge_reranker_timeout_ms: int = Field(
+        default=10_000,
+        ge=100,
+        le=120_000,
+        alias="KNOWLEDGE_RERANKER_TIMEOUT_MS",
+    )
+    # Only the hash. ADMIN_CREATE_APPROVAL_TOKEN is a render-time input to
+    # deploy/scripts/config.py, which derives this hash into .runtime/*.env; the
+    # plaintext deliberately never reaches the application.
     admin_create_approval_token_hash: str = Field(default="", alias="ADMIN_CREATE_APPROVAL_TOKEN_HASH")
 
     upload_max_files: int = Field(default=20, alias="UPLOAD_MAX_FILES")
@@ -260,6 +428,8 @@ class Settings(BaseSettings):
     cors_allow_methods: str = Field(default="*", alias="CORS_ALLOW_METHODS")
     cors_allow_headers: str = Field(default="*", alias="CORS_ALLOW_HEADERS")
     cors_allow_credentials: bool = Field(default=True, alias="CORS_ALLOW_CREDENTIALS")
+    csrf_enabled: bool = Field(default=True, alias="CSRF_ENABLED")
+    rate_limit_enabled: bool = Field(default=True, alias="RATE_LIMIT_ENABLED")
 
     @property
     def chroma_path(self) -> Path:
@@ -278,6 +448,14 @@ class Settings(BaseSettings):
         return Path(self.parent_store_path_str)
 
     @property
+    def evidence_artifact_path(self) -> Path:
+        return Path(self.evidence_artifact_root)
+
+    @property
+    def wiki_db_path(self) -> Path:
+        return Path(self.wiki_db_path_str)
+
+    @property
     def sessions_path(self) -> Path:
         return Path(self.sessions_dir)
 
@@ -292,6 +470,10 @@ class Settings(BaseSettings):
     @property
     def auth_sessions_path(self) -> Path:
         return Path(self.auth_sessions_file)
+
+    @property
+    def router_calibration_path(self) -> Path:
+        return Path(self.router_calibration_path_str)
 
     @property
     def app_db_path(self) -> Path:
@@ -327,6 +509,35 @@ class Settings(BaseSettings):
         return [x.strip() for x in raw.split(",") if x.strip()]
 
 
+def resolve_response_signing_secret(settings: Settings) -> tuple[str | None, str | None]:
+    """Resolve the active response-signing key from one explicit settings snapshot."""
+    active_kid = str(settings.response_signing_active_kid or "v1").strip() or "v1"
+    mapping: dict[str, str] = {}
+    for pair in str(settings.response_signing_keys or "").split(";"):
+        if ":" not in pair:
+            continue
+        kid, secret = pair.split(":", 1)
+        if kid.strip() and secret.strip():
+            mapping[kid.strip()] = secret.strip()
+    if active_kid in mapping:
+        return active_kid, mapping[active_kid]
+    legacy_secret = str(settings.response_signing_secret or "").strip()
+    return (active_kid, legacy_secret) if legacy_secret else (None, None)
+
+
+def validate_security_settings(settings: Settings) -> None:
+    """Fail closed for missing production signing keys and warn elsewhere."""
+    if not settings.response_signing_enabled:
+        return
+    kid, secret = resolve_response_signing_secret(settings)
+    if kid and secret:
+        return
+    message = "response signing is enabled but no active signing key is configured"
+    if str(settings.app_env or "").strip().lower() in {"production", "prod"}:
+        raise RuntimeError(message)
+    logger.warning("%s; responses and audit events will be unsigned", message)
+
+
 @lru_cache(maxsize=1)
 def get_settings() -> Settings:
     settings = Settings()
@@ -345,5 +556,7 @@ def get_settings() -> Settings:
 
 
 def reload_settings() -> Settings:
+    candidate = Settings()
+    validate_security_settings(candidate)
     get_settings.cache_clear()
     return get_settings()

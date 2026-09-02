@@ -1,0 +1,474 @@
+/**
+ * Timing Tokens - Design System
+ *
+ * 定义应用程序的完整动画时间系统，包括持续时间和缓动函数。
+ * 所有动画遵循自然物理运动规律，保持60fps性能。
+ *
+ * 设计原则：
+ * - 即时反馈：用户操作后<100ms响应
+ * - 自然物理：模拟真实世界的运动规律
+ * - 性能优先：使用GPU加速属性（transform, opacity）
+ * - 克制优雅：subtle但有存在感
+ *
+ * 使用方式：
+ * - transition: all var(--duration-normal) var(--ease-out);
+ * - animation: slide-in var(--duration-slow) var(--ease-spring);
+ *
+ * @version 1.0.0
+ * @created 2026-08-16
+ */
+
+:root {
+  /* ================================
+     持续时间（Duration）
+     基于感知速度的时间刻度
+     ================================ */
+
+  /* 基础持续时间 */
+  --duration-instant: 100ms;  /* 即时反馈 - 按钮按下、开关切换 */
+  --duration-fast: 150ms;     /* 快速 - Hover效果、简单过渡 */
+  --duration-quick: 200ms;    /* 迅速 - 按钮状态变化 */
+  --duration-normal: 300ms;   /* 标准 - 大多数过渡效果 */
+  --duration-moderate: 400ms; /* 适中 - 下拉菜单、弹窗入场 */
+  --duration-slow: 500ms;     /* 缓慢 - 复杂动画、页面过渡 */
+  --duration-slower: 600ms;   /* 更慢 - 波纹效果、渐变动画 */
+  --duration-slowest: 800ms;  /* 最慢 - 特殊场景、强调动画 */
+
+  /* 特殊持续时间 */
+  --duration-spinner: 1000ms;      /* Spinner旋转周期 */
+  --duration-skeleton: 1500ms;     /* 骨架屏闪烁周期 */
+  --duration-toast: 4000ms;        /* Toast显示时长 */
+  --duration-tooltip-delay: 500ms; /* Tooltip延迟显示 */
+
+  /* ================================
+     缓动函数（Easing Functions）
+     CSS cubic-bezier 曲线定义
+     ================================ */
+
+  /* 标准缓动（Standard Easing）*/
+  --ease-linear: linear;
+  --ease-in: cubic-bezier(0.4, 0, 1, 1);           /* 加速进入 */
+  --ease-out: cubic-bezier(0, 0, 0.2, 1);          /* 减速退出 */
+  --ease-in-out: cubic-bezier(0.4, 0, 0.2, 1);     /* 加速后减速 */
+
+  /* Material Design缓动 */
+  --ease-standard: cubic-bezier(0.4, 0.0, 0.2, 1); /* 标准曲线 */
+  --ease-decelerate: cubic-bezier(0.0, 0.0, 0.2, 1); /* 减速曲线 */
+  --ease-accelerate: cubic-bezier(0.4, 0.0, 1, 1);   /* 加速曲线 */
+  --ease-sharp: cubic-bezier(0.4, 0.0, 0.6, 1);      /* 锐利曲线 */
+
+  /* iOS风格缓动 */
+  --ease-ios: cubic-bezier(0.25, 0.1, 0.25, 1);      /* iOS标准 */
+  --ease-ios-in: cubic-bezier(0.42, 0, 1, 1);        /* iOS入场 */
+  --ease-ios-out: cubic-bezier(0, 0, 0.58, 1);       /* iOS退场 */
+
+  /* 弹性缓动（Elastic）- 需配合CSS动画使用 */
+  --ease-bounce: cubic-bezier(0.68, -0.55, 0.265, 1.55);  /* 弹跳效果 */
+  --ease-overshoot: cubic-bezier(0.175, 0.885, 0.32, 1.275); /* 超调效果 */
+  --ease-anticipate: cubic-bezier(0.6, -0.28, 0.735, 0.045); /* 预期效果 */
+
+  /* 自定义缓动 */
+  --ease-smooth: cubic-bezier(0.25, 0.46, 0.45, 0.94);    /* 平滑曲线 */
+  --ease-dramatic: cubic-bezier(0.87, 0, 0.13, 1);        /* 戏剧化 */
+  --ease-gentle: cubic-bezier(0.33, 1, 0.68, 1);          /* 温和曲线 */
+
+  /* ================================
+     Framer Motion 弹簧配置（Spring）
+     用于JavaScript动画库
+     ================================ */
+
+  /*
+   * 注意：这些值是给Framer Motion使用的配置参数，
+   * 不是CSS属性，需在JS中引用
+   */
+
+  /* 标准弹簧 */
+  --spring-stiffness: 300;    /* 弹簧刚度 */
+  --spring-damping: 30;       /* 弹簧阻尼 */
+  --spring-mass: 1;           /* 弹簧质量 */
+
+  /* 轻快弹簧（按钮、小元素）*/
+  --spring-snappy-stiffness: 500;
+  --spring-snappy-damping: 30;
+
+  /* 柔和弹簧（大元素、模态框）*/
+  --spring-gentle-stiffness: 200;
+  --spring-gentle-damping: 25;
+
+  /* 弹跳弹簧（强调动画）*/
+  --spring-bouncy-stiffness: 400;
+  --spring-bouncy-damping: 20;
+
+  /* ================================
+     组件特定时序（Component Timing）
+     为特定组件定制的动画时序
+     ================================ */
+
+  /* 按钮动画 */
+  --timing-button-hover: var(--duration-quick) var(--ease-out);
+  --timing-button-active: var(--duration-instant) var(--ease-in);
+  --timing-button-loading: var(--duration-spinner) var(--ease-linear);
+
+  /* 卡片动画 */
+  --timing-card-hover: var(--duration-normal) var(--ease-out);
+  --timing-card-expand: var(--duration-moderate) var(--ease-in-out);
+
+  /* 模态框动画 */
+  --timing-modal-enter: var(--duration-moderate) var(--ease-out);
+  --timing-modal-exit: var(--duration-normal) var(--ease-in);
+  --timing-modal-backdrop: var(--duration-quick) var(--ease-out);
+
+  /* 下拉菜单动画 */
+  --timing-dropdown-enter: var(--duration-quick) var(--ease-out);
+  --timing-dropdown-exit: var(--duration-fast) var(--ease-in);
+
+  /* Toast通知动画 */
+  --timing-toast-enter: var(--duration-moderate) var(--ease-out);
+  --timing-toast-exit: var(--duration-normal) var(--ease-in);
+  --timing-toast-duration: var(--duration-toast);
+
+  /* 波纹效果 */
+  --timing-ripple: var(--duration-slower) var(--ease-out);
+
+  /* 骨架屏动画 */
+  --timing-skeleton: var(--duration-skeleton) var(--ease-in-out);
+
+  /* 开关动画 */
+  --timing-toggle: var(--duration-normal) var(--ease-out);
+
+  /* 工具提示 */
+  --timing-tooltip-delay: var(--duration-tooltip-delay);
+  --timing-tooltip-enter: var(--duration-quick) var(--ease-out);
+  --timing-tooltip-exit: var(--duration-fast) var(--ease-in);
+
+  /* 输入框动画 */
+  --timing-input-focus: var(--duration-quick) var(--ease-out);
+  --timing-input-error: var(--duration-slow) var(--ease-bounce);
+
+  /* 加载状态 */
+  --timing-spinner-rotation: var(--duration-spinner) linear infinite;
+  --timing-pulse: var(--duration-skeleton) var(--ease-in-out) infinite;
+
+  /* ================================
+     动画延迟（Animation Delay）
+     交错动画、序列动画使用
+     ================================ */
+
+  --delay-none: 0ms;
+  --delay-xs: 50ms;    /* 极小延迟 - 列表项交错 */
+  --delay-sm: 100ms;   /* 小延迟 - 按钮序列 */
+  --delay-md: 200ms;   /* 中延迟 - 卡片序列 */
+  --delay-lg: 300ms;   /* 大延迟 - 区块序列 */
+  --delay-xl: 500ms;   /* 超大延迟 - 页面序列 */
+
+  /* 交错延迟步进（用于计算）*/
+  --stagger-step: 50ms;   /* 列表项交错步进 */
+  --stagger-fast: 30ms;   /* 快速交错 */
+  --stagger-slow: 100ms;  /* 慢速交错 */
+
+  /* ================================
+     变换原点（Transform Origin）
+     用于缩放、旋转动画
+     ================================ */
+
+  --origin-center: center center;
+  --origin-top: top center;
+  --origin-bottom: bottom center;
+  --origin-left: center left;
+  --origin-right: center right;
+  --origin-top-left: top left;
+  --origin-top-right: top right;
+  --origin-bottom-left: bottom left;
+  --origin-bottom-right: bottom right;
+
+  /* ================================
+     缩放比例（Scale Values）
+     用于hover、active状态
+     ================================ */
+
+  --scale-hover: 1.02;      /* 悬停轻微放大 */
+  --scale-active: 0.97;     /* 按下缩小 */
+  --scale-pop: 1.1;         /* 弹出效果 */
+  --scale-focus: 1.05;      /* 聚焦放大 */
+  --scale-disappear: 0.8;   /* 消失缩小 */
+}
+
+/* ================================
+   性能优化（Performance）
+   自动启用GPU加速
+   ================================ */
+
+.animated-element,
+.will-animate {
+  will-change: transform, opacity;
+}
+
+.animated-element.animation-done,
+.will-animate.animation-done {
+  will-change: auto;
+}
+
+/* ================================
+   无障碍支持（Accessibility）
+   尊重用户减少动画偏好
+   ================================ */
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    /* 大幅缩短所有动画时长 */
+    --duration-instant: 10ms;
+    --duration-fast: 10ms;
+    --duration-quick: 10ms;
+    --duration-normal: 10ms;
+    --duration-moderate: 10ms;
+    --duration-slow: 10ms;
+    --duration-slower: 10ms;
+    --duration-slowest: 10ms;
+
+    /* 使用线性缓动 */
+    --ease-in: linear;
+    --ease-out: linear;
+    --ease-in-out: linear;
+  }
+
+  /* 禁用所有变换动画 */
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* ================================
+   低性能设备优化
+   在低端设备上降级动画
+   ================================ */
+
+@media (prefers-reduced-data: reduce) {
+  :root {
+    --duration-normal: 150ms;
+    --duration-slow: 200ms;
+  }
+}
+
+/* ================================
+   预定义动画类（Utility Classes）
+   快速应用常见动画效果
+   ================================ */
+
+/* 过渡效果快捷类 */
+.transition-fast {
+  transition: all var(--duration-fast) var(--ease-out);
+}
+
+.transition-normal {
+  transition: all var(--duration-normal) var(--ease-out);
+}
+
+.transition-slow {
+  transition: all var(--duration-slow) var(--ease-in-out);
+}
+
+/* 变换过渡 */
+.transition-transform {
+  transition: transform var(--duration-normal) var(--ease-out);
+}
+
+.transition-opacity {
+  transition: opacity var(--duration-normal) var(--ease-out);
+}
+
+.transition-colors {
+  transition: background-color var(--duration-normal) var(--ease-out),
+              border-color var(--duration-normal) var(--ease-out),
+              color var(--duration-normal) var(--ease-out);
+}
+
+/* ================================
+   关键帧动画（Keyframe Animations）
+   预定义常用动画
+   ================================ */
+
+/* 淡入淡出 */
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes fade-out {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+
+/* 滑入滑出 */
+@keyframes slide-in-right {
+  from {
+    opacity: 0;
+    transform: translateX(300px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes slide-out-right {
+  from {
+    opacity: 1;
+    transform: translateX(0);
+  }
+  to {
+    opacity: 0;
+    transform: translateX(300px);
+  }
+}
+
+/* 缩放动画 */
+@keyframes scale-in {
+  from {
+    opacity: 0;
+    transform: scale(0.8);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes scale-out {
+  from {
+    opacity: 1;
+    transform: scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: scale(0.8);
+  }
+}
+
+/* 旋转动画 */
+@keyframes rotate {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* 抖动动画 */
+@keyframes shake {
+  0%, 100% {
+    transform: translateX(0);
+  }
+  10%, 30%, 50%, 70%, 90% {
+    transform: translateX(-10px);
+  }
+  20%, 40%, 60%, 80% {
+    transform: translateX(10px);
+  }
+}
+
+/* 脉冲动画 */
+@keyframes pulse {
+  0%, 100% {
+    opacity: 0.5;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+/* 弹跳动画 */
+@keyframes bounce {
+  0%, 20%, 50%, 80%, 100% {
+    transform: translateY(0);
+  }
+  40% {
+    transform: translateY(-30px);
+  }
+  60% {
+    transform: translateY(-15px);
+  }
+}
+
+/* 骨架屏闪烁 */
+@keyframes skeleton-shimmer {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
+}
+
+/* 波纹扩散 */
+@keyframes ripple-animation {
+  to {
+    transform: scale(2);
+    opacity: 0;
+  }
+}
+
+/* ================================
+   使用示例
+   ================================ */
+
+/*
+// CSS中使用
+.button {
+  transition: var(--timing-button-hover);
+}
+
+.button:hover {
+  transform: scale(var(--scale-hover));
+}
+
+.button:active {
+  transform: scale(var(--scale-active));
+  transition: var(--timing-button-active);
+}
+
+.modal {
+  animation: scale-in var(--timing-modal-enter);
+}
+
+.spinner {
+  animation: rotate var(--timing-spinner-rotation);
+}
+
+// JavaScript中使用（Framer Motion）
+const buttonVariants = {
+  hover: {
+    scale: 1.02,
+    transition: {
+      duration: 0.2,
+      ease: [0, 0, 0.2, 1] // --ease-out
+    }
+  },
+  tap: {
+    scale: 0.97,
+    transition: {
+      duration: 0.1,
+      ease: [0.4, 0, 1, 1] // --ease-in
+    }
+  }
+};
+
+const springConfig = {
+  type: 'spring',
+  stiffness: 300,  // --spring-stiffness
+  damping: 30      // --spring-damping
+};
+*/

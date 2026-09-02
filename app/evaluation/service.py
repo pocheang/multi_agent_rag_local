@@ -171,6 +171,7 @@ class EvaluationService:
             comparisons: List of system comparisons
         """
         import logging
+
         logger = logging.getLogger(__name__)
 
         logger.info("\n" + "=" * 80)

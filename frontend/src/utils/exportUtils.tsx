@@ -1,6 +1,5 @@
 // 数据导出工具函数
-
-export function exportToCSV(data: any[], filename: string) {
+export function exportToCSV(data: Array<Record<string, unknown>>, filename: string) {
   if (data.length === 0) return;
 
   const headers = Object.keys(data[0]);
@@ -9,6 +8,10 @@ export function exportToCSV(data: any[], filename: string) {
     ...data.map(row =>
       headers.map(header => {
         const value = row[header];
+        // Skip complex objects and arrays
+        if (value && typeof value === 'object') {
+          return JSON.stringify(value);
+        }
         // 转义包含逗号或引号的值
         if (typeof value === 'string' && (value.includes(',') || value.includes('"'))) {
           return `"${value.replace(/"/g, '""')}"`;
@@ -21,7 +24,7 @@ export function exportToCSV(data: any[], filename: string) {
   downloadFile(csvContent, filename, 'text/csv;charset=utf-8;');
 }
 
-export function exportToJSON(data: any[], filename: string) {
+export function exportToJSON(data: Array<Record<string, unknown>>, filename: string) {
   const jsonContent = JSON.stringify(data, null, 2);
   downloadFile(jsonContent, filename, 'application/json');
 }
@@ -57,7 +60,7 @@ function downloadFile(content: string, filename: string, mimeType: string) {
 import { useTranslation } from "react-i18next";
 
 interface ExportButtonsProps {
-  data: any[];
+  data: Array<Record<string, unknown>>;
   filename: string;
   onExport?: () => void;
 }

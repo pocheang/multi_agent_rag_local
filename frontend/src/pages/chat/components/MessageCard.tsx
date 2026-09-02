@@ -1,9 +1,14 @@
+import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { SessionMessage } from "@/types/api";
 import { EMPTY_METADATA } from "@/pages/chat/constants";
 import { MarkdownBlock } from "@/pages/chat/components/MarkdownBlock";
 import { CollapsibleSection } from "@/pages/chat/components/CollapsibleSection";
 import { MetadataBadges } from "@/pages/chat/components/MetadataBadges";
+import { AnimatedButtonLite as AnimatedButton } from "@/components/animations/AnimatedButtonLite";
+import { ThinkingIndicator } from "@/pages/chat/components/ThinkingIndicator";
+import { ConfirmDialog } from "@/components/ConfirmDialog";
+import { useConfirmDialog } from "@/hooks/useConfirmDialog";
 
 type Props = {
   message: SessionMessage;
@@ -16,8 +21,29 @@ export function MessageCard({ message, onEditMessage, onRemoveMessage }: Props) 
   const isAssistant = message.role === "assistant";
   const metadata = message.metadata || EMPTY_METADATA;
   const timeLocale = i18n.language === "zh" ? "zh-CN" : "en-US";
+  const [processExpanded, setProcessExpanded] = useState(false);
+  const confirmDialog = useConfirmDialog();
+
+  // Determine if this is a streaming message (thinking state)
+  const isStreaming = message.message_id === "local-assistant-stream";
+  const isThinking = isStreaming && !message.content;
+  const isGenerating = isStreaming && message.content;
+  const hasExecutionSteps = (metadata.execution_steps || []).length > 0;
+
+  // Calculate elapsed time from execution steps
+  const getElapsedSeconds = () => {
+    if (!hasExecutionSteps) return 0;
+    const steps = metadata.execution_steps || [];
+    const firstStep = steps[0];
+    const lastStep = steps[steps.length - 1];
+    if (!firstStep?.at || !lastStep?.at) return 0;
+    const start = new Date(firstStep.at).getTime();
+    const end = new Date(lastStep.at).getTime();
+    return Math.round((end - start) / 1000);
+  };
 
   return (
+    <>
     <article
       className={`bubble ${isAssistant ? "assistant" : "user"}`}
       role="article"
@@ -28,62 +54,96 @@ export function MessageCard({ message, onEditMessage, onRemoveMessage }: Props) 
           <span className="message-avatar" aria-hidden="true">{isAssistant ? "AI" : "U"}</span>
           <span className="message-role">{isAssistant ? t("components.messages.assistant") : t("components.messages.you")}</span>
         </div>
-        {message.message_id.startsWith("local-") ? null : (
+        {!message.message_id || message.message_id.startsWith("local-") ? null : (
           <div className="row-actions">
-            <button
-              type="button"
-              className="secondary tiny-btn"
+            <AnimatedButton
               onClick={() => void onEditMessage(message)}
-              aria-label={t("components.messages.editMessage")}
+              variant="secondary"
+              size="small"
+              className="tiny-btn"
             >
               {t("components.messages.edit")}
-            </button>
-            <button
-              type="button"
-              className="danger tiny-btn"
-              onClick={() => {
-                if (window.confirm(t("components.messages.deleteConfirm"))) {
-                  void onRemoveMessage(message);
+            </AnimatedButton>
+            <AnimatedButton
+              onClick={async () => {
+                const confirmMsg = message.role === "assistant"
+                  ? t("components.messages.deleteAssistantConfirm")
+                  : t("components.messages.deleteUserConfirm");
+                const confirmed = await confirmDialog.confirm({ message: confirmMsg, isDanger: true });
+                if (confirmed) {
+                  await onRemoveMessage(message);
                 }
               }}
-              aria-label={t("components.messages.deleteMessage")}
+              variant="danger"
+              size="small"
+              className="tiny-btn"
             >
               {t("components.messages.delete")}
-            </button>
+            </AnimatedButton>
           </div>
         )}
       </div>
 
-      <div className="markdown">
-        <MarkdownBlock text={message.content || ""} />
-      </div>
+      {/* Show thinking indicator when streaming without content */}
+      {isThinking ? (
+        <ThinkingIndicator elapsedSeconds={getElapsedSeconds()} />
+      ) : (
+        <div className="markdown">
+          <MarkdownBlock text={message.content || ""} />
+          {isGenerating && <span className="cursor-blink">▍</span>}
+        </div>
+      )}
 
-      {isAssistant && (
+      {isAssistant && !isThinking && (
         <>
           <MetadataBadges metadata={metadata} />
 
-          {(metadata.execution_steps || []).length > 0 && (
-            <CollapsibleSection
-              open={message.message_id === "local-assistant-stream"}
-              className="process-panel"
-              title={t("components.messages.execution")}
-              ariaLabel={t("components.messages.toggleExecution")}
-            >
-              <div className="process-timeline">
-                {(metadata.execution_steps || []).map((step, index) => (
-                  <div key={`${message.message_id}-step-${index}`} className="process-step">
-                    <div className="process-step-head">
-                      <span className={`process-kind kind-${step.kind || "default"}`}>{step.kind || "step"}</span>
-                      <strong>{step.label || t("components.messages.processing")}</strong>
-                      <span className="process-time">
-                        {step.at ? new Date(step.at).toLocaleTimeString(timeLocale, { hour12: false }) : ""}
-                      </span>
-                    </div>
-                    {step.detail && <div className="process-detail">{step.detail}</div>}
+          {/* Collapsible process summary - hidden by default */}
+          {hasExecutionSteps && (
+            <>
+              <button
+                className={`process-summary-toggle ${processExpanded ? "expanded" : ""}`}
+                onClick={() => setProcessExpanded(!processExpanded)}
+                aria-expanded={processExpanded}
+                aria-label={processExpanded ? "隐藏执行过程" : "查看执行过程"}
+              >
+                <span>已思考 {getElapsedSeconds()} 秒</span>
+                <span className="toggle-arrow">▾</span>
+              </button>
+
+              {processExpanded && (
+                <CollapsibleSection
+                  open={true}
+                  className="process-panel"
+                  title={t("components.messages.execution")}
+                  ariaLabel={t("components.messages.toggleExecution")}
+                >
+                  <div className="process-timeline">
+                    {(metadata.execution_steps || []).map((step, index) => {
+                      // Filter out technical fields
+                      const shouldShow = !["execution started", "trace", "STATUS"].some(
+                        (tech) => step.label?.toLowerCase().includes(tech.toLowerCase())
+                      );
+
+                      if (!shouldShow) return null;
+
+                      return (
+                        <div key={`${message.message_id}-step-${index}`} className="process-step">
+                          <div className="process-step-head">
+                            <span className={`process-kind kind-${step.kind || "default"}`}>{step.kind || "step"}</span>
+                            <strong>{step.label || t("components.messages.processing")}</strong>
+                            <span className="process-time">
+                              {step.at ? new Date(step.at).toLocaleTimeString(timeLocale, { hour12: false }) : ""}
+                            </span>
+                          </div>
+                          {step.detail && <div className="process-detail">{step.detail}</div>}
+                        </div>
+                      );
+                    })}
                   </div>
-                ))}
-              </div>
-            </CollapsibleSection>
+                </CollapsibleSection>
+              )}
+            </>
           )}
 
           {(metadata.thoughts || []).length > 0 && (
@@ -96,16 +156,42 @@ export function MessageCard({ message, onEditMessage, onRemoveMessage }: Props) 
             </CollapsibleSection>
           )}
 
+          {(metadata.tool_runs || []).length > 0 && (
+            <CollapsibleSection title={t("components.messages.toolRuns")} ariaLabel={t("components.messages.toggleToolRuns")}>
+              <ul className="compact-list">
+                {(metadata.tool_runs || []).map((run, index) => (
+                  <li key={`${message.message_id}-tool-${index}`}>
+                    <strong>{run.tool_id}</strong>
+                    {" — "}
+                    {t(`components.messages.toolStatus.${run.status}`, { defaultValue: run.status })}
+                    {run.summary ? `: ${run.summary}` : ""}
+                  </li>
+                ))}
+              </ul>
+            </CollapsibleSection>
+          )}
+
           {(metadata.citations || []).length > 0 && (
             <CollapsibleSection title={t("components.messages.citations")} ariaLabel={t("components.messages.toggleCitations")}>
               <div className="citation-grid">
-                {(metadata.citations || []).slice(0, 8).map((citation, index) => (
+                {/* Not truncated: the answer text cites these by number, so hiding
+                    an entry leaves a [n] in the text that resolves to nothing. */}
+                {(metadata.citations || []).map((citation, index) => (
                   <div key={`${message.message_id}-cit-${index}`} className="citation-card">
-                    <strong>{citation.source || "unknown"}</strong>
+                    <strong>
+                      {citation.marker ? `${citation.marker} ` : ""}
+                      {citation.source || "unknown"}
+                    </strong>
                     <MarkdownBlock text={citation.content || ""} />
                   </div>
                 ))}
               </div>
+            </CollapsibleSection>
+          )}
+
+          {metadata.quality_report && Object.keys(metadata.quality_report).length > 0 && (
+            <CollapsibleSection title={t("components.messages.qualityReport")} ariaLabel={t("components.messages.toggleQualityReport")}>
+              <pre className="graph-context">{JSON.stringify(metadata.quality_report, null, 2)}</pre>
             </CollapsibleSection>
           )}
 
@@ -197,5 +283,14 @@ export function MessageCard({ message, onEditMessage, onRemoveMessage }: Props) 
         </>
       )}
     </article>
+    <ConfirmDialog
+      isOpen={confirmDialog.isOpen}
+      title={t("components.messages.delete")}
+      message={confirmDialog.options?.message || ""}
+      isDanger={confirmDialog.options?.isDanger}
+      onConfirm={confirmDialog.handleConfirm}
+      onCancel={confirmDialog.handleCancel}
+    />
+    </>
   );
 }

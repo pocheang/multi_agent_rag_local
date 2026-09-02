@@ -5,7 +5,7 @@ from collections import Counter
 from dataclasses import dataclass
 
 from app.core.config import get_settings
-from app.core.models import get_chat_model
+from app.services.models.runtime import get_chat_model
 
 logger = logging.getLogger(__name__)
 

@@ -1,4 +1,5 @@
 import type { Dispatch, SetStateAction } from "react";
+import { useTranslation } from "react-i18next";
 import { appApi } from "@/lib/api";
 import type { IndexedFileSummary } from "@/types/api";
 
@@ -18,9 +19,11 @@ interface UseDocumentActionsParams {
   chatUploadInputRef: React.RefObject<HTMLInputElement | null>;
   notify: (text: string, kind?: "info" | "success" | "warn" | "error", ttl?: number) => void;
   handleApiError: (e: unknown, fallback: string) => Promise<void>;
+  confirm: (opts: { message: string; title?: string; isDanger?: boolean }) => Promise<boolean>;
 }
 
 export function useDocumentActions(params: UseDocumentActionsParams) {
+  const { t } = useTranslation();
   const {
     setDocuments,
     setDocsLoading,
@@ -35,6 +38,7 @@ export function useDocumentActions(params: UseDocumentActionsParams) {
     chatUploadInputRef,
     notify,
     handleApiError,
+    confirm,
   } = params;
 
   const refreshDocuments = async (silent = false) => {
@@ -44,7 +48,7 @@ export function useDocumentActions(params: UseDocumentActionsParams) {
       setDocuments(rows);
       setError("");
     } catch (e) {
-      await handleApiError(e, "Failed to load documents");
+      await handleApiError(e, t("components.workbench.loadDocumentsFailed"));
     } finally {
       if (!silent) setDocsLoading(false);
     }
@@ -55,39 +59,39 @@ export function useDocumentActions(params: UseDocumentActionsParams) {
     try {
       setUploading(true);
       setUploadProgress(0);
-      setUploadProgressText("Preparing upload...");
-      setUploadInfo("Uploading...");
+      setUploadProgressText(t("components.workbench.preparingUpload"));
+      setUploadInfo(t("components.workbench.uploading"));
       const data = await appApi.upload(
         files,
         (percent) => {
           setUploadProgress(percent);
-          setUploadProgressText(`Uploading ${Math.round(percent)}%`);
+          setUploadProgressText(t("components.workbench.uploadProgress", { progress: Math.round(percent) }));
         },
         uploadVisibility,
       );
       setUploadProgress(100);
-      setUploadProgressText("Upload complete");
+      setUploadProgressText(t("components.workbench.uploadComplete"));
 
       const uploadSummary = [];
       if (data.indexing_status === "queued") {
-        uploadSummary.push("queued for indexing");
+        uploadSummary.push(t("components.workbench.queuedForIndexing"));
       }
       if (data.duplicate_files && data.duplicate_files.length > 0) {
-        uploadSummary.push(`reused: ${data.duplicate_files.join(", ")}`);
+        uploadSummary.push(t("components.workbench.reusedFiles", { files: data.duplicate_files.join(", ") }));
       }
-      uploadSummary.push(`✓ 已上传 ${data.loaded_documents} 个文件`);
+      uploadSummary.push(t("components.workbench.uploadedCount", { count: data.loaded_documents }));
       if (data.chunks_indexed > 0) {
-        uploadSummary.push(`索引了 ${data.chunks_indexed} 个文本块`);
+        uploadSummary.push(t("components.workbench.indexedChunksCount", { count: data.chunks_indexed }));
       }
       if (data.pages_by_source && Object.keys(data.pages_by_source).length > 0) {
         const totalPages = Object.values(data.pages_by_source).reduce((a, b) => a + b, 0);
-        uploadSummary.push(`共 ${totalPages} 页`);
+        uploadSummary.push(t("components.workbench.totalPagesCount", { count: totalPages }));
       }
       if (data.triplets_written > 0) {
-        uploadSummary.push(`提取了 ${data.triplets_written} 个知识三元组`);
+        uploadSummary.push(t("components.workbench.extractedTripletsCount", { count: data.triplets_written }));
       }
       if (data.skipped_files && data.skipped_files.length > 0) {
-        uploadSummary.push(`跳过: ${data.skipped_files.join(", ")}`);
+        uploadSummary.push(t("components.workbench.skippedFiles", { files: data.skipped_files.join(", ") }));
       }
 
       setUploadInfo(uploadSummary.join(" | "));
@@ -99,8 +103,12 @@ export function useDocumentActions(params: UseDocumentActionsParams) {
       notify(uploadSummary.join(" | "), "success", 4000);
       await refreshDocuments();
     } catch (e) {
-      setUploadInfo(`Upload failed: ${e instanceof Error ? e.message : "unknown error"}`);
-      await handleApiError(e, "Upload failed");
+      setUploadInfo(
+        t("components.workbench.uploadFailedReason", {
+          reason: e instanceof Error ? e.message : t("components.workbench.unknownError"),
+        }),
+      );
+      await handleApiError(e, t("components.workbench.uploadFailed"));
     } finally {
       setUploading(false);
       if (fileInputRef.current) fileInputRef.current.value = "";
@@ -113,48 +121,57 @@ export function useDocumentActions(params: UseDocumentActionsParams) {
   };
 
   const deleteDocument = async (item: IndexedFileSummary, removeFile: boolean) => {
-    const verb = removeFile ? "Delete file and index" : "Delete index";
-    if (!window.confirm(`${verb}: ${item.filename} ?`)) return;
+    const verb = removeFile
+      ? t("components.workbench.deleteFileAndIndexVerb")
+      : t("components.workbench.deleteIndexVerb");
+    const confirmed = await confirm({
+      message: t("components.workbench.deleteDocConfirm", { verb, filename: item.filename }),
+      isDanger: true,
+    });
+    if (!confirmed) return;
     try {
-      const res = await appApi.documentDelete(item.filename, item.source, removeFile);
+      const res = await appApi.documentDelete(item.filename, item.source, removeFile, item.document_id);
       setUploadInfo(
         `${item.filename}: chunks_removed=${res.chunks_removed}, triplets_removed=${res.triplets_removed}, file_removed=${res.file_removed}`,
       );
-      notify(`${item.filename} deleted`, "success");
+      notify(t("components.workbench.fileDeleted", { filename: item.filename }), "success");
       await refreshDocuments();
     } catch (e) {
-      await handleApiError(e, "Failed to delete document");
+      await handleApiError(e, t("components.workbench.deleteDocumentFailed"));
     }
   };
 
   const reindexDocument = async (item: IndexedFileSummary) => {
     try {
-      const res = await appApi.documentReindex(item.filename, item.source);
+      const res = await appApi.documentReindex(item.filename, item.source, item.document_id);
       if (res.skipped) {
-        const skippedSummary = `${item.filename} skipped: ${res.reason || "unchanged"}`;
+        const skippedSummary = t("components.workbench.reindexSkipped", {
+          filename: item.filename,
+          reason: res.reason || t("components.workbench.unchangedReason"),
+        });
         setUploadInfo(skippedSummary);
         notify(skippedSummary, "info", 3000);
         await refreshDocuments();
         return;
       }
 
-      const reindexSummary = [`✓ ${item.filename} 重新索引完成`];
+      const reindexSummary = [t("components.workbench.reindexComplete", { filename: item.filename })];
       if (res.chunks_indexed && res.chunks_indexed > 0) {
-        reindexSummary.push(`${res.chunks_indexed} 个文本块`);
+        reindexSummary.push(t("components.workbench.indexedChunksCount", { count: res.chunks_indexed }));
       }
       if (res.pages_by_source && Object.keys(res.pages_by_source).length > 0) {
         const totalPages = Object.values(res.pages_by_source).reduce((a, b) => a + b, 0);
-        reindexSummary.push(`${totalPages} 页`);
+        reindexSummary.push(t("components.workbench.totalPagesCount", { count: totalPages }));
       }
       if (res.triplets_written && res.triplets_written > 0) {
-        reindexSummary.push(`${res.triplets_written} 个知识三元组`);
+        reindexSummary.push(t("components.workbench.extractedTripletsCount", { count: res.triplets_written }));
       }
 
       setUploadInfo(reindexSummary.join(" - "));
       notify(reindexSummary.join(" - "), "success", 3000);
       await refreshDocuments();
     } catch (e) {
-      await handleApiError(e, "Failed to reindex document");
+      await handleApiError(e, t("components.workbench.reindexDocumentFailed"));
     }
   };
 

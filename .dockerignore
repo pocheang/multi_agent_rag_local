@@ -32,7 +32,6 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 .npm
-package-lock.json
 
 # IDEs
 .idea/
@@ -97,7 +96,6 @@ scripts/test_*.py
 scripts/verify_*.py
 scripts/debug_*.py
 
-# Frontend source (not needed in backend image)
-frontend/
-nginx.conf
+# Frontend source and nginx.conf are required by Dockerfile.frontend. The
+# backend Dockerfile copies only its explicitly listed paths.
 Dockerfile.frontend

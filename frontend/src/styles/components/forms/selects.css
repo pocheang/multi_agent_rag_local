@@ -26,7 +26,7 @@ select {
   background-repeat: no-repeat;
   background-size: 1.5em 1.5em;
   padding-right: var(--space-10);
-  color-scheme: dark;
+  color-scheme: light;
 }
 
 select:hover {
@@ -44,15 +44,15 @@ select:focus {
    Select Options (Dropdown Items)
    ============================================ */
 
-select option {
-  background-color: var(--surface) !important;
-  color: var(--text-primary) !important;
+:root[data-theme] select option {
+  background-color: var(--surface);
+  color: var(--text-primary);
   padding: 0.5rem;
 }
 
-select option:hover,
-select option:focus,
-select option:checked {
-  background-color: var(--accent) !important;
-  color: #ffffff !important;
+:root[data-theme] select option:hover,
+:root[data-theme] select option:focus,
+:root[data-theme] select option:checked {
+  background-color: var(--accent);
+  color: #ffffff;
 }

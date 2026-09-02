@@ -1,31 +1,17 @@
 import type React from "react";
 import { useTranslation } from "react-i18next";
 import { QuickActions } from "@/pages/chat/components/QuickActions";
-import { SelectControl } from "@/pages/chat/components/SelectControl";
-import { ToggleControl } from "@/pages/chat/components/ToggleControl";
+import { AnimatedButtonLite as AnimatedButton } from "@/components/animations/AnimatedButtonLite";
+import { useChatStore } from "@/stores/useChatStore";
+import { useTextareaAutoResize } from "@/pages/chat/hooks/useTextareaAutoResize";
 
 type Props = {
-  composerDropActive: boolean;
-  question: string;
   questionRef: React.MutableRefObject<HTMLTextAreaElement | null>;
   chatUploadInputRef: React.MutableRefObject<HTMLInputElement | null>;
   isSending: boolean;
   quickPrompts: string[];
-  runStatus: string;
-  error: string;
-  useWeb: boolean;
-  useReasoning: boolean;
-  agentClassHint: string;
-  retrievalStrategy: string;
-  onQuestionChange: (value: string) => void;
   onAsk: () => Promise<void>;
   onStop: () => void;
-  onClearQuestion: () => void;
-  onPromptPick: (prompt: string) => void;
-  onUseWebChange: (next: boolean) => void;
-  onUseReasoningChange: (next: boolean) => void;
-  onAgentClassHintChange: (value: string) => void;
-  onRetrievalStrategyChange: (value: string) => void;
   onComposerDragEnter: (evt: React.DragEvent<HTMLElement>) => void;
   onComposerDragOver: (evt: React.DragEvent<HTMLElement>) => void;
   onComposerDragLeave: (evt: React.DragEvent<HTMLElement>) => void;
@@ -33,42 +19,13 @@ type Props = {
   onChatUploadChange: (evt: React.ChangeEvent<HTMLInputElement>) => Promise<void>;
 };
 
-const RETRIEVAL_OPTIONS = [
-  { value: "advanced", label: "advanced" },
-  { value: "baseline", label: "baseline" },
-  { value: "safe", label: "safe" },
-];
-
-const AGENT_OPTIONS = [
-  { value: "", label: "auto" },
-  { value: "cybersecurity", label: "cybersecurity" },
-  { value: "artificial_intelligence", label: "artificial_intelligence" },
-  { value: "pdf_text", label: "pdf_text" },
-  { value: "general", label: "general" },
-];
-
 export function ChatComposer({
-  composerDropActive,
-  question,
   questionRef,
   chatUploadInputRef,
   isSending,
   quickPrompts,
-  runStatus,
-  error,
-  useWeb,
-  useReasoning,
-  agentClassHint,
-  retrievalStrategy,
-  onQuestionChange,
   onAsk,
   onStop,
-  onClearQuestion,
-  onPromptPick,
-  onUseWebChange,
-  onUseReasoningChange,
-  onAgentClassHintChange,
-  onRetrievalStrategyChange,
   onComposerDragEnter,
   onComposerDragOver,
   onComposerDragLeave,
@@ -76,12 +33,12 @@ export function ChatComposer({
   onChatUploadChange,
 }: Props) {
   const { t } = useTranslation();
-  const strategy = t(`components.chat.strategy.${retrievalStrategy || "advanced"}`);
-  const modeHint = useWeb
-    ? t("components.chat.modeHint.web", { strategy })
-    : useReasoning
-      ? t("components.chat.modeHint.reasoning", { strategy })
-      : t("components.chat.modeHint.local", { strategy });
+  const question = useChatStore((s) => s.question);
+  const setQuestion = useChatStore((s) => s.setQuestion);
+  const runStatus = useChatStore((s) => s.runStatus);
+  const composerDropActive = useChatStore((s) => s.composerDropActive);
+  useTextareaAutoResize({ ref: questionRef, value: question });
+  const modeHint = t("components.chat.modeHint.advancedReasoning");
 
   return (
     <section
@@ -101,7 +58,7 @@ export function ChatComposer({
           <textarea
             ref={questionRef}
             value={question}
-            onChange={(event) => onQuestionChange(event.target.value)}
+            onChange={(event) => setQuestion(event.target.value)}
             placeholder={t("components.chat.composerPlaceholder")}
             rows={3}
             aria-label={t("components.chat.questionInput")}
@@ -136,48 +93,17 @@ export function ChatComposer({
       </div>
 
       <div className="composer-controls">
-        <div className="composer-options">
-          <ToggleControl
-            label={t("components.chat.webSearch")}
-            active={useWeb}
-            onChange={onUseWebChange}
-            ariaLabel={t("components.chat.webSearchAria")}
-            title={t("components.chat.webSearchTitle")}
-          />
-          <ToggleControl
-            label={t("components.chat.reasoning")}
-            active={useReasoning}
-            onChange={onUseReasoningChange}
-            ariaLabel={t("components.chat.reasoningAria")}
-            title={t("components.chat.reasoningTitle")}
-          />
-          <SelectControl
-            label={t("components.chat.retrievalStrategy")}
-            value={retrievalStrategy}
-            options={RETRIEVAL_OPTIONS}
-            onChange={onRetrievalStrategyChange}
-            ariaLabel={t("components.chat.retrievalStrategyAria")}
-          />
-          <SelectControl
-            label="Agent"
-            value={agentClassHint}
-            options={AGENT_OPTIONS}
-            onChange={onAgentClassHintChange}
-            ariaLabel={t("components.chat.agentTypeAria")}
-          />
-        </div>
-
-        <button
-          type="button"
-          className="composer-primary-btn"
-          onClick={() => void onAsk()}
+        <AnimatedButton
+          onClick={onAsk}
+          state={isSending ? 'loading' : 'idle'}
+          variant="primary"
+          size="large"
           disabled={isSending}
-          aria-label={isSending ? t("components.chat.processingQuestion") : t("components.chat.startAnalysisAria")}
+          className="composer-primary-btn"
         >
-          {isSending && <span className="spinner" aria-hidden="true"></span>}
           <span className="btn-text">{isSending ? t("components.chat.analyzing") : t("components.chat.startAnalysis")}</span>
           {!isSending && <span className="btn-shortcut">Ctrl / Cmd + Enter</span>}
-        </button>
+        </AnimatedButton>
       </div>
 
       <div className="composer-hint" id="composer-hint">
@@ -188,13 +114,12 @@ export function ChatComposer({
         quickPrompts={quickPrompts}
         question={question}
         isSending={isSending}
-        onPromptPick={onPromptPick}
+        onPromptPick={setQuestion}
         onStop={onStop}
-        onClearQuestion={onClearQuestion}
+        onClearQuestion={() => setQuestion("")}
       />
 
       {runStatus && <div className="status">{runStatus}</div>}
-      {error && <div className="status error">{error}</div>}
     </section>
   );
 }

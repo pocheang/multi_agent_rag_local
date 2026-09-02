@@ -1,480 +1,424 @@
-/* ============================================
-   Architecture Page
-   ============================================ */
+/* Imported from a component, so there is no import site to carry the
+   layer -- it is declared here instead. See styles/tailwind.css. */
+@layer legacy {
+  /* ============================================
+     Architecture Page
+     ============================================ */
 
-.architecture-shell {
-  --arch-primary: #0ea5e9;
-  --arch-primary-strong: #2563eb;
-  --arch-secondary: #7c3aed;
-  --arch-success: #059669;
-  --arch-hero-bg:
-    radial-gradient(circle at top left, rgba(14, 165, 233, 0.18), transparent 34%),
-    radial-gradient(circle at bottom right, rgba(124, 58, 237, 0.12), transparent 36%),
-    linear-gradient(135deg, rgba(255, 255, 255, 0.98), rgba(246, 250, 255, 0.96));
-  --arch-panel-bg: rgba(255, 255, 255, 0.9);
-  --arch-panel-border: rgba(148, 163, 184, 0.18);
-  --arch-panel-shadow: 0 20px 45px rgba(15, 23, 42, 0.08);
-  --arch-muted: #5b6b82;
-  --arch-tag-bg: rgba(255, 255, 255, 0.74);
-  --arch-tag-border: rgba(37, 99, 235, 0.16);
-  --arch-grid: rgba(14, 165, 233, 0.08);
-  font-size: 14px;
-  line-height: 1.6;
-  position: relative;
-  overflow: hidden;
-}
-
-.architecture-shell::before {
-  content: "";
-  position: fixed;
-  inset: 0;
-  background-image:
-    linear-gradient(var(--arch-grid) 1px, transparent 1px),
-    linear-gradient(90deg, var(--arch-grid) 1px, transparent 1px);
-  background-size: 44px 44px;
-  opacity: 0.32;
-  pointer-events: none;
-  z-index: 0;
-  mask-image: linear-gradient(180deg, rgba(0, 0, 0, 0.55), transparent 82%);
-}
-
-.architecture-shell::after {
-  content: "";
-  position: fixed;
-  inset: auto -12% -8% auto;
-  width: 420px;
-  height: 420px;
-  border-radius: 50%;
-  background: radial-gradient(circle, rgba(14, 165, 233, 0.12), transparent 70%);
-  pointer-events: none;
-  z-index: 0;
-}
-
-.architecture-shell > * {
-  position: relative;
-  z-index: 1;
-}
-
-.architecture-shell .topbar {
-  display: grid;
-  grid-template-columns: minmax(0, 1.5fr) minmax(280px, 0.9fr);
-  align-items: stretch;
-  gap: 24px;
-  padding: 32px 34px;
-  margin-bottom: 28px;
-  background: var(--arch-hero-bg);
-  border: 1px solid var(--arch-panel-border);
-  border-radius: 28px;
-  box-shadow: var(--arch-panel-shadow);
-  overflow: hidden;
-}
-
-.architecture-shell .topbar::before {
-  content: "";
-  position: absolute;
-  inset: 0 auto 0 0;
-  width: 6px;
-  background: linear-gradient(180deg, var(--arch-primary), var(--arch-secondary));
-}
-
-.architecture-shell .architecture-hero-copy {
-  display: grid;
-  gap: 12px;
-  min-width: 0;
-}
-
-.architecture-shell .architecture-kicker {
-  display: inline-flex;
-  align-items: center;
-  width: fit-content;
-  min-height: 32px;
-  padding: 0 12px;
-  border-radius: 999px;
-  background: rgba(14, 165, 233, 0.1);
-  border: 1px solid rgba(14, 165, 233, 0.18);
-  color: var(--arch-primary-strong);
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-
-.architecture-shell .topbar h2 {
-  margin: 0;
-  max-width: 12ch;
-  color: var(--text-primary);
-  font-size: clamp(2.1rem, 4vw, 3.35rem);
-  line-height: 0.98;
-  font-weight: 800;
-  letter-spacing: 0;
-  text-wrap: balance;
-}
-
-.architecture-shell .topbar .muted {
-  margin: 0;
-  max-width: 46rem;
-  color: var(--arch-muted);
-  font-size: 1rem;
-  line-height: 1.72;
-}
-
-.architecture-shell .architecture-hero-tags {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
-  padding-top: 4px;
-}
-
-.architecture-shell .architecture-hero-tags span {
-  display: inline-flex;
-  align-items: center;
-  min-height: 34px;
-  padding: 0 14px;
-  border-radius: 999px;
-  background: var(--arch-tag-bg);
-  border: 1px solid var(--arch-tag-border);
-  color: #1e3a5f;
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.5);
-}
-
-.architecture-shell .architecture-hero-actions {
-  display: flex;
-  align-items: flex-start;
-  justify-content: flex-end;
-}
-
-.architecture-shell .topbar .top-actions {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 12px;
-  width: 100%;
-  padding: 16px;
-  border-radius: 22px;
-  background: rgba(255, 255, 255, 0.58);
-  border: 1px solid rgba(148, 163, 184, 0.18);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.65);
-  backdrop-filter: blur(14px);
-}
-
-.architecture-shell .topbar button,
-.architecture-shell .topbar .link-btn,
-.architecture-shell .topbar .language-toggle {
-  min-height: 44px;
-  border-radius: 14px;
-  border: 1px solid rgba(148, 163, 184, 0.24);
-  background: rgba(255, 255, 255, 0.92);
-  color: var(--text-primary);
-  font-size: 13px;
-  font-weight: 700;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.08);
-  transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease, background 0.2s ease;
-}
-
-.architecture-shell .topbar .link-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0 18px;
-  text-decoration: none;
-  white-space: nowrap;
-}
-
-.architecture-shell .topbar .language-toggle {
-  text-transform: uppercase;
-}
-
-.architecture-shell .topbar button:hover,
-.architecture-shell .topbar .link-btn:hover,
-.architecture-shell .topbar .language-toggle:hover {
-  transform: translateY(-1px);
-  border-color: rgba(37, 99, 235, 0.34);
-  background: #ffffff;
-  box-shadow: 0 14px 30px rgba(37, 99, 235, 0.16);
-}
-
-.architecture-shell .panel {
-  margin-bottom: 24px;
-  padding: 24px;
-  border-radius: 24px;
-  border: 1px solid var(--arch-panel-border);
-  background: var(--arch-panel-bg);
-  box-shadow: 0 12px 28px rgba(15, 23, 42, 0.06);
-  backdrop-filter: blur(10px);
-}
-
-.architecture-shell .section-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 18px;
-  padding-bottom: 14px;
-  border-bottom: 1px solid rgba(148, 163, 184, 0.18);
-}
-
-.architecture-shell .section-head strong {
-  display: inline-flex;
-  align-items: center;
-  gap: 12px;
-  color: var(--text-primary);
-  font-size: 1rem;
-  font-weight: 800;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-}
-
-.architecture-shell .section-head strong::before {
-  content: "";
-  width: 10px;
-  height: 10px;
-  border-radius: 999px;
-  background: linear-gradient(135deg, var(--arch-primary), var(--arch-secondary));
-  box-shadow: 0 0 0 6px rgba(14, 165, 233, 0.1);
-}
-
-.architecture-shell .compact-list {
-  list-style: none;
-  padding: 0;
-  margin: 0;
-  display: grid;
-  gap: 10px;
-}
-
-.architecture-shell .compact-list li {
-  position: relative;
-  margin: 0;
-  padding: 12px 14px 12px 42px;
-  border-radius: 16px;
-  background: rgba(248, 250, 252, 0.86);
-  border: 1px solid rgba(148, 163, 184, 0.16);
-  color: var(--text-primary);
-  line-height: 1.72;
-  transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
-}
-
-.architecture-shell .compact-list li::before {
-  content: "";
-  position: absolute;
-  top: 18px;
-  left: 16px;
-  width: 12px;
-  height: 12px;
-  border-radius: 999px;
-  background: linear-gradient(135deg, var(--arch-primary), var(--arch-secondary));
-  box-shadow: 0 0 0 4px rgba(14, 165, 233, 0.1);
-}
-
-.architecture-shell .compact-list li:hover {
-  transform: translateY(-1px);
-  border-color: rgba(37, 99, 235, 0.26);
-  background: #ffffff;
-  box-shadow: 0 12px 24px rgba(15, 23, 42, 0.07);
-}
-
-.architecture-shell .diagram-block {
-  margin: 0;
-  overflow-x: auto;
-  padding: 20px;
-  border-radius: 18px;
-  border: 1px solid rgba(14, 165, 233, 0.16);
-  background:
-    linear-gradient(180deg, rgba(248, 250, 252, 0.95), rgba(255, 255, 255, 0.95));
-  color: var(--text-primary);
-  font-family: var(--font-mono);
-  font-size: 12px;
-  line-height: 1.75;
-  white-space: pre;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.7);
-}
-
-.architecture-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
-  gap: 24px;
-  margin-top: 28px;
-}
-
-.architecture-grid .panel:nth-child(4) {
-  grid-column: span 2;
-}
-
-.architecture-grid .panel:nth-child(1) .section-head strong::before,
-.architecture-grid .panel:nth-child(5) .section-head strong::before {
-  background: linear-gradient(135deg, var(--arch-primary), #38bdf8);
-}
-
-.architecture-grid .panel:nth-child(2) .section-head strong::before,
-.architecture-grid .panel:nth-child(6) .section-head strong::before {
-  background: linear-gradient(135deg, var(--arch-secondary), #a855f7);
-}
-
-.architecture-grid .panel:nth-child(3) .section-head strong::before,
-.architecture-grid .panel:nth-child(7) .section-head strong::before {
-  background: linear-gradient(135deg, var(--arch-success), #34d399);
-}
-
-.architecture-grid .panel:nth-child(4) .section-head strong::before {
-  background: linear-gradient(135deg, #f59e0b, #fb7185);
-}
-
-:root[data-theme="dark"] .architecture-shell {
-  --arch-primary: #38bdf8;
-  --arch-primary-strong: #7dd3fc;
-  --arch-secondary: #a78bfa;
-  --arch-success: #34d399;
-  --arch-hero-bg:
-    radial-gradient(circle at top left, rgba(56, 189, 248, 0.18), transparent 32%),
-    radial-gradient(circle at bottom right, rgba(167, 139, 250, 0.12), transparent 34%),
-    linear-gradient(135deg, rgba(10, 15, 25, 0.98), rgba(17, 24, 39, 0.96));
-  --arch-panel-bg: rgba(15, 23, 42, 0.82);
-  --arch-panel-border: rgba(100, 116, 139, 0.24);
-  --arch-panel-shadow: 0 24px 46px rgba(2, 6, 23, 0.46);
-  --arch-muted: #9db0c7;
-  --arch-tag-bg: rgba(15, 23, 42, 0.6);
-  --arch-tag-border: rgba(56, 189, 248, 0.18);
-  --arch-grid: rgba(56, 189, 248, 0.08);
-}
-
-:root[data-theme="dark"] .architecture-shell .topbar .top-actions {
-  background: rgba(15, 23, 42, 0.44);
-  border-color: rgba(100, 116, 139, 0.22);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
-}
-
-:root[data-theme="dark"] .architecture-shell .topbar h2,
-:root[data-theme="dark"] .architecture-shell .section-head strong {
-  color: #f8fafc;
-}
-
-:root[data-theme="dark"] .architecture-shell .topbar button,
-:root[data-theme="dark"] .architecture-shell .topbar .link-btn,
-:root[data-theme="dark"] .architecture-shell .topbar .language-toggle {
-  background: rgba(15, 23, 42, 0.8);
-  border-color: rgba(100, 116, 139, 0.3);
-  color: #e2e8f0;
-  box-shadow: 0 12px 24px rgba(2, 6, 23, 0.24);
-}
-
-:root[data-theme="dark"] .architecture-shell .topbar button:hover,
-:root[data-theme="dark"] .architecture-shell .topbar .link-btn:hover,
-:root[data-theme="dark"] .architecture-shell .topbar .language-toggle:hover {
-  background: rgba(15, 23, 42, 0.95);
-  border-color: rgba(56, 189, 248, 0.34);
-  box-shadow: 0 16px 30px rgba(56, 189, 248, 0.12);
-}
-
-:root[data-theme="dark"] .architecture-shell .architecture-hero-tags span {
-  color: #dbeafe;
-}
-
-:root[data-theme="dark"] .architecture-shell .compact-list li,
-:root[data-theme="dark"] .architecture-shell .diagram-block {
-  background: rgba(15, 23, 42, 0.74);
-  border-color: rgba(100, 116, 139, 0.2);
-  color: #e2e8f0;
-}
-
-:root[data-theme="dark"] .architecture-shell .compact-list li:hover {
-  background: rgba(15, 23, 42, 0.92);
-}
-
-@media (max-width: 1100px) {
-  .architecture-shell .topbar {
-    grid-template-columns: 1fr;
-  }
-
-  .architecture-shell .architecture-hero-actions {
-    justify-content: flex-start;
-  }
-
-  .architecture-shell .topbar .top-actions {
-    justify-content: flex-start;
-  }
-
-  .architecture-grid .panel:nth-child(4) {
-    grid-column: auto;
-  }
-}
-
-@media (max-width: 768px) {
   .architecture-shell {
-    font-size: 13px;
+    --arch-primary: #0ea5e9;
+    --arch-primary-strong: #2563eb;
+    --arch-secondary: #7c3aed;
+    --arch-success: #059669;
+    --arch-hero-bg:
+      radial-gradient(circle at top left, rgba(14, 165, 233, 0.18), transparent 34%),
+      radial-gradient(circle at bottom right, rgba(124, 58, 237, 0.12), transparent 36%),
+      linear-gradient(135deg, rgba(255, 255, 255, 0.98), rgba(246, 250, 255, 0.96));
+    --arch-panel-bg: rgba(255, 255, 255, 0.9);
+    --arch-panel-border: rgba(148, 163, 184, 0.18);
+    --arch-panel-shadow: 0 20px 45px rgba(15, 23, 42, 0.08);
+    --arch-muted: #5b6b82;
+    --arch-tag-bg: rgba(255, 255, 255, 0.74);
+    --arch-tag-border: rgba(37, 99, 235, 0.16);
+    --arch-grid: rgba(14, 165, 233, 0.08);
+    font-size: 14px;
+    line-height: 1.6;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .architecture-shell::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    background-image:
+      linear-gradient(var(--arch-grid) 1px, transparent 1px),
+      linear-gradient(90deg, var(--arch-grid) 1px, transparent 1px);
+    background-size: 44px 44px;
+    opacity: 0.32;
+    pointer-events: none;
+    z-index: 0;
+    mask-image: linear-gradient(180deg, rgba(0, 0, 0, 0.55), transparent 82%);
+  }
+
+  .architecture-shell::after {
+    content: "";
+    position: fixed;
+    inset: auto -12% -8% auto;
+    width: 420px;
+    height: 420px;
+    border-radius: 50%;
+    background: radial-gradient(circle, rgba(14, 165, 233, 0.12), transparent 70%);
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  .architecture-shell > * {
+    position: relative;
+    z-index: 1;
   }
 
   .architecture-shell .topbar {
-    gap: 18px;
-    padding: 24px 20px;
-    border-radius: 22px;
+    display: grid;
+    grid-template-columns: minmax(0, 1.5fr) minmax(280px, 0.9fr);
+    align-items: stretch;
+    gap: 24px;
+    padding: 32px 34px;
+    margin-bottom: 28px;
+    background: var(--arch-hero-bg);
+    border: 1px solid var(--arch-panel-border);
+    border-radius: 28px;
+    box-shadow: var(--arch-panel-shadow);
+    overflow: hidden;
+  }
+
+  .architecture-shell .topbar::before {
+    content: "";
+    position: absolute;
+    inset: 0 auto 0 0;
+    width: 6px;
+    background: linear-gradient(180deg, var(--arch-primary), var(--arch-secondary));
+  }
+
+  .architecture-shell .architecture-hero-copy {
+    display: grid;
+    gap: 12px;
+    min-width: 0;
+  }
+
+  .architecture-shell .architecture-kicker {
+    display: inline-flex;
+    align-items: center;
+    width: fit-content;
+    min-height: 32px;
+    padding: 0 12px;
+    border-radius: 999px;
+    background: rgba(14, 165, 233, 0.1);
+    border: 1px solid rgba(14, 165, 233, 0.18);
+    color: var(--arch-primary-strong);
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
   }
 
   .architecture-shell .topbar h2 {
-    max-width: none;
-    font-size: 2rem;
+    margin: 0;
+    max-width: 12ch;
+    color: var(--text-primary);
+    font-size: clamp(2.1rem, 4vw, 3.35rem);
+    line-height: 0.98;
+    font-weight: 800;
+    letter-spacing: 0;
+    text-wrap: balance;
   }
 
   .architecture-shell .topbar .muted {
-    font-size: 0.95rem;
+    margin: 0;
+    max-width: 46rem;
+    color: var(--arch-muted);
+    font-size: 1rem;
+    line-height: 1.72;
+  }
+
+  .architecture-shell .architecture-hero-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    padding-top: 4px;
+  }
+
+  .architecture-shell .architecture-hero-tags span {
+    display: inline-flex;
+    align-items: center;
+    min-height: 34px;
+    padding: 0 14px;
+    border-radius: 999px;
+    background: var(--arch-tag-bg);
+    border: 1px solid var(--arch-tag-border);
+    color: #1e3a5f;
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.5);
+  }
+
+  .architecture-shell .architecture-hero-actions {
+    display: flex;
+    align-items: flex-start;
+    justify-content: flex-end;
   }
 
   .architecture-shell .topbar .top-actions {
-    gap: 10px;
-    padding: 14px;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 12px;
+    width: 100%;
+    padding: 16px;
+    border-radius: 22px;
+    background: rgba(255, 255, 255, 0.58);
+    border: 1px solid rgba(148, 163, 184, 0.18);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.65);
+    backdrop-filter: blur(14px);
   }
 
   .architecture-shell .topbar button,
   .architecture-shell .topbar .link-btn,
   .architecture-shell .topbar .language-toggle {
-    width: 100%;
-    justify-content: center;
+    min-height: 44px;
+    border-radius: 14px;
+    border: 1px solid rgba(148, 163, 184, 0.24);
+    background: rgba(255, 255, 255, 0.92);
+    color: var(--text-primary);
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    box-shadow: 0 10px 24px rgba(15, 23, 42, 0.08);
+    transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease, background 0.2s ease;
   }
 
-  .architecture-shell .architecture-hero-tags span {
-    min-height: 32px;
-    padding: 0 12px;
-    font-size: 11px;
+  .architecture-shell .topbar .link-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0 18px;
+    text-decoration: none;
+    white-space: nowrap;
+  }
+
+  .architecture-shell .topbar .language-toggle {
+    text-transform: uppercase;
+  }
+
+  .architecture-shell .topbar button:hover,
+  .architecture-shell .topbar .link-btn:hover,
+  .architecture-shell .topbar .language-toggle:hover {
+    transform: translateY(-1px);
+    border-color: rgba(37, 99, 235, 0.34);
+    background: #ffffff;
+    box-shadow: 0 14px 30px rgba(37, 99, 235, 0.16);
   }
 
   .architecture-shell .panel {
-    padding: 18px;
-    border-radius: 20px;
+    margin-bottom: 24px;
+    padding: 24px;
+    border-radius: 24px;
+    border: 1px solid var(--arch-panel-border);
+    background: var(--arch-panel-bg);
+    box-shadow: 0 12px 28px rgba(15, 23, 42, 0.06);
+    backdrop-filter: blur(10px);
   }
 
   .architecture-shell .section-head {
-    margin-bottom: 16px;
-    padding-bottom: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 18px;
+    padding-bottom: 14px;
+    border-bottom: 1px solid rgba(148, 163, 184, 0.18);
   }
 
   .architecture-shell .section-head strong {
-    font-size: 0.92rem;
+    display: inline-flex;
+    align-items: center;
+    gap: 12px;
+    color: var(--text-primary);
+    font-size: 1rem;
+    font-weight: 800;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+  }
+
+  .architecture-shell .section-head strong::before {
+    content: "";
+    width: 10px;
+    height: 10px;
+    border-radius: 999px;
+    background: linear-gradient(135deg, var(--arch-primary), var(--arch-secondary));
+    box-shadow: 0 0 0 6px rgba(14, 165, 233, 0.1);
+  }
+
+  .architecture-shell .compact-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    display: grid;
+    gap: 10px;
   }
 
   .architecture-shell .compact-list li {
-    padding: 11px 12px 11px 38px;
-    border-radius: 14px;
+    position: relative;
+    margin: 0;
+    padding: 12px 14px 12px 42px;
+    border-radius: 16px;
+    background: rgba(248, 250, 252, 0.86);
+    border: 1px solid rgba(148, 163, 184, 0.16);
+    color: var(--text-primary);
+    line-height: 1.72;
+    transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
   }
 
   .architecture-shell .compact-list li::before {
-    top: 16px;
-    left: 14px;
-    width: 10px;
-    height: 10px;
+    content: "";
+    position: absolute;
+    top: 18px;
+    left: 16px;
+    width: 12px;
+    height: 12px;
+    border-radius: 999px;
+    background: linear-gradient(135deg, var(--arch-primary), var(--arch-secondary));
+    box-shadow: 0 0 0 4px rgba(14, 165, 233, 0.1);
+  }
+
+  .architecture-shell .compact-list li:hover {
+    transform: translateY(-1px);
+    border-color: rgba(37, 99, 235, 0.26);
+    background: #ffffff;
+    box-shadow: 0 12px 24px rgba(15, 23, 42, 0.07);
   }
 
   .architecture-shell .diagram-block {
-    padding: 16px;
-    font-size: 11px;
+    margin: 0;
+    overflow-x: auto;
+    padding: 20px;
+    border-radius: 18px;
+    border: 1px solid rgba(14, 165, 233, 0.16);
+    background:
+      linear-gradient(180deg, rgba(248, 250, 252, 0.95), rgba(255, 255, 255, 0.95));
+    color: var(--text-primary);
+    font-family: var(--font-mono);
+    font-size: 12px;
+    line-height: 1.75;
+    white-space: pre;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.7);
   }
 
   .architecture-grid {
-    grid-template-columns: 1fr;
-    gap: 18px;
-    margin-top: 22px;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+    gap: 24px;
+    margin-top: 28px;
   }
+
+  .architecture-grid .panel:nth-child(4) {
+    grid-column: span 2;
+  }
+
+  .architecture-grid .panel:nth-child(1) .section-head strong::before,
+  .architecture-grid .panel:nth-child(5) .section-head strong::before {
+    background: linear-gradient(135deg, var(--arch-primary), #38bdf8);
+  }
+
+  .architecture-grid .panel:nth-child(2) .section-head strong::before,
+  .architecture-grid .panel:nth-child(6) .section-head strong::before {
+    background: linear-gradient(135deg, var(--arch-secondary), #a855f7);
+  }
+
+  .architecture-grid .panel:nth-child(3) .section-head strong::before,
+  .architecture-grid .panel:nth-child(7) .section-head strong::before {
+    background: linear-gradient(135deg, var(--arch-success), #34d399);
+  }
+
+  .architecture-grid .panel:nth-child(4) .section-head strong::before {
+    background: linear-gradient(135deg, #f59e0b, #fb7185);
+  }
+
+  @media (max-width: 1100px) {
+    .architecture-shell .topbar {
+      grid-template-columns: 1fr;
+    }
+
+    .architecture-shell .architecture-hero-actions {
+      justify-content: flex-start;
+    }
+
+    .architecture-shell .topbar .top-actions {
+      justify-content: flex-start;
+    }
+
+    .architecture-grid .panel:nth-child(4) {
+      grid-column: auto;
+    }
+  }
+
+  @media (max-width: 768px) {
+    .architecture-shell {
+      font-size: 13px;
+    }
+
+    .architecture-shell .topbar {
+      gap: 18px;
+      padding: 24px 20px;
+      border-radius: 22px;
+    }
+
+    .architecture-shell .topbar h2 {
+      max-width: none;
+      font-size: 2rem;
+    }
+
+    .architecture-shell .topbar .muted {
+      font-size: 0.95rem;
+    }
+
+    .architecture-shell .topbar .top-actions {
+      gap: 10px;
+      padding: 14px;
+    }
+
+    .architecture-shell .topbar button,
+    .architecture-shell .topbar .link-btn,
+    .architecture-shell .topbar .language-toggle {
+      width: 100%;
+      justify-content: center;
+    }
+
+    .architecture-shell .architecture-hero-tags span {
+      min-height: 32px;
+      padding: 0 12px;
+      font-size: 11px;
+    }
+
+    .architecture-shell .panel {
+      padding: 18px;
+      border-radius: 20px;
+    }
+
+    .architecture-shell .section-head {
+      margin-bottom: 16px;
+      padding-bottom: 12px;
+    }
+
+    .architecture-shell .section-head strong {
+      font-size: 0.92rem;
+    }
+
+    .architecture-shell .compact-list li {
+      padding: 11px 12px 11px 38px;
+      border-radius: 14px;
+    }
+
+    .architecture-shell .compact-list li::before {
+      top: 16px;
+      left: 14px;
+      width: 10px;
+      height: 10px;
+    }
+
+    .architecture-shell .diagram-block {
+      padding: 16px;
+      font-size: 11px;
+    }
+
+    .architecture-grid {
+      grid-template-columns: 1fr;
+      gap: 18px;
+      margin-top: 22px;
+    }
+  }
+
 }

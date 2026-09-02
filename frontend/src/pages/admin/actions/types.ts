@@ -1,14 +1,9 @@
-import type { AdminUserSummary, AdminModelSettingsView, RetrievalProfileState } from "@/types/api";
+import type { AdminUserSummary, AdminModelSettingsView, AuditLogEntry, SystemLogEntry, OpsOverview, BenchmarkTrendItem } from "@/types/api";
 
 export interface AdminActionsParams {
   users: AdminUserSummary[];
   modelSettings: AdminModelSettingsView | null;
   modelApiKey: string;
-  canaryEnabled: boolean;
-  canaryBaseline: number;
-  canarySafe: number;
-  canarySeed: string;
-  profileState: RetrievalProfileState | null;
   auditLimit: number;
   auditActorUserId: string;
   auditActionKeyword: string;
@@ -36,12 +31,12 @@ export interface AdminActionsParams {
   editScope: string;
   isAdmin: boolean;
   onLogout: () => Promise<void>;
+  promptInput: (opts: { message: string; title?: string; defaultValue?: string; inputType?: "text" | "password" }) => Promise<string | null>;
   setUsers: (users: AdminUserSummary[] | ((prev: AdminUserSummary[]) => AdminUserSummary[])) => void;
-  setLogs: (logs: any[]) => void;
-  setSystemLogs: (logs: any[]) => void;
-  setOps: (ops: any) => void;
-  setProfileState: (state: RetrievalProfileState | null) => void;
-  setBenchmarkTrends: (trends: any[]) => void;
+  setLogs: (logs: AuditLogEntry[]) => void;
+  setSystemLogs: (logs: SystemLogEntry[]) => void;
+  setOps: (ops: OpsOverview | ((prev: OpsOverview | null) => OpsOverview | null) | null) => void;
+  setBenchmarkTrends: (trends: BenchmarkTrendItem[] | ((prev: BenchmarkTrendItem[]) => BenchmarkTrendItem[])) => void;
   setModelSettings: (settings: AdminModelSettingsView | null | ((prev: AdminModelSettingsView | null) => AdminModelSettingsView | null)) => void;
   setError: (error: string) => void;
   setStatusText: (text: string) => void;
@@ -57,10 +52,6 @@ export interface AdminActionsParams {
   setModelTesting: (testing: boolean) => void;
   setModelApiKey: (key: string) => void;
   setModelTestResult: (result: { type: "success" | "error"; message: string } | null) => void;
-  setCanaryEnabled: (enabled: boolean) => void;
-  setCanaryBaseline: (baseline: number) => void;
-  setCanarySafe: (safe: number) => void;
-  setCanarySeed: (seed: string) => void;
   setAdminUsername: (username: string) => void;
   setAdminPassword: (password: string) => void;
   setAdminPassword2: (password: string) => void;

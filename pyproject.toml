@@ -43,10 +43,21 @@ dependencies = [
   "itsdangerous>=2.1.0",
   "scikit-learn>=1.3.0",
   "aiofiles>=23.2.0",
-  "psutil>=7.0.0,<8.0"
+  "psutil>=7.0.0,<8.0",
+  "mcp>=1.24.0,<2.0"
 ]
 
 [project.optional-dependencies]
+# Nacos as a configuration source. Optional on purpose: the source returns
+# nothing unless NACOS_ENABLED is true, and app/core/remote_config.py treats a
+# missing SDK as "no client" and degrades to the local snapshot, so an
+# installation that has not adopted a configuration centre never imports this.
+# Pinned to the 1.x line on purpose: 2.x/3.x are a rewrite that imports as
+# `v2.nacos` and whose `get_config` is a coroutine, and this client is called
+# from synchronous Settings construction. See app/core/remote_config_nacos.py.
+config-centre = [
+  "nacos-sdk-python>=1.0.0,<2.0",
+]
 # Tesseract-based OCR for image and scanned-PDF ingestion. Requires the
 # native ``tesseract`` binary on PATH (see TESSERACT_CMD env var).
 ocr = [
@@ -61,6 +72,19 @@ paddle = [
 docling = [
   "docling>=2.93.0",
 ]
+# Spreadsheet ingestion. DOCX/PPTX use Docling with a package-XML fallback.
+office = [
+  "openpyxl>=3.1.0",
+  "pandas>=2.2.0,<3.0",
+  "xlrd>=2.0.1",
+]
+# PDF/image/table extraction support.
+multimodal = [
+  "pandas>=2.2.0,<3.0",
+  "PyMuPDF>=1.24.0",
+  "pdfplumber>=0.11.0",
+  "tabulate>=0.9.0",
+]
 # Cross-encoder reranking via sentence-transformers (BAAI/bge-reranker-v2-m3
 # by default). Falls back to lexical scoring when missing.
 reranker = [
@@ -68,7 +92,7 @@ reranker = [
 ]
 # Convenience meta-extra: equivalent to the historical full install.
 full = [
-  "querymind[ocr,paddle,docling,reranker]",
+  "querymind[ocr,paddle,docling,office,reranker,multimodal]",
 ]
 dev = [
   "pytest>=8.0.0",
@@ -76,7 +100,8 @@ dev = [
   "pytest-cov>=4.1.0",
   "pytest-xdist>=3.5.0",
   "reportlab>=4.0.0",
-  "ruff>=0.6.0"
+  "ruff>=0.6.0",
+  "pre-commit>=3.7.0"
 ]
 
 [tool.setuptools]
@@ -87,69 +112,19 @@ where = ["."]
 include = ["app*"]
 
 # ---------------------------------------------------------------------------
-# Tooling configuration (consolidated from pytest.ini and .coveragerc)
+# Tooling configuration
 # ---------------------------------------------------------------------------
+# Note (2026-08-28): pytest/coverage configuration was removed here ahead of the v0.7
+# rewrite — `tests/` was cleared and will be rebuilt against the new architecture.
+# Note (2026-08-29): a minimal pytest config is back. Tests are being rebuilt
+# alongside the audit fixes, and CI needs discovery + asyncio mode to be
+# configured rather than passed on the command line. Coverage is still not
+# configured; there is no meaningful baseline to gate on yet.
 
 [tool.pytest.ini_options]
-pythonpath = ["."]
 testpaths = ["tests"]
-norecursedirs = [
-  ".git",
-  ".venv",
-  ".tmp",
-  "pytest_tmp_run_*",
-  ".pytest_tmp*",
-  ".pytest_basetemp",
-  "artifacts",
-  "frontend/node_modules",
-]
-python_files = ["test_*.py"]
-python_classes = ["Test*"]
-python_functions = ["test_*"]
-addopts = "-v --strict-markers --tb=short"
-markers = [
-  "unit: Unit tests for individual components",
-  "performance: Performance and benchmark tests",
-  "integration: Integration tests across multiple components",
-  "slow: Tests that take significant time to run",
-]
-tmp_path_retention_policy = "none"
-asyncio_mode = "auto"
+asyncio_mode = "strict"
 asyncio_default_fixture_loop_scope = "function"
-
-[tool.coverage.run]
-source = ["app"]
-branch = true
-omit = [
-  "*/tests/*",
-  "*/test_*.py",
-  "*/__pycache__/*",
-  "*/venv/*",
-  "*/.venv/*",
-  "*/site-packages/*",
-  "*/conftest.py",
-]
-
-[tool.coverage.report]
-precision = 2
-show_missing = true
-skip_covered = false
-exclude_lines = [
-  "pragma: no cover",
-  "def __repr__",
-  "raise AssertionError",
-  "raise NotImplementedError",
-  "if __name__ == .__main__.:",
-  "if TYPE_CHECKING:",
-  "@abstractmethod",
-  "@abc.abstractmethod",
-]
-
-[tool.coverage.html]
-directory = "htmlcov"
-
-[tool.coverage.xml]
-output = "coverage.xml"
 
 [tool.ruff]
 target-version = "py311"
@@ -183,8 +158,6 @@ ignore = [
 ]
 
 [tool.ruff.lint.per-file-ignores]
-"tests/**" = ["B011"]                        # tests use plain assert; allow assert False
-"scripts/**" = ["E402", "T201"]              # scripts may print and import after sys.path edits
 "app/services/agent_document_filter.py" = ["T201"]  # demo block under __main__
 "app/evaluation/service.py" = ["T201"]       # CLI-style table printing is intentional
 

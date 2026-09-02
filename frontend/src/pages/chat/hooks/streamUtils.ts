@@ -1,18 +1,5 @@
-import type { SessionMessage } from "@/types/api";
-import { EMPTY_METADATA } from "@/pages/chat/constants";
-
-/**
- * 解析流式请求错误响应
- */
-export function parseStreamError(raw: string): string {
-  if (!raw) return "Stream request failed";
-  try {
-    const parsed = JSON.parse(raw);
-    return String(parsed?.detail || raw);
-  } catch {
-    return raw;
-  }
-}
+import type { SessionMessage } from "../../../types/api";
+import { EMPTY_METADATA } from "../constants";
 
 /**
  * 判断是否为中止错误
@@ -23,18 +10,6 @@ export function isAbortError(e: unknown, streamStopped: boolean): boolean {
     streamStopped ||
     (e instanceof DOMException && e.name === "AbortError") ||
     String(rawError).toLowerCase().includes("abort")
-  );
-}
-
-/**
- * 判断是否为网络错误
- */
-export function isNetworkError(errorText: string): boolean {
-  const lowered = String(errorText).toLowerCase();
-  return (
-    lowered.includes("networkerror") ||
-    lowered.includes("failed to fetch") ||
-    lowered.includes("network error")
   );
 }
 

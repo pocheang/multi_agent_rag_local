@@ -1,0 +1,3 @@
+/* Moved into styles/main.css: `@source` and the Tailwind imports have to be
+   at the entry's root level. Kept as a stub so nothing that references this
+   path breaks. */

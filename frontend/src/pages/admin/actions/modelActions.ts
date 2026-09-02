@@ -1,6 +1,10 @@
+import i18n from "@/i18n/config";
 import { appApi } from "@/lib/api";
+import { normalizeModelTemperature } from "@/lib/model-temperature";
 import type { AdminModelSettingsPayload, AdminModelSettingsView } from "@/types/api";
 import type { AdminActionsParams, ErrorHandler } from "./types";
+
+const t = i18n.t.bind(i18n);
 
 const DEFAULT_MODEL_SETTINGS: AdminModelSettingsView = {
   enabled: false,
@@ -42,19 +46,20 @@ export function createModelActions(params: AdminActionsParams, errorHandler: Err
       chat_model: settings.chat_model.trim(),
       reasoning_model: (settings.reasoning_model || settings.chat_model).trim(),
       embedding_model: settings.embedding_model.trim(),
-      temperature: Math.min(2, Math.max(0, Number(settings.temperature || DEFAULT_MODEL_SETTINGS.temperature))),
+      temperature: normalizeModelTemperature(Number(settings.temperature), DEFAULT_MODEL_SETTINGS.temperature),
       max_tokens: Math.min(131072, Math.max(256, Number(settings.max_tokens || DEFAULT_MODEL_SETTINGS.max_tokens))),
     };
   };
 
   const validateModelSettings = () => {
     const payload = buildModelPayload();
-    if (!payload.provider) return "Choose a model provider first.";
-    if (payload.provider !== "local" && !payload.base_url) return "Base URL is required for remote providers.";
-    if (!payload.chat_model) return "Chat model cannot be empty.";
-    if (!["anthropic", "deepseek"].includes(payload.provider) && !payload.embedding_model) return "Embedding model cannot be empty for this provider.";
+    if (!payload.provider) return t("admin.actions.chooseProviderFirst");
+    if (payload.provider !== "local" && !payload.base_url) return t("admin.actions.baseUrlRequired");
+    if (!payload.chat_model) return t("admin.actions.chatModelRequired");
+    if (!["anthropic", "deepseek"].includes(payload.provider) && !payload.embedding_model)
+      return t("admin.actions.embeddingModelRequired");
     if (!["local", "ollama"].includes(payload.provider) && !payload.api_key && !getCurrentSettings().api_key_masked) {
-      return "This provider requires an API key.";
+      return t("admin.actions.apiKeyRequired");
     }
     return "";
   };
@@ -64,7 +69,7 @@ export function createModelActions(params: AdminActionsParams, errorHandler: Err
     try {
       setOps(await appApi.adminOpsOverview({ hours: params.opsHours, actorUserId: undefined, actionKeyword: undefined }));
     } catch (e) {
-      await handleApiError(e, "Failed to refresh operations metrics.");
+      await handleApiError(e, t("admin.actions.refreshOpsSnapshotFailed"));
     }
   };
 
@@ -78,7 +83,7 @@ export function createModelActions(params: AdminActionsParams, errorHandler: Err
       setModelTestResult(null);
       setError("");
     } catch (e) {
-      await handleApiError(e, "Failed to load model settings.");
+      await handleApiError(e, t("admin.actions.loadModelSettingsFailed"));
     } finally {
       setModelLoading(false);
     }
@@ -100,11 +105,11 @@ export function createModelActions(params: AdminActionsParams, errorHandler: Err
       const saved = await appApi.adminSaveModelSettings(buildModelPayload());
       setModelSettings(saved.settings);
       setModelApiKey("");
-      setModelTestResult({ type: "success", message: "Global model settings saved. New requests will use the updated priority chain." });
+      setModelTestResult({ type: "success", message: t("admin.actions.modelSettingsSaved") });
       setError("");
       await refreshOpsSnapshot();
     } catch (e) {
-      await handleApiError(e, "Failed to save model settings.");
+      await handleApiError(e, t("admin.actions.saveModelSettingsFailed"));
     } finally {
       setModelSaving(false);
     }
@@ -119,13 +124,16 @@ export function createModelActions(params: AdminActionsParams, errorHandler: Err
     setModelTesting(true);
     try {
       const res = await appApi.adminTestModelSettings(buildModelPayload());
+      const preview = res.preview ? t("components.apiSettings.preview", { preview: res.preview }) : "";
       setModelTestResult({
         type: res.reachable ? "success" : "error",
-        message: res.reachable ? `Connection succeeded (${res.latency_ms}ms)${res.preview ? ` | ${res.preview}` : ""}` : res.message || "Connection failed.",
+        message: res.reachable
+          ? t("components.apiSettings.connectionSuccess", { latency: res.latency_ms, preview })
+          : res.message || t("admin.actions.connectionFailedDefault"),
       });
       setError("");
     } catch (e) {
-      await handleApiError(e, "Failed to test model settings.");
+      await handleApiError(e, t("admin.actions.testModelSettingsFailed"));
     } finally {
       setModelTesting(false);
     }

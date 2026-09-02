@@ -27,7 +27,7 @@ export function AdminPagination({
   const safeCurrentPage = Math.max(1, Math.min(currentPage, safeTotalPages));
 
   return (
-    <nav aria-label={t("admin.ui.pagination") || "Pagination"} className="admin-pagination">
+    <nav aria-label={t("admin.ui.pagination", "Pagination")} className="admin-pagination">
       <div className="admin-pagination-info">
         {t("admin.ui.totalItems", { count: totalItems })}
       </div>
@@ -37,7 +37,7 @@ export function AdminPagination({
           <select
             value={safePageSize}
             onChange={(e) => onPageSizeChange(Number(e.target.value) || pageSizeOptions[0])}
-            aria-label={t("admin.ui.itemsPerPage") || "Items per page"}
+            aria-label={t("admin.ui.itemsPerPage", "Items per page")}
           >
             {pageSizeOptions.map((option) => (
               <option key={option} value={option}>

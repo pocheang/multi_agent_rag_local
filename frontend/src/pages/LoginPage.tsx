@@ -6,27 +6,25 @@ import type { AuthUser } from "@/types/api";
 import { validateUsername, validatePassword } from "@/lib/validation";
 import { useFormState } from "@/hooks/useFormState";
 import { AuthInput } from "@/components/AuthInput";
-import { ThemeToggle } from "@/components/ThemeToggle";
 import { LanguageToggle } from "@/components/LanguageToggle";
+import { secureGetItem, secureSetItem, secureRemoveItem, secureHasItem } from "@/lib/secureStorage";
 
 // Route-specific CSS (code-split by Vite)
 import "@/styles/pages/auth-entry.css";
 
 type Props = {
   onLogin: (user: AuthUser) => void;
-  themeLabel: string;
-  onThemeToggle: () => void;
 };
 
-export function LoginPage({ onLogin, themeLabel, onThemeToggle }: Props) {
+export function LoginPage({ onLogin }: Props) {
   const { t } = useTranslation();
   const [searchParams, setSearchParams] = useSearchParams();
   const mode = searchParams.get("mode") === "register" ? "register" : "login";
 
-  const [username, setUsername] = useState(localStorage.getItem("remembered_username") || "");
+  const [username, setUsername] = useState(secureGetItem("remembered_username") || "");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
-  const [rememberMe, setRememberMe] = useState(!!localStorage.getItem("remembered_username"));
+  const [rememberMe, setRememberMe] = useState(secureHasItem("remembered_username"));
   const { status, setStatus, error, setError, loading, setLoading } = useFormState();
 
   const loginValid = useMemo(() => validateUsername(username) && password.length > 0, [username, password]);
@@ -53,8 +51,11 @@ export function LoginPage({ onLogin, themeLabel, onThemeToggle }: Props) {
     setStatus(t('query.searching'));
     try {
       const data = await authApi.login(username.trim(), password);
-      if (rememberMe) localStorage.setItem("remembered_username", username.trim());
-      else localStorage.removeItem("remembered_username");
+      if (rememberMe) {
+        secureSetItem("remembered_username", username.trim());
+      } else {
+        secureRemoveItem("remembered_username");
+      }
       onLogin(data.user);
     } catch (e) {
       setError(e instanceof Error ? e.message : t('auth.loginFailed'));
@@ -89,7 +90,25 @@ export function LoginPage({ onLogin, themeLabel, onThemeToggle }: Props) {
   };
 
   const handleGoogleLogin = () => {
-    window.location.href = "/api/auth/google/login";
+    // Validate return URL to prevent open redirect attacks
+    const returnUrl = new URLSearchParams(window.location.search).get('return') || '/app';
+    const allowedOrigins = [window.location.origin];
+
+    // Ensure return URL is relative or same-origin
+    if (returnUrl.startsWith('http://') || returnUrl.startsWith('https://') || returnUrl.startsWith('//')) {
+      try {
+        const parsed = new URL(returnUrl, window.location.origin);
+        if (!allowedOrigins.some(origin => parsed.origin === origin)) {
+          setError(t('auth.invalidRedirect'));
+          return;
+        }
+      } catch {
+        setError(t('auth.invalidRedirect'));
+        return;
+      }
+    }
+
+    window.location.href = `/auth/google/login?return=${encodeURIComponent(returnUrl)}`;
   };
 
   const handleGitHubLogin = () => {
@@ -101,7 +120,6 @@ export function LoginPage({ onLogin, themeLabel, onThemeToggle }: Props) {
     <div className="auth-root">
       <div className="auth-toolbar">
         <LanguageToggle />
-        <ThemeToggle themeLabel={themeLabel} onThemeToggle={onThemeToggle} />
       </div>
 
       <main className="auth-card">
@@ -234,9 +252,6 @@ export function LoginPage({ onLogin, themeLabel, onThemeToggle }: Props) {
                 <input type="checkbox" checked={rememberMe} onChange={(e) => setRememberMe(e.target.checked)} />
                 {t("pages.login.rememberMe")}
               </label>
-              <Link to="/app/forgot-password" className="text-link-btn">
-                {t("pages.login.forgotPassword")}
-              </Link>
             </div>
           )}
 

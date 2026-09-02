@@ -5,9 +5,9 @@ from pathlib import Path
 
 from langchain_core.documents import Document
 
-from app.ingestion.utils.nested_table_handler import simplify_complex_table
-from app.ingestion.utils.pdf_cleaner import clean_pdf_pages
-from app.ingestion.utils.table_merger import merge_cross_page_tables
+from app.ingestion.extraction.tables import merge_cross_page_tables
+from app.ingestion.extraction.tables_nested import simplify_complex_table
+from app.ingestion.processing.cleaning import clean_pdf_pages
 
 logger = logging.getLogger(__name__)
 
@@ -46,7 +46,7 @@ def load_pdf_enhanced(
 
         # Step 2: Extract page contents
         pages_content = []
-        for page_idx, page in enumerate(result.document.pages, start=1):
+        for _page_idx, page in enumerate(result.document.pages, start=1):
             page_markdown = page.export_to_markdown()
             if page_markdown and page_markdown.strip():
                 pages_content.append(page_markdown)

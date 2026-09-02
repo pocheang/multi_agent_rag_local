@@ -5,7 +5,7 @@ from pathlib import Path
 
 from langchain_core.documents import Document
 
-from app.ingestion.utils.ocr_utils import ocr_image_bytes
+from app.ingestion.extraction.ocr import ocr_image_bytes
 
 logger = logging.getLogger(__name__)
 

@@ -1,5 +1,6 @@
 import { useTranslation } from "react-i18next";
-import "../../../styles/components/welcome-screen.css";
+import "@/styles/components/welcome-screen.css";
+import { AnimatedButtonLite as AnimatedButton } from "@/components/animations/AnimatedButtonLite";
 
 type Props = {
   documentsCount?: number;
@@ -51,15 +52,25 @@ export function WelcomeScreen({
       </div>
 
       <div className="welcome-actions">
-        <button type="button" className="welcome-action-btn primary" onClick={onCreateSession}>
+        <AnimatedButton
+          onClick={onCreateSession}
+          variant="primary"
+          size="large"
+          className="welcome-action-btn"
+        >
           <span className="action-icon" aria-hidden="true">+</span>
           <span className="action-text">{t("components.chat.startConversation")}</span>
-        </button>
+        </AnimatedButton>
 
-        <button type="button" className="welcome-action-btn secondary" onClick={onNavigateToArchitecture}>
+        <AnimatedButton
+          onClick={onNavigateToArchitecture}
+          variant="secondary"
+          size="large"
+          className="welcome-action-btn"
+        >
           <span className="action-icon" aria-hidden="true">▦</span>
           <span className="action-text">{t("components.chat.viewArchitecture")}</span>
-        </button>
+        </AnimatedButton>
       </div>
 
       <div className="welcome-features">

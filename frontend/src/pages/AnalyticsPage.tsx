@@ -17,19 +17,16 @@ import {
 import type { AuthUser } from "@/types/api";
 import { LanguageToggle } from "@/components/LanguageToggle";
 import { analyticsApi, type AgentStats, type AnalyticsOverview, type DocumentStats } from "@/lib/analytics-api";
-import { getThemeIcon } from "@/lib/theme";
-import "../styles/pages/analytics.css";
+import "@/styles/pages/analytics.css";
 
 type Props = {
   user: AuthUser | null;
   onLogout: () => Promise<void>;
-  themeLabel: string;
-  onThemeToggle: () => void;
 };
 
 const COLORS = ["#0088FE", "#00C49F", "#FFBB28", "#FF8042"];
 
-export function AnalyticsPage({ onLogout, themeLabel, onThemeToggle }: Props) {
+export function AnalyticsPage({ onLogout }: Props) {
   const { t } = useTranslation();
   const [overview, setOverview] = useState<AnalyticsOverview | null>(null);
   const [agents, setAgents] = useState<AgentStats[]>([]);
@@ -68,8 +65,6 @@ export function AnalyticsPage({ onLogout, themeLabel, onThemeToggle }: Props) {
     window.open(analyticsApi.exportUrl(format), "_blank", "noopener,noreferrer");
   };
 
-  const themeIcon = getThemeIcon(themeLabel);
-
   if (loading && !overview) {
     return (
       <div className="analytics-loading">
@@ -107,9 +102,6 @@ export function AnalyticsPage({ onLogout, themeLabel, onThemeToggle }: Props) {
         </div>
         <div className="analytics-header-actions">
           <LanguageToggle />
-          <button onClick={onThemeToggle} className="theme-btn" type="button">
-            {themeIcon} {themeLabel}
-          </button>
           <Link to="/app/admin" className="back-btn">
             {t("pages.analytics.backToAdmin")}
           </Link>

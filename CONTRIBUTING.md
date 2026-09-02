@@ -73,7 +73,7 @@ python scripts/init_db.py
 
 ```bash
 # Run tests
-pytest tests/ -v
+pytest -q
 
 # Check code style
 ruff check .
@@ -115,21 +115,14 @@ git checkout -b fix/bug-description
 
 ```bash
 # Run all tests
-pytest tests/ -v
+pytest -q
 
 # Run with coverage
 pytest --cov=app tests/
 
-# Run specific test types
-pytest -m unit           # Unit tests only
-pytest -m integration    # Integration tests only
-pytest -m performance    # Performance tests only
-
-# Type checking
-mypy app/
-
-# Linting
+# Linting and formatting
 ruff check .
+ruff format --check .
 
 # Formatting
 ruff format .
@@ -285,7 +278,7 @@ def test_query_endpoint_returns_valid_response():
 
 - ✅ All new features must include tests
 - ✅ Bug fixes must include regression tests
-- ✅ Maintain test coverage ≥80%
+- ✅ Land each fix with the regression test that would have caught it
 - ✅ Tests must pass before PR can be merged
 - ✅ Use meaningful test names that describe behavior
 
@@ -361,7 +354,7 @@ Update clients to handle new format.
 ### Before Submitting
 
 - [ ] Code follows style guidelines
-- [ ] All tests pass (`pytest tests/ -v`)
+- [ ] All tests pass (`pytest -q`)
 - [ ] Added tests for new features
 - [ ] Documentation updated (if needed)
 - [ ] Commit messages follow guidelines
@@ -445,7 +438,7 @@ docs/
 - Keep consistent formatting
 - Update table of contents
 
-**Documentation Guide:** [docs/DOCUMENTATION_POLICY.md](docs/DOCUMENTATION_POLICY.md)
+**Documentation Guide:** [docs/README.md](docs/README.md), and the daily-log convention in [CLAUDE.md](CLAUDE.md).
 
 ---
 
@@ -460,7 +453,7 @@ docs/
 
 ### Getting Help
 
-- Check [FAQ](docs/reference/faq.md)
+- Read [CLAUDE.md](CLAUDE.md), which describes how the system works today
 - Search existing [GitHub Issues](https://github.com/pocheang/querymind/issues)
 - Ask in [GitHub Discussions](https://github.com/pocheang/querymind/discussions)
 
@@ -469,7 +462,7 @@ docs/
 All contributions go through code review. Reviewers will:
 
 - Check code quality and style
-- Verify tests pass and coverage
+- Verify tests pass
 - Suggest improvements
 - Ensure documentation is updated
 

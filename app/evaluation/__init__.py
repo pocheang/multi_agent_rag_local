@@ -1,5 +1,6 @@
 """Evaluation module for comparing retrieval system performance."""
 
+from app.evaluation.agents import agent_trace_summary, router_decision_score
 from app.evaluation.data_loader import (
     filter_queries_by_category,
     filter_queries_by_difficulty,
@@ -23,6 +24,8 @@ from app.evaluation.models import (
     SystemComparison,
     TestQuery,
 )
+from app.evaluation.rag import answer_relevance, citation_coverage, faithfulness
+from app.evaluation.retrieval import reranker_lift
 from app.evaluation.service import EvaluationService
 
 __all__ = [
@@ -41,6 +44,12 @@ __all__ = [
     "mean_reciprocal_rank",
     "ndcg_at_k",
     "calculate_all_metrics",
+    "reranker_lift",
+    "faithfulness",
+    "answer_relevance",
+    "citation_coverage",
+    "router_decision_score",
+    "agent_trace_summary",
     # Service
     "EvaluationService",
     # Data loading

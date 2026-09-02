@@ -8,8 +8,6 @@ export default {
   ],
   safelist: [
     /^data-theme/,
-    /^theme-/,
-    /^dark/,
     /^light/,
     'active',
     'disabled',

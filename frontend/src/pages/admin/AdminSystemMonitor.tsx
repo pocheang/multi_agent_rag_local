@@ -94,7 +94,7 @@ export function AdminSystemMonitor() {
     <>
       <main className="panel">
         <div className="row-actions">
-          <h3>{t("pages.admin.monitor.title", "Runtime Monitor")}</h3>
+          <h3>{t("admin.systemMonitor.title", "Runtime Monitor")}</h3>
           <div className="row-actions">
             <label>
               <input
@@ -102,7 +102,7 @@ export function AdminSystemMonitor() {
                 checked={autoRefresh}
                 onChange={(e) => setAutoRefresh(e.target.checked)}
               />
-              {t("pages.admin.monitor.autoRefresh", "Auto-refresh (3s)")}
+              {t("admin.systemMonitor.autoRefresh", "Auto-refresh (3s)")}
             </label>
             <button type="button" className="secondary" onClick={() => void loadSnapshot()} disabled={loading}>
               {loading ? t("common.loading", "Loading...") : t("common.refresh", "Refresh")}
@@ -114,7 +114,7 @@ export function AdminSystemMonitor() {
 
         <div className="ops-kpi-grid ops-kpi-grid-primary">
           <div className={`ops-kpi-card ${statusClass === 'success' ? 'is-success' : 'is-danger'}`}>
-            <span>{t("pages.admin.monitor.systemStatus", "System Status")}</span>
+            <span>{t("admin.systemMonitor.systemStatus", "System Status")}</span>
             <strong>{snapshot.status.toUpperCase()}</strong>
             <p style={{ fontSize: '0.7rem', marginTop: '0.25rem', color: 'var(--admin-text-tertiary)' }}>
               {new Date(snapshot.generated_at).toLocaleTimeString()}
@@ -122,40 +122,40 @@ export function AdminSystemMonitor() {
           </div>
 
           <div className="ops-kpi-card">
-            <span>{t("pages.admin.monitor.cpu", "CPU")}</span>
+            <span>{t("admin.systemMonitor.cpu", "CPU")}</span>
             <strong>{snapshot.resources.cpu_percent.toFixed(1)}%</strong>
           </div>
 
           <div className="ops-kpi-card">
-            <span>{t("pages.admin.monitor.memory", "Memory")}</span>
+            <span>{t("admin.systemMonitor.memory", "Memory")}</span>
             <strong>{snapshot.resources.memory_percent.toFixed(1)}%</strong>
           </div>
 
           <div className="ops-kpi-card">
-            <span>{t("pages.admin.monitor.disk", "Disk")}</span>
+            <span>{t("admin.systemMonitor.disk", "Disk")}</span>
             <strong>{snapshot.resources.disk_percent.toFixed(1)}%</strong>
           </div>
 
           <div className="ops-kpi-card">
-            <span>{t("pages.admin.monitor.totalRequests", "Total Requests")}</span>
+            <span>{t("admin.systemMonitor.totalRequests", "Total Requests")}</span>
             <strong>{snapshot.traffic.requests_total}</strong>
             <p style={{ fontSize: '0.7rem', marginTop: '0.25rem', color: 'var(--admin-text-tertiary)' }}>
-              {t("pages.admin.monitor.last", "Last")} {snapshot.traffic.window_seconds}s
+              {t("admin.systemMonitor.last", "Last")} {snapshot.traffic.window_seconds}s
             </p>
           </div>
 
           <div className="ops-kpi-card">
-            <span>{t("pages.admin.monitor.avgResponseTime", "Avg Response")}</span>
+            <span>{t("admin.systemMonitor.avgResponse", "Avg Response")}</span>
             <strong>{snapshot.traffic.avg_response_ms.toFixed(1)} ms</strong>
           </div>
 
           <div className="ops-kpi-card">
-            <span>{t("pages.admin.monitor.errorRate", "Error Rate")}</span>
+            <span>{t("admin.systemMonitor.errorRate", "Error Rate")}</span>
             <strong>{snapshot.traffic.error_rate_percent.toFixed(2)}%</strong>
           </div>
 
           <div className="ops-kpi-card">
-            <span>{t("pages.admin.monitor.activeRequests", "Active Requests")}</span>
+            <span>{t("admin.systemMonitor.activeRequests", "Active Requests")}</span>
             <strong>{snapshot.traffic.active_requests}</strong>
           </div>
         </div>
@@ -163,7 +163,7 @@ export function AdminSystemMonitor() {
 
       <div className="admin-ops-grid">
         <main className="panel">
-          <h3>{t("pages.admin.monitor.resources", "System Resources")}</h3>
+          <h3>{t("admin.systemMonitor.resources", "System Resources")}</h3>
           <ResponsiveContainer width="100%" height={280}>
             <BarChart data={resourceData} margin={{ top: 20, right: 30, left: 0, bottom: 5 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
@@ -190,7 +190,7 @@ export function AdminSystemMonitor() {
         </main>
 
         <main className="panel">
-          <h3>{t("pages.admin.monitor.trafficMetrics", "Traffic Metrics")}</h3>
+          <h3>{t("admin.systemMonitor.trafficMetrics", "Traffic Metrics")}</h3>
           <ResponsiveContainer width="100%" height={280}>
             <AreaChart
               data={[
@@ -248,7 +248,7 @@ export function AdminSystemMonitor() {
 
       <div className="admin-ops-grid">
         <main className="panel">
-          <h3>{t("pages.admin.monitor.serviceLatency", "Service Latency")}</h3>
+          <h3>{t("admin.systemMonitor.serviceLatency", "Service Latency")}</h3>
           <ResponsiveContainer width="100%" height={280}>
             <BarChart data={servicesData} margin={{ top: 20, right: 30, left: 0, bottom: 5 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
@@ -271,7 +271,7 @@ export function AdminSystemMonitor() {
         </main>
 
         <main className="panel">
-          <h3>{t("pages.admin.monitor.responseTime", "Response Time")}</h3>
+          <h3>{t("admin.systemMonitor.responseTime", "Response Time")}</h3>
           <ResponsiveContainer width="100%" height={280}>
             <LineChart
               data={[
@@ -308,7 +308,7 @@ export function AdminSystemMonitor() {
       </div>
 
       <main className="panel">
-        <h3>{t("pages.admin.monitor.services", "Service Health")}</h3>
+        <h3>{t("admin.systemMonitor.serviceStatus", "Service Health")}</h3>
         <div className="admin-service-grid">
           {Object.entries(snapshot.services).map(([name, health]) => (
             <div key={name} className={`admin-service-card ${health.ok ? 'is-online' : 'is-offline'}`}>
@@ -327,35 +327,35 @@ export function AdminSystemMonitor() {
       </main>
 
       <main className="panel">
-        <h3>{t("pages.admin.monitor.model", "Model Configuration")}</h3>
+        <h3>{t("admin.systemMonitor.model", "Model Configuration")}</h3>
         <div className="ops-kpi-grid ops-kpi-grid-secondary">
           <div className="ops-kpi-card">
-            <span>{t("pages.admin.monitor.enabled", "Enabled")}</span>
+            <span>{t("admin.systemMonitor.enabled", "Enabled")}</span>
             <strong>{snapshot.model.enabled ? t("common.yes", "是") : t("common.no", "否")}</strong>
           </div>
 
           <div className="ops-kpi-card">
-            <span>{t("pages.admin.monitor.provider", "Provider")}</span>
+            <span>{t("admin.systemMonitor.provider", "Provider")}</span>
             <strong>{snapshot.model.provider}</strong>
           </div>
 
           <div className="ops-kpi-card">
-            <span>{t("pages.admin.monitor.chatModel", "Chat Model")}</span>
+            <span>{t("admin.systemMonitor.chatModel", "Chat Model")}</span>
             <strong style={{ fontSize: 'var(--text-lg)' }}>{snapshot.model.chat_model}</strong>
           </div>
 
           <div className="ops-kpi-card">
-            <span>{t("pages.admin.monitor.reasoningModel", "Reasoning Model")}</span>
+            <span>{t("admin.systemMonitor.reasoningModel", "Reasoning Model")}</span>
             <strong style={{ fontSize: 'var(--text-lg)' }}>{snapshot.model.reasoning_model}</strong>
           </div>
 
           <div className="ops-kpi-card">
-            <span>{t("pages.admin.monitor.embeddingModel", "Embedding Model")}</span>
+            <span>{t("admin.systemMonitor.embeddingModel", "Embedding Model")}</span>
             <strong style={{ fontSize: 'var(--text-lg)' }}>{snapshot.model.embedding_model || "-"}</strong>
           </div>
 
           <div className="ops-kpi-card" style={{ gridColumn: 'span 2' }}>
-            <span>{t("pages.admin.monitor.baseUrl", "Base URL")}</span>
+            <span>{t("admin.systemMonitor.baseUrl", "Base URL")}</span>
             <strong style={{ fontSize: 'var(--text-sm)', wordBreak: 'break-all' }}>{snapshot.model.base_url}</strong>
           </div>
         </div>

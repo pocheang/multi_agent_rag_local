@@ -1,88 +1,114 @@
-﻿"""
+"""
 Shared dependencies, services, and helper functions for the QueryMind API.
 
 This module serves as the central hub for all shared dependencies and re-exports
 helper functions from specialized utility modules.
 """
 
+import asyncio
 import logging
 import re
+import sys
 import threading
+import uuid
+from contextlib import asynccontextmanager, contextmanager
+from dataclasses import dataclass
 from typing import Any
 
 from fastapi import Request
-from fastapi.security import HTTPBearer
 
-from app.api.utils.admin_helpers import _runtime_diagnostics_summary as _runtime_diagnostics_summary_impl
-from app.api.utils.auth_dependencies import (
-    _require_permission,
-    _require_user,
-    _require_user_and_token,
-    auth_scheme,
+from app.api.deps.admin import _runtime_diagnostics_summary as _runtime_diagnostics_summary_impl
+from app.api.deps.auth import (
     auth_service,
 )
+from app.api.deps.sessions import (
+    _history_store_for_user,
+)
+from app.api.schemas import AdminModelSettingsResponse, UserApiSettings, UserApiSettingsView
+from app.api.transport.errors import bad_request, forbidden, rate_limited, service_unavailable
 from app.api.utils.auth_helpers import (
     _audit,
 )
-from app.api.utils.admin_helpers import (
-    _check_chroma_ready,
-    _check_ollama_ready,
-    _extract_grounding_support_from_detail,
-    _filter_audit_rows,
-    _load_benchmark_queries,
-    _parse_audit_ts,
-    _parse_request_ts,
-)
-from app.api.utils.auth_helpers import _clear_auth_cookie, _client_ip, _set_auth_cookie
-from app.api.utils.document_helpers import (
-    _allowed_sources_for_user,
-    _build_user_file_inventory_answer,
-    _is_file_inventory_question,
-)
-from app.api.utils.memory_helpers import _memory_store_for_user, _promote_long_term_memory
-from app.api.utils.query_helpers import (
-    _call_with_supported_kwargs,
-    _normalize_agent_class_hint,
-    _query_limiter_key,
-    _resolve_effective_agent_class,
-    _trace_id,
-)
-from app.api.utils.response_helpers import _sse_response
-from app.api.utils.session_helpers import _require_existing_session_for_query, _require_valid_session_id
-from app.api.utils.document_helpers import _enforce_result_source_scope as _enforce_result_source_scope_impl
-from app.api.utils.document_helpers import (
-    _visible_index_fingerprint_for_user,
-)
-from app.api.utils.error_responses import bad_request
 from app.api.utils.memory_helpers import _build_memory_context_for_session as _build_memory_context_for_session_impl
-from app.api.utils.query_helpers import _effective_strategy_for_session as _effective_strategy_for_session_impl
-from app.api.utils.query_helpers import _is_overload_mode as _is_overload_mode_impl
-from app.api.utils.query_helpers import _launch_shadow_run as _launch_shadow_run_impl
-from app.api.utils.query_helpers import _query_cache_key as _query_cache_key_impl
-from app.api.utils.query_helpers import _query_model_fingerprint_for_user as _query_model_fingerprint_for_user_impl
-from app.api.utils.query_helpers import _run_with_query_runtime as _run_with_query_runtime_impl
-from app.api.utils.query_helpers import _user_api_settings_for_runtime as _user_api_settings_for_runtime_impl
-from app.api.utils.session_helpers import (
-    _history_store_for_user,
-)
+from app.api.utils.memory_helpers import _recent_session_turns as _recent_session_turns_impl
 
 # Import helper functions from utility modules
 from app.api.utils.string_utils import normalize_string
-from app.core.config import get_settings
-from app.core.schemas import AdminModelSettingsResponse, UserApiSettings, UserApiSettingsView
-from app.services.auto_ingest_watcher import AutoIngestWatcher
-from app.services.background_queue import BackgroundTaskQueue
-from app.services.model_config_store import get_global_model_settings, public_global_model_settings
-from app.services.prompt_store import PromptStore
-from app.services.query_guard import QueryLoadGuard
-from app.services.query_result_cache import QueryResultCache
-from app.services.quota_guard import QuotaGuard
-from app.services.rate_limiter import SlidingWindowLimiter
-from app.services.runtime_metrics import RuntimeMetrics
+from app.core.config import Settings, get_settings
+from app.services.agent_classifier import classify_agent_class
+from app.services.auth.user_manager import InsufficientCreditsError
+from app.services.models.config_store import get_global_model_settings, public_global_model_settings
+from app.services.prompts.store import PromptStore
+from app.services.query.guard import QueryLoadGuard, QueryOverloadedError, QueryRateLimitedError
+from app.services.runtime.auto_ingest_watcher import AutoIngestWatcher
+from app.services.runtime.background_queue import BackgroundTaskQueue
+from app.services.runtime.runtime_metrics import RuntimeMetrics
+from app.services.security.quota import QuotaGuard
+from app.services.security.rate_limiter import SlidingWindowLimiter
 
 # Global settings and logger
 settings = get_settings()
 logger = logging.getLogger(__name__)
+
+
+@contextmanager
+def _reserve_chat_credit(request: Request, user: dict[str, Any], resource_type: str):
+    """Acquire the query load guard, then reserve one chat credit.
+
+    Composes both gates every query entry point needs: per-user rate limiting
+    plus bounded server-wide concurrency (``QueryLoadGuard``), and the
+    existing per-user credit balance check.
+    """
+    user_key = str(user.get("user_id", "") or "") or "anonymous"
+    try:
+        with get_query_runtime().query_guard.acquire(user_key):
+            with auth_service.chat_credit_reservation(str(user.get("user_id", ""))) as credit:
+                yield credit
+    except (QueryRateLimitedError, QueryOverloadedError) as exc:
+        _audit(
+            request,
+            action="query.load_guard",
+            resource_type=resource_type,
+            result="blocked",
+            user=user,
+            detail=str(exc),
+        )
+        if isinstance(exc, QueryRateLimitedError):
+            raise rate_limited(str(exc)) from exc
+        raise service_unavailable(str(exc)) from exc
+    except InsufficientCreditsError as exc:
+        _audit(
+            request,
+            action="query.credit_reserve",
+            resource_type=resource_type,
+            result="blocked",
+            user=user,
+            detail="credit_balance_exhausted",
+        )
+        raise forbidden(str(exc)) from exc
+
+
+@asynccontextmanager
+async def _reserve_chat_credit_async(request: Request, user: dict[str, Any], resource_type: str):
+    """Async twin of ``_reserve_chat_credit`` for async route handlers.
+
+    ``_reserve_chat_credit`` waits on a threading semaphore (up to
+    ``QUERY_ACQUIRE_TIMEOUT_MS``) and touches SQLite for the credit reservation;
+    both must stay off the event loop or an overloaded server stops answering
+    everything, including health checks.  Sync handlers -- the message-rerun path
+    -- keep using the sync version, which FastAPI already runs in a threadpool.
+    """
+    manager = _reserve_chat_credit(request, user, resource_type)
+    credit = await asyncio.to_thread(manager.__enter__)
+    exc_info: tuple = (None, None, None)
+    try:
+        yield credit
+    except BaseException:
+        exc_info = sys.exc_info()
+        raise
+    finally:
+        await asyncio.to_thread(manager.__exit__, *exc_info)
+
 
 # Shared service instances
 prompt_store = PromptStore()
@@ -103,29 +129,66 @@ upload_limiter = SlidingWindowLimiter(
     window_seconds=3600,
 )
 
-# Query guard and caching
-query_guard = QueryLoadGuard(
-    per_user_max_requests=settings.query_rate_limit_max_attempts,
-    per_user_window_seconds=settings.query_rate_limit_window_seconds,
-    max_concurrent=settings.query_max_concurrent,
-    max_waiting=settings.query_max_waiting,
-    acquire_timeout_ms=settings.query_acquire_timeout_ms,
-    backend=settings.query_guard_backend,
-)
-query_result_cache = QueryResultCache(
-    backend=settings.query_result_cache_backend,
-    ttl_seconds=settings.query_result_cache_ttl_seconds,
-    max_items=settings.query_result_cache_max_items,
-    session_ttl_seconds=settings.query_result_session_ttl_seconds,
-)
-quota_guard = QuotaGuard()
 
-# Background task queue
-shadow_queue = BackgroundTaskQueue(
-    maxsize=settings.shadow_queue_maxsize,
-    workers=settings.shadow_queue_workers,
-    name="shadow-query",
-)
+@dataclass(frozen=True, slots=True)
+class QueryRuntime:
+    """Atomically replaceable services used by query request paths."""
+
+    settings: Settings
+    query_guard: QueryLoadGuard
+    quota_guard: QuotaGuard
+    shadow_queue: BackgroundTaskQueue
+
+
+def _build_query_runtime(new_settings: Settings) -> QueryRuntime:
+    return QueryRuntime(
+        settings=new_settings,
+        query_guard=QueryLoadGuard(
+            per_user_max_requests=new_settings.query_rate_limit_max_attempts,
+            per_user_window_seconds=new_settings.query_rate_limit_window_seconds,
+            max_concurrent=new_settings.query_max_concurrent,
+            max_waiting=new_settings.query_max_waiting,
+            acquire_timeout_ms=new_settings.query_acquire_timeout_ms,
+            backend=new_settings.query_guard_backend,
+        ),
+        quota_guard=QuotaGuard(),
+        shadow_queue=BackgroundTaskQueue(
+            maxsize=new_settings.shadow_queue_maxsize,
+            workers=new_settings.shadow_queue_workers,
+            name="shadow-query",
+        ),
+    )
+
+
+_query_runtime = _build_query_runtime(settings)
+_runtime_reload_lock = threading.Lock()
+
+
+def get_query_runtime() -> QueryRuntime:
+    """Return one internally consistent snapshot of the query runtime."""
+    return _query_runtime
+
+
+def reload_query_runtime(new_settings: Settings) -> QueryRuntime:
+    """Replace query services without stopping the healthy runtime first."""
+    global _query_runtime, settings
+
+    new_runtime = _build_query_runtime(new_settings)
+    try:
+        new_runtime.shadow_queue.start()
+    except Exception:
+        new_runtime.shadow_queue.stop(timeout=1.0)
+        raise
+
+    with _runtime_reload_lock:
+        old_runtime = _query_runtime
+        _query_runtime = new_runtime
+        settings = new_settings
+        auto_ingest_watcher.settings = new_settings
+
+    old_runtime.shadow_queue.stop(timeout=1.0)
+    return new_runtime
+
 
 # Auto-ingest watcher state
 _auto_ingest_stop_event = threading.Event()
@@ -135,25 +198,33 @@ _auto_ingest_thread: threading.Thread | None = None
 runtime_metrics = RuntimeMetrics()
 
 
-
 def __getattr__(name: str):
     """Resolve legacy helper imports from split utility modules."""
-    from app.api.utils import admin_helpers, auth_dependencies, auth_helpers, document_helpers, memory_helpers, query_helpers, request_helpers, response_helpers, session_helpers
+    runtime_attributes = {
+        "query_guard": "query_guard",
+        "quota_guard": "quota_guard",
+        "shadow_queue": "shadow_queue",
+    }
+    if name in runtime_attributes:
+        return getattr(_query_runtime, runtime_attributes[name])
+
+    from app.api.deps import admin, auth, documents, sessions
+    from app.api.utils import auth_helpers, memory_helpers, request_helpers
 
     modules = (
-        admin_helpers,
-        auth_dependencies,
+        admin,
+        auth,
+        documents,
+        sessions,
         auth_helpers,
-        document_helpers,
         memory_helpers,
-        query_helpers,
         request_helpers,
-        session_helpers,
     )
     for module in modules:
         if hasattr(module, name):
             return getattr(module, name)
     raise AttributeError(f"module '{__name__}' has no attribute '{name}'")
+
 
 # ============================================================================
 # Dependency-injected helpers
@@ -166,108 +237,44 @@ def __getattr__(name: str):
 # dependencies.
 
 
-def _query_cache_key(
-    *,
-    user: dict[str, Any],
-    session_id: str | None,
-    question: str,
-    use_web_fallback: bool,
-    use_reasoning: bool,
-    retrieval_strategy: str | None,
-    agent_class_hint: str | None,
-    request_id: str | None,
-    mode: str = "query",
-) -> str:
-    """Compute the query cache key, injecting user-scoped fingerprint helpers."""
-    return _query_cache_key_impl(
-        user=user,
-        session_id=session_id,
-        question=question,
-        use_web_fallback=use_web_fallback,
-        use_reasoning=use_reasoning,
-        retrieval_strategy=retrieval_strategy,
-        agent_class_hint=agent_class_hint,
-        request_id=request_id,
-        mode=mode,
-        index_fingerprint_fn=_visible_index_fingerprint_for_user,
-        model_fingerprint_fn=_query_model_fingerprint_for_user,
-    )
-
-
-def _run_with_query_runtime(*, user: dict[str, Any], request: Request, fn):
-    """Run ``fn`` under the shared query guard / metrics runtime."""
-    return _run_with_query_runtime_impl(
-        user=user,
-        request=request,
-        fn=fn,
-        query_guard=query_guard,
-        runtime_metrics=runtime_metrics,
-        api_settings_fn=_user_api_settings_for_runtime,
-    )
-
-
-def _is_overload_mode() -> bool:
-    """Return True when the query guard is currently shedding load."""
-    return _is_overload_mode_impl(query_guard)
-
-
-def _launch_shadow_run(
-    *,
-    user: dict[str, Any],
-    session_id: str | None,
-    question: str,
-    primary_result: dict[str, Any],
-) -> None:
-    """Schedule a shadow comparison run on the background queue."""
-    return _launch_shadow_run_impl(
-        user=user,
-        session_id=session_id,
-        question=question,
-        primary_result=primary_result,
-        shadow_queue=shadow_queue,
-    )
-
-
-def _effective_strategy_for_session(
-    *, req_strategy: str | None, user: dict[str, Any], session_id: str | None, question: str
-) -> tuple[str, dict[str, Any]]:
-    """Resolve the strategy to use for a session, honoring strategy locks."""
-    return _effective_strategy_for_session_impl(
-        req_strategy=req_strategy,
-        user=user,
-        session_id=session_id,
-        question=question,
-        history_store_fn=_history_store_for_user,
-    )
-
-
 def _build_memory_context_for_session(user: dict[str, Any], session_id: str | None, question: str) -> str:
     """Build the LLM-ready memory context block for a session."""
     return _build_memory_context_for_session_impl(user, session_id, question, _history_store_for_user)
 
 
-def _enforce_result_source_scope(
-    result: dict[str, Any], allowed_sources: list[str], request: Request, user: dict[str, Any]
-) -> dict[str, Any]:
-    """Drop citations outside the user's allowed source scope, with audit logging."""
-    return _enforce_result_source_scope_impl(result, allowed_sources, request, user, _audit)
+def _recent_session_turns(user: dict[str, Any], session_id: str | None) -> tuple[tuple[str, str], ...]:
+    """Return the session's recent (question, answer) pairs for query rewriting."""
+    return _recent_session_turns_impl(user, session_id, _history_store_for_user)
 
 
 def _runtime_diagnostics_summary() -> dict[str, Any]:
     """Compose the runtime diagnostics block surfaced on /admin/* endpoints."""
-    from app.api.middleware import get_request_metrics
+    from app.api.transport.middleware import get_request_metrics
 
     return _runtime_diagnostics_summary_impl(get_request_metrics)
 
 
-def _user_api_settings_for_runtime(user: dict[str, Any]) -> dict[str, Any] | None:
-    """Resolve per-user API settings for runtime model selection."""
-    return _user_api_settings_for_runtime_impl(user, auth_service)
+def _trace_id(request: Request) -> str:
+    """Get or generate a trace ID for the request."""
+    return str(getattr(request.state, "trace_id", "") or "").strip() or uuid.uuid4().hex
 
 
-def _query_model_fingerprint_for_user(user: dict[str, Any]) -> str:
-    """Compute a fingerprint of the resolved model config for cache invalidation."""
-    return _query_model_fingerprint_for_user_impl(user, auth_service, get_global_model_settings)
+_ALLOWED_AGENT_CLASSES = {"general", "cybersecurity", "artificial_intelligence", "pdf_text", "policy"}
+
+
+def _normalize_agent_class_hint(value: str | None) -> str | None:
+    """Normalize a public agent-class hint against the allowed class set."""
+    hint = normalize_string(value, lowercase=True)
+    return hint if hint in _ALLOWED_AGENT_CLASSES else None
+
+
+def _resolve_effective_agent_class(question: str, agent_class_hint: str | None) -> str:
+    """Resolve the canonical agent class for a question, honoring an explicit hint."""
+    hinted = _normalize_agent_class_hint(agent_class_hint)
+    if hinted:
+        return hinted
+    guessed = classify_agent_class(question)
+    return guessed if guessed in _ALLOWED_AGENT_CLASSES else "general"
 
 
 # ============================================================================
@@ -325,7 +332,7 @@ def _mask_api_key(api_key: str) -> str:
 
 def _api_settings_view(settings_data: UserApiSettings) -> UserApiSettingsView:
     """Convert API settings to view model."""
-    from app.core.schemas import UserApiSettingsView
+    from app.api.schemas import UserApiSettingsView
 
     global_settings = get_global_model_settings()
     global_enabled = bool(global_settings.get("enabled", False))
@@ -358,5 +365,3 @@ def _api_settings_view(settings_data: UserApiSettings) -> UserApiSettingsView:
 def _admin_model_settings_view(settings_data: dict[str, Any]) -> AdminModelSettingsResponse:
     """Convert model settings to admin view model."""
     return AdminModelSettingsResponse(ok=True, settings=public_global_model_settings(settings_data))
-
-

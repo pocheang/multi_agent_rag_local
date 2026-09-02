@@ -1,11 +1,10 @@
 import type React from "react";
-import type { AuthUser, Citation, SessionMessage } from "@/types/api";
+import type { AuthUser, Citation, SessionMessage, ToolRun } from "@/types/api";
 
 export type Props = {
   user: AuthUser | null;
   onLogout: () => Promise<void>;
-  themeLabel: string;
-  onThemeToggle: () => void;
+  onUserRefresh: () => Promise<void>;
 };
 
 export type Toast = {
@@ -41,7 +40,6 @@ export type GraphResult = {
 export type ChatMetadata = {
   route: string;
   execution_route?: string;
-  retrieval_strategy?: string;
   agent_class: string;
   web_used: boolean;
   latency_ms?: number;
@@ -49,6 +47,9 @@ export type ChatMetadata = {
   graph_entities: string[];
   graph_result?: GraphResult;
   citations: Citation[];
+  /** What the governed tool loop actually did. */
+  tool_runs: ToolRun[];
+  quality_report?: Record<string, unknown>;
   current_status?: string;
   execution_steps?: Array<{
     kind: string;

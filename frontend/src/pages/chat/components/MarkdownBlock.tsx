@@ -2,7 +2,7 @@ import { isValidElement } from "react";
 import { useTranslation } from "react-i18next";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { useCopyToClipboard } from "@/lib/hooks/useCopyToClipboard";
+import { useCopyToClipboard } from "@/hooks/useCopyToClipboard";
 
 function CodeBlock({ code, className = "" }: { code: string; className?: string }) {
   const { t } = useTranslation();

@@ -1,0 +1,97 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      # Lint first: it needs no project dependencies, so a style failure reports
+      # in seconds instead of after the full install.
+      - name: Install ruff
+        run: pip install "ruff>=0.6.0"
+
+      - name: Lint
+        run: ruff check .
+
+      - name: Format check
+        run: ruff format --check .
+
+      - name: Install package
+        run: pip install -e ".[dev]"
+
+      - name: Endpoint census
+        # Guards against a refactor silently dropping routers. Counts OpenAPI
+        # operations, not len(app.routes): FastAPI 0.138+ stores an
+        # _IncludedRouter wrapper instead of flattening child routes, so that
+        # count varies by version (30 on 0.138.2 vs 156 on 0.135.3).
+        run: >-
+          python -c "import app.api.main as m; d = m.app.openapi()['paths'];
+          n = sum(1 for i in d.values() for k in i if k in {'get','post','put','patch','delete'});
+          print(f'{n} operations');
+          assert n >= 140, f'endpoint count collapsed to {n}'"
+
+      - name: Tests
+        run: pytest tests/ -q
+
+  frontend:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install
+        run: npm ci
+
+      # Gates on errors. The threshold is a ratchet at the current warning
+      # count (25: react-refresh, exhaustive-deps, unused-vars, explicit-any),
+      # so no new warning can land while those are worked through separately.
+      # Lower it as they are fixed; never raise it.
+      - name: Lint
+        run: npm run lint
+
+      - name: Type check
+        run: npm run type-check
+
+      # Shape and depth scale, as a ratchet. The chat screen once carried eight
+      # radii and eighteen distinct shadows at the same time; that drift is
+      # cheap to prevent and expensive to undo. Existing counts are frozen per
+      # file in scripts/design-scale-baseline.json -- a file may improve, never
+      # regress, and a new file starts at zero.
+      - name: Design scale
+        run: npm run lint:design
+
+      # Store-reset coverage: the Zustand stores live for the lifetime of the
+      # tab, so a field that survives logout shows the next person on a shared
+      # browser the previous one's data. The test discovers fields rather than
+      # listing them, so it catches one added to the store but forgotten in
+      # INITIAL_STATE.
+      - name: Tests
+        run: npm test -- --run
+
+      - name: Build
+        run: npm run build

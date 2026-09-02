@@ -1,136 +1,99 @@
-import { useState, useRef } from "react";
-import type { IndexedFileSummary, PromptTemplate, SessionMessage, SessionSummary } from "@/types/api";
-import type { Toast } from "@/pages/chat/types";
-import type { AgentClassHint, RetrievalStrategy } from "@/pages/chat/constants";
+import { useRef } from "react";
+import { useChatStore } from "@/stores/useChatStore";
 
 export function useChatPageState() {
-  // Session state
-  const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-  const [sessions, setSessions] = useState<SessionSummary[]>([]);
-  const [sessionLoading, setSessionLoading] = useState(true);
-  const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
-  const [messages, setMessages] = useState<SessionMessage[]>([]);
-  const [busySessionId, setBusySessionId] = useState<string | null>(null);
+  // Each field below is its own selector so ChatPage only re-renders when
+  // that specific field changes. High-churn fields that ChatPage never
+  // reads directly (question, runStatus, promptTitle, uploadProgress, ...)
+  // are intentionally NOT selected here -- they're owned by the leaf
+  // component that renders them (ChatComposer, ChatSidebar). See
+  // docs/superpowers/plans/2026-08-29-frontend-audit-followups.md Part 1.
+  const sidebarOpen = useChatStore((s) => s.sidebarOpen);
+  const sidebarCollapsed = useChatStore((s) => s.sidebarCollapsed);
+  const sessions = useChatStore((s) => s.sessions);
+  const currentSessionId = useChatStore((s) => s.currentSessionId);
+  const messages = useChatStore((s) => s.messages);
+  const isSending = useChatStore((s) => s.isSending);
+  const pdfTargetFile = useChatStore((s) => s.pdfTargetFile);
+  const documents = useChatStore((s) => s.documents);
+  const uploadVisibility = useChatStore((s) => s.uploadVisibility);
+  const toasts = useChatStore((s) => s.toasts);
+  const settingsOpen = useChatStore((s) => s.settingsOpen);
 
-  // Chat state
-  const [question, setQuestion] = useState("");
-  const [isSending, setIsSending] = useState(false);
-  const [runStatus, setRunStatus] = useState("");
-  const [useWeb, setUseWeb] = useState(false);
-  const [useReasoning, setUseReasoning] = useState(false);
-  const [agentClassHint, setAgentClassHint] = useState<AgentClassHint>("");
-  const [retrievalStrategy, setRetrievalStrategy] = useState<RetrievalStrategy>("advanced");
-  const [pdfTargetFile, setPdfTargetFile] = useState("");
+  // Action setters never change identity across renders, so reading them
+  // via getState() here does not subscribe ChatPage to the values they
+  // write.
+  const {
+    setSidebarOpen,
+    setSidebarCollapsed,
+    setSessions,
+    setSessionLoading,
+    setCurrentSessionId,
+    setMessages,
+    setBusySessionId,
+    setIsCreatingSession,
+    setQuestion,
+    setIsSending,
+    setRunStatus,
+    setAgentClassHint,
+    setPdfTargetFile,
+    setDocuments,
+    setDocsLoading,
+    setUploading,
+    setUploadInfo,
+    setUploadProgress,
+    setUploadProgressText,
+    setUploadVisibility,
+    setDocDropActive,
+    setComposerDropActive,
+    setPrompts,
+    setPromptsLoading,
+    setPromptTitle,
+    setPromptContent,
+    setEditingPromptId,
+    setPromptCheckInfo,
+    setToasts,
+    setError,
+    setSettingsOpen,
+  } = useChatStore.getState();
 
-  // Document state
-  const [documents, setDocuments] = useState<IndexedFileSummary[]>([]);
-  const [docsLoading, setDocsLoading] = useState(false);
-  const [uploading, setUploading] = useState(false);
-  const [uploadInfo, setUploadInfo] = useState("");
-  const [uploadProgress, setUploadProgress] = useState(0);
-  const [uploadProgressText, setUploadProgressText] = useState("");
-  const [uploadVisibility, setUploadVisibility] = useState<"private" | "public">("private");
-  const [docDropActive, setDocDropActive] = useState(false);
-  const [composerDropActive, setComposerDropActive] = useState(false);
-
-  // Prompt state
-  const [prompts, setPrompts] = useState<PromptTemplate[]>([]);
-  const [promptsLoading, setPromptsLoading] = useState(false);
-  const [promptTitle, setPromptTitle] = useState("");
-  const [promptContent, setPromptContent] = useState("");
-  const [editingPromptId, setEditingPromptId] = useState<string | null>(null);
-  const [promptCheckInfo, setPromptCheckInfo] = useState("");
-
-  // UI state
-  const [toasts, setToasts] = useState<Toast[]>([]);
-  const [error, setError] = useState("");
-  const [settingsOpen, setSettingsOpen] = useState(false);
-
-  // Refs
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const chatUploadInputRef = useRef<HTMLInputElement | null>(null);
   const questionRef = useRef<HTMLTextAreaElement | null>(null);
   const chatScrollRef = useRef<HTMLDivElement | null>(null);
 
   return {
-    // Session state
-    sidebarOpen,
-    setSidebarOpen,
-    sidebarCollapsed,
-    setSidebarCollapsed,
-    sessions,
-    setSessions,
-    sessionLoading,
+    sidebarOpen, setSidebarOpen,
+    sidebarCollapsed, setSidebarCollapsed,
+    sessions, setSessions,
     setSessionLoading,
-    currentSessionId,
-    setCurrentSessionId,
-    messages,
-    setMessages,
-    busySessionId,
+    currentSessionId, setCurrentSessionId,
+    messages, setMessages,
     setBusySessionId,
-
-    // Chat state
-    question,
+    setIsCreatingSession,
     setQuestion,
-    isSending,
-    setIsSending,
-    runStatus,
+    isSending, setIsSending,
     setRunStatus,
-    useWeb,
-    setUseWeb,
-    useReasoning,
-    setUseReasoning,
-    agentClassHint,
     setAgentClassHint,
-    retrievalStrategy,
-    setRetrievalStrategy,
-    pdfTargetFile,
-    setPdfTargetFile,
-
-    // Document state
-    documents,
-    setDocuments,
-    docsLoading,
+    pdfTargetFile, setPdfTargetFile,
+    documents, setDocuments,
     setDocsLoading,
-    uploading,
     setUploading,
-    uploadInfo,
     setUploadInfo,
-    uploadProgress,
     setUploadProgress,
-    uploadProgressText,
     setUploadProgressText,
-    uploadVisibility,
-    setUploadVisibility,
-    docDropActive,
+    uploadVisibility, setUploadVisibility,
     setDocDropActive,
-    composerDropActive,
     setComposerDropActive,
-
-    // Prompt state
-    prompts,
     setPrompts,
-    promptsLoading,
     setPromptsLoading,
-    promptTitle,
     setPromptTitle,
-    promptContent,
     setPromptContent,
-    editingPromptId,
     setEditingPromptId,
-    promptCheckInfo,
     setPromptCheckInfo,
-
-    // UI state
-    toasts,
-    setToasts,
-    error,
+    toasts, setToasts,
     setError,
-    settingsOpen,
-    setSettingsOpen,
-
-    // Refs
+    settingsOpen, setSettingsOpen,
     fileInputRef,
     chatUploadInputRef,
     questionRef,

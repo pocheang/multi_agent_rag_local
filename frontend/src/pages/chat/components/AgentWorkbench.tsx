@@ -35,6 +35,10 @@ export function AgentWorkbench({
             key={mode.title}
             type="button"
             className={`agent-mode-card ${agentClassHint === mode.key ? "active" : ""}`}
+            /* One mode is in effect at a time, so these are a single-select
+               group, not four independent actions. Without this the selection
+               is carried by colour alone and is not announced at all. */
+            aria-pressed={agentClassHint === mode.key}
             onClick={() => onSwitchAgentMode(mode.key)}
             title={`${mode.title}: ${mode.desc}`}
           >

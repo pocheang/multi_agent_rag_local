@@ -1,1 +1,1 @@
-﻿# Route modules for the QueryMind API
+# Route modules for the QueryMind API

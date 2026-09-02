@@ -1,0 +1,206 @@
+/* ============================================
+   Chat density and small-screen corrections
+
+   Loaded last so it can tighten what the feature stylesheets set, without
+   rewriting them. Everything here was measured rather than guessed:
+
+   - the composer took 313px of a 900px desktop viewport (35%) and 550px of an
+     812px phone viewport (68%), leaving the conversation less room than the
+     box used to ask for it;
+   - `.section-toggle-btn` is `position: fixed; bottom: 20px; right: 20px`,
+     which is exactly where the submit button is, so the two overlapped;
+   - below 680px `.composer-heading-row` switches to a column, making the
+     header *taller* on the screens with the least room;
+   - the keyboard hint advertised Ctrl / Cmd on devices with no such key.
+   ============================================ */
+
+/* --------------------------------------------
+   Vertical budget
+   -------------------------------------------- */
+
+.page-shell .composer-controls {
+  margin-top: 10px;
+}
+
+.page-shell .composer-hint {
+  margin-top: 6px;
+  padding: 2px 2px;
+  font-size: 12px;
+}
+
+.page-shell .quick-actions {
+  margin-top: 8px;
+}
+
+/* --------------------------------------------
+   The floating section toggle
+
+   Stacked under the overflow menu instead of pinned to the bottom-right
+   corner: the composer grows and shrinks with its content, so any fixed
+   bottom offset collides with it at some size. Icon-only, with the label
+   carried by `title`/`aria-label`, so it stays out of the way of the
+   conversation at every width.
+   -------------------------------------------- */
+
+.section-toggle-btn {
+  /* The same row as the overflow menu (which sits at top 16, right 16), not
+     below it: a second row would land on the conversation, and the reserved
+     top strip only covers one. */
+  top: 16px;
+  right: 72px;
+  bottom: auto;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 12px;
+  font-size: 18px;
+  overflow: hidden;
+}
+
+.section-toggle-btn > span:not(.icon) {
+  /* Visually hidden, still announced. */
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* --------------------------------------------
+   Reference lists
+
+   A citation URL is one unbroken token; without this it either overflows its
+   card or forces a horizontal scrollbar on the whole conversation.
+   -------------------------------------------- */
+
+.page-shell .bubble a,
+.page-shell .bubble li {
+  overflow-wrap: anywhere;
+}
+
+/* --------------------------------------------
+   Touch and small screens
+   -------------------------------------------- */
+
+@media (pointer: coarse) {
+  /* No Ctrl or Cmd key to press. */
+  .page-shell .btn-shortcut {
+    display: none;
+  }
+}
+
+@media (max-width: 768px) {
+  .page-shell .main {
+    /* The top strip is reserved for the two floating buttons. Padding on the
+       scroll container itself does not work: it scrolls away with the content,
+       so message text still passed under the buttons on the way up. */
+    padding: 68px 12px calc(8px + env(safe-area-inset-bottom, 0px));
+  }
+
+  .page-shell .composer-panel {
+    padding: 10px 12px;
+    border-radius: 14px;
+  }
+
+  /* The label repeats the textarea's own placeholder, and the drag-and-drop
+     hint beside it describes an interaction a touch screen does not have.
+     Both are restored above this breakpoint. */
+  .page-shell .composer-heading-row,
+  .page-shell .composer-hint {
+    display: none;
+  }
+
+  .page-shell .composer-main {
+    gap: 8px;
+  }
+
+  .page-shell .composer-controls {
+    margin-top: 8px;
+    gap: 8px;
+  }
+
+  /* One scrolling row rather than a wrapping block: wrapped chips grew the
+     composer by a line for every extra suggestion. */
+  .page-shell .quick-actions {
+    margin-top: 8px;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    scrollbar-width: none;
+    padding-bottom: 2px;
+  }
+
+  .page-shell .quick-actions::-webkit-scrollbar {
+    display: none;
+  }
+
+  .page-shell .quick-action-btn {
+    flex: none;
+    white-space: nowrap;
+  }
+
+  /* Still a comfortable touch target; it was 58px. */
+  .page-shell .composer-controls > button {
+    min-height: 46px;
+  }
+
+  .page-shell .composer-panel textarea {
+    min-height: 64px;
+  }
+
+}
+
+@media (max-width: 768px) and (max-height: 700px) {
+  /* Landscape phones: the conversation is what is scarce here. */
+  .page-shell .quick-actions {
+    display: none;
+  }
+
+  .page-shell .composer-panel textarea {
+    min-height: 48px;
+  }
+}
+
+/* --------------------------------------------
+   The floating controls versus the drawer
+
+   Found by the screenshot run, not by a test: with the drawer open on a phone,
+   the three floating buttons (z-index 10002) sit on top of it (z-index 1000).
+   The section toggle at x 259-303 covered the sidebar's own Collapse button at
+   236-301, and the hamburger covered the brand mark.
+
+   Two of them act on the chat surface, which the drawer is currently covering,
+   so operating them there means nothing -- they go away until it closes. The
+   hamburger stays, because it is what closes the drawer, and the header makes
+   room for it rather than sliding underneath.
+   -------------------------------------------- */
+
+/* The same reservation on wide screens. The strip was only made on mobile,
+   and the screenshot run showed why that was half a fix: the chat window
+   scrolls under the floating row at every width, so on desktop the monkey
+   covered the first message's Delete button and the hamburger sat on the
+   sidebar's brand mark. Anything at the top of the scroll area passes beneath
+   them; 52px of a 900px viewport is the price of it not doing so. */
+.page-shell .main {
+  padding-top: 68px;
+}
+
+/* Down, not right -- the same correction the mobile drawer needed. Insetting
+   from the left pushes the brand block into the Collapse button on the other
+   end of the same row; the row above it is empty. */
+.page-shell .sidebar-shell {
+  padding-top: 56px;
+}
+
+@media (max-width: 1080px) {
+  body:has(.sidebar.open) .topbar-actions-right,
+  body:has(.sidebar.open) .section-toggle-btn {
+    display: none;
+  }
+
+}

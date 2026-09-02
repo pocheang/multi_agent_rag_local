@@ -4,6 +4,7 @@
 
 .page-shell .composer-heading-row {
   display: flex;
+  display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
@@ -29,9 +30,9 @@
   position: relative;
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
-  gap: 12px;
+  gap: 10px;
   align-items: start;
-  padding: 12px;
+  padding: 8px 12px;
   border-radius: 16px;
   border: 1px solid rgba(111, 132, 189, 0.16);
   background: rgba(4, 9, 21, 0.34);
@@ -39,14 +40,15 @@
 
 .page-shell .composer-panel textarea {
   width: 100%;
-  min-height: 112px;
+  min-height: 54px;
+  max-height: 160px;
   border: 0;
   border-radius: 12px;
-  padding: 5px 10px 5px 2px;
+  padding: 4px 8px 4px 2px;
   background: transparent;
   color: var(--text-primary);
-  font-size: 16px;
-  line-height: 1.66;
+  font-size: 15px;
+  line-height: 1.6;
   resize: none;
   overflow-y: auto;
   scrollbar-gutter: stable;

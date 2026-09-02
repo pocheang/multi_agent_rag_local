@@ -110,29 +110,3 @@
   border-color: #b8caec;
   transform: translateY(-1px);
 }
-
-/* Dark Mode - Social Login */
-
-:root[data-theme="dark"] .auth-root .social-btn,
-:root[data-theme="dark"] .auth-root .link-button {
-  background: rgba(16, 29, 47, 0.98);
-  border-color: rgba(56, 76, 102, 0.9);
-  color: #eef5fd;
-  box-shadow: 0 8px 18px rgba(0, 0, 0, 0.16);
-}
-
-:root[data-theme="dark"] .auth-root .social-btn:hover,
-:root[data-theme="dark"] .auth-root .link-button:hover {
-  background: rgba(21, 37, 59, 0.98);
-  border-color: rgba(108, 182, 255, 0.48);
-  color: #ffffff;
-}
-
-:root[data-theme="dark"] .auth-form .divider::before {
-  background: rgba(49, 67, 90, 0.92);
-}
-
-:root[data-theme="dark"] .auth-form .divider span {
-  background: rgba(8, 16, 28, 0.94);
-  color: #89a0bb;
-}

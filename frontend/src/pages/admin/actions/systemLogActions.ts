@@ -1,5 +1,8 @@
+import i18n from "@/i18n/config";
 import { appApi } from "@/lib/api";
 import type { AdminActionsParams, ErrorHandler } from "./types";
+
+const t = i18n.t.bind(i18n);
 
 export function createSystemLogActions(params: AdminActionsParams, errorHandler: ErrorHandler) {
   const {
@@ -28,7 +31,7 @@ export function createSystemLogActions(params: AdminActionsParams, errorHandler:
       setSystemLogs(res.items || []);
       setError("");
     } catch (e) {
-      await handleApiError(e, "加载系统日志失败");
+      await handleApiError(e, t("admin.actions.loadSystemLogsFailed"));
     } finally {
       setLoadingSystemLogs(false);
     }

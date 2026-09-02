@@ -10,7 +10,14 @@ class SessionManager:
         self.conn_factory = conn_factory
         self.token_ttl_hours = token_ttl_hours
 
-    def create_session(self, user_id: str, username: str, role: str, status: str) -> dict[str, Any]:
+    def create_session(
+        self,
+        user_id: str,
+        username: str,
+        role: str,
+        status: str,
+        credit_balance: int = 10,
+    ) -> dict[str, Any]:
         token = secrets.token_urlsafe(40)
         issued_at = now()
         expires_at = issued_at + timedelta(hours=self.token_ttl_hours)
@@ -28,6 +35,7 @@ class SessionManager:
                 "username": username,
                 "role": role,
                 "status": status,
+                "credit_balance": int(credit_balance),
             },
         }
 
@@ -41,7 +49,7 @@ class SessionManager:
             row = conn.execute(
                 """
                 SELECT s.user_id AS user_id, s.username AS username, s.expires_at AS expires_at,
-                       u.role AS role, u.status AS status
+                       u.role AS role, u.status AS status, u.credit_balance AS credit_balance
                 FROM auth_sessions s
                 JOIN users u ON u.user_id = s.user_id
                 WHERE s.token=?
@@ -60,6 +68,7 @@ class SessionManager:
                 "username": str(row["username"]),
                 "role": str(row["role"]),
                 "status": str(row["status"]),
+                "credit_balance": int(row["credit_balance"]),
             }
 
     def touch_session(self, token: str) -> None:
@@ -67,7 +76,13 @@ class SessionManager:
             conn.execute("UPDATE auth_sessions SET last_seen_at=? WHERE token=?", (iso(now()), token))
 
     def rotate_session_token(
-        self, old_token: str, user_id: str, username: str, role: str, status: str
+        self,
+        old_token: str,
+        user_id: str,
+        username: str,
+        role: str,
+        status: str,
+        credit_balance: int = 10,
     ) -> dict[str, Any]:
         """
         安全修复：轮换会话令牌（用于密码更改、角色提升等敏感操作）
@@ -76,7 +91,7 @@ class SessionManager:
         # 删除旧会话
         self.delete_session(old_token)
         # 创建新会话
-        return self.create_session(user_id, username, role, status)
+        return self.create_session(user_id, username, role, status, credit_balance)
 
     def count_active_sessions(self) -> int:
         now_ts = iso(now())

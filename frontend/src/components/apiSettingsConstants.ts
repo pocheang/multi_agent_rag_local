@@ -29,13 +29,13 @@ export const PROVIDER_DEFAULTS: Record<Provider, Pick<ApiConfig, "baseUrl" | "mo
   openai: { baseUrl: "https://api.openai.com/v1", model: "gpt-5.5" },
   anthropic: { baseUrl: "https://api.anthropic.com", model: "claude-sonnet-5" },
   deepseek: { baseUrl: "https://api.deepseek.com/v1", model: "deepseek-v4-flash" },
-  ollama: { baseUrl: "http://localhost:11434", model: "qwen2.5:7b-instruct" },
+  ollama: { baseUrl: import.meta.env.VITE_OLLAMA_BASE_URL || "http://localhost:11434", model: "qwen3:14b" },
   custom: { baseUrl: "", model: "" },
 };
 
 export const QUICK_PRESETS = [
   { name: "Local Evidence", provider: "local" as Provider, model: "local-evidence", mark: "LC" },
-  { name: "Ollama Local", provider: "ollama" as Provider, model: "qwen2.5:7b-instruct", mark: "OL" },
+  { name: "Ollama Local", provider: "ollama" as Provider, model: "qwen3:14b", mark: "OL" },
   { name: "OpenAI GPT", provider: "openai" as Provider, model: "gpt-5.5", mark: "OA" },
   { name: "DeepSeek", provider: "deepseek" as Provider, model: "deepseek-v4-flash", mark: "DS" },
   { name: "Claude", provider: "anthropic" as Provider, model: "claude-sonnet-5", mark: "CL" },

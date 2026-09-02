@@ -2,9 +2,13 @@ import { Link } from "react-router-dom";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import type React from "react";
-import type { IndexedFileSummary, PromptTemplate, SessionSummary } from "@/types/api";
+import type { PromptTemplate } from "@/types/api";
+import type { UserIdentity } from "@/types/auth";
 import { SessionList } from "@/pages/chat/components/SessionList";
 import { WorkbenchPanel } from "@/pages/chat/components/WorkbenchPanel";
+import { useChatStore } from "@/stores/useChatStore";
+import { useShallow } from "zustand/react/shallow";
+import type { IndexedFileSummary } from "@/types/api";
 
 type AgentClassHint = "" | "general" | "cybersecurity" | "artificial_intelligence" | "pdf_text";
 
@@ -15,41 +19,20 @@ type AgentMode = {
 };
 
 type Props = {
-  sidebarOpen: boolean;
-  sidebarCollapsed: boolean;
-  sessions: SessionSummary[];
-  sessionLoading: boolean;
-  currentSessionId: string | null;
-  busySessionId: string | null;
-  agentClassHint: AgentClassHint;
   agentModes: AgentMode[];
   agentDistribution: Array<{ agent: string; count: number }>;
   pdfDocuments: IndexedFileSummary[];
   pdfNeedingReindex: IndexedFileSummary[];
-  pdfTargetFile: string;
-  documents: IndexedFileSummary[];
-  docsLoading: boolean;
-  uploading: boolean;
-  uploadInfo: string;
-  uploadProgress: number;
-  uploadProgressText: string;
-  uploadVisibility: "private" | "public";
-  docDropActive: boolean;
   canUploadAndManageDocs: boolean;
   isAdmin: boolean;
-  user: any;
-  prompts: PromptTemplate[];
-  promptsLoading: boolean;
-  promptTitle: string;
-  promptContent: string;
-  editingPromptId: string | null;
-  promptCheckInfo: string;
+  user: UserIdentity | null;
   fileInputRef: React.RefObject<HTMLInputElement>;
   onToggleSidebarCollapsed: () => void;
   onCreateSession: () => Promise<void>;
   onLoadSession: (sessionId: string) => Promise<void>;
   onDeleteSession: (sessionId: string) => Promise<void>;
-  onRenameSession: (sessionId: string, newTitle: string) => Promise<void>;
+  onRenameSession?: (sessionId: string, newTitle: string) => Promise<void>;
+  onPinSession?: (sessionId: string, pinned: boolean) => Promise<void>;
   onSwitchAgentMode: (mode: AgentClassHint) => void;
   onPdfTargetFileChange: (filename: string) => void;
   onDraftQuestion: () => void;
@@ -72,41 +55,20 @@ type Props = {
 };
 
 export function ChatSidebar({
-  sidebarOpen,
-  sidebarCollapsed,
-  sessions,
-  sessionLoading,
-  currentSessionId,
-  busySessionId,
-  agentClassHint,
   agentModes,
   agentDistribution,
   pdfDocuments,
   pdfNeedingReindex,
-  pdfTargetFile,
-  documents,
-  docsLoading,
-  uploading,
-  uploadInfo,
-  uploadProgress,
-  uploadProgressText,
-  uploadVisibility,
-  docDropActive,
   canUploadAndManageDocs,
   isAdmin,
   user,
-  prompts,
-  promptsLoading,
-  promptTitle,
-  promptContent,
-  editingPromptId,
-  promptCheckInfo,
   fileInputRef,
   onToggleSidebarCollapsed,
   onCreateSession,
   onLoadSession,
   onDeleteSession,
   onRenameSession,
+  onPinSession,
   onSwitchAgentMode,
   onPdfTargetFileChange,
   onDraftQuestion,
@@ -128,6 +90,57 @@ export function ChatSidebar({
   onLogout,
 }: Props) {
   const { t } = useTranslation();
+  const {
+    sidebarOpen,
+    sidebarCollapsed,
+    sessions,
+    sessionLoading,
+    currentSessionId,
+    busySessionId,
+    isCreatingSession,
+    agentClassHint,
+    pdfTargetFile,
+    documents,
+    docsLoading,
+    uploading,
+    uploadInfo,
+    uploadProgress,
+    uploadProgressText,
+    uploadVisibility,
+    docDropActive,
+    prompts,
+    promptsLoading,
+    promptTitle,
+    promptContent,
+    editingPromptId,
+    promptCheckInfo,
+  } = useChatStore(
+    useShallow((s) => ({
+      sidebarOpen: s.sidebarOpen,
+      sidebarCollapsed: s.sidebarCollapsed,
+      sessions: s.sessions,
+      sessionLoading: s.sessionLoading,
+      currentSessionId: s.currentSessionId,
+      busySessionId: s.busySessionId,
+      isCreatingSession: s.isCreatingSession,
+      agentClassHint: s.agentClassHint,
+      pdfTargetFile: s.pdfTargetFile,
+      documents: s.documents,
+      docsLoading: s.docsLoading,
+      uploading: s.uploading,
+      uploadInfo: s.uploadInfo,
+      uploadProgress: s.uploadProgress,
+      uploadProgressText: s.uploadProgressText,
+      uploadVisibility: s.uploadVisibility,
+      docDropActive: s.docDropActive,
+      prompts: s.prompts,
+      promptsLoading: s.promptsLoading,
+      promptTitle: s.promptTitle,
+      promptContent: s.promptContent,
+      editingPromptId: s.editingPromptId,
+      promptCheckInfo: s.promptCheckInfo,
+    }))
+  );
   const isDesktop = typeof window !== "undefined" ? window.innerWidth > 1080 : true;
   const showCompactRail = sidebarCollapsed && isDesktop;
   const [sessionSearchRequest, setSessionSearchRequest] = useState(0);
@@ -191,12 +204,14 @@ export function ChatSidebar({
             sessionLoading={sessionLoading}
             currentSessionId={currentSessionId}
             busySessionId={busySessionId}
+            isCreatingSession={isCreatingSession}
             searchRequestKey={sessionSearchRequest}
             user={user}
             onCreateSession={onCreateSession}
             onLoadSession={onLoadSession}
             onDeleteSession={onDeleteSession}
             onRenameSession={onRenameSession}
+            onPinSession={onPinSession}
           />
         </div>
 

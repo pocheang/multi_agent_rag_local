@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import os
 import re
 import secrets
@@ -19,7 +20,9 @@ SECRET_KEYS = (
     "JWT_SECRET_KEY",
     "API_SETTINGS_ENCRYPTION_KEY",
     "ADMIN_CREATE_APPROVAL_TOKEN",
+    "RESPONSE_SIGNING_SECRET",
 )
+DERIVED_SECRET_KEYS = ("ADMIN_CREATE_APPROVAL_TOKEN_HASH",)
 
 
 def parse_env_file(path: Path) -> dict[str, str]:
@@ -63,13 +66,17 @@ def generate_secrets(path: Path, existing: Mapping[str, str] | None = None) -> d
     for key in SECRET_KEYS:
         if not str(values.get(key, "")).strip():
             values[key] = _new_secret(key)
+    values["ADMIN_CREATE_APPROVAL_TOKEN_HASH"] = hashlib.sha256(
+        values["ADMIN_CREATE_APPROVAL_TOKEN"].encode("utf-8")
+    ).hexdigest()
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text("".join(f"{key}={values[key]}\n" for key in SECRET_KEYS), encoding="utf-8")
+    output_keys = SECRET_KEYS + DERIVED_SECRET_KEYS
+    path.write_text("".join(f"{key}={values[key]}\n" for key in output_keys), encoding="utf-8")
     try:
         path.chmod(0o600)
     except OSError:
         pass
-    return {key: values[key] for key in SECRET_KEYS}
+    return {key: values[key] for key in output_keys}
 
 
 def validate_environment(values: Mapping[str, str], environment: str) -> list[str]:
@@ -87,8 +94,6 @@ def validate_environment(values: Mapping[str, str], environment: str) -> list[st
             errors.append("ANTHROPIC_API_KEY is required when MODEL_BACKEND=anthropic")
         if backend == "ollama" and not str(values.get("OLLAMA_BASE_URL", "")).strip():
             errors.append("OLLAMA_BASE_URL is required when MODEL_BACKEND=ollama")
-        if str(values.get("DEBUG", "")).strip().lower() == "true":
-            errors.append("DEBUG must not be true in production")
         origins = str(values.get("CORS_ALLOW_ORIGINS", "")).strip()
         if not origins or "*" in {part.strip() for part in origins.split(",")}:
             errors.append("CORS_ALLOW_ORIGINS must contain explicit production origins")
@@ -107,6 +112,14 @@ def _write_env(path: Path, values: Mapping[str, str]) -> None:
         pass
 
 
+def _config_layer(*candidates: Path) -> Path:
+    """Select a local ignored override or its committed example fallback."""
+    for candidate in candidates:
+        if candidate.is_file():
+            return candidate
+    raise FileNotFoundError(candidates[-1])
+
+
 def render_environment(environment: str, profile: str, output: Path, repo_root: Path) -> dict[str, str]:
     """Render one complete runtime environment from canonical layers."""
     if environment not in VALID_ENVIRONMENTS:
@@ -115,18 +128,24 @@ def render_environment(environment: str, profile: str, output: Path, repo_root: 
         raise ValueError(f"unsupported profile: {profile}")
     config_root = repo_root / "config"
     runtime_root = repo_root / ".runtime"
-    env_file = config_root / "env" / f"{environment}.env.example"
-    profile_file = config_root / "profiles" / f"{profile}.env"
-    if not env_file.is_file():
-        raise FileNotFoundError(env_file)
-    if not profile_file.is_file():
-        raise FileNotFoundError(profile_file)
+    base_file = _config_layer(config_root / "env" / "base.env", config_root / "env" / "base.env.example")
+    env_file = _config_layer(
+        config_root / "env" / f"{environment}.env",
+        config_root / "env" / f"{environment}.env.example",
+    )
+    profile_file = _config_layer(
+        config_root / "profiles" / f"{profile}.env",
+        config_root / "profiles" / f"{profile}.env.example",
+    )
     secrets_file = runtime_root / "generated-secrets.env"
     generate_secrets(secrets_file)
-    layers = (config_root / "env" / "base.env", env_file, profile_file, secrets_file)
+    layers = (base_file, env_file, profile_file, secrets_file)
     values = merge_env_files(layers)
     override_keys = set(values) | set(SECRET_KEYS)
     values.update({key: value for key, value in os.environ.items() if key in override_keys})
+    approval_token = str(values.get("ADMIN_CREATE_APPROVAL_TOKEN", "") or "").strip()
+    if approval_token:
+        values["ADMIN_CREATE_APPROVAL_TOKEN_HASH"] = hashlib.sha256(approval_token.encode("utf-8")).hexdigest()
     errors = validate_environment(values, environment)
     if errors:
         raise ValueError("; ".join(errors))

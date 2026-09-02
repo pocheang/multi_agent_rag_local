@@ -144,7 +144,7 @@ export function AdminAgentQualityDashboard() {
         <strong>{t("admin.agentQuality.title", "Agent Quality Monitor")}</strong>
         <div className="row-actions">
           <ExportButtons
-            data={stats?.agents || []}
+            data={(stats?.agents || []) as unknown as Array<Record<string, unknown>>}
             filename={`agent-quality-${new Date().toISOString().split("T")[0]}`}
           />
           <button type="button" className="secondary tiny-btn" onClick={() => void fetchStats()}>

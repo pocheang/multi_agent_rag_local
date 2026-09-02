@@ -1,0 +1,279 @@
+/* Imported from a component, so there is no import site to carry the
+   layer -- it is declared here instead. See styles/tailwind.css. */
+@layer components {
+  /**
+   * AnimatedButtonLite CSS - 纯CSS动画实现
+   *
+   * 零JS依赖，使用CSS变量和变换实现流畅动画
+   * GPU加速，60fps性能保证
+   *
+   * @version 1.0.0
+   * @created 2026-08-16
+   */
+
+  /* ============================================
+     基础样式
+     ============================================ */
+
+  .animated-btn-lite {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 10px 20px;
+    border: none;
+    border-radius: 8px;
+    font-family: inherit;
+    font-weight: 500;
+    cursor: pointer;
+    transition:
+      transform 200ms cubic-bezier(0.4, 0, 0.2, 1),
+      opacity 200ms ease,
+      background-color 200ms ease,
+      box-shadow 200ms ease;
+    will-change: transform;
+    user-select: none;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .animated-btn-lite:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+
+  /* ============================================
+     Hover & Active 动画
+     ============================================ */
+
+  .animated-btn-lite:hover:not(:disabled) {
+    transform: scale(1.02);
+  }
+
+  .animated-btn-lite:active:not(:disabled) {
+    transform: scale(0.97);
+    transition-duration: 100ms;
+  }
+
+  /* ============================================
+     变体样式
+     ============================================ */
+
+  /* Primary */
+  .animated-btn-lite--primary {
+    background: var(--accent);
+    color: white;
+  }
+
+  .animated-btn-lite--primary:hover:not(:disabled) {
+    background: var(--accent-hover);
+    box-shadow: 0 4px 12px rgba(0, 123, 255, 0.3);
+  }
+
+  /* Secondary */
+  .animated-btn-lite--secondary {
+    background: var(--surface-2);
+    color: var(--text);
+    border: 1px solid var(--border);
+  }
+
+  .animated-btn-lite--secondary:hover:not(:disabled) {
+    background: var(--surface-3);
+    border-color: var(--accent);
+  }
+
+  /* Ghost */
+  .animated-btn-lite--ghost {
+    background: transparent;
+    color: var(--text);
+  }
+
+  .animated-btn-lite--ghost:hover:not(:disabled) {
+    background: var(--surface-2);
+  }
+
+  /* Danger */
+  .animated-btn-lite--danger {
+    background: #ef4444; /* 直接使用颜色值，不依赖CSS变量 */
+    color: white;
+    font-weight: 600;
+    border: none; /* 确保没有边框干扰 */
+  }
+
+  .animated-btn-lite--danger:hover:not(:disabled) {
+    background: #dc2626; /* 深红色hover */
+    box-shadow: 0 4px 12px rgba(239, 68, 68, 0.5);
+    transform: scale(1.05); /* 稍微放大增强视觉 */
+  }
+
+  .animated-btn-lite--danger:active:not(:disabled) {
+    background: #b91c1c; /* 更深的红色 */
+  }
+
+  /* ============================================
+     尺寸
+     ============================================ */
+
+  .animated-btn-lite--small {
+    padding: 6px 12px;
+    font-size: 13px;
+    gap: 4px;
+    border-radius: 6px;
+  }
+
+  .animated-btn-lite--medium {
+    padding: 10px 20px;
+    font-size: 14px;
+    gap: 8px;
+    border-radius: 8px;
+  }
+
+  .animated-btn-lite--large {
+    padding: 14px 28px;
+    font-size: 16px;
+    gap: 10px;
+    border-radius: 10px;
+  }
+
+  /* ============================================
+     状态：Loading
+     ============================================ */
+
+  .animated-btn-lite--loading {
+    cursor: wait;
+    pointer-events: none;
+  }
+
+  .animated-btn-lite__spinner {
+    display: inline-block;
+    width: 16px;
+    height: 16px;
+    border: 2.5px solid rgba(255, 255, 255, 0.3);
+    border-top-color: white;
+    border-radius: 50%;
+    animation: spin-lite 0.8s linear infinite;
+    flex-shrink: 0; /* 防止被压缩 */
+    margin-right: 8px; /* 与文字保持间距 */
+  }
+
+  /* 大尺寸按钮中的spinner */
+  .animated-btn-lite--large .animated-btn-lite__spinner {
+    width: 20px;
+    height: 20px;
+    border-width: 3px;
+    margin-right: 10px;
+  }
+
+  /* 小尺寸按钮中的spinner */
+  .animated-btn-lite--small .animated-btn-lite__spinner {
+    width: 14px;
+    height: 14px;
+    border-width: 2px;
+    margin-right: 6px;
+  }
+
+  /* 确保在不同变体下spinner都可见 */
+  .animated-btn-lite--primary .animated-btn-lite__spinner,
+  .animated-btn-lite--danger .animated-btn-lite__spinner {
+    border-color: rgba(255, 255, 255, 0.3);
+    border-top-color: white;
+  }
+
+  .animated-btn-lite--secondary .animated-btn-lite__spinner,
+  .animated-btn-lite--ghost .animated-btn-lite__spinner {
+    border-color: rgba(0, 0, 0, 0.2);
+    border-top-color: var(--accent, #007bff);
+  }
+
+  @keyframes spin-lite {
+    to {
+      transform: rotate(360deg);
+    }
+  }
+
+  /* ============================================
+     状态：Success & Error
+     ============================================ */
+
+  .animated-btn-lite--success,
+  .animated-btn-lite--error {
+    pointer-events: none;
+  }
+
+  .animated-btn-lite__icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    height: 20px;
+    font-size: 14px;
+    animation: icon-pop 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+  }
+
+  @keyframes icon-pop {
+    0% {
+      transform: scale(0);
+      opacity: 0;
+    }
+    50% {
+      transform: scale(1.2);
+    }
+    100% {
+      transform: scale(1);
+      opacity: 1;
+    }
+  }
+
+  .animated-btn-lite--success {
+    background: var(--success, #10b981) !important;
+  }
+
+  .animated-btn-lite--error {
+    background: var(--danger) !important;
+    animation: shake-lite 0.4s ease-in-out;
+  }
+
+  @keyframes shake-lite {
+    0%, 100% { transform: translateX(0); }
+    25% { transform: translateX(-8px); }
+    75% { transform: translateX(8px); }
+  }
+
+  /* ============================================
+     Disabled 状态
+     ============================================ */
+
+  .animated-btn-lite:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    transform: none;
+  }
+
+  /* ============================================
+     内容布局
+     ============================================ */
+
+  .animated-btn-lite__content {
+    display: inline-flex;
+    align-items: center;
+    gap: inherit;
+  }
+
+  /* ============================================
+     无障碍：减少动画
+     ============================================ */
+
+  @media (prefers-reduced-motion: reduce) {
+    .animated-btn-lite,
+    .animated-btn-lite__spinner,
+    .animated-btn-lite__icon {
+      animation: none !important;
+      transition: opacity 200ms ease !important;
+    }
+
+    .animated-btn-lite:hover:not(:disabled),
+    .animated-btn-lite:active:not(:disabled) {
+      transform: none !important;
+    }
+  }
+
+}

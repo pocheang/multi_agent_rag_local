@@ -1,0 +1,219 @@
+/* ============================================
+   Sidebar workbench - refinements
+
+   Measured before changing anything: the four collapsed cards took 363px of a
+   922px sidebar (39%) while showing no content, against 286px for the session
+   list they compete with.
+
+   Four problems, in descending order of how much they cost the reader:
+
+   1. Four separately bordered, separately shadowed boxes stacked in a 292px
+      column read as four unrelated things. They are one list.
+   2. Nothing said the rows expand -- no marker and no `aria-expanded`, so the
+      affordance was invisible to a reader and to a screen reader alike.
+   3. `border-radius` computed to 18px (the `.panel` class overrides the 9px
+      this component asks for). On a 65px row in a narrow column that reads as
+      oversized; the rest of the app sits at 8-12px.
+   4. A count was dressed as a status: "0 docs" in a purple pill looks like a
+      badge for something needing attention, when it means the opposite.
+   ============================================ */
+
+/* --------------------------------------------
+   One list, not four boxes
+   -------------------------------------------- */
+
+.page-shell .sidebar-tools {
+  gap: 0;
+  /* Grid rows shrink to fit a squeezed container, so `overflow: auto` on this
+     element never fired -- `scrollHeight` equalled `clientHeight` while the
+     expanded panels were being clipped by `.sidebar-module`'s `overflow:
+     hidden` (563px of content inside a 108px row). Sizing the rows to their
+     content lets the list overflow, which is what makes it scroll. */
+  grid-auto-rows: min-content;
+  align-content: start;
+}
+
+.page-shell .sidebar-tools .sidebar-module {
+  border-radius: 0;
+  border-left: 0;
+  border-right: 0;
+  border-top: 0;
+  box-shadow: none;
+  background: transparent;
+}
+
+/* The group keeps one border and one radius. `:has` is used only to round the
+   ends; without support the list is square, which is a cosmetic difference
+   rather than a broken layout. */
+.page-shell .sidebar-tools .sidebar-module:first-of-type {
+  border-top: 1px solid var(--border-light);
+  border-top-left-radius: 10px;
+  border-top-right-radius: 10px;
+}
+
+.page-shell .sidebar-tools .sidebar-module:last-of-type {
+  border-bottom-left-radius: 10px;
+  border-bottom-right-radius: 10px;
+}
+
+.page-shell .sidebar-tools .sidebar-module {
+  border-left: 1px solid var(--border-light);
+  border-right: 1px solid var(--border-light);
+}
+
+:root[data-theme="light"] .page-shell .sidebar-tools .sidebar-module {
+  background: var(--chat-bg-surface, #fff);
+}
+
+/* Hover belongs to the row, not to a floating card. */
+.page-shell .sidebar-tools .sidebar-module:hover {
+  border-color: var(--border-light);
+  box-shadow: none;
+}
+
+/* An expanded section is the one the reader is working in, so it gets the
+   emphasis the four idle boxes used to share. */
+.page-shell .sidebar-tools .sidebar-module:has(.sidebar-module-body) {
+  background: var(--chat-bg-surface-soft, #fbfcff);
+}
+
+/* --------------------------------------------
+   Rows
+   -------------------------------------------- */
+
+.page-shell .sidebar-module-toggle {
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+}
+
+.page-shell .sidebar-module-copy {
+  gap: 2px;
+}
+
+/* One line. The description is orientation shown once, not a caption that
+   earns two lines on every render forever; the full text stays reachable as
+   the row's title attribute. */
+.page-shell .sidebar-module-copy small {
+  -webkit-line-clamp: 1;
+  line-height: 1.45;
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+/* --------------------------------------------
+   Disclosure marker
+   -------------------------------------------- */
+
+.page-shell .sidebar-module-chevron {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  margin-right: 2px;
+  border-right: 1.6px solid var(--chat-text-muted, #475569);
+  border-bottom: 1.6px solid var(--chat-text-muted, #475569);
+  transform: rotate(-45deg) translate(-1px, -1px);
+  transition: transform 0.18s ease;
+  opacity: 0.75;
+}
+
+.page-shell .sidebar-module-toggle[aria-expanded="true"] .sidebar-module-chevron {
+  transform: rotate(45deg) translate(-1px, -1px);
+}
+
+.page-shell .sidebar-module-toggle:hover .sidebar-module-chevron {
+  opacity: 1;
+}
+
+/* --------------------------------------------
+   Status badges
+
+   Colour is reserved for the two badges that report a *state*: `status-auto`
+   (routing is automatic) and `status-locked` (a mode has been pinned). Counts
+   are neutral, and an empty count is quieter still -- it is the absence of
+   something, and dressing it in the same pill as a real alert is what made the
+   sidebar look busier than it is.
+   -------------------------------------------- */
+
+.page-shell .sidebar-module-status.status-files,
+.page-shell .sidebar-module-status.status-docs,
+.page-shell .sidebar-module-status.status-saved {
+  padding: 2px 7px;
+  background: transparent;
+  border-color: transparent;
+  color: var(--chat-text-muted, #475569);
+  font-variant-numeric: tabular-nums;
+}
+
+/* A non-zero count is worth noticing; `:not()` on the leading character is not
+   expressible in CSS, so the component would have to say so. Until it does,
+   the neutral treatment is the honest default: it never overstates. */
+
+.page-shell .sidebar-module-status.status-auto,
+.page-shell .sidebar-module-status.status-locked {
+  padding: 2px 7px;
+  border-radius: 999px;
+  font-weight: 700;
+}
+
+/* --------------------------------------------
+   Agent mode picker
+
+   The card was `display: flex` in its default row direction, so a title and
+   its own description sat side by side as two centred columns: the title got
+   106px, the description 124px of a 260px card, and both had ragged edges from
+   the centring. A three-word line break is not a wrapping problem, it is a
+   column that should never have existed -- the description belongs under the
+   thing it describes.
+
+   Reading order, then: title, then description, both left-aligned, the
+   description spanning the full width. Five cards drop from 76px each.
+   -------------------------------------------- */
+
+.page-shell .sidebar .agent-mode-card {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 3px;
+  padding: 9px 11px;
+  text-align: left;
+}
+
+.page-shell .sidebar .agent-mode-card strong {
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.page-shell .sidebar .agent-mode-card span {
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--chat-text-muted, #475569);
+  /* Two lines is the honest cap for a 240px column; the `title` attribute the
+     component already sets carries the rest. */
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* The selected mode is marked by an edge, not only by a tint: a colour
+   difference alone disappears for anyone who cannot separate these two blues,
+   and `aria-pressed` now says the same thing to a screen reader. */
+.page-shell .sidebar .agent-mode-card.active {
+  position: relative;
+  padding-left: 14px;
+}
+
+.page-shell .sidebar .agent-mode-card.active::before {
+  content: "";
+  position: absolute;
+  left: 5px;
+  top: 9px;
+  bottom: 9px;
+  width: 3px;
+  border-radius: 999px;
+  background: #4f46e5;
+}
+
+.page-shell .sidebar .agent-mode-grid {
+  gap: 6px;
+}

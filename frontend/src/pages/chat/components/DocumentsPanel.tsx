@@ -1,6 +1,7 @@
 import { useTranslation } from "react-i18next";
 import type React from "react";
 import type { IndexedFileSummary } from "@/types/api";
+import type { UserIdentity } from "@/types/auth";
 import { DocumentItem } from "./DocumentItem";
 
 const PDF_FILE_RE = /\.(pdf|png|jpe?g|bmp|tiff?|webp)$/i;
@@ -16,7 +17,7 @@ type Props = {
   docDropActive: boolean;
   canUploadAndManageDocs: boolean;
   isAdmin: boolean;
-  user: any;
+  user: UserIdentity | null;
   fileInputRef: React.RefObject<HTMLInputElement>;
   onRefreshDocuments: () => Promise<void>;
   onUploadVisibilityChange: (visibility: "private" | "public") => void;

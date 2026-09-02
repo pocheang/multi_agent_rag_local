@@ -1,6 +1,9 @@
+import i18n from "@/i18n/config";
 import { appApi } from "@/lib/api";
 import type { AdminActionsParams, ErrorHandler } from "./types";
 import { resolveUserIdFromInput } from "../utils";
+
+const t = i18n.t.bind(i18n);
 
 export function createAuditActions(params: AdminActionsParams, errorHandler: ErrorHandler) {
   const {
@@ -46,7 +49,7 @@ export function createAuditActions(params: AdminActionsParams, errorHandler: Err
       setLogs(rows);
       setError("");
     } catch (e) {
-      await handleApiError(e, "加载审计日志失败");
+      await handleApiError(e, t("admin.actions.loadAuditLogsFailed"));
     } finally {
       setLoadingLogs(false);
     }

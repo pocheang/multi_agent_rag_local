@@ -2,6 +2,7 @@
 import { useTranslation } from "react-i18next";
 import { AdminFormField, AdminFormSelect } from "@/components/AdminFormField";
 import { appApi } from "@/lib/api";
+import { normalizeModelTemperature } from "@/lib/model-temperature";
 import type {
   AdminModelSettingsView,
   ModelCatalogItem,
@@ -17,7 +18,7 @@ const FALLBACK_DEFAULTS: Record<
   Pick<AdminModelSettingsView, "base_url" | "chat_model" | "reasoning_model" | "embedding_model">
 > = {
   local: { base_url: "", chat_model: "local-evidence", reasoning_model: "local-evidence", embedding_model: "local-hash-384" },
-  ollama: { base_url: "http://localhost:11434", chat_model: "qwen3:14b", reasoning_model: "deepseek-r1:32b", embedding_model: "nomic-embed-text" },
+  ollama: { base_url: import.meta.env.VITE_OLLAMA_BASE_URL || "http://localhost:11434", chat_model: "qwen3:14b", reasoning_model: "deepseek-r1:32b", embedding_model: "nomic-embed-text" },
   openai: { base_url: "https://api.openai.com/v1", chat_model: "gpt-5.5", reasoning_model: "gpt-5.5", embedding_model: "text-embedding-3-small" },
   deepseek: { base_url: "https://api.deepseek.com/v1", chat_model: "deepseek-v4-flash", reasoning_model: "deepseek-v4-pro", embedding_model: "" },
   anthropic: { base_url: "https://api.anthropic.com", chat_model: "claude-sonnet-5", reasoning_model: "claude-fable-5", embedding_model: "" },
@@ -184,7 +185,9 @@ export function AdminModelSettings({
 
           <label className="admin-field admin-model-slider">
             <span>Temperature {Number(modelSettings.temperature || 0).toFixed(1)}</span>
-            <input type="range" min={0} max={2} step={0.1} value={modelSettings.temperature} onChange={(event) => onPatch({ temperature: Number(event.target.value) })} />
+            <input type="range" min={0} max={1} step={0.1} value={modelSettings.temperature} onChange={(event) => onPatch({
+              temperature: normalizeModelTemperature(Number(event.target.value), modelSettings.temperature),
+            })} />
           </label>
 
           {modelTestResult && <div className={`admin-state-panel ${modelTestResult.type === "error" ? "is-error" : "is-success"}`}>{modelTestResult.message}</div>}

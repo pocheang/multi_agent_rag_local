@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 import type { SessionMessage } from "@/types/api";
 import { MessageCard } from "@/pages/chat/components/MessageCard";
 import { WelcomeScreen } from "@/pages/chat/components/WelcomeScreen";
+import { useAutoScroll } from "@/pages/chat/hooks/useAutoScroll";
 
 type Props = {
   messages: SessionMessage[];
@@ -27,8 +28,18 @@ export function ChatMessages({
 }: Props) {
   const { t } = useTranslation();
 
+  // Check if currently streaming
+  const isStreaming = messages.some((m) => m.message_id === "local-assistant-stream");
+
+  // Auto-scroll when new content arrives during streaming
+  useAutoScroll({
+    ref: containerRef,
+    messages,
+    enabled: isStreaming,
+  });
+
   return (
-    <section className="chat-window panel" ref={containerRef} role="log" aria-live="polite" aria-label={t("components.messages.logLabel")}>
+    <section className="chat-window" ref={containerRef} role="log" aria-live="polite" aria-label={t("components.messages.logLabel")}>
       {messages.length === 0 && (
         <WelcomeScreen
           documentsCount={documentsCount}
@@ -37,9 +48,9 @@ export function ChatMessages({
           onNavigateToArchitecture={onNavigateToArchitecture}
         />
       )}
-      {messages.map((message) => (
+      {messages.map((message, index) => (
         <MessageCard
-          key={message.message_id}
+          key={message.message_id ?? `${message.role}-${message.created_at ?? "undated"}-${index}`}
           message={message}
           onEditMessage={onEditMessage}
           onRemoveMessage={onRemoveMessage}

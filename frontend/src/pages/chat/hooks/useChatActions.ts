@@ -1,5 +1,6 @@
 import type { Dispatch, SetStateAction } from "react";
-import { ApiError } from "@/lib/api";
+import { useTranslation } from "react-i18next";
+import { createApiErrorHandler } from "@/lib/api-error-handler";
 import type { IndexedFileSummary, PromptTemplate, SessionMessage, SessionSummary } from "@/types/api";
 import type { Toast } from "@/pages/chat/types";
 import { useSessionActions } from "./useSessionActions";
@@ -17,6 +18,7 @@ interface UseChatActionsParams {
   setCurrentSessionId: Dispatch<SetStateAction<string | null>>;
   setMessages: Dispatch<SetStateAction<SessionMessage[]>>;
   setBusySessionId: Dispatch<SetStateAction<string | null>>;
+  setIsCreatingSession: Dispatch<SetStateAction<boolean>>;
   setDocuments: Dispatch<SetStateAction<IndexedFileSummary[]>>;
   setDocsLoading: Dispatch<SetStateAction<boolean>>;
   setUploading: Dispatch<SetStateAction<boolean>>;
@@ -31,14 +33,19 @@ interface UseChatActionsParams {
   setPromptContent: Dispatch<SetStateAction<string>>;
   setPromptCheckInfo: Dispatch<SetStateAction<string>>;
   currentSessionId: string | null;
+  sessions: SessionSummary[];
+  messages: SessionMessage[];
   uploadVisibility: "private" | "public";
   fileInputRef: React.RefObject<HTMLInputElement | null>;
   chatUploadInputRef: React.RefObject<HTMLInputElement | null>;
   onLogout: () => Promise<void>;
   closeSidebar: () => void;
+  confirm: (opts: { message: string; title?: string; isDanger?: boolean }) => Promise<boolean>;
+  promptInput: (opts: { message: string; title?: string; defaultValue?: string; multiline?: boolean }) => Promise<string | null>;
 }
 
 export function useChatActions(params: UseChatActionsParams) {
+  const { t } = useTranslation();
   const {
     setToasts,
     setError,
@@ -47,6 +54,7 @@ export function useChatActions(params: UseChatActionsParams) {
     setCurrentSessionId,
     setMessages,
     setBusySessionId,
+    setIsCreatingSession,
     setDocuments,
     setDocsLoading,
     setUploading,
@@ -61,11 +69,15 @@ export function useChatActions(params: UseChatActionsParams) {
     setPromptContent,
     setPromptCheckInfo,
     currentSessionId,
+    sessions,
+    messages,
     uploadVisibility,
     fileInputRef,
     chatUploadInputRef,
     onLogout,
     closeSidebar,
+    confirm,
+    promptInput,
   } = params;
 
   const notify = (text: string, kind: Toast["kind"] = "info", ttl = 2400) => {
@@ -74,16 +86,14 @@ export function useChatActions(params: UseChatActionsParams) {
     window.setTimeout(() => setToasts((prev) => prev.filter((x) => x.id !== id)), ttl);
   };
 
-  const handleApiError = async (e: unknown, fallback: string) => {
-    if (e instanceof ApiError && e.status === 401) {
-      notify("Session expired. Please log in again.", "error");
-      await onLogout();
-      return;
-    }
-    const msg = e instanceof Error ? e.message : fallback;
-    setError(msg);
-    notify(msg, "error");
-  };
+  const handleApiError = createApiErrorHandler({
+    onLogout,
+    onError: (msg) => {
+      setError(msg);
+      notify(msg, "error");
+    },
+    sessionExpiredMessage: t("common.sessionExpired"),
+  });
 
   // Session management actions
   const sessionActions = useSessionActions({
@@ -94,7 +104,10 @@ export function useChatActions(params: UseChatActionsParams) {
     setCurrentSessionId,
     setMessages,
     setBusySessionId,
+    setIsCreatingSession,
     currentSessionId,
+    sessions,
+    messages,
     onLogout,
     closeSidebar,
     notify,
@@ -116,6 +129,7 @@ export function useChatActions(params: UseChatActionsParams) {
     chatUploadInputRef,
     notify,
     handleApiError,
+    confirm,
   });
 
   // Prompt management actions
@@ -130,6 +144,7 @@ export function useChatActions(params: UseChatActionsParams) {
     setError,
     notify,
     handleApiError,
+    confirm,
   });
 
   // Message operations
@@ -139,6 +154,7 @@ export function useChatActions(params: UseChatActionsParams) {
     notify,
     handleApiError,
     refreshSessions: sessionActions.refreshSessions,
+    promptInput,
   });
 
   return {

@@ -1,0 +1,1 @@
+"""Canonical retriever storage capabilities."""

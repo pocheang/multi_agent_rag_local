@@ -1,19 +1,15 @@
 import { Link } from "react-router-dom";
 import { useTranslation } from "react-i18next";
-import "../styles/pages/architecture.css";
-import { DataFlowVisualization } from "../components/DataFlowVisualization";
-import { getThemeIcon } from "@/lib/theme";
+import "@/styles/pages/architecture.css";
+import { DataFlowVisualization } from "@/components/DataFlowVisualization";
 import { LanguageToggle } from "@/components/LanguageToggle";
 
 type Props = {
   isLoggedIn: boolean;
-  themeLabel: string;
-  onThemeToggle: () => void;
 };
 
-export function ArchitecturePage({ isLoggedIn, themeLabel, onThemeToggle }: Props) {
+export function ArchitecturePage({ isLoggedIn }: Props) {
   const { t } = useTranslation();
-  const themeIcon = getThemeIcon(themeLabel);
   const heroSectionKeys = [
     'dataFlow',
     'coreMethods',
@@ -41,9 +37,6 @@ export function ArchitecturePage({ isLoggedIn, themeLabel, onThemeToggle }: Prop
         <div className="architecture-hero-actions">
           <div className="top-actions">
             <LanguageToggle />
-            <button type="button" className="secondary" onClick={onThemeToggle}>
-              {themeIcon} {themeLabel}
-            </button>
             <Link className="secondary link-btn" to={isLoggedIn ? "/app" : "/app/login"}>
               {isLoggedIn ? t('nav.home') : t('auth.login')}
             </Link>

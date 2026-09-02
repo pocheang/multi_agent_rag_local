@@ -1,0 +1,68 @@
+"""Immutable input model for the orchestration engine."""
+
+from __future__ import annotations
+
+from datetime import datetime
+from typing import Any
+
+from pydantic import Field
+
+from app.domain.contracts import ImmutableContract
+
+
+class RequestActor(ImmutableContract):
+    """Identity and permissions available to a single execution."""
+
+    user_id: str | None = None
+    tenant_id: str | None = None
+    username: str | None = None
+    role: str | None = None
+    permissions: frozenset[str] = Field(default_factory=frozenset)
+
+
+class RequestScope(ImmutableContract):
+    """Source restrictions propagated from the public pipeline contract."""
+
+    allowed_sources: frozenset[str] | None = None
+    document_ids: frozenset[str] | None = None
+    acl_tags: frozenset[str] | None = None
+    allowed_fields: frozenset[str] | None = None
+    agent_class_hint: str | None = None
+
+
+class ConversationTurn(ImmutableContract):
+    """A compact prior message that may inform routing or synthesis."""
+
+    role: str = Field(min_length=1)
+    content: str
+
+
+class OrchestrationRequest(ImmutableContract):
+    """All typed request data available to orchestration stages."""
+
+    question: str = Field(min_length=1)
+    profile: str = "advanced"
+    session_id: str | None = None
+    conversation: tuple[ConversationTurn, ...] = Field(default_factory=tuple)
+    actor: RequestActor | None = None
+    source_scope: RequestScope = Field(default_factory=RequestScope)
+    use_reasoning: bool = False
+    use_web_fallback: bool = False
+    deadline_at: datetime | None = None
+    enable_decomposition: bool = False
+    enable_self_rag: bool = False
+    enable_context_tracking: bool = True
+    force_language: str = ""
+    # Present only on a resume: the run replays the approved tool call instead
+    # of asking the selector again. See app/mcp/approvals.py::approved_call.
+    approval_token: str | None = Field(default=None, min_length=24, max_length=256)
+    request_id: str | None = None
+    execution_id: str | None = None
+    runtime_context: Any | None = Field(default=None, exclude=True)
+
+    @property
+    def context_key(self) -> tuple[str, str] | None:
+        """Return the tenant-scoped context key when both identities exist."""
+        if self.actor is None or not self.actor.user_id or not self.session_id:
+            return None
+        return self.actor.user_id, self.session_id

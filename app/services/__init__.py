@@ -1,4 +1,4 @@
-from app.services.agent_execution_tracker import (
+from app.services.observability.agent_execution_tracker import (
     AgentExecutionTracker,
     AgentStep,
     ExecutionTrace,

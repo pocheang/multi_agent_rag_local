@@ -46,12 +46,6 @@
   overflow: hidden;
 }
 
-/* Dark theme */
-:root[data-theme="dark"] .page-shell .session-search {
-  border-color: rgba(101, 122, 172, 0.18);
-  background: rgba(15, 23, 42, 0.6);
-}
-
 .page-shell .session-search-icon {
   width: 18px;
   height: 18px;
@@ -63,18 +57,8 @@
   flex-shrink: 0;
 }
 
-:root[data-theme="dark"] .page-shell .session-search-icon {
-  border-color: #7a9dff;
-  opacity: 0.8;
-}
-
 .page-shell .session-search:hover {
   border-color: var(--accent);
-}
-
-:root[data-theme="dark"] .page-shell .session-search:hover {
-  border-color: rgba(91, 140, 255, 0.35);
-  background: rgba(20, 30, 52, 0.7);
 }
 
 .page-shell .session-search:focus-within {
@@ -87,15 +71,6 @@
   background: linear-gradient(135deg, var(--accent), var(--accent-hover));
 }
 
-:root[data-theme="dark"] .page-shell .session-search:focus-within {
-  background: linear-gradient(135deg, rgba(18, 28, 50, 0.95), rgba(12, 20, 38, 0.9));
-  border-color: rgba(91, 140, 255, 0.6);
-  box-shadow:
-    0 0 0 4px rgba(91, 140, 255, 0.12),
-    0 8px 24px rgba(91, 140, 255, 0.2),
-    inset 0 1px 0 rgba(255, 255, 255, 0.08);
-}
-
 .page-shell .session-search:hover .session-search-icon {
   opacity: 0.9;
   transform: scale(1.05);
@@ -106,11 +81,6 @@
   opacity: 1;
   transform: scale(1.1) rotate(-12deg);
   border-width: 2.5px;
-}
-
-:root[data-theme="dark"] .page-shell .session-search:focus-within .session-search-icon {
-  border-color: #5b8cff;
-  box-shadow: 0 0 8px rgba(91, 140, 255, 0.4);
 }
 
 .page-shell .session-search-icon::after {
@@ -126,10 +96,6 @@
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-:root[data-theme="dark"] .page-shell .session-search-icon::after {
-  background: #7a9dff;
-}
-
 .page-shell .session-search:hover .session-search-icon::after {
   background: var(--accent);
 }
@@ -139,11 +105,6 @@
   width: 10px;
   height: 3px;
   box-shadow: 0 0 6px currentColor;
-}
-
-:root[data-theme="dark"] .page-shell .session-search:focus-within .session-search-icon::after {
-  background: #5b8cff;
-  box-shadow: 0 0 8px rgba(91, 140, 255, 0.6);
 }
 
 .page-shell .session-search input {
@@ -201,6 +162,15 @@
   font-weight: 500;
   text-align: center;
   letter-spacing: 0;
+}
+
+/* Ensure dropdown menus are not clipped */
+.page-shell .sidebar-history-panel {
+  overflow: visible;
+}
+
+.page-shell .sidebar-history {
+  overflow: visible;
 }
 
 .page-shell .session-create-btn:hover:not(:disabled) {
@@ -264,6 +234,7 @@
   display: grid;
   gap: 8px;
   margin-top: 0;
+  overflow: visible;
 }
 
 .page-shell .session-item {
@@ -289,6 +260,7 @@
 
 .page-shell .session-item:has(.session-dropdown-menu) {
   z-index: 100;
+  overflow: visible;
 }
 
 .page-shell .session-item::before {
@@ -455,7 +427,7 @@
    ============================================ */
 
 .page-shell .session-menu-wrapper {
-  position: static;
+  position: relative;
   display: flex;
   align-items: center;
   margin-right: 6px;
@@ -492,9 +464,9 @@
 
 .page-shell .session-dropdown-menu {
   position: absolute;
-  top: 32px;
-  right: 6px;
-  min-width: 140px;
+  top: calc(100% + 4px);
+  right: 0;
+  min-width: 160px;
   padding: 8px;
   border-radius: 12px;
   border: 1px solid var(--border-medium);
@@ -503,17 +475,6 @@
   box-shadow: var(--shadow-xl);
   z-index: 1000;
   animation: menuSlideIn 0.2s cubic-bezier(0.16, 1, 0.3, 1);
-}
-
-/* Dark theme specific enhancements */
-:root[data-theme="dark"] .page-shell .session-dropdown-menu {
-  background: linear-gradient(135deg, rgba(25, 35, 60, 0.98), rgba(18, 26, 45, 0.98));
-  border-color: rgba(91, 140, 255, 0.25);
-  box-shadow:
-    0 12px 32px rgba(0, 0, 0, 0.7),
-    0 6px 16px rgba(91, 140, 255, 0.15),
-    inset 0 1px 0 rgba(255, 255, 255, 0.1),
-    inset 0 -1px 0 rgba(91, 140, 255, 0.1);
 }
 
 /* Light theme specific enhancements */
@@ -574,13 +535,6 @@
   box-shadow: var(--shadow-sm);
 }
 
-/* Dark theme hover */
-:root[data-theme="dark"] .page-shell .session-menu-item:hover {
-  background: linear-gradient(135deg, rgba(91, 140, 255, 0.15), rgba(100, 122, 180, 0.12));
-  border-color: rgba(91, 140, 255, 0.25);
-  box-shadow: 0 2px 8px rgba(91, 140, 255, 0.15);
-}
-
 /* Light theme hover */
 :root[data-theme="light"] .page-shell .session-menu-item:hover {
   background: var(--accent-light);
@@ -610,14 +564,6 @@
   border-color: var(--danger);
   color: var(--danger);
   box-shadow: var(--shadow-sm);
-}
-
-/* Dark theme danger hover */
-:root[data-theme="dark"] .page-shell .session-menu-item.danger:hover {
-  background: linear-gradient(135deg, rgba(255, 85, 112, 0.18), rgba(255, 100, 130, 0.15));
-  border-color: rgba(255, 85, 112, 0.3);
-  color: rgba(255, 200, 215, 1);
-  box-shadow: 0 2px 8px rgba(255, 85, 112, 0.2);
 }
 
 /* Light theme danger hover */
@@ -661,4 +607,61 @@
 .page-shell .sidebar-history-panel .skeleton-list::before,
 .page-shell .sidebar-history-panel .skeleton-list::after {
   height: 48px;
+}
+
+/* ============================================
+   Session Rename Input
+   ============================================ */
+
+.page-shell .session-rename-input {
+  width: 100%;
+  padding: 6px 8px;
+  border-radius: 6px;
+  border: 1px solid var(--accent);
+  background: var(--surface);
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.3;
+  outline: none;
+  box-shadow: 0 0 0 3px var(--accent-soft);
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.page-shell .session-rename-input:focus {
+  border-color: var(--accent-hover);
+  box-shadow: 0 0 0 4px var(--accent-soft);
+}
+
+.page-shell .session-rename-input:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* ============================================
+   Session Pin Indicator
+   ============================================ */
+
+.page-shell .session-pin-indicator {
+  display: inline-block;
+  margin-right: 6px;
+  font-size: 11px;
+  opacity: 0.8;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.page-shell .session-item.pinned::before {
+  background: linear-gradient(180deg, #fbbf24, #f59e0b);
+  box-shadow: 0 0 16px rgba(251, 191, 36, 0.6);
+  height: 32px;
+}
+
+.page-shell .session-item.pinned {
+  border-color: rgba(251, 191, 36, 0.3);
+}
+
+.page-shell .session-item:hover .session-pin-indicator,
+.page-shell .session-item.active .session-pin-indicator {
+  opacity: 1;
+  transform: scale(1.1);
 }

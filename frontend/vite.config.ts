@@ -1,5 +1,6 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react-swc";
+import tailwindcss from "@tailwindcss/vite";
 // @ts-ignore - JavaScript plugin without type definitions
 import inlineCriticalCSS from './vite-plugin-inline-critical.js';
 
@@ -13,7 +14,6 @@ function isChatRouteCss(id: string) {
     id.includes('pages/chat.css') ||
     id.includes('pages/chat-responsive.css') ||
     id.includes('themes/light/chat.css') ||
-    id.includes('themes/dark/chat.css') ||
     id.includes('components/topbar') ||
     id.includes('components/sidebar') ||
     id.includes('components/welcome-screen.css') ||
@@ -36,7 +36,7 @@ function createBackendProxy(rewriteAppBase = false) {
 }
 
 export default defineConfig({
-  plugins: [react(), inlineCriticalCSS()],
+  plugins: [react(), tailwindcss(), inlineCriticalCSS()],
   base: "/",
   resolve: {
     alias: {
@@ -98,6 +98,7 @@ export default defineConfig({
       "/query": createBackendProxy(),
       "/admin": createBackendProxy(),
       "/user": createBackendProxy(),
+      "/api/v1": createBackendProxy(),
       "/api": createBackendProxy(),
       "/app/auth": createBackendProxy(true),
       "/app/sessions": createBackendProxy(true),

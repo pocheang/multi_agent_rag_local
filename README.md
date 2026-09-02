@@ -122,12 +122,14 @@ npm run dev
 ## 📖 Documentation
 
 ### Quick Links
-- 📘 [User Guide](docs/user-guide/README.md) - How to use QueryMind
-- 🏗️ [Architecture](docs/architecture/README.md) - System design and components
+- 📗 [CLAUDE.md](CLAUDE.md) - How the system actually works today, in detail
+- 📚 [Documentation index](docs/README.md) - What exists and where it lives
 - 💻 [Development Guide](docs/development/README.md) - Contributing and development
-- 🚀 [Deployment Guide](docs/operations/deployment.md) - Production deployment
-- 📋 [API Reference](docs/reference/api-examples.md) - API documentation
-- ❓ [FAQ](docs/reference/faq.md) - Frequently asked questions
+- 📝 [Release notes](docs/releases/README.md) - Version history
+
+> The architecture, user-guide, operations and reference documents were cleared ahead of
+> the v0.7 rewrite and are being regenerated against the new architecture. Until they land,
+> [CLAUDE.md](CLAUDE.md) is the accurate description of how the system works today.
 
 ### Documentation Structure
 ```
@@ -196,7 +198,7 @@ docs/
 - **Quality Assurance** - 5-layer validation and scoring
 - **Configuration Governance** - Centralized `config/` directory
 
-**Detailed Architecture:** [docs/architecture/overview.md](docs/architecture/overview.md)
+**Detailed Architecture:** [CLAUDE.md](CLAUDE.md) — kept current with the code rather than alongside it.
 
 ---
 
@@ -253,15 +255,14 @@ cp config/env/development.env.example .env
 
 ```bash
 # All tests
-pytest tests/ -v
+pytest -q
 
 # With coverage
 pytest --cov=app tests/
-
-# Specific markers
-pytest -m unit        # Unit tests only
-pytest -m integration # Integration tests only
 ```
+
+No pytest markers are registered, so `-m unit` and friends select nothing. The
+frontend has its own suite: `cd frontend && npm test -- --run`.
 
 **4. Code quality:**
 
@@ -271,23 +272,22 @@ ruff check .
 
 # Formatting
 ruff format .
-
-# Type checking
-mypy app/
 ```
+
+Type checking is TypeScript-side only (`cd frontend && npm run type-check`); the
+Python code is not under mypy and the tool is not a dependency.
 
 ### Contributing
 
 We welcome contributions! Please see:
 
 - [Contributing Guide](CONTRIBUTING.md) - How to contribute
-- [Development Workflow](docs/development/workflow.md) - Development process
-- [Code Standards](docs/development/code-standards.md) - Coding conventions
-- [Architecture Guide](docs/architecture/README.md) - System architecture
+- [Development Guide](docs/development/README.md) - Development process and daily logs
+- [CLAUDE.md](CLAUDE.md) - Architecture, conventions, and the reasoning behind them
 
 **Before submitting a PR:**
 1. Write tests for new features
-2. Ensure all tests pass: `pytest tests/ -v`
+2. Ensure all tests pass: `pytest -q`
 3. Format code: `ruff format .`
 4. Update documentation if needed
 
@@ -318,7 +318,7 @@ config/
     └── alertmanager/
 ```
 
-**Configuration Guide:** [docs/getting-started/configuration.md](docs/getting-started/configuration.md)
+**Configuration Guide:** [config/README.md](config/README.md), and the Configuration System section of [CLAUDE.md](CLAUDE.md).
 
 ### Environment Variables
 
@@ -357,7 +357,7 @@ API_SETTINGS_ENCRYPTION_KEY=...    # For encrypting stored API keys
 | P95 Latency | 3.8s | <4s ✅ |
 | System Availability | 99.8% | >99.5% ✅ |
 
-**Performance Guide:** [docs/operations/performance.md](docs/operations/performance.md)
+**Performance Guide:** see the Quality Metrics and stage-timeout sections of [CLAUDE.md](CLAUDE.md).
 
 ---
 
@@ -407,7 +407,6 @@ This project uses open-source technologies:
 ## 📞 Support
 
 - 📖 [Documentation](docs/README.md)
-- ❓ [FAQ](docs/reference/faq.md)
 - 🐛 [Issue Tracker](https://github.com/pocheang/querymind/issues)
 - 📧 Email: po.cheang@gmail.com
 

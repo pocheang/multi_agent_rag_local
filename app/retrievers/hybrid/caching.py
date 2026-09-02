@@ -1,12 +1,35 @@
 import json
 import logging
+import threading
+import time
 
-from app.services.resilience import TTLCache
+from app.services.runtime.resilience import TTLCache
 
 logger = logging.getLogger(__name__)
 
 _RETRIEVAL_CACHE: TTLCache | None = None
 _REDIS_CLIENT = None
+_REDIS_LOCK = threading.Lock()
+_REDIS_UNAVAILABLE_UNTIL = 0.0
+
+
+def _redis_retry_cooldown_seconds(settings) -> float:
+    return max(1.0, float(getattr(settings, "redis_retry_cooldown_seconds", 15) or 15))
+
+
+def _mark_redis_unavailable(settings, exc: BaseException) -> None:
+    """Discard a failed client so retrieval immediately falls back to memory."""
+    global _REDIS_CLIENT, _REDIS_UNAVAILABLE_UNTIL
+    with _REDIS_LOCK:
+        client = _REDIS_CLIENT
+        _REDIS_CLIENT = None
+        _REDIS_UNAVAILABLE_UNTIL = time.monotonic() + _redis_retry_cooldown_seconds(settings)
+    if client is not None:
+        try:
+            client.close()
+        except Exception:
+            pass
+    logger.warning("Redis retrieval cache unavailable; using memory cache: %s", exc)
 
 
 def cache_backend(settings) -> str:
@@ -21,9 +44,11 @@ def cache_backend(settings) -> str:
 
 def redis_client(settings):
     """Get or create Redis client."""
-    global _REDIS_CLIENT
+    global _REDIS_CLIENT, _REDIS_UNAVAILABLE_UNTIL
     if _REDIS_CLIENT is not None:
         return _REDIS_CLIENT
+    if _REDIS_UNAVAILABLE_UNTIL and time.monotonic() < _REDIS_UNAVAILABLE_UNTIL:
+        return None
     try:
         import redis  # type: ignore
     except ImportError:
@@ -33,14 +58,15 @@ def redis_client(settings):
         # CRITICAL FIX: Add connection pooling configuration
         _REDIS_CLIENT = redis.from_url(
             str(getattr(settings, "redis_url", "")),
-            max_connections=50,           # Connection pool size
-            socket_keepalive=True,         # Keep connections alive
-            socket_connect_timeout=5,      # Connection timeout
-            socket_timeout=5,              # Socket operation timeout
-            decode_responses=False,        # Handle bytes explicitly for caching
-            health_check_interval=30,      # Health check every 30s
+            max_connections=50,  # Connection pool size
+            socket_keepalive=True,  # Keep connections alive
+            socket_connect_timeout=5,  # Connection timeout
+            socket_timeout=5,  # Socket operation timeout
+            decode_responses=False,  # Handle bytes explicitly for caching
+            health_check_interval=30,  # Health check every 30s
         )
         _REDIS_CLIENT.ping()
+        _REDIS_UNAVAILABLE_UNTIL = 0.0
     except (redis.ConnectionError, redis.TimeoutError) as e:
         logger.warning(f"Redis connection failed: {e}")
         _REDIS_CLIENT = None
@@ -108,6 +134,7 @@ def cache_lookup(cache_key: str, settings, traced_span_fn):
                     out_diag["cache_backend"] = "redis"
                     return list(payload.get("results", [])), out_diag
             except Exception as e:
+                _mark_redis_unavailable(settings, e)
                 import logging
 
                 logging.getLogger(__name__).debug(
@@ -162,6 +189,7 @@ def cache_store(cache_key: str, results: list, diagnostics: dict, settings, ttl_
                 logger.debug(f"Redis cache store failed (serialization): {e}")
                 diagnostics["cache_backend"] = "memory"
             except Exception as e:
+                _mark_redis_unavailable(settings, e)
                 logger.debug(f"Redis cache store failed: {e}")
                 diagnostics["cache_backend"] = "memory"
         else:

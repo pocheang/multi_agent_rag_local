@@ -90,7 +90,7 @@ def load_pdf_image_ocr(path: Path) -> list[Document]:
         logger.warning(f"pypdf not available for image OCR: {e}")
         return []
 
-    from app.ingestion.utils.ocr_enhanced import ocr_image_bytes_with_structure
+    from app.ingestion.extraction.ocr_enhanced import ocr_image_bytes_with_structure
 
     docs: list[Document] = []
     try:

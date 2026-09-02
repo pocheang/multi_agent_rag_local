@@ -1,0 +1,210 @@
+import functools
+import json
+
+import app.retrievers.hybrid.candidate_collection as candidate_collection
+from app.core.config import get_settings
+from app.retrievers.bm25_retriever import bm25_search
+from app.retrievers.hybrid.caching import cache_lookup, cache_store, clear_retrieval_cache
+from app.retrievers.hybrid.parent_expansion import expand_to_parent_context
+from app.retrievers.hybrid.strategy import strategy_flags
+from app.retrievers.reranker import rerank_with_diagnostics
+from app.retrievers.stores.parent import get_parent_text_map
+from app.retrievers.stores.vector import OwnerScope, similarity_search
+from app.services.observability.tracing import traced_span
+from app.services.query.rule_rewrite import build_rewrite_queries
+
+
+def hybrid_search_with_diagnostics(
+    query: str,
+    allowed_sources: list[str] | None = None,
+    dynamic_top_k: int | None = None,
+    dynamic_vector_weight: float | None = None,
+    dynamic_bm25_weight: float | None = None,
+    *,
+    owner: OwnerScope | None,
+) -> tuple[list[dict], dict]:
+    """Perform hybrid search with full diagnostics.
+
+    ``owner`` is keyword-only and has no default: it reaches the store's own
+    ownership check, and every leak of it so far came from an intermediate
+    function that defaulted it to None.  A caller that genuinely has no identity
+    (the offline evaluation harness) has to write ``owner=None`` and be listed in
+    ``tests/security/test_no_unrestricted_retrieval.py``.
+    """
+    with traced_span("retrieval.hybrid_search", {}):
+        settings = get_settings()
+        flags = strategy_flags()
+        strict_threshold = float(getattr(settings, "vector_similarity_threshold", 0.2) or 0.2)
+        relaxed_threshold = float(getattr(settings, "vector_similarity_relaxed_threshold", 0.05) or 0.05)
+        degraded = False
+
+        cache_key = json.dumps(
+            {
+                "q": query,
+                "allowed": sorted(allowed_sources) if allowed_sources is not None else None,
+                "strict": strict_threshold,
+                "relaxed": relaxed_threshold,
+                "rrf": getattr(settings, "hybrid_rrf_k", 60),
+                "rerank_n": getattr(settings, "reranker_top_n", 5),
+                "dynamic_top_k": dynamic_top_k,
+                "dynamic_vector_weight": dynamic_vector_weight,
+                "dynamic_bm25_weight": dynamic_bm25_weight,
+                # The owner narrows what the store returns, so two callers with
+                # the same source list but different identities are different
+                # queries. Leaving it out would serve one of them the other's
+                # cached results the day the owner clause starts mattering.
+                "owner": [owner.user_id, owner.tenant_id] if owner is not None else None,
+            },
+            ensure_ascii=False,
+            sort_keys=True,
+        )
+
+        cached = cache_lookup(cache_key, settings, traced_span)
+        if cached:
+            return cached
+
+        with traced_span("retrieval.collect_candidates", {}):
+            fused, diag = _collect_candidates_for_current_module(
+                query,
+                allowed_sources=allowed_sources,
+                vector_threshold=strict_threshold,
+                settings=settings,
+                dynamic_top_k=dynamic_top_k,
+                dynamic_vector_weight=dynamic_vector_weight,
+                dynamic_bm25_weight=dynamic_bm25_weight,
+                owner=owner,
+            )
+
+        raw_vector_cache: dict[str, list] = {}
+        if not fused and relaxed_threshold < strict_threshold:
+            with traced_span("retrieval.degraded_retry", {"relaxed_threshold": relaxed_threshold}):
+                flags = strategy_flags()
+                vector_top_k = int(getattr(settings, "vector_top_k", 6) or 6)
+                variants = build_rewrite_queries(
+                    query,
+                    enable_llm=bool(
+                        flags["rewrite"]
+                        and getattr(settings, "query_rewrite_enabled", True)
+                        and getattr(settings, "query_rewrite_with_llm", False)
+                    ),
+                    use_reasoning=False,
+                    enable_decompose=bool(flags["decompose"] and getattr(settings, "query_decompose_enabled", True)),
+                    max_variants=int(getattr(settings, "query_rewrite_max_variants", 6) or 6),
+                )
+                if not variants:
+                    variants = [query]
+
+                for variant in variants:
+                    raw_vector_cache[variant] = _safe_similarity_search(
+                        variant, k=vector_top_k, allowed_sources=allowed_sources, owner=owner
+                    )
+
+                fused, diag = _collect_candidates_for_current_module(
+                    query,
+                    allowed_sources=allowed_sources,
+                    vector_threshold=relaxed_threshold,
+                    settings=settings,
+                    precomputed_raw_vector_results=raw_vector_cache,
+                    dynamic_top_k=dynamic_top_k,
+                    dynamic_vector_weight=dynamic_vector_weight,
+                    dynamic_bm25_weight=dynamic_bm25_weight,
+                    owner=owner,
+                )
+                degraded = True
+                diag["degraded_reason"] = "strict_threshold_no_results"
+
+        fused.sort(key=lambda x: x.get("hybrid_score", 0.0), reverse=True)
+
+        rerank_top_n = int(diag.get("reranker_top_n", getattr(settings, "reranker_top_n", 5)) or 5)
+        reranked, reranker_diagnostics = rerank_with_diagnostics(query, fused, top_n=rerank_top_n)
+        expanded = _expand_to_parent_context(reranked)
+        diagnostics = {
+            **diag,
+            "degraded_to_relaxed_threshold": degraded,
+            "strict_threshold": strict_threshold,
+            "relaxed_threshold": relaxed_threshold,
+            "pre_rerank_count": len(fused),
+            "post_rerank_count": len(reranked),
+            "post_expand_count": len(expanded),
+            "cache_hit": False,
+            "cache_backend": "none",
+            **reranker_diagnostics,
+        }
+        cache_store(cache_key, expanded, diagnostics, settings)
+        return expanded, diagnostics
+
+
+def _safe_similarity_search(
+    query: str,
+    k: int,
+    allowed_sources: list[str] | None = None,
+    *,
+    owner: OwnerScope | None,
+):
+    """Vector search hop for hybrid retrieval; this module's patch point.
+
+    Both of the escape hatches this used to have -- treating `allowed_sources is
+    None` as "search everything", and recovering from a TypeError by retrying
+    without the filter -- widened a single user's query into a scan of every
+    tenant's corpus. A TypeError here means the signature changed, so let it
+    propagate; a missing scope means the caller skipped the resolver, so let
+    similarity_search raise.
+    """
+    return similarity_search(query, k=k, allowed_sources=allowed_sources, owner=owner)
+
+
+def _expand_to_parent_context(candidates: list[dict]) -> list[dict]:
+    """Expand candidates to parent context using this module's text-map source."""
+    return expand_to_parent_context(candidates, parent_text_map_fn=get_parent_text_map)
+
+
+def _collect_candidates_for_current_module(
+    query: str,
+    allowed_sources: list[str] | None,
+    vector_threshold: float,
+    settings,
+    precomputed_raw_vector_results: dict[str, list] | None = None,
+    dynamic_top_k: int | None = None,
+    dynamic_vector_weight: float | None = None,
+    dynamic_bm25_weight: float | None = None,
+    *,
+    owner: OwnerScope | None,
+) -> tuple[list[dict], dict]:
+    """Collect candidates using this module's retrieval primitives.
+
+    The primitives are injected explicitly.  They used to be installed by
+    reassigning candidate_collection's module globals and restoring them in a
+    finally block, which raced whenever two retrievals overlapped -- and this is
+    a concurrent path (RAGAgentService gathers query variants across a thread
+    pool).
+    """
+    return candidate_collection.collect_candidates(
+        query,
+        allowed_sources=allowed_sources,
+        vector_threshold=vector_threshold,
+        settings=settings,
+        precomputed_raw_vector_results=precomputed_raw_vector_results,
+        dynamic_top_k=dynamic_top_k,
+        dynamic_vector_weight=dynamic_vector_weight,
+        dynamic_bm25_weight=dynamic_bm25_weight,
+        rewrite_fn=build_rewrite_queries,
+        # Bound here rather than threaded through collect_candidates: the owner
+        # belongs to the vector hop, not to candidate collection.
+        vector_fn=functools.partial(_safe_similarity_search, owner=owner),
+        bm25_fn=bm25_search,
+    )
+
+
+# `hybrid_search` and `_collect_candidates` used to live here as convenience
+# wrappers. Both had no callers left and neither could take an owner, so they
+# were two ready-made ways back to an ownership-blind search; removed 2026-08-30
+# with the graph-fallback owner fix. Use `hybrid_search_with_diagnostics`.
+__all__ = [
+    "hybrid_search_with_diagnostics",
+    "clear_retrieval_cache",
+    "_expand_to_parent_context",
+    "_safe_similarity_search",
+    "similarity_search",
+    "bm25_search",
+    "get_parent_text_map",
+]

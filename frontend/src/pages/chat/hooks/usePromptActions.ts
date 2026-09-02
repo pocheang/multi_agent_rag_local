@@ -1,4 +1,5 @@
 import type { Dispatch, SetStateAction } from "react";
+import { useTranslation } from "react-i18next";
 import { appApi } from "@/lib/api";
 import type { PromptTemplate } from "@/types/api";
 import type { Toast } from "@/pages/chat/types";
@@ -27,9 +28,11 @@ interface UsePromptActionsParams {
   setError: Dispatch<SetStateAction<string>>;
   notify: (text: string, kind?: Toast["kind"], ttl?: number) => void;
   handleApiError: (e: unknown, fallback: string) => Promise<void>;
+  confirm: (opts: { message: string; title?: string; isDanger?: boolean }) => Promise<boolean>;
 }
 
 export function usePromptActions(params: UsePromptActionsParams) {
+  const { t } = useTranslation();
   const {
     setPrompts,
     setPromptsLoading,
@@ -41,6 +44,7 @@ export function usePromptActions(params: UsePromptActionsParams) {
     setError,
     notify,
     handleApiError,
+    confirm,
   } = params;
 
   const refreshPrompts = async (silent = false) => {
@@ -50,7 +54,7 @@ export function usePromptActions(params: UsePromptActionsParams) {
       setPrompts(rows);
       setError("");
     } catch (e) {
-      await handleApiError(e, "Failed to load prompt templates");
+      await handleApiError(e, t("components.workbench.loadPromptsFailed"));
     } finally {
       if (!silent) setPromptsLoading(false);
     }
@@ -62,17 +66,17 @@ export function usePromptActions(params: UsePromptActionsParams) {
 
     // Validate required fields
     if (!title || !content) {
-      notify("Title and content are required", "warn");
+      notify(t("components.workbench.titleContentRequired"), "warn");
       return;
     }
 
     // Validate length limits
     if (title.length > MAX_TITLE_LENGTH) {
-      notify(`Title must be under ${MAX_TITLE_LENGTH} characters`, "warn");
+      notify(t("components.workbench.titleTooLong", { max: MAX_TITLE_LENGTH }), "warn");
       return;
     }
     if (content.length > MAX_CONTENT_LENGTH) {
-      notify(`Content must be under ${MAX_CONTENT_LENGTH} characters`, "warn");
+      notify(t("components.workbench.contentTooLong", { max: MAX_CONTENT_LENGTH }), "warn");
       return;
     }
 
@@ -89,10 +93,10 @@ export function usePromptActions(params: UsePromptActionsParams) {
       setEditingPromptId(null);
       setPromptTitle("");
       setPromptContent("");
-      notify("Prompt saved", "success");
+      notify(t("components.workbench.promptSaved"), "success");
       await refreshPrompts();
     } catch (e) {
-      await handleApiError(e, "Failed to save prompt");
+      await handleApiError(e, t("components.workbench.savePromptFailed"));
     }
   };
 
@@ -102,22 +106,22 @@ export function usePromptActions(params: UsePromptActionsParams) {
 
     // Validate required fields
     if (!title || !content) {
-      notify("Fill in title and content first", "warn");
+      notify(t("components.workbench.fillTitleContentFirst"), "warn");
       return;
     }
 
     // Validate length limits
     if (title.length > MAX_TITLE_LENGTH) {
-      notify(`Title must be under ${MAX_TITLE_LENGTH} characters`, "warn");
+      notify(t("components.workbench.titleTooLong", { max: MAX_TITLE_LENGTH }), "warn");
       return;
     }
     if (content.length > MAX_CONTENT_LENGTH) {
-      notify(`Content must be under ${MAX_CONTENT_LENGTH} characters`, "warn");
+      notify(t("components.workbench.contentTooLong", { max: MAX_CONTENT_LENGTH }), "warn");
       return;
     }
 
     try {
-      setPromptCheckInfo("Checking...");
+      setPromptCheckInfo(t("components.workbench.checkingPrompt"));
       const res = await appApi.promptCheck(title, content, useReasoning);
 
       // Sanitize API response data to prevent XSS
@@ -128,7 +132,7 @@ export function usePromptActions(params: UsePromptActionsParams) {
         .map((s) => sanitizeString(String(s)));
 
       const suggestionBlock = sanitizedSuggestions.length
-        ? `\n\n[Suggestions]\n${sanitizedSuggestions.map((x, i) => `${i + 1}. ${x}`).join("\n")}`
+        ? `${t("components.workbench.suggestionsLabel")}${sanitizedSuggestions.map((x, i) => `${i + 1}. ${x}`).join("\n")}`
         : "";
 
       const sanitizedIssues = (res.issues || [])
@@ -137,18 +141,22 @@ export function usePromptActions(params: UsePromptActionsParams) {
 
       setPromptTitle(sanitizedTitle);
       setPromptContent(`${sanitizedContent.trim()}${suggestionBlock}`);
-      setPromptCheckInfo(`Check done. ${sanitizedIssues.join(";")}`);
-      notify("Prompt check completed", "success");
+      setPromptCheckInfo(t("components.workbench.checkDone", { issues: sanitizedIssues.join(";") }));
+      notify(t("components.workbench.promptCheckCompleted"), "success");
     } catch (e) {
       setPromptCheckInfo("");
-      await handleApiError(e, "Failed to check prompt");
+      await handleApiError(e, t("components.workbench.checkPromptFailed"));
     }
   };
 
   const deletePrompt = async (item: PromptTemplate, editingPromptId: string | null) => {
     // Sanitize title for display in confirmation dialog
     const sanitizedTitle = sanitizeString(item.title);
-    if (!window.confirm(`Delete template: ${sanitizedTitle}?`)) return;
+    const confirmed = await confirm({
+      message: t("components.workbench.deleteTemplateConfirm", { title: sanitizedTitle }),
+      isDanger: true,
+    });
+    if (!confirmed) return;
 
     try {
       await appApi.promptDelete(item.prompt_id);
@@ -157,10 +165,10 @@ export function usePromptActions(params: UsePromptActionsParams) {
         setPromptTitle("");
         setPromptContent("");
       }
-      notify("Prompt deleted", "success");
+      notify(t("components.workbench.promptDeleted"), "success");
       await refreshPrompts();
     } catch (e) {
-      await handleApiError(e, "Failed to delete prompt");
+      await handleApiError(e, t("components.workbench.deletePromptFailed"));
     }
   };
 

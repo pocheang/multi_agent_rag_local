@@ -1,10 +1,6 @@
-export type AuthUser = {
-  user_id: string;
-  username: string;
-  display_name?: string | null;
-  role: "admin" | "analyst" | "viewer" | string;
-  status: "active" | "disabled" | string;
-};
+import type { UserIdentity } from "./auth";
+
+export type AuthUser = UserIdentity;
 
 export type LoginResponse = {
   token: string;
@@ -18,23 +14,85 @@ export type SessionSummary = {
   title: string;
   message_count: number;
   updated_at?: string;
+  pinned?: boolean;
 };
 
 export type Citation = {
-  source?: string;
-  content?: string;
+  /** Reader-facing marker ("[1]") matching the one in the answer text. */
+  marker?: string;
+  source: string;
+  content: string;
+  document_id?: string;
+  page?: number;
+  metadata?: Record<string, unknown>;
+};
+
+/** One governed tool invocation, as the run reports it. */
+export type ToolRun = {
+  tool_id: string;
+  status: string;
+  summary: string;
+};
+
+/** A governed action the run produced but did not perform. */
+export type PendingApproval = {
+  tool_id: string;
+  token: string;
+  summary: string;
+};
+
+export type AdvancedQueryResponse = {
+  query: string;
+  decomposed_query: Record<string, unknown> | null;
+  sub_query_results: Array<Record<string, unknown>>;
+  final_answer: string;
+  status?: "complete" | "pending_approval";
+  pending_approval?: PendingApproval | null;
+  answer_quality: Record<string, unknown> | null;
+  metadata: Record<string, unknown>;
+};
+
+export type NormalizedQueryResult = {
+  answer: string;
+  citations: Citation[];
+  /** "pending_approval" means the answer is complete but the action the user
+   *  asked for is waiting on their confirmation and has NOT been performed. */
+  status: "complete" | "pending_approval";
+  pendingApproval: PendingApproval | null;
+  toolRuns: ToolRun[];
+  route?: string;
+  executionId?: string;
+  qualityReport?: Record<string, unknown>;
+  executionMetadata?: Record<string, unknown>;
+};
+
+export type RetrievalSourceOutcome = {
+  source: string;
+  status: string;
+  count: number;
+  /** Why a source did not complete. `EmptyAccessScope` means the caller has no
+   *  documents, which is not a failure. */
+  reason?: string | null;
 };
 
 export type SessionMessageMetadata = {
   route?: string;
   execution_route?: string;
-  retrieval_strategy?: string;
   agent_class?: string;
   web_used?: boolean;
+  /** Which sources the run actually reached, and what each returned. Derived
+   *  from the run's own diagnostics rather than assumed: `web_used` alone was a
+   *  single bit for a system with eight sources, and nothing set it. */
+  sources?: RetrievalSourceOutcome[];
+  contributing_sources?: string[];
   latency_ms?: number;
   thoughts?: string[];
   graph_entities?: string[];
   citations?: Citation[];
+  /** What the governed tool loop actually did, so a multi-step run leaves a
+   *  record instead of only whatever the answer prose mentions. */
+  tool_runs?: ToolRun[];
+  quality_report?: Record<string, unknown>;
   current_status?: string;
   execution_steps?: Array<{
     kind: string;
@@ -63,7 +121,7 @@ export type SessionMessageMetadata = {
 };
 
 export type SessionMessage = {
-  message_id: string;
+  message_id: string | null;
   role: "user" | "assistant" | string;
   content: string;
   created_at?: string;
@@ -97,8 +155,10 @@ export type IndexedFileSummary = {
 };
 
 export type FileIndexActionResponse = {
+  ok: boolean;
   filename: string;
   chunks_removed: number;
+  vector_ids_removed: number;
   triplets_removed: number;
   file_removed: boolean;
   loaded_documents?: number;
@@ -110,6 +170,7 @@ export type FileIndexActionResponse = {
 };
 
 export type UploadResponse = {
+  ok: boolean;
   filenames: string[];
   skipped_files?: string[];
   visibility_applied?: "private" | "public" | string;
@@ -161,6 +222,7 @@ export type AdminUserSummary = {
   department?: string | null;
   user_type?: string | null;
   data_scope?: string | null;
+  credit_balance: number;
   is_online?: boolean;
   is_online_10m?: boolean;
   created_at?: string;
@@ -335,24 +397,9 @@ export type AdminModelSettingsView = {
   records_reindexed?: number;
 };
 
-export type RetrievalProfileState = {
-  active_profile: string;
-  config_default_profile: string;
-  follow_config_default: boolean;
-  canary: {
-    enabled: boolean;
-    baseline_percent: number;
-    safe_percent: number;
-    seed: string;
-  };
-  updated_at: string;
-  profiles?: Array<{ id: string; label: string; desc: string }>;
-};
-
 export type BenchmarkTrendItem = {
   created_at: string;
   num_queries: number;
-  strategy: string;
   latency_ms: {
     p50: number;
     p95: number;
@@ -378,4 +425,76 @@ export type SystemLogEntry = {
   line?: number;
   thread?: string;
   exception?: string;
+};
+
+// Clarification types
+export type ClarificationQuestion = {
+  question: string;
+  options: string[];
+  allow_custom_input: boolean;
+  field_name: string;
+};
+
+export type ClarificationContext = {
+  collected_info: Record<string, string>;
+  asked_questions: string[];
+  clarification_round: number;
+  max_rounds: number;
+  intent: string;
+  original_query?: string;
+};
+
+export type ClarificationCheckRequest = {
+  question: string;
+  session_id: string;
+  field_name?: string;
+  answer?: string;
+  workflow_thread_id?: string;
+  resume_token?: string;
+};
+
+export type ClarificationResponse = {
+  action: "CONTINUE" | "NEED_CLARIFICATION";
+  clarification?: ClarificationQuestion;
+  context: ClarificationContext;
+  complete_query?: string;
+  workflow_thread_id: string;
+  resume_token?: string | null;
+  route?: {
+    intent: string;
+    route?: string;
+    confidence: number;
+    requires_plan: boolean;
+    allowed_capabilities: string[];
+    reason: string;
+  };
+};
+
+/** One field an administrator may change, and where its current value came from.
+ *
+ *  `layer` is the thing the page exists to show: a value pinned in the process
+ *  environment outranks the configuration centre, so editing it would look like
+ *  it worked and change nothing. `editable_here` is false for exactly those. */
+export type ConfigField = {
+  alias: string;
+  group: string;
+  summary: string;
+  type: string;
+  value: string | number | boolean;
+  default: string | number | boolean;
+  layer: "environment" | "config-centre" | "runtime-file" | "default";
+  editable_here: boolean;
+  requires_restart: boolean;
+};
+
+export type ConfigSchemaResponse = {
+  config_centre_enabled: boolean;
+  fields: ConfigField[];
+};
+
+export type ConfigSaveResponse = {
+  ok: boolean;
+  data_id: string;
+  changed: string[];
+  fields: ConfigField[];
 };

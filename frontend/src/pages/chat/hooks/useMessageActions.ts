@@ -1,30 +1,18 @@
-import { useRef } from "react";
+import { useEffect, useRef } from "react";
 import { appApi } from "@/lib/api";
-import type { SessionMessage } from "@/types/api";
+import type { PendingApproval, SessionMessage, SessionSummary } from "@/types/api";
 import { EMPTY_METADATA } from "@/pages/chat/constants";
-import {
-  isAbortError,
-  isNetworkError,
-  parseStreamError,
-  createInitialStreamMessages,
-} from "./streamUtils";
-import {
-  createStreamEventHandlers,
-  type StreamEventContext,
-  type StreamMetadata,
-} from "./streamEventHandlers";
+import { isAbortError, createInitialStreamMessages } from "./streamUtils";
 import { createStreamMessageUpdater } from "./streamMessageUpdater";
-
-type AgentClassHint = "" | "general" | "cybersecurity" | "artificial_intelligence" | "pdf_text";
-type RetrievalStrategy = "baseline" | "advanced" | "safe";
+import { createChatRunLifecycle, type ChatRunToken } from "./chatStreamAdapter";
 
 interface ChatActions {
   notify: (message: string, type: "success" | "info" | "warn" | "error") => void;
   handleApiError: (e: unknown, fallback: string) => Promise<void>;
-  createSession: () => Promise<string | null>;
-  editMessage: (msg: SessionMessage, useWeb: boolean, useReasoning: boolean) => Promise<void>;
+  createSession: (signal?: AbortSignal) => Promise<string | null>;
+  editMessage: (msg: SessionMessage) => Promise<void>;
   removeMessage: (msg: SessionMessage) => Promise<void>;
-  refreshSessions: (silent?: boolean, background?: boolean) => Promise<any[]>;
+  refreshSessions: (silent?: boolean, background?: boolean) => Promise<SessionSummary[]>;
 }
 
 interface UseMessageActionsParams {
@@ -34,20 +22,28 @@ interface UseMessageActionsParams {
   setMessages: React.Dispatch<React.SetStateAction<SessionMessage[]>>;
   setIsSending: (sending: boolean) => void;
   setQuestion: (question: string) => void;
+  onExecutionId?: (executionId: string | null) => void;
+  onCreditsChanged?: () => Promise<void>;
+  /** Raised when a run produced a governed action it did not perform, together
+   *  with the question that produced it. Confirming re-runs `ask` with that
+   *  question and the token, which is what actually executes the action.
+   *
+   *  The question comes from here rather than being tracked alongside `ask`
+   *  call sites: there are three of them, and one forgetting to record it means
+   *  a confirmation silently resends a stale question. */
+  onPendingApproval?: (pending: PendingApproval | null, question: string) => void;
 }
 
 interface UseMessageActionsReturn {
-  editMessage: (msg: SessionMessage, useWeb: boolean, useReasoning: boolean) => Promise<void>;
+  editMessage: (msg: SessionMessage) => Promise<void>;
   removeMessage: (msg: SessionMessage) => Promise<void>;
   ensureSessionForAsk: () => Promise<string | null>;
   stopCurrentRun: (isSending: boolean) => void;
   ask: (params: {
     question: string;
     isSending: boolean;
-    useWeb: boolean;
-    useReasoning: boolean;
-    agentClassHint: AgentClassHint;
-    retrievalStrategy: RetrievalStrategy;
+    sessionId?: string;
+    approvalToken?: string;
   }) => Promise<void>;
 }
 
@@ -58,14 +54,30 @@ export function useMessageActions({
   setMessages,
   setIsSending,
   setQuestion,
+  onExecutionId,
+  onCreditsChanged,
+  onPendingApproval,
 }: UseMessageActionsParams): UseMessageActionsReturn {
   const streamAbortRef = useRef<AbortController | null>(null);
   const streamStoppedRef = useRef(false);
+  const runLifecycleRef = useRef(createChatRunLifecycle());
+  const activeRunRef = useRef<ChatRunToken | null>(null);
 
-  const editMessage = async (msg: SessionMessage, useWeb: boolean, useReasoning: boolean) => {
+  useEffect(() => {
+    const lifecycle = runLifecycleRef.current;
+    lifecycle.mount();
+    return () => {
+      streamStoppedRef.current = true;
+      lifecycle.dispose();
+      streamAbortRef.current?.abort();
+    };
+  }, []);
+
+  const editMessage = async (msg: SessionMessage) => {
     if (!currentSessionId) return;
     if (msg.role === "user") setRunStatus("Re-running");
-    await actions.editMessage(msg, useWeb, useReasoning);
+    await actions.editMessage(msg);
+    if (msg.role === "user") await onCreditsChanged?.();
     setRunStatus("");
   };
 
@@ -73,9 +85,9 @@ export function useMessageActions({
     await actions.removeMessage(msg);
   };
 
-  const ensureSessionForAsk = async () => {
+  const ensureSessionForAsk = async (signal?: AbortSignal) => {
     if (currentSessionId) return currentSessionId;
-    return actions.createSession();
+    return actions.createSession(signal);
   };
 
   const stopCurrentRun = (isSending: boolean) => {
@@ -92,162 +104,96 @@ export function useMessageActions({
   const ask = async ({
     question,
     isSending,
-    useWeb,
-    useReasoning,
-    agentClassHint,
-    retrievalStrategy,
+    sessionId,
+    approvalToken,
   }: {
     question: string;
     isSending: boolean;
-    useWeb: boolean;
-    useReasoning: boolean;
-    agentClassHint: AgentClassHint;
-    retrievalStrategy: RetrievalStrategy;
+    sessionId?: string;
+    approvalToken?: string;
   }) => {
     const q = question.trim();
     if (!q || isSending) return;
+    const run = runLifecycleRef.current.begin();
+    if (run === null) return;
+    activeRunRef.current = run;
+    const isRunActive = () => runLifecycleRef.current.isActive(run);
+    const runAbort = new AbortController();
+    streamAbortRef.current = runAbort;
     streamStoppedRef.current = false;
-    const sid = await ensureSessionForAsk();
-    if (!sid) return;
-
+    if (!isRunActive()) return;
+    onExecutionId?.(null);
     setIsSending(true);
     setQuestion("");
     setRunStatus("Processing");
-    setMessages((prev) => [...prev, ...createInitialStreamMessages(q)]);
+    const sid = sessionId || await ensureSessionForAsk(runAbort.signal);
+    if (!sid || !isRunActive()) {
+      const wasActive = isRunActive();
+      if (wasActive) {
+        setIsSending(false);
+        setRunStatus("");
+        runLifecycleRef.current.stop(run);
+      }
+      if (activeRunRef.current === run) activeRunRef.current = null;
+      if (streamAbortRef.current === runAbort) streamAbortRef.current = null;
+      return;
+    }
 
-    const eventHandlers = createStreamEventHandlers();
+    setMessages((prev) => [...prev, ...createInitialStreamMessages(q)]);
     const messageUpdater = createStreamMessageUpdater({ setMessages });
 
     try {
-      const runStartedAt = performance.now();
-      const elapsedMs = () => Math.max(1, Math.round(performance.now() - runStartedAt));
-      const streamAbort = new AbortController();
-      streamAbortRef.current = streamAbort;
-
-      const res = await appApi.streamQuery({
-        question: q,
-        useWebFallback: useWeb,
-        useReasoning,
+      const result = await appApi.advanced({
+        query: q,
         sessionId: sid,
-        agentClassHint: agentClassHint || undefined,
-        retrievalStrategy,
-        signal: streamAbort.signal,
+        enableDecomposition: true,
+        enableSelfRag: true,
+        ...(approvalToken ? { approvalToken } : {}),
+        signal: runAbort.signal,
       });
-
-      if (!res.ok || !res.body) {
-        const raw = await res.text();
-        throw new Error(parseStreamError(raw));
-      }
-
-      const reader = res.body.getReader();
-      const decoder = new TextDecoder("utf-8");
-      let buffer = "";
-
-      let ctx: StreamEventContext = {
-        answer: "",
-        thoughts: [],
-        meta: { ...EMPTY_METADATA } as StreamMetadata,
-        executionSteps: [...(EMPTY_METADATA.execution_steps || [])],
-        elapsedMs,
-      };
-
-      while (true) {
-        const { value, done } = await reader.read();
-        if (done) break;
-
-        buffer += decoder.decode(value, { stream: true });
-        const parts = buffer.split("\n\n");
-        buffer = parts.pop() || "";
-
-        for (const part of parts) {
-          const line = part.split("\n").find((x) => x.startsWith("data: "));
-          if (!line) continue;
-
-          let evt: any;
-          try {
-            evt = JSON.parse(line.slice(6));
-          } catch {
-            continue;
-          }
-
-          if (evt.type === "status") {
-            const { nextStatus, updatedCtx } = eventHandlers.handleStatusEvent(evt, ctx);
-            ctx = updatedCtx;
-            setRunStatus(nextStatus);
-            messageUpdater.patchStreamMessage(ctx.answer, ctx.meta);
-          } else if (evt.type === "route") {
-            ctx = eventHandlers.handleRouteEvent(evt, ctx);
-            messageUpdater.patchStreamMessage(ctx.answer, ctx.meta);
-          } else if (evt.type === "thought") {
-            ctx = eventHandlers.handleThoughtEvent(evt, ctx);
-            messageUpdater.patchStreamMessage(ctx.answer, ctx.meta);
-          } else if (evt.type === "error") {
-            const { error, updatedCtx } = eventHandlers.handleErrorEvent(evt, ctx);
-            ctx = updatedCtx;
-            messageUpdater.patchStreamMessage(ctx.answer, ctx.meta);
-            throw error;
-          } else if (evt.type === "vector_result") {
-            ctx = eventHandlers.handleVectorResultEvent(evt, ctx);
-            messageUpdater.patchStreamMessage(ctx.answer, ctx.meta);
-          } else if (evt.type === "graph_result") {
-            ctx = eventHandlers.handleGraphResultEvent(evt, ctx);
-            messageUpdater.patchStreamMessage(ctx.answer, ctx.meta);
-          } else if (evt.type === "web_result") {
-            ctx = eventHandlers.handleWebResultEvent(evt, ctx);
-            messageUpdater.patchStreamMessage(ctx.answer, ctx.meta);
-          } else if (evt.type === "answer_chunk") {
-            ctx = eventHandlers.handleAnswerChunkEvent(evt, ctx);
-            messageUpdater.patchStreamMessage(ctx.answer, ctx.meta);
-          } else if (evt.type === "answer_reset") {
-            ctx = eventHandlers.handleAnswerResetEvent(evt, ctx);
-            messageUpdater.patchStreamMessage(ctx.answer, ctx.meta);
-          } else if (evt.type === "done") {
-            ctx = eventHandlers.handleDoneEvent(evt, ctx, retrievalStrategy);
-            messageUpdater.patchStreamMessage(ctx.answer, ctx.meta);
-          }
-        }
-      }
-
-      const detail = await appApi.sessionDetail(sid);
-      messageUpdater.updateFinalMessage(detail.messages || [], ctx.meta);
-      await actions.refreshSessions();
+      if (!isRunActive()) return;
+      if (result.executionId) onExecutionId?.(result.executionId);
+      // A resumed run either performed the action or reported why it could not;
+      // either way the previous pending approval is spent.
+      onPendingApproval?.(result.status === "pending_approval" ? result.pendingApproval : null, q);
+      setMessages((prev) => prev.map((message) => (
+        message.message_id === "local-assistant-stream"
+          ? {
+              ...message,
+              content: result.answer,
+              metadata: {
+                ...EMPTY_METADATA,
+                route: result.route || "",
+                citations: result.citations,
+                tool_runs: result.toolRuns,
+                quality_report: result.qualityReport,
+              },
+            }
+          : message
+      )));
+      // The backend now persists both turns; reconcile the optimistic local
+      // messages with what actually landed in the session history.
+      await actions.refreshSessions(true, true);
+      await onCreditsChanged?.();
     } catch (e) {
+      if (!isRunActive()) return;
       if (isAbortError(e, streamStoppedRef.current)) {
         messageUpdater.replaceWithStoppedMessage("");
         actions.notify("Generation stopped", "info");
         return;
       }
-
-      const fallback = "Request failed. Please check backend/model status.";
-      await actions.handleApiError(e, fallback);
-      const rawErrorText = e instanceof Error && e.message ? e.message : fallback;
-      const isNetworkDisconnect = isNetworkError(rawErrorText);
-      let visibleError = isNetworkDisconnect
-        ? "NetworkError: stream disconnected. Retrying with non-stream mode..."
-        : rawErrorText;
-
-      if (isNetworkDisconnect && sid) {
-        try {
-          const fallbackRes = await appApi.query({
-            question: q,
-            useWebFallback: useWeb,
-            useReasoning,
-            sessionId: sid,
-            agentClassHint: agentClassHint || undefined,
-            retrievalStrategy,
-          });
-          visibleError = String(fallbackRes.answer || "No answer returned");
-        } catch {
-          visibleError = "NetworkError: stream disconnected. Please verify backend(8000), Ollama(11434), then retry.";
-        }
-      }
-
-      messageUpdater.replaceWithErrorMessage(visibleError);
+      await actions.handleApiError(e, "Request failed. Please check backend/model status.");
+      if (!isRunActive()) return;
+      const message = e instanceof Error && e.message ? e.message : "Request failed";
+      messageUpdater.replaceWithErrorMessage(message);
     } finally {
-      streamAbortRef.current = null;
-      streamStoppedRef.current = false;
-      setIsSending(false);
-      setRunStatus("");
+      if (isRunActive()) {
+        setIsSending(false);
+        setRunStatus("");
+        runLifecycleRef.current.stop(run);
+      }
+      if (streamAbortRef.current === runAbort) streamAbortRef.current = null;
+      if (activeRunRef.current === run) activeRunRef.current = null;
     }
   };
 

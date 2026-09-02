@@ -1,387 +1,346 @@
-/* ============================================
-   Analytics Page Styles
-   ============================================ */
+/* Imported from a component, so there is no import site to carry the
+   layer -- it is declared here instead. See styles/tailwind.css. */
+@layer legacy {
+  /* ============================================
+     Analytics Page Styles
+     ============================================ */
 
-.analytics-page {
-  min-height: 100vh;
-  background: var(--bg);
-}
+  .analytics-page {
+    min-height: 100vh;
+    background: var(--bg);
+  }
 
-/* Header */
-.analytics-header {
-  background: var(--surface);
-  border-bottom: 1px solid var(--border-light);
-  padding: 1rem 2rem;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 2rem;
-}
-
-:root[data-theme="dark"] .analytics-header {
-  background: var(--surface);
-  border-bottom-color: rgba(100, 122, 180, 0.2);
-}
-
-:root[data-theme="light"] .analytics-header {
-  background: var(--surface);
-  border-bottom-color: var(--border-light);
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
-}
-
-.analytics-header-content h2 {
-  margin: 0 0 0.25rem 0;
-  font-size: 1.5rem;
-  font-weight: 700;
-  color: var(--text-primary);
-}
-
-.analytics-header-content p {
-  margin: 0;
-  font-size: 0.9rem;
-  color: var(--text-secondary);
-}
-
-.analytics-header-actions {
-  display: flex;
-  gap: 1rem;
-  align-items: center;
-}
-
-.analytics-header-actions button,
-.analytics-header-actions a {
-  padding: 0.5rem 1rem;
-  background: var(--surface-hover);
-  border: 1px solid var(--border-light);
-  border-radius: 8px;
-  cursor: pointer;
-  font-size: 0.9rem;
-  font-weight: 500;
-  color: var(--text-primary);
-  text-decoration: none;
-  transition: all 0.2s ease;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-}
-
-:root[data-theme="dark"] .analytics-header-actions button,
-:root[data-theme="dark"] .analytics-header-actions a {
-  background: rgba(15, 25, 45, 0.5);
-  border-color: rgba(100, 122, 180, 0.25);
-}
-
-:root[data-theme="light"] .analytics-header-actions button,
-:root[data-theme="light"] .analytics-header-actions a {
-  background: var(--surface);
-  border-color: var(--border-medium);
-}
-
-.analytics-header-actions button:hover,
-.analytics-header-actions a:hover {
-  background: var(--surface-hover);
-  border-color: var(--accent);
-  transform: translateY(-1px);
-}
-
-:root[data-theme="dark"] .analytics-header-actions button:hover,
-:root[data-theme="dark"] .analytics-header-actions a:hover {
-  background: rgba(25, 35, 60, 0.7);
-  border-color: rgba(91, 140, 255, 0.4);
-}
-
-:root[data-theme="light"] .analytics-header-actions button:hover,
-:root[data-theme="light"] .analytics-header-actions a:hover {
-  background: var(--accent-soft);
-  border-color: var(--accent);
-}
-
-.analytics-header-actions .theme-btn {
-  min-width: 140px;
-}
-
-.analytics-header-actions .back-btn {
-  /* Inherits from parent styles */
-}
-
-.analytics-header-actions .logout-btn {
-  background: var(--danger-light);
-  border-color: var(--danger);
-  color: var(--danger);
-}
-
-:root[data-theme="dark"] .analytics-header-actions .logout-btn {
-  background: rgba(255, 71, 87, 0.1);
-  border-color: rgba(255, 71, 87, 0.3);
-}
-
-:root[data-theme="light"] .analytics-header-actions .logout-btn {
-  background: rgba(239, 68, 68, 0.1);
-  border-color: var(--danger);
-}
-
-.analytics-header-actions .logout-btn:hover {
-  background: var(--danger);
-  color: white;
-  border-color: var(--danger);
-  transform: translateY(-1px);
-}
-
-/* Main Content */
-.analytics-content {
-  padding: 0 2rem 2rem 2rem;
-  max-width: 1400px;
-  margin: 0 auto;
-}
-
-.analytics-title-bar {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 2rem;
-}
-
-.analytics-title-bar h1 {
-  margin: 0;
-  font-size: 2rem;
-  font-weight: 700;
-  color: var(--text-primary);
-}
-
-.analytics-page .refresh-btn {
-  padding: 0.5rem 1rem;
-  background: var(--accent);
-  color: white;
-  border: none;
-  border-radius: 8px;
-  cursor: pointer;
-  font-size: 0.9rem;
-  font-weight: 600;
-  transition: all 0.2s ease;
-}
-
-.analytics-page .refresh-btn:hover {
-  background: var(--accent-hover);
-  transform: translateY(-1px);
-  box-shadow: 0 4px 12px var(--accent-glow);
-}
-
-/* Statistics Cards */
-.analytics-stats-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-  gap: 1.5rem;
-  margin-bottom: 2rem;
-}
-
-.stat-card-analytics {
-  background: var(--surface);
-  padding: 1.5rem;
-  border-radius: 12px;
-  border: 1px solid var(--border-light);
-  transition: all 0.3s ease;
-}
-
-:root[data-theme="dark"] .stat-card-analytics {
-  background: rgba(7, 12, 24, 0.4);
-  border-color: rgba(100, 122, 180, 0.18);
-}
-
-:root[data-theme="light"] .stat-card-analytics {
-  background: var(--surface);
-  border-color: var(--border-light);
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
-}
-
-.stat-card-analytics:hover {
-  transform: translateY(-2px);
-  border-color: var(--accent);
-}
-
-:root[data-theme="dark"] .stat-card-analytics:hover {
-  background: rgba(15, 25, 45, 0.5);
-  box-shadow: 0 4px 12px rgba(91, 140, 255, 0.15);
-}
-
-:root[data-theme="light"] .stat-card-analytics:hover {
-  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.15);
-}
-
-.stat-card-analytics h3 {
-  margin: 0 0 0.5rem 0;
-  font-size: 0.9rem;
-  font-weight: 600;
-  color: var(--text-tertiary);
-  text-transform: uppercase;
-  letter-spacing: 0;
-}
-
-.stat-card-analytics p {
-  margin: 0;
-  font-size: 2rem;
-  font-weight: 700;
-  line-height: 1;
-}
-
-.stat-card-analytics.blue p {
-  color: var(--accent);
-}
-
-.stat-card-analytics.green p {
-  color: #00C49F;
-}
-
-.stat-card-analytics.yellow p {
-  color: #FFBB28;
-}
-
-.stat-card-analytics.orange p {
-  color: #FF8042;
-}
-
-/* Charts Section */
-.analytics-charts-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(500px, 1fr));
-  gap: 1.5rem;
-  margin-bottom: 2rem;
-}
-
-.analytics-page .chart-card {
-  background: var(--surface);
-  padding: 1.5rem;
-  border-radius: 12px;
-  border: 1px solid var(--border-light);
-}
-
-:root[data-theme="dark"] .analytics-page .chart-card {
-  background: rgba(7, 12, 24, 0.4);
-  border-color: rgba(100, 122, 180, 0.18);
-}
-
-:root[data-theme="light"] .analytics-page .chart-card {
-  background: var(--surface);
-  border-color: var(--border-light);
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
-}
-
-.analytics-page .chart-card h2 {
-  margin: 0 0 1rem 0;
-  font-size: 1.2rem;
-  font-weight: 700;
-  color: var(--text-primary);
-}
-
-/* Full Width Chart */
-.analytics-page .chart-card-full {
-  background: var(--surface);
-  padding: 1.5rem;
-  border-radius: 12px;
-  border: 1px solid var(--border-light);
-  margin-bottom: 2rem;
-}
-
-:root[data-theme="dark"] .analytics-page .chart-card-full {
-  background: rgba(7, 12, 24, 0.4);
-  border-color: rgba(100, 122, 180, 0.18);
-}
-
-:root[data-theme="light"] .analytics-page .chart-card-full {
-  background: var(--surface);
-  border-color: var(--border-light);
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
-}
-
-.analytics-page .chart-card-full h2 {
-  margin: 0 0 1rem 0;
-  font-size: 1.2rem;
-  font-weight: 700;
-  color: var(--text-primary);
-}
-
-/* Export Buttons */
-.analytics-export-actions {
-  display: flex;
-  gap: 1rem;
-  justify-content: center;
-}
-
-.analytics-page .export-btn {
-  padding: 0.75rem 1.5rem;
-  border: none;
-  border-radius: 8px;
-  cursor: pointer;
-  font-size: 1rem;
-  font-weight: 600;
-  color: white;
-  transition: all 0.2s ease;
-}
-
-.analytics-page .export-btn.json {
-  background: var(--accent);
-}
-
-.analytics-page .export-btn.json:hover {
-  background: var(--accent-hover);
-  transform: translateY(-2px);
-  box-shadow: 0 4px 12px var(--accent-glow);
-}
-
-.analytics-page .export-btn.csv {
-  background: #00C49F;
-}
-
-.analytics-page .export-btn.csv:hover {
-  background: #00d4a8;
-  transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(0, 196, 159, 0.3);
-}
-
-/* Loading State */
-.analytics-loading {
-  padding: 2rem;
-  text-align: center;
-  color: var(--text-secondary);
-  font-size: 1rem;
-}
-
-/* Responsive */
-@media (max-width: 768px) {
+  /* Header */
   .analytics-header {
-    flex-direction: column;
-    gap: 1rem;
-    align-items: flex-start;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border-light);
+    padding: 1rem 2rem;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 2rem;
+  }
+
+  :root[data-theme="light"] .analytics-header {
+    background: var(--surface);
+    border-bottom-color: var(--border-light);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+  }
+
+  .analytics-header-content h2 {
+    margin: 0 0 0.25rem 0;
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: var(--text-primary);
+  }
+
+  .analytics-header-content p {
+    margin: 0;
+    font-size: 0.9rem;
+    color: var(--text-secondary);
   }
 
   .analytics-header-actions {
-    width: 100%;
-    flex-wrap: wrap;
+    display: flex;
+    gap: 1rem;
+    align-items: center;
   }
 
+  .analytics-header-actions button,
+  .analytics-header-actions a {
+    padding: 0.5rem 1rem;
+    background: var(--surface-hover);
+    border: 1px solid var(--border-light);
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 0.9rem;
+    font-weight: 500;
+    color: var(--text-primary);
+    text-decoration: none;
+    transition: all 0.2s ease;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  :root[data-theme="light"] .analytics-header-actions button,
+  :root[data-theme="light"] .analytics-header-actions a {
+    background: var(--surface);
+    border-color: var(--border-medium);
+  }
+
+  .analytics-header-actions button:hover,
+  .analytics-header-actions a:hover {
+    background: var(--surface-hover);
+    border-color: var(--accent);
+    transform: translateY(-1px);
+  }
+
+  :root[data-theme="light"] .analytics-header-actions button:hover,
+  :root[data-theme="light"] .analytics-header-actions a:hover {
+    background: var(--accent-soft);
+    border-color: var(--accent);
+  }
+
+  .analytics-header-actions .back-btn {
+    /* Inherits from parent styles */
+  }
+
+  .analytics-header-actions .logout-btn {
+    background: var(--danger-light);
+    border-color: var(--danger);
+    color: var(--danger);
+  }
+
+  :root[data-theme="light"] .analytics-header-actions .logout-btn {
+    background: rgba(239, 68, 68, 0.1);
+    border-color: var(--danger);
+  }
+
+  .analytics-header-actions .logout-btn:hover {
+    background: var(--danger);
+    color: white;
+    border-color: var(--danger);
+    transform: translateY(-1px);
+  }
+
+  /* Main Content */
   .analytics-content {
-    padding: 0 1rem 2rem 1rem;
+    padding: 0 2rem 2rem 2rem;
+    max-width: 1400px;
+    margin: 0 auto;
   }
 
   .analytics-title-bar {
-    flex-direction: column;
-    gap: 1rem;
-    align-items: flex-start;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 2rem;
   }
 
+  .analytics-title-bar h1 {
+    margin: 0;
+    font-size: 2rem;
+    font-weight: 700;
+    color: var(--text-primary);
+  }
+
+  .analytics-page .refresh-btn {
+    padding: 0.5rem 1rem;
+    background: var(--accent);
+    color: white;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 0.9rem;
+    font-weight: 600;
+    transition: all 0.2s ease;
+  }
+
+  .analytics-page .refresh-btn:hover {
+    background: var(--accent-hover);
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px var(--accent-glow);
+  }
+
+  /* Statistics Cards */
   .analytics-stats-grid {
-    grid-template-columns: 1fr;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+    gap: 1.5rem;
+    margin-bottom: 2rem;
   }
 
+  .stat-card-analytics {
+    background: var(--surface);
+    padding: 1.5rem;
+    border-radius: 12px;
+    border: 1px solid var(--border-light);
+    transition: all 0.3s ease;
+  }
+
+  :root[data-theme="light"] .stat-card-analytics {
+    background: var(--surface);
+    border-color: var(--border-light);
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+  }
+
+  .stat-card-analytics:hover {
+    transform: translateY(-2px);
+    border-color: var(--accent);
+  }
+
+  :root[data-theme="light"] .stat-card-analytics:hover {
+    box-shadow: 0 4px 12px rgba(59, 130, 246, 0.15);
+  }
+
+  .stat-card-analytics h3 {
+    margin: 0 0 0.5rem 0;
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: var(--text-tertiary);
+    text-transform: uppercase;
+    letter-spacing: 0;
+  }
+
+  .stat-card-analytics p {
+    margin: 0;
+    font-size: 2rem;
+    font-weight: 700;
+    line-height: 1;
+  }
+
+  .stat-card-analytics.blue p {
+    color: var(--accent);
+  }
+
+  .stat-card-analytics.green p {
+    color: #00C49F;
+  }
+
+  .stat-card-analytics.yellow p {
+    color: #FFBB28;
+  }
+
+  .stat-card-analytics.orange p {
+    color: #FF8042;
+  }
+
+  /* Charts Section */
   .analytics-charts-grid {
-    grid-template-columns: 1fr;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(500px, 1fr));
+    gap: 1.5rem;
+    margin-bottom: 2rem;
   }
 
+  .analytics-page .chart-card {
+    background: var(--surface);
+    padding: 1.5rem;
+    border-radius: 12px;
+    border: 1px solid var(--border-light);
+  }
+
+  :root[data-theme="light"] .analytics-page .chart-card {
+    background: var(--surface);
+    border-color: var(--border-light);
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+  }
+
+  .analytics-page .chart-card h2 {
+    margin: 0 0 1rem 0;
+    font-size: 1.2rem;
+    font-weight: 700;
+    color: var(--text-primary);
+  }
+
+  /* Full Width Chart */
+  .analytics-page .chart-card-full {
+    background: var(--surface);
+    padding: 1.5rem;
+    border-radius: 12px;
+    border: 1px solid var(--border-light);
+    margin-bottom: 2rem;
+  }
+
+  :root[data-theme="light"] .analytics-page .chart-card-full {
+    background: var(--surface);
+    border-color: var(--border-light);
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+  }
+
+  .analytics-page .chart-card-full h2 {
+    margin: 0 0 1rem 0;
+    font-size: 1.2rem;
+    font-weight: 700;
+    color: var(--text-primary);
+  }
+
+  /* Export Buttons */
   .analytics-export-actions {
-    flex-direction: column;
-    width: 100%;
+    display: flex;
+    gap: 1rem;
+    justify-content: center;
   }
 
   .analytics-page .export-btn {
-    width: 100%;
+    padding: 0.75rem 1.5rem;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 1rem;
+    font-weight: 600;
+    color: white;
+    transition: all 0.2s ease;
   }
+
+  .analytics-page .export-btn.json {
+    background: var(--accent);
+  }
+
+  .analytics-page .export-btn.json:hover {
+    background: var(--accent-hover);
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px var(--accent-glow);
+  }
+
+  .analytics-page .export-btn.csv {
+    background: #00C49F;
+  }
+
+  .analytics-page .export-btn.csv:hover {
+    background: #00d4a8;
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0, 196, 159, 0.3);
+  }
+
+  /* Loading State */
+  .analytics-loading {
+    padding: 2rem;
+    text-align: center;
+    color: var(--text-secondary);
+    font-size: 1rem;
+  }
+
+  /* Responsive */
+  @media (max-width: 768px) {
+    .analytics-header {
+      flex-direction: column;
+      gap: 1rem;
+      align-items: flex-start;
+    }
+
+    .analytics-header-actions {
+      width: 100%;
+      flex-wrap: wrap;
+    }
+
+    .analytics-content {
+      padding: 0 1rem 2rem 1rem;
+    }
+
+    .analytics-title-bar {
+      flex-direction: column;
+      gap: 1rem;
+      align-items: flex-start;
+    }
+
+    .analytics-stats-grid {
+      grid-template-columns: 1fr;
+    }
+
+    .analytics-charts-grid {
+      grid-template-columns: 1fr;
+    }
+
+    .analytics-export-actions {
+      flex-direction: column;
+      width: 100%;
+    }
+
+    .analytics-page .export-btn {
+      width: 100%;
+    }
+  }
+
 }

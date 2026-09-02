@@ -6,7 +6,7 @@ from pathlib import Path
 from langchain_core.documents import Document
 
 from app.core.config import get_settings
-from app.ingestion.utils.chart_extractor import (
+from app.ingestion.extraction.charts import (
     chart_data_to_markdown,
     detect_chart_in_image,
     extract_chart_data_with_vision,
