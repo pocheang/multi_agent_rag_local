@@ -297,7 +297,8 @@ def test_the_same_owner_reuses_its_cache_entry(recorded_cache_keys):
     it -- an `OwnerScope` is built fresh per request, so identity would make
     every request a miss while still passing a same-literal comparison.
     """
-    alice = "".join(["ali", "ce"])  # joined, not concatenated: literals get folded
+    literal = "alice"
+    rebuilt = "".join(["ali", "ce"])  # joined, not concatenated: literals get folded
 
-    assert alice is not "alice"  # noqa: F632 -- identity is the point here
-    assert _search("alice", recorded_cache_keys) == _search(alice, recorded_cache_keys)
+    assert rebuilt is not literal, "the interpreter interned these; the test would prove less"
+    assert _search(literal, recorded_cache_keys) == _search(rebuilt, recorded_cache_keys)
