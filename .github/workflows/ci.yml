@@ -49,11 +49,16 @@ jobs:
         # hundred and eighty.
         run: 'pip install --only-binary :all: --no-binary jieba -r requirements/ci.txt'
 
-      - name: Install package
-        # Separately, and without dependencies: the hashes above imply
-        # --require-hashes, which will not accept an editable install, and the
-        # project itself is not a supply-chain input.
-        run: pip install -e . --no-deps
+      # The project itself is deliberately not installed. `app/` sits at the
+      # repository root and every step below runs from there, so it imports from
+      # the checkout; nothing reads distribution metadata and there are no entry
+      # points, which is what an install would add. Verified by uninstalling it
+      # and running the whole suite: 605 passed.
+      #
+      # It also removes the last unlocked `pip install` from this job, which is
+      # what githubactions:S8544 was pointing at -- `pip install -e . --no-deps`
+      # resolves nothing and locks nothing, so the rule was right about the shape
+      # and the answer was to stop doing it rather than to pin it.
 
       - name: Endpoint census
         # Guards against a refactor silently dropping routers. Counts OpenAPI
