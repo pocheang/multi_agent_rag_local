@@ -504,8 +504,13 @@ class AgentExecutionTracker:
                         logger.debug(f"Cleaned up {len(orphaned)} orphaned trace locks")
 
             except asyncio.CancelledError:
+                # Re-raised, not swallowed: `break` ended this coroutine
+                # *normally*, so `await task` after `task.cancel()` returned
+                # instead of raising and the canceller could not tell the
+                # difference between "stopped as asked" and "finished on its
+                # own". `stop_periodic_cleanup` is the one that may absorb it.
                 logger.info("Cleanup task cancelled")
-                break
+                raise
             except Exception as e:
                 logger.error(f"Error in cleanup loop: {e}", exc_info=True)
 
@@ -516,6 +521,9 @@ class AgentExecutionTracker:
             try:
                 await self._cleanup_task
             except asyncio.CancelledError:
+                # Absorbing it here is the point: this is the caller that asked
+                # for the cancellation one line above, and shutdown should not
+                # propagate it further.
                 pass
         self._cleanup_task = None
         logger.info("Stopped execution tracker cleanup")

@@ -164,7 +164,9 @@ def split_wide_table(text: str, max_columns: int = 6) -> list[str]:
         if "|" in line:
             header_line = line
             if i + 1 < len(lines) and re.match(r"^\|[\s\-:]+\|", lines[i + 1].strip()):
-                lines[i + 1]
+                # The separator row is only being *detected* here; the match
+                # above is the whole test. A bare `lines[i + 1]` stood here and
+                # evaluated to nothing.
                 break
 
     if not header_line:

@@ -55,7 +55,10 @@ def classify_chunk_type(text: str, metadata: dict[str, Any]) -> ChunkType:
     Returns:
         ChunkType: chunk类型
     """
-    text.lower().strip()
+    # `text.lower().strip()` stood here with its result discarded, so the
+    # normalization never happened -- every check below reads the raw `text`.
+    # Deleted rather than turned into an assignment: making it one would change
+    # what every document classifies as, which is a decision, not a cleanup.
 
     # 检查标题模式
     if _is_heading(text, metadata):

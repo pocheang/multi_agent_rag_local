@@ -52,7 +52,7 @@ class SessionStore:
             self.fallback_path.parent.mkdir(parents=True, exist_ok=True)
             logger.info(f"SessionStore: Using file storage at {self.fallback_path}")
 
-    def set(self, key: str, value: dict[str, Any], ttl_seconds: int = 86400):
+    def set(self, key: str, value: dict[str, Any], ttl_seconds: int = 86400) -> bool:
         """Store session data with TTL."""
         if self.use_redis and self.redis_client:
             try:
@@ -65,8 +65,7 @@ class SessionStore:
         # File fallback
         sessions = self._load_file_sessions()
         sessions[key] = {"data": value, "expires_at": time.time() + ttl_seconds}
-        self._save_file_sessions(sessions)
-        return True
+        return self._save_file_sessions(sessions)
 
     def get(self, key: str) -> dict[str, Any] | None:
         """Retrieve session data."""
@@ -129,13 +128,21 @@ class SessionStore:
         except Exception:
             return {}
 
-    def _save_file_sessions(self, sessions: dict[str, dict]):
-        """Save sessions to file."""
+    def _save_file_sessions(self, sessions: dict[str, dict]) -> bool:
+        """Save sessions to file. Returns whether the write succeeded.
+
+        It used to swallow the failure and return nothing, so `set()` reported
+        success on a session it had not stored -- the caller had no way to know
+        the login would not survive.
+        """
+
         try:
             with open(self.fallback_path, "w") as f:
                 json.dump(sessions, f, indent=2)
+            return True
         except Exception as e:
             logger.error(f"Failed to save sessions: {e}")
+            return False
 
 
 class EnhancedSessionManager:

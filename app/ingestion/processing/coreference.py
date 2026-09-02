@@ -92,8 +92,9 @@ def resolve_pronouns_in_sentence(sentence: str, recent_entities: list[str]) -> s
 
     resolved = sentence
 
-    # Get most recent entity
-    most_recent = recent_entities[-1] if recent_entities else None
+    # Get most recent entity. The `if recent_entities else None` that stood here
+    # could not fire: the guard at the top of the function already returned.
+    most_recent = recent_entities[-1]
 
     # Resolve "it"
     if most_recent:
