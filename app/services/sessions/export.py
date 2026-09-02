@@ -18,6 +18,7 @@ from app.services.sessions.metadata import (
     SessionMetadata,
     SessionMetadataService,
     get_metadata_service,
+    utc_now,
 )
 
 __all__ = [
@@ -63,7 +64,7 @@ class ExportedSession:
 
     def __post_init__(self):
         if not self.exported_at:
-            self.exported_at = datetime.utcnow().isoformat()
+            self.exported_at = utc_now().isoformat()
 
 
 @dataclass

@@ -16,7 +16,7 @@ from __future__ import annotations
 import re
 from collections import OrderedDict
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Literal
 
 __all__ = [
@@ -27,6 +27,31 @@ __all__ = [
     "SessionMetadataService",
     "get_metadata_service",
 ]
+
+
+def utc_now() -> datetime:
+    """An aware UTC timestamp.
+
+    `datetime.utcnow()` returns a *naive* one, which is the shape that lets a
+    naive and an aware value meet in the same comparison. They do meet here:
+    `search.py::_sort_results` sorts SearchResult objects on
+    `metadata.updated_at`, and a list holding one of each raises
+    `TypeError: can't compare offset-naive and offset-aware datetimes` -- a 500
+    on session search. It has not happened only because every writer was
+    consistently naive.
+
+    Which is why the writers moving to aware is not the whole change: rows
+    already on disk parse back naive, so `as_utc` normalises on the way in and
+    the model is uniformly aware whatever the database holds.
+    """
+
+    return datetime.now(UTC)
+
+
+def as_utc(value: datetime) -> datetime:
+    """Read a timestamp that may predate this change, as aware UTC."""
+
+    return value.replace(tzinfo=UTC) if value.tzinfo is None else value.astimezone(UTC)
 
 
 # ============================================================================
@@ -97,8 +122,8 @@ class SessionMetadata:
     category: SessionCategory | None = None
     description: str | None = None
     auto_tags: list[str] = field(default_factory=list)  # Auto-extracted tags
-    created_at: datetime = field(default_factory=datetime.utcnow)
-    updated_at: datetime = field(default_factory=datetime.utcnow)
+    created_at: datetime = field(default_factory=utc_now)
+    updated_at: datetime = field(default_factory=utc_now)
     query_count: int = 0
     last_query_at: datetime | None = None
 
@@ -567,9 +592,9 @@ class SessionMetadataService:
 
         if update.increment_query_count:
             metadata.query_count += 1
-            metadata.last_query_at = datetime.utcnow()
+            metadata.last_query_at = utc_now()
 
-        metadata.updated_at = datetime.utcnow()
+        metadata.updated_at = utc_now()
 
         # Move to end for LRU
         self._sessions.move_to_end(session_id)
@@ -636,7 +661,7 @@ class SessionMetadataService:
 
         # Update metadata
         metadata.auto_tags = auto_tags
-        metadata.updated_at = datetime.utcnow()
+        metadata.updated_at = utc_now()
 
         return auto_tags
 

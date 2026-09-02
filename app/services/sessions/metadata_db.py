@@ -20,8 +20,10 @@ from app.services.sessions.metadata import (
     MetadataUpdate,
     SessionCategory,
     SessionMetadata,
+    as_utc,
     normalize_description,
     normalize_tags,
+    utc_now,
 )
 
 __all__ = [
@@ -154,10 +156,13 @@ class SessionMetadataDB:
             category=row["category"],
             description=row["description"],
             auto_tags=json.loads(row["auto_tags"]),
-            created_at=datetime.fromisoformat(row["created_at"]),
-            updated_at=datetime.fromisoformat(row["updated_at"]),
+            # as_utc, not fromisoformat alone: rows written before 2026-09-02 are
+            # naive, and one of those beside an aware one is a TypeError the
+            # moment search.py sorts on it.
+            created_at=as_utc(datetime.fromisoformat(row["created_at"])),
+            updated_at=as_utc(datetime.fromisoformat(row["updated_at"])),
             query_count=row["query_count"],
-            last_query_at=datetime.fromisoformat(row["last_query_at"]) if row["last_query_at"] else None,
+            last_query_at=as_utc(datetime.fromisoformat(row["last_query_at"])) if row["last_query_at"] else None,
         )
 
     def _evict_from_cache_if_needed(self) -> None:
@@ -369,7 +374,7 @@ class SessionMetadataDB:
 
         # Update metadata
         metadata.auto_tags = auto_tags
-        metadata.updated_at = datetime.utcnow()
+        metadata.updated_at = utc_now()
 
         # Write to DB
         with self._connect() as conn:
@@ -418,9 +423,9 @@ class SessionMetadataDB:
             metadata.description = normalize_description(update.description)
         if update.increment_query_count:
             metadata.query_count += 1
-            metadata.last_query_at = datetime.utcnow()
+            metadata.last_query_at = utc_now()
 
-        metadata.updated_at = datetime.utcnow()
+        metadata.updated_at = utc_now()
 
         # Write to DB
         with self._connect() as conn:
