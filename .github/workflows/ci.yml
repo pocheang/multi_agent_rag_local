@@ -43,11 +43,17 @@ jobs:
         # `make lock`; tests/core/test_dependency_locks_are_current.py fails if
         # pyproject moves and the lock does not.
         #
-        # --only-binary keeps setup.py from running. jieba is exempted because it
-        # publishes no wheel at all -- not for this platform, for any -- so that
-        # is one named package rather than dropping the protection for the other
-        # hundred and eighty.
-        run: 'pip install --only-binary :all: --no-binary jieba -r requirements/ci.txt'
+        # --only-binary keeps setup.py from running. Two packages are exempted
+        # because they publish no wheel at all -- not for this platform, for any:
+        # jieba, and forbiddenfruit (pulled in by blockbuster). The order of the
+        # flags matters: --only-binary :all: clears the no-binary set, so it has
+        # to come first.
+        #
+        # That list is produced by `python scripts/check_lock_wheels.py`, which
+        # asks PyPI about the whole lock in one pass. Finding these one red build
+        # at a time is exactly what that script exists to stop -- it happened
+        # twice before it was written.
+        run: 'pip install --only-binary :all: --no-binary forbiddenfruit,jieba -r requirements/ci.txt'
 
       # The project itself is deliberately not installed. `app/` sits at the
       # repository root and every step below runs from there, so it imports from

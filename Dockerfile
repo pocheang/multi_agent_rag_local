@@ -26,7 +26,7 @@ COPY requirements/runtime.txt ./requirements/
 # editable path hook baked into the builder's site-packages pointed at a
 # directory the production stage refills with `COPY app ./app`. The code is
 # copied in either way, so PYTHONPATH below says what that was relying on.
-RUN pip install --no-cache-dir --only-binary :all: --no-binary jieba -r requirements/runtime.txt
+RUN pip install --no-cache-dir --only-binary :all: --no-binary forbiddenfruit,jieba -r requirements/runtime.txt
 
 # Production stage
 FROM python:3.11-slim

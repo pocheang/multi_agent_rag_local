@@ -26,6 +26,7 @@ fe-build:
 lock:
 	uv pip compile pyproject.toml --python-platform linux --python-version 3.11 --generate-hashes --no-annotate -o requirements/runtime.txt
 	uv pip compile pyproject.toml --extra dev --python-platform linux --python-version 3.11 --generate-hashes --no-annotate -o requirements/ci.txt
+	conda run --no-capture-output -n rag-local python scripts/check_lock_wheels.py
 
 test:
 	conda run --no-capture-output -n rag-local pytest -q
