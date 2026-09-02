@@ -1,7 +1,7 @@
 const THEME_KEY = "theme_preference";
 
 export function applyLightTheme() {
-  document.documentElement.setAttribute("data-theme", "light");
+  document.documentElement.dataset.theme = "light";
 
   try {
     localStorage.removeItem(THEME_KEY);

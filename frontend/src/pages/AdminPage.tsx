@@ -69,29 +69,54 @@ export function AdminPage({ user, onLogout }: Props) {
     void actions.loadOps();
     void actions.loadRagOps();
     void actions.loadModelSettings();
-    // eslint-disable-next-line
+    // Fires on the filter values, not on the action identity. The rule is
+    // named rather than left bare: a bare disable turns off every rule on
+    // the line, which is how a real finding hides behind an intended one.
+    // The directive has to be the last line of this comment, or it points
+    // at the comment instead of the code.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isAdmin]);
 
   useEffect(() => {
     if (isAdmin) void actions.loadLogs();
-    // eslint-disable-next-line
+    // Fires on the filter values, not on the action identity. The rule is
+    // named rather than left bare: a bare disable turns off every rule on
+    // the line, which is how a real finding hides behind an intended one.
+    // The directive has to be the last line of this comment, or it points
+    // at the comment instead of the code.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state.auditLimit, state.auditActorUserId, state.auditActionKeyword, state.auditEventCategory, state.auditSeverity, state.auditResult, state.users.length]);
 
   useEffect(() => {
     if (isAdmin) void actions.loadOps();
-    // eslint-disable-next-line
+    // Fires on the filter values, not on the action identity. The rule is
+    // named rather than left bare: a bare disable turns off every rule on
+    // the line, which is how a real finding hides behind an intended one.
+    // The directive has to be the last line of this comment, or it points
+    // at the comment instead of the code.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state.opsHours, state.opsActorUserId, state.opsActionKeyword]);
 
   useEffect(() => {
     if (isAdmin) void actions.loadSystemLogs();
-    // eslint-disable-next-line
+    // Fires on the filter values, not on the action identity. The rule is
+    // named rather than left bare: a bare disable turns off every rule on
+    // the line, which is how a real finding hides behind an intended one.
+    // The directive has to be the last line of this comment, or it points
+    // at the comment instead of the code.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state.systemLogLimit, state.systemLogLevel, state.systemLogLogger, state.systemLogKeyword]);
 
   useEffect(() => {
     if (!isAdmin || state.section !== "ops" || !state.opsAutoRefresh) return;
     const t = window.setInterval(() => void actions.loadOps(), 30000);
     return () => window.clearInterval(t);
-    // eslint-disable-next-line
+    // Fires on the filter values, not on the action identity. The rule is
+    // named rather than left bare: a bare disable turns off every rule on
+    // the line, which is how a real finding hides behind an intended one.
+    // The directive has to be the last line of this comment, or it points
+    // at the comment instead of the code.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isAdmin, state.section, state.opsAutoRefresh, state.opsHours, state.opsActorUserId, state.opsActionKeyword]);
 
   // Reset audit pagination when filters change

@@ -52,7 +52,11 @@ class _StubNacos(http.server.BaseHTTPRequestHandler):
         self.end_headers()
 
     def log_message(self, *args: object) -> None:
-        pass
+        """Silence BaseHTTPRequestHandler's per-request line on stderr.
+
+        This stub server exists to answer the SDK; its access log would bury
+        the verification output this script is run for.
+        """
 
 
 def _free_port() -> int:
