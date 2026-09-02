@@ -180,9 +180,9 @@ request = OrchestrationRequest(
 context = ClarificationContext()
 decision = await service.route(request, context)
 
-print(f"Action: {decision.action}")              # NEED_CLARIFICATION
-print(f"Intent: {decision.context.intent}")      # rag_design
-print(f"Max Rounds: {decision.context.max_rounds}") # 7
+print(f"Action: {decision.action}")  # NEED_CLARIFICATION
+print(f"Intent: {decision.context.intent}")  # rag_design
+print(f"Max Rounds: {decision.context.max_rounds}")  # 7
 
 if decision.clarification:
     print(f"Question: {decision.clarification.question}")
@@ -272,18 +272,12 @@ INTENT_REQUIRED_INFO["new_intent"] = {
     "fields": ["field1", "field2"],
     "questions": {
         "field1": ClarificationQuestion(
-            question="问题1？",
-            options=["选项1", "选项2"],
-            allow_custom_input=True,
-            field_name="field1"
+            question="问题1？", options=["选项1", "选项2"], allow_custom_input=True, field_name="field1"
         ),
         "field2": ClarificationQuestion(
-            question="问题2？",
-            options=["选项A", "选项B"],
-            allow_custom_input=True,
-            field_name="field2"
+            question="问题2？", options=["选项A", "选项B"], allow_custom_input=True, field_name="field2"
         ),
-    }
+    },
 }
 ```
 

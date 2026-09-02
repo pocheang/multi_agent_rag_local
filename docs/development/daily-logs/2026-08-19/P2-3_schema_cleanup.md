@@ -42,6 +42,7 @@ Removed:
 class QualityReport(BaseModel):
     """API schema boundary for legacy quality-report payloads."""
 
+
 # After:
 class LegacyQualityReportDTO(BaseModel):
     """API DTO for legacy quality-report payloads (compatibility layer)."""
@@ -123,8 +124,8 @@ from app.domain.contracts import OrchestratedQualityReport
 from app.agents.shared import result_schemas
 from app.api.routes.compatibility.enhanced_query import LegacyQualityReportDTO
 
-assert 'QualityReport' not in dir(result_schemas)
-assert 'EnhancedRAGResult' not in dir(result_schemas)
+assert "QualityReport" not in dir(result_schemas)
+assert "EnhancedRAGResult" not in dir(result_schemas)
 ```
 
 **Result**: ✅ All imports successful, no duplicates

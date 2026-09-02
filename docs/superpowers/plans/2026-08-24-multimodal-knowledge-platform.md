@@ -58,9 +58,7 @@ from typing import Any, Literal, Protocol, TypedDict
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
-KnowledgeSource = Literal[
-    "vector", "bm25", "graph", "wiki", "memory", "multimodal", "web", "tool"
-]
+KnowledgeSource = Literal["vector", "bm25", "graph", "wiki", "memory", "multimodal", "web", "tool"]
 EvidenceLayer = Literal["evidence", "knowledge", "memory", "web", "tool"]
 Modality = Literal["text", "table", "image", "page", "graph"]
 

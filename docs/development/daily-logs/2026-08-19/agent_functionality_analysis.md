@@ -133,33 +133,29 @@ validation = await self._validation_status(request, safe, evidence)
 @dataclass
 class AnswerQualityCard:
     """答案质量卡片 - 用户可见的质量指标"""
-    
+
     confidence_score: float  # 0-100 的置信度分数
     confidence_level: Literal["high", "medium", "low"]  # 可信度等级
     evidence_count: int  # 基于多少份证据
     retrieval_quality: str  # "优秀"/"良好"/"一般"
     completeness: str  # "完整"/"部分"/"可能不完整"
-    
+
     # 用户可操作的建议
     suggestions: list[str]  # ["建议核实具体数字", "可以进一步询问细节"]
     limitations: list[str]  # ["仅包含2023年数据", "未找到季度明细"]
-    
+
     def to_user_display(self, language: str = "zh") -> dict:
         """转换为用户友好的展示格式"""
-        
+
         # 置信度图标和描述
-        confidence_icons = {
-            "high": "🟢",
-            "medium": "🟡", 
-            "low": "🔴"
-        }
-        
+        confidence_icons = {"high": "🟢", "medium": "🟡", "low": "🔴"}
+
         confidence_desc = {
             "high": "高可信度 - 基于充分的证据和验证",
             "medium": "中等可信度 - 建议与原始资料核对",
-            "low": "低可信度 - 强烈建议核实"
+            "low": "低可信度 - 强烈建议核实",
         }
-        
+
         return {
             "score": f"{self.confidence_score:.0f}/100",
             "icon": confidence_icons[self.confidence_level],
@@ -173,38 +169,39 @@ class AnswerQualityCard:
             "limitations": self.limitations,
         }
 
+
 # 在答案中展示
 class EnhancedAnswer:
     answer_text: str
     quality_card: AnswerQualityCard
     citations: list[Citation]
-    
+
     def format_for_user(self) -> str:
         """格式化为用户友好的展示"""
         output = f"{self.answer_text}\n\n"
-        
+
         # 质量卡片
         card = self.quality_card.to_user_display()
         output += "───────────────────────\n"
         output += f"{card['icon']} 答案可信度: {card['score']}\n"
         output += f"💡 {card['description']}\n\n"
-        
+
         # 详细信息
         output += "📊 质量详情:\n"
-        for key, value in card['details'].items():
+        for key, value in card["details"].items():
             output += f"  • {key}: {value}\n"
-        
+
         # 建议和限制
-        if card['suggestions']:
+        if card["suggestions"]:
             output += "\n💬 建议:\n"
-            for suggestion in card['suggestions']:
+            for suggestion in card["suggestions"]:
                 output += f"  • {suggestion}\n"
-        
-        if card['limitations']:
+
+        if card["limitations"]:
             output += "\n⚠️ 注意事项:\n"
-            for limitation in card['limitations']:
+            for limitation in card["limitations"]:
                 output += f"  • {limitation}\n"
-        
+
         return output
 ```
 
@@ -268,27 +265,22 @@ if successful_retrievers == 0:
 @dataclass
 class UserFriendlyError:
     """用户友好的错误信息"""
-    
+
     error_type: str  # 内部错误类型
     user_title: str  # 用户可理解的标题
     user_message: str  # 详细说明
     severity: Literal["info", "warning", "error", "critical"]
-    
+
     # 恢复建议
     immediate_actions: list[str]  # 用户可以立即尝试的操作
     technical_details: str | None  # 可选的技术细节（折叠显示）
     contact_support: bool  # 是否需要联系技术支持
-    
+
     def format_for_display(self, language: str = "zh") -> dict:
         """格式化为用户界面显示"""
-        
-        severity_icons = {
-            "info": "ℹ️",
-            "warning": "⚠️",
-            "error": "❌",
-            "critical": "🚨"
-        }
-        
+
+        severity_icons = {"info": "ℹ️", "warning": "⚠️", "error": "❌", "critical": "🚨"}
+
         return {
             "icon": severity_icons[self.severity],
             "title": self.user_title,
@@ -298,6 +290,7 @@ class UserFriendlyError:
             "technical_details": self.technical_details,
             "support_contact": self.contact_support,
         }
+
 
 # 错误映射表
 ERROR_MAPPING = {
@@ -314,7 +307,6 @@ ERROR_MAPPING = {
         technical_details="All retrieval services (vector, BM25, graph) failed to respond",
         contact_support=False,
     ),
-    
     "NoEvidenceFoundError": UserFriendlyError(
         error_type="NoEvidenceFoundError",
         user_title="未找到相关信息",
@@ -328,7 +320,6 @@ ERROR_MAPPING = {
         technical_details=None,
         contact_support=False,
     ),
-    
     "LowQualityAnswerError": UserFriendlyError(
         error_type="LowQualityAnswerError",
         user_title="答案质量不足",
@@ -344,13 +335,14 @@ ERROR_MAPPING = {
     ),
 }
 
+
 def convert_to_user_friendly_error(exception: Exception) -> UserFriendlyError:
     """将内部异常转换为用户友好的错误"""
     error_name = type(exception).__name__
-    
+
     if error_name in ERROR_MAPPING:
         return ERROR_MAPPING[error_name]
-    
+
     # 默认通用错误
     return UserFriendlyError(
         error_type=error_name,
@@ -407,41 +399,41 @@ def convert_to_user_friendly_error(exception: Exception) -> UserFriendlyError:
 ```python
 class QueryOptimizationAdvisor:
     """查询优化建议器"""
-    
+
     def analyze_query(self, query: str) -> dict:
         """分析查询并给出优化建议"""
-        
+
         issues = []
         suggestions = []
-        
+
         # 1. 检查查询长度
         if len(query) < 5:
             issues.append("问题过于简短")
             suggestions.append("请提供更多细节，例如您想了解什么方面的信息")
-        
+
         # 2. 检查是否过于宽泛
         vague_keywords = ["怎么样", "如何", "情况", "信息", "内容"]
         if any(kw in query for kw in vague_keywords) and len(query) < 15:
             issues.append("问题可能过于宽泛")
             suggestions.append("建议明确具体的方面，例如：时间范围、具体指标、特定主题等")
-        
+
         # 3. 检查是否缺少上下文
         if not self._has_context_keywords(query):
             issues.append("缺少必要的上下文信息")
             suggestions.append("建议说明：具体时间、地点、对象等背景信息")
-        
+
         # 4. 检查是否包含多个问题
         if query.count("？") > 1 or query.count("?") > 1:
             issues.append("包含多个问题")
             suggestions.append("建议一次只问一个问题，这样能得到更准确的答案")
-        
+
         return {
             "needs_optimization": len(issues) > 0,
             "issues": issues,
             "suggestions": suggestions,
             "optimized_examples": self._generate_examples(query),
         }
-    
+
     def _generate_examples(self, query: str) -> list[str]:
         """生成优化示例"""
         # 基于原始查询生成更好的提问示例
@@ -453,13 +445,14 @@ class QueryOptimizationAdvisor:
             ]
         return []
 
+
 # 在路由阶段集成
 class RouterAgentService:
     async def route(self, request: OrchestrationRequest) -> RouteDecision:
         # 分析查询质量
         advisor = QueryOptimizationAdvisor()
         analysis = advisor.analyze_query(request.question)
-        
+
         # 如果查询质量较差，返回优化建议
         if analysis["needs_optimization"] and self._should_suggest_optimization(analysis):
             return RouteDecision(
@@ -471,9 +464,9 @@ class RouterAgentService:
                 reason="query_needs_optimization",
                 metadata={
                     "optimization_suggestions": analysis,
-                }
+                },
             )
-        
+
         # 正常路由流程...
 ```
 
@@ -531,62 +524,64 @@ def decide_route(
 ```python
 class RoutingPipeline:
     """路由决策流水线 - 将复杂逻辑拆分为清晰的步骤"""
-    
+
     def __init__(self):
         self.intent_classifier = IntentClassifier()
         self.skill_selector = SkillSelector()
         self.route_decider = RouteDecider()
         self.confidence_calibrator = ConfidenceCalibrator()
         self.fallback_handler = FallbackHandler()
-    
+
     def decide(self, question: str, **options) -> RouteDecision:
         """执行完整的路由决策流水线"""
-        
+
         # 步骤 1: 意图分类
         intent = self.intent_classifier.classify(question, **options)
-        
+
         # 步骤 2: 技能选择
         skill = self.skill_selector.select(question, intent)
-        
+
         # 步骤 3: 路由决策
         route_result = self.route_decider.decide(question, intent, skill)
-        
+
         # 步骤 4: 置信度校准
         calibrated = self.confidence_calibrator.calibrate(route_result)
-        
+
         # 步骤 5: 低置信度 fallback
         if calibrated.confidence < THRESHOLD:
             calibrated = self.fallback_handler.handle(question, calibrated)
-        
+
         return calibrated
+
 
 # 每个组件独立、可测试、可扩展
 class IntentClassifier:
     """意图分类器 - 单一职责"""
-    
+
     def classify(self, question: str, use_llm: bool = True, hint: str | None = None) -> Intent:
         if hint:
             return self._validate_hint(hint)
-        
+
         if self._is_smalltalk(question):
             return Intent(type="smalltalk", confidence=0.95)
-        
+
         if use_llm:
             return self._classify_with_llm(question)
-        
+
         return self._classify_with_rules(question)
+
 
 class SkillSelector:
     """技能选择器 - 单一职责"""
-    
+
     def select(self, question: str, intent: Intent) -> Skill:
         # 基于意图和问题选择技能
         if intent.type == "cybersecurity":
             return self._pick_cyber_skill(question)
-        
+
         if "compare" in question.lower():
             return Skill("compare_entities")
-        
+
         return Skill("answer_with_citations")
 ```
 
@@ -830,60 +825,46 @@ class CitationEnhancer:
 ```python
 class IntelligentContextManager:
     """智能上下文管理器"""
-    
+
     def __init__(self):
         self.entity_tracker = EntityTracker()  # 实体追踪
-        self.topic_tracker = TopicTracker()    # 话题追踪
-        self.intent_history = []               # 意图历史
-    
+        self.topic_tracker = TopicTracker()  # 话题追踪
+        self.intent_history = []  # 意图历史
+
     def build_context(
         self,
         current_query: str,
         session_history: list[dict],
     ) -> EnrichedContext:
         """构建增强的上下文"""
-        
+
         # 1. 实体共指消解
-        resolved_query = self.entity_tracker.resolve_references(
-            current_query,
-            session_history
-        )
+        resolved_query = self.entity_tracker.resolve_references(current_query, session_history)
         # "那净利润呢？" → "公司2023年的净利润是多少？"
-        
+
         # 2. 话题连续性
         current_topic = self.topic_tracker.get_current_topic(session_history)
         # 识别当前话题：财务分析
-        
+
         # 3. 选择相关历史
-        relevant_history = self._select_relevant_history(
-            resolved_query,
-            session_history,
-            current_topic
-        )
-        
+        relevant_history = self._select_relevant_history(resolved_query, session_history, current_topic)
+
         # 4. 构建结构化上下文
         return EnrichedContext(
             original_query=current_query,
             resolved_query=resolved_query,
             current_topic=current_topic,
             relevant_history=relevant_history,
-            entities={
-                "company": "公司",
-                "time": "2023年",
-                "metrics": ["营收", "净利润"]
-            }
+            entities={"company": "公司", "time": "2023年", "metrics": ["营收", "净利润"]},
         )
+
 
 class EntityTracker:
     """实体追踪和共指消解"""
-    
-    def resolve_references(
-        self,
-        query: str,
-        history: list[dict]
-    ) -> str:
+
+    def resolve_references(self, query: str, history: list[dict]) -> str:
         """解析指代关系"""
-        
+
         # 检测代词和指代词
         pronouns = {
             "它": self._find_recent_entity(history, "company"),
@@ -891,18 +872,18 @@ class EntityTracker:
             "这个": self._find_recent_entity(history, "topic"),
             "那个": self._find_recent_topic(history),
         }
-        
+
         resolved = query
         for pronoun, entity in pronouns.items():
             if pronoun in query and entity:
                 resolved = resolved.replace(pronoun, entity)
-        
+
         # 补全省略的主语
         if self._is_follow_up_question(query):
             main_entity = self._get_conversation_subject(history)
             if main_entity and not self._has_subject(query):
                 resolved = f"{main_entity}的{query}"
-        
+
         return resolved
 ```
 
@@ -942,65 +923,58 @@ class EntityTracker:
 @dataclass
 class SynthesisTrace:
     """答案生成追踪"""
-    
+
     evidence_selection: list[dict]  # 证据选择过程
     reasoning_steps: list[str]  # 推理步骤
     citation_decisions: list[dict]  # 引用决策
     quality_checks: list[dict]  # 质量检查
-    
+
     def to_debug_view(self) -> str:
         """调试视图"""
         output = "🔍 答案生成追踪\n\n"
-        
+
         output += "1️⃣ 证据筛选:\n"
         for item in self.evidence_selection:
             output += f"  • {item['document']}: {item['reason']} (分数: {item['score']})\n"
-        
+
         output += "\n2️⃣ 推理过程:\n"
         for i, step in enumerate(self.reasoning_steps, 1):
             output += f"  {i}. {step}\n"
-        
+
         output += "\n3️⃣ 引用决策:\n"
         for item in self.citation_decisions:
             output += f"  • {item['claim']} ← {item['citation']} (置信度: {item['confidence']})\n"
-        
+
         return output
+
 
 class ObservableSynthesizer:
     """可观测的答案生成器"""
-    
+
     async def synthesize_with_trace(
         self,
         request: OrchestrationRequest,
         evidence: EvidenceBundle,
     ) -> tuple[FinalAnswer, SynthesisTrace]:
         """生成答案并返回追踪信息"""
-        
+
         trace = SynthesisTrace(
             evidence_selection=[],
             reasoning_steps=[],
             citation_decisions=[],
             quality_checks=[],
         )
-        
+
         # 1. 证据选择（记录过程）
         selected_evidence = self._select_evidence(evidence, trace)
         trace.reasoning_steps.append(f"从 {len(evidence.items)} 条证据中选择了 {len(selected_evidence)} 条最相关的")
-        
+
         # 2. 生成答案（记录推理）
-        answer = await self._generate_with_reasoning(
-            request,
-            selected_evidence,
-            trace
-        )
-        
+        answer = await self._generate_with_reasoning(request, selected_evidence, trace)
+
         # 3. 添加引用（记录决策）
-        answer_with_citations = self._add_citations(
-            answer,
-            selected_evidence,
-            trace
-        )
-        
+        answer_with_citations = self._add_citations(answer, selected_evidence, trace)
+
         return answer_with_citations, trace
 ```
 
@@ -1016,7 +990,7 @@ class ObservableSynthesizer:
 ```python
 class AnswerVersionManager:
     """答案版本管理"""
-    
+
     def save_version(
         self,
         session_id: str,
@@ -1026,29 +1000,28 @@ class AnswerVersionManager:
     ) -> str:
         """保存答案版本"""
         version_id = self._generate_version_id()
-        
-        self.storage.save({
-            "version_id": version_id,
-            "session_id": session_id,
-            "question": question,
-            "answer": answer.model_dump(),
-            "metadata": version_metadata,
-            "created_at": datetime.utcnow(),
-        })
-        
+
+        self.storage.save(
+            {
+                "version_id": version_id,
+                "session_id": session_id,
+                "question": question,
+                "answer": answer.model_dump(),
+                "metadata": version_metadata,
+                "created_at": datetime.utcnow(),
+            }
+        )
+
         return version_id
-    
+
     def get_versions(
         self,
         session_id: str,
         question: str,
     ) -> list[AnswerVersion]:
         """获取某个问题的所有答案版本"""
-        return self.storage.query(
-            session_id=session_id,
-            question_normalized=self._normalize(question)
-        )
-    
+        return self.storage.query(session_id=session_id, question_normalized=self._normalize(question))
+
     def compare_versions(
         self,
         version_a: str,
@@ -1117,8 +1090,9 @@ class UnifiedConfig:
 ```python
 from prometheus_client import Histogram, Counter
 
-query_latency = Histogram('query_latency_seconds', 'Query latency')
-query_count = Counter('query_total', 'Total queries')
+query_latency = Histogram("query_latency_seconds", "Query latency")
+query_count = Counter("query_total", "Total queries")
+
 
 @query_latency.time()
 async def execute(self, request):

@@ -178,10 +178,13 @@ def test_k_counts_matching_documents_not_candidates(corpus, monkeypatch):
     monkeypatch.setattr(
         bm25_retriever,
         "read_corpus_records",
-        lambda: [
-            {"id": f"hit-{i}", "text": f"compensation review {i}", "metadata": {"source": ALICE_DOC}} for i in range(5)
-        ]
-        + [{"id": f"miss-{i}", "text": f"travel policy {i}", "metadata": {"source": ALICE_DOC}} for i in range(5)],
+        lambda: (
+            [
+                {"id": f"hit-{i}", "text": f"compensation review {i}", "metadata": {"source": ALICE_DOC}}
+                for i in range(5)
+            ]
+            + [{"id": f"miss-{i}", "text": f"travel policy {i}", "metadata": {"source": ALICE_DOC}} for i in range(5)]
+        ),
     )
     bm25_retriever.reset_bm25_cache()
 

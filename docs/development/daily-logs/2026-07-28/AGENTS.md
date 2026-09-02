@@ -166,13 +166,16 @@ All nodes in `app/graph/nodes/` follow this pattern:
 from langgraph.graph import StateGraph
 from typing import TypedDict
 
+
 class GraphState(TypedDict):
     query: str
     # ... other state fields
 
+
 def my_node(state: GraphState) -> GraphState:
     # Process state
     return updated_state
+
 
 # Add to graph
 graph.add_node("my_node", my_node)

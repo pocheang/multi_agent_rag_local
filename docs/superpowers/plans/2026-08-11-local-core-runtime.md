@@ -83,9 +83,7 @@ def test_render_environment_expands_generated_secret_references(tmp_path):
         "ADMIN_CREATE_APPROVAL_TOKEN=approval-secret\n",
     )
 
-    values = render_environment(
-        "development", "balanced", tmp_path / "rendered.env", root
-    )
+    values = render_environment("development", "balanced", tmp_path / "rendered.env", root)
 
     assert values["REDIS_URL"] == "redis://:redis-secret@127.0.0.1:6379/0"
 ```
@@ -269,8 +267,15 @@ def test_local_infrastructure_compose_renders_only_core_services(tmp_path):
     env = {**os.environ, "DOCKER_CONFIG": str(docker_config)}
     result = subprocess.run(
         [
-            "docker", "compose", "--env-file", str(env_file),
-            "-f", str(COMPOSE), "config", "--format", "json",
+            "docker",
+            "compose",
+            "--env-file",
+            str(env_file),
+            "-f",
+            str(COMPOSE),
+            "config",
+            "--format",
+            "json",
         ],
         cwd=ROOT,
         env=env,
@@ -437,11 +442,16 @@ from deploy.scripts.local_dev import (
 def test_compose_command_uses_infrastructure_file_and_local_project(tmp_path):
     command = compose_command(tmp_path, tmp_path / ".runtime" / "development.env")
     assert command == [
-        "docker", "compose",
-        "--project-directory", str(tmp_path),
-        "--project-name", "querymind-local",
-        "--env-file", str(tmp_path / ".runtime" / "development.env"),
-        "-f", str(tmp_path / "deploy" / "compose" / "compose.infrastructure.yaml"),
+        "docker",
+        "compose",
+        "--project-directory",
+        str(tmp_path),
+        "--project-name",
+        "querymind-local",
+        "--env-file",
+        str(tmp_path / ".runtime" / "development.env"),
+        "-f",
+        str(tmp_path / "deploy" / "compose" / "compose.infrastructure.yaml"),
     ]
 
 
@@ -518,11 +528,16 @@ class ProcessRecord:
 
 def compose_command(root: Path, runtime_env: Path) -> list[str]:
     return [
-        "docker", "compose",
-        "--project-directory", str(root),
-        "--project-name", "querymind-local",
-        "--env-file", str(runtime_env),
-        "-f", str(root / "deploy" / "compose" / "compose.infrastructure.yaml"),
+        "docker",
+        "compose",
+        "--project-directory",
+        str(root),
+        "--project-name",
+        "querymind-local",
+        "--env-file",
+        str(runtime_env),
+        "-f",
+        str(root / "deploy" / "compose" / "compose.infrastructure.yaml"),
     ]
 
 

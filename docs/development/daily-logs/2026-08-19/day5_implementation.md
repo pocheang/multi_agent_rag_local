@@ -227,20 +227,20 @@ Fused Results
 
 ```python
 # Enable all features
-ENABLE_IMAGE_PROCESSING=true
-ENABLE_TABLE_EXTRACTION=true
-ENABLE_OCR=true
+ENABLE_IMAGE_PROCESSING = true
+ENABLE_TABLE_EXTRACTION = true
+ENABLE_OCR = true
 
 # Vision model (GPT-4V for quality)
-VISION_MODEL=gpt-4-vision-preview
-MAX_IMAGE_TOKENS=1000
+VISION_MODEL = gpt - 4 - vision - preview
+MAX_IMAGE_TOKENS = 1000
 
 # OCR (PaddleOCR for Chinese)
-OCR_ENGINE=paddleocr
-OCR_LANGUAGES=eng+chi_sim
+OCR_ENGINE = paddleocr
+OCR_LANGUAGES = eng + chi_sim
 
 # Fusion method (RRF recommended)
-MULTIMODAL_FUSION_METHOD=rrf
+MULTIMODAL_FUSION_METHOD = rrf
 ```
 
 ## Usage Example
@@ -251,11 +251,7 @@ from app.services.multimodal.processor import MultiModalDocumentProcessor
 processor = MultiModalDocumentProcessor()
 
 # Process document with full pipeline
-results = await processor.process_document(
-    pdf_path="document.pdf",
-    doc_id="doc_123",
-    index_content=True
-)
+results = await processor.process_document(pdf_path="document.pdf", doc_id="doc_123", index_content=True)
 
 print(f"Extracted: {results['stats']['num_images']} images")
 print(f"Extracted: {results['stats']['num_tables']} tables")
@@ -267,9 +263,7 @@ from app.retrievers.multimodal_retriever import MultiModalRetriever
 
 retriever = MultiModalRetriever()
 results = await retriever.retrieve(
-    query="Show me the sales chart",
-    modalities=["text", "image", "table", "chart"],
-    top_k=10
+    query="Show me the sales chart", modalities=["text", "image", "table", "chart"], top_k=10
 )
 ```
 

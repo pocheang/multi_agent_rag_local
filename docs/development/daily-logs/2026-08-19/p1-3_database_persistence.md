@@ -136,6 +136,7 @@ def _cache_put(self, metadata: SessionMetadata):
     self._evict_from_cache_if_needed()
     self._cache[metadata.session_id] = metadata
 
+
 def _cache_touch(self, session_id: str):
     """Touch entry (move to end for LRU)."""
     if session_id in self._cache:
@@ -349,14 +350,11 @@ def test_persistence_across_instances(temp_db):
     """Data survives service restarts."""
     # Instance 1: Create data
     service1 = SessionMetadataDB(db_path=temp_db)
-    service1.create(SessionMetadata(
-        session_id="test-1",
-        tags=["persistent"]
-    ))
-    
+    service1.create(SessionMetadata(session_id="test-1", tags=["persistent"]))
+
     # Instance 2: New process (simulated restart)
     service2 = SessionMetadataDB(db_path=temp_db)
-    
+
     # Data still there
     retrieved = service2.get("test-1")
     assert retrieved.tags == ["persistent"]  # ✅

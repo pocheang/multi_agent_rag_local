@@ -48,6 +48,7 @@
 from pydantic import ValidationError
 from app.domain.contracts import EvidenceItem, EvidenceBundle
 
+
 def test_evidence_bundle_rejects_fact_without_source() -> None:
     with pytest.raises(ValidationError):
         EvidenceBundle(items=(EvidenceItem(content="fact", source=""),))
@@ -68,6 +69,7 @@ class EvidenceItem(BaseModel):
     source: str = Field(min_length=1)
     document_id: str | None = None
     page: int | None = Field(default=None, ge=1)
+
 
 class EvidenceBundle(BaseModel):
     model_config = ConfigDict(frozen=True)
@@ -184,8 +186,10 @@ Expected: FAIL because `fuse_evidence` does not exist.
 
 ```python
 results = await asyncio.gather(
-    self._vector.retrieve(task), self._bm25.retrieve(task),
-    self._graph.retrieve(task), self._web.retrieve(task),
+    self._vector.retrieve(task),
+    self._bm25.retrieve(task),
+    self._graph.retrieve(task),
+    self._web.retrieve(task),
     return_exceptions=True,
 )
 return self._reranker.rank(fuse_evidence(normalize_results(results)))

@@ -203,24 +203,22 @@ from functools import lru_cache
 from collections import OrderedDict
 import time
 
+
 class ContextManagementService:
     MAX_SESSIONS = 10000  # 最大session数
     SESSION_TTL = 3600 * 24  # 24小时过期
-    
+
     def __init__(self):
         self.contexts: OrderedDict = OrderedDict()
         self.last_access: dict[str, float] = {}
-    
+
     def _cleanup_old_sessions(self):
         """清理过期session"""
         now = time.time()
-        expired = [
-            sid for sid, last in self.last_access.items()
-            if now - last > self.SESSION_TTL
-        ]
+        expired = [sid for sid, last in self.last_access.items() if now - last > self.SESSION_TTL]
         for sid in expired:
             self.clear_context(sid)
-    
+
     def _ensure_capacity(self):
         """确保不超过容量限制"""
         if len(self.contexts) >= self.MAX_SESSIONS:
@@ -254,14 +252,14 @@ def process_query(self, query: str, session_id: str) -> ResolvedQuery:
     # 输入验证
     if len(query) > 10000:
         raise ValueError("Query too long (max 10000 chars)")
-    
+
     if len(session_id) > 128:
         raise ValueError("Session ID too long (max 128 chars)")
-    
+
     # 过滤危险字符
-    if re.search(r'[\x00-\x08\x0B-\x0C\x0E-\x1F]', query):
+    if re.search(r"[\x00-\x08\x0B-\x0C\x0E-\x1F]", query):
         raise ValueError("Query contains invalid characters")
-    
+
     # 正常处理...
 ```
 
@@ -270,7 +268,8 @@ def process_query(self, query: str, session_id: str) -> ResolvedQuery:
 
 **建议**:
 ```python
-SESSION_ID_PATTERN = re.compile(r'^[a-zA-Z0-9_-]{1,128}$')
+SESSION_ID_PATTERN = re.compile(r"^[a-zA-Z0-9_-]{1,128}$")
+
 
 def _validate_session_id(self, session_id: str) -> None:
     if not self.SESSION_ID_PATTERN.match(session_id):
@@ -290,15 +289,21 @@ def _validate_session_id(self, session_id: str) -> None:
 ```python
 class ContextManagementError(Exception):
     """Base exception for context management"""
+
     pass
+
 
 class EntityExtractionError(ContextManagementError):
     """Entity extraction failed"""
+
     pass
+
 
 class CoreferenceResolutionError(ContextManagementError):
     """Coreference resolution failed"""
+
     pass
+
 
 def process_query(self, query: str, session_id: str) -> ResolvedQuery:
     try:

@@ -153,7 +153,9 @@ def stream_synthesize_answer(...):
 
 ```python
 # 在配置或日志中记录
-logger.info(f"Using model: {model.__class__.__name__}, backend: {backend}, model_name: {openai_model or anthropic_model or ollama_model}")
+logger.info(
+    f"Using model: {model.__class__.__name__}, backend: {backend}, model_name: {openai_model or anthropic_model or ollama_model}"
+)
 ```
 
 **已知情况**：

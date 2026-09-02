@@ -72,6 +72,7 @@ def update_session_title(self, session_id: str, title: str) -> dict[str, Any] | 
         self._write(session_id, data)
         return data
 
+
 def update_session_pinned(self, session_id: str, pinned: bool) -> dict[str, Any] | None:
     """Update session pinned status."""
     with self._lock:

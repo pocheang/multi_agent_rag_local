@@ -140,9 +140,7 @@ if successful_retrievers == 0:
     raise RuntimeError(...)  # 保持原有行为
 
 if evidence_count == 0:  # ⚠️ 新增的检查
-    await self._report_degradation(
-        ExecutionEvent(status="completed", message="DEGRADED: ...no matching documents...")
-    )
+    await self._report_degradation(ExecutionEvent(status="completed", message="DEGRADED: ...no matching documents..."))
 ```
 
 **问题分析**:
@@ -256,19 +254,18 @@ ExecutionEvent(stage="rag", status="completed", message="DEGRADED: ...")
 
 **原始期望**:
 ```python
-[("route", "completed", ""),
- ("rag", "skipped", "vector: TimeoutError"),
- ("rag", "completed", ""),
- ...]
+[("route", "completed", ""), ("rag", "skipped", "vector: TimeoutError"), ("rag", "completed", ""), ...]
 ```
 
 **更新后期望**:
 ```python
-[("route", "completed", ""),
- ("rag", "skipped", "vector: TimeoutError: vector timeout"),
- ("rag", "completed", "DEGRADED: Partial retrieval success: 1/2 retrievers..."),
- ("rag", "completed", ""),
- ...]
+[
+    ("route", "completed", ""),
+    ("rag", "skipped", "vector: TimeoutError: vector timeout"),
+    ("rag", "completed", "DEGRADED: Partial retrieval success: 1/2 retrievers..."),
+    ("rag", "completed", ""),
+    ...,
+]
 ```
 
 **问题**: 

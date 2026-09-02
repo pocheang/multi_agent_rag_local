@@ -158,9 +158,7 @@ CALIBRATION_CONFIG_DIR: Final[Path] = Path(__file__).parent.parent.parent / "con
 to:
 
 ```python
-CALIBRATION_CONFIG_DIR: Final[Path] = (
-    Path(__file__).resolve().parents[2] / "config" / "application"
-)
+CALIBRATION_CONFIG_DIR: Final[Path] = Path(__file__).resolve().parents[2] / "config" / "application"
 ```
 
 Keep `DEFAULT_CALIBRATION_FILE` unchanged. Update the web activity test fixture path to `config/application/web_activity_config.json`.
@@ -440,7 +438,7 @@ def test_init_app_script_has_no_destructive_database_commands():
 def test_healthcheck_script_exposes_cli_entrypoint():
     source = Path("deploy/scripts/healthcheck.py").read_text(encoding="utf-8")
     assert "--url" in source
-    assert "if __name__ == \"__main__\"" in source
+    assert 'if __name__ == "__main__"' in source
 ```
 
 - [ ] **Step 2: Implement `init_app.py`**

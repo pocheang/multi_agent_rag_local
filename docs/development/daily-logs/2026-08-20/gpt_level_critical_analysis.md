@@ -128,6 +128,7 @@ if request.source_scope.allowed_sources is not None and not request.source_scope
 if "rag" not in route.allowed_capabilities:
     # 可选：记录日志
     import logging
+
     logging.debug(f"Skipping RAG: 'rag' not in allowed_capabilities {route.allowed_capabilities}")
     return EvidenceBundle()
 ```
@@ -165,9 +166,7 @@ total_attempts = len(jobs)
 **场景**:
 ```python
 # 假设 plan 中所有任务的 max_retrievals = 0
-plan = TaskPlan(tasks=[
-    PlannedTask(..., budget=TaskBudget(max_retrievals=0))
-])
+plan = TaskPlan(tasks=[PlannedTask(..., budget=TaskBudget(max_retrievals=0))])
 # jobs = []
 # total_attempts = 0
 # 错误: "All 0 retrieval attempts failed"
@@ -208,7 +207,7 @@ jobs = [
     ("vector", fn, req1),
     ("bm25", fn, req1),
     ("vector", fn, req2),  # 重复
-    ("bm25", fn, req2),    # 重复
+    ("bm25", fn, req2),  # 重复
 ]
 ```
 
@@ -316,11 +315,7 @@ for (name, _, _), result in zip(jobs, results, strict=True):
     if isinstance(result, BaseException):
         failed_retrievers.append(name)
         await self._report_degradation(
-            ExecutionEvent(
-                stage="rag",
-                status="skipped",
-                message=f"{name}: {type(result).__name__}: {str(result)}"
-            )
+            ExecutionEvent(stage="rag", status="skipped", message=f"{name}: {type(result).__name__}: {str(result)}")
         )
         continue
     bundles.append(result)
@@ -336,7 +331,7 @@ for (name, _, _), result in zip(jobs, results, strict=True):
 
 **问题**:
 ```python
-message=f"{name}: {type(result).__name__}: {str(result)}"
+message = f"{name}: {type(result).__name__}: {str(result)}"
 ```
 
 - `str(result)` 可能包含敏感信息（例如，API密钥、路径等）
@@ -354,7 +349,7 @@ raise RuntimeError(f"Failed to connect to database at {db_connection_string}")
 error_msg = str(result)
 if len(error_msg) > 200:
     error_msg = error_msg[:200] + "..."
-message=f"{name}: {type(result).__name__}: {error_msg}"
+message = f"{name}: {type(result).__name__}: {error_msg}"
 ```
 
 **严重性**: 🟠 中等（安全/隐私问题）
@@ -405,11 +400,7 @@ if isinstance(result, BaseException):
 if not isinstance(result, EvidenceBundle):
     # 记录错误并跳过
     await self._report_degradation(
-        ExecutionEvent(
-            stage="rag",
-            status="skipped",
-            message=f"{name}: returned invalid type {type(result)}"
-        )
+        ExecutionEvent(stage="rag", status="skipped", message=f"{name}: returned invalid type {type(result)}")
     )
     failed_retrievers.append(name)
     continue
@@ -508,15 +499,14 @@ if evidence_count == 0 or failed_retrievers:
         status_parts.append("no matching documents")
     if failed_retrievers:
         status_parts.append(f"Failed: {', '.join(set(failed_retrievers))}")
-    
+
     await self._report_degradation(
         ExecutionEvent(
             stage="rag",
             status="completed",
             message=(
-                f"DEGRADED: {successful_attempts}/{total_attempts} attempts succeeded. "
-                + "; ".join(status_parts)
-            )
+                f"DEGRADED: {successful_attempts}/{total_attempts} attempts succeeded. " + "; ".join(status_parts)
+            ),
         )
     )
 ```
@@ -554,7 +544,7 @@ def _enabled_retrievers(self, route: RouteDecision) -> tuple[tuple[str, TypedRet
 ```python
 route = RouteDecision(
     intent="web_search",
-    allowed_capabilities=frozenset({"web"})  # 只允许 web
+    allowed_capabilities=frozenset({"web"}),  # 只允许 web
 )
 # 但仍然会运行 vector 和 bm25
 ```
@@ -624,7 +614,10 @@ def _retrieval_requests(
     return tuple(
         (
             request.model_copy(update={"question": task.prompt}),
-            min(task.budget.max_retrievals if task.budget.max_retrievals > 0 else available_retrievers, available_retrievers)
+            min(
+                task.budget.max_retrievals if task.budget.max_retrievals > 0 else available_retrievers,
+                available_retrievers,
+            ),
         )
         for task in plan.tasks
         if task.retrieval_required and task.budget.max_retrievals > 0
@@ -649,17 +642,14 @@ min(task.budget.max_retrievals if task.budget.max_retrievals > 0 else available_
 # 如果 max_retrievals > 0，使用它（但不超过 available）
 # 如果 max_retrievals <= 0，使用 available
 effective_max = (
-    min(task.budget.max_retrievals, available_retrievers)
-    if task.budget.max_retrievals > 0
-    else available_retrievers
+    min(task.budget.max_retrievals, available_retrievers) if task.budget.max_retrievals > 0 else available_retrievers
 )
 ```
 
 或者更简洁：
 ```python
 effective_max = min(
-    task.budget.max_retrievals if task.budget.max_retrievals > 0 else float('inf'),
-    available_retrievers
+    task.budget.max_retrievals if task.budget.max_retrievals > 0 else float("inf"), available_retrievers
 )
 ```
 
@@ -692,10 +682,7 @@ task.budget.max_retrievals if task.budget.max_retrievals > 0 else ...
 **修复**:
 ```python
 return tuple(
-    (
-        request.model_copy(update={"question": task.prompt}),
-        min(task.budget.max_retrievals, available_retrievers)
-    )
+    (request.model_copy(update={"question": task.prompt}), min(task.budget.max_retrievals, available_retrievers))
     for task in plan.tasks
     if task.retrieval_required and task.budget.max_retrievals > 0
 )
@@ -776,7 +763,7 @@ del route, plan
 
 所有检索器都有类似代码：
 ```python
-allowed_sources=list(request.source_scope.allowed_sources) if request.source_scope.allowed_sources else None,
+allowed_sources = (list(request.source_scope.allowed_sources) if request.source_scope.allowed_sources else None,)
 ```
 
 **问题 5.3: 重复的 None 检查**
@@ -792,8 +779,9 @@ def _get_allowed_sources(request: OrchestrationRequest) -> list[str] | None:
         return list(request.source_scope.allowed_sources)
     return None
 
+
 # 使用
-allowed_sources=_get_allowed_sources(request)
+allowed_sources = _get_allowed_sources(request)
 ```
 
 **严重性**: 🟡 低（代码重复，可维护性问题）
@@ -846,6 +834,7 @@ await asyncio.to_thread(bm25_search, ...)
 ```python
 # 创建有限的线程池
 import concurrent.futures
+
 executor = concurrent.futures.ThreadPoolExecutor(max_workers=50)
 
 # 使用自定义 executor
@@ -897,6 +886,7 @@ TypedRetriever = Callable[[OrchestrationRequest, RouteDecision, TaskPlan | None]
 ```python
 from typing import Protocol
 
+
 class TypedRetriever(Protocol):
     async def __call__(
         self,
@@ -915,9 +905,7 @@ class TypedRetriever(Protocol):
 #### 问题 8.1: RuntimeError 不够具体
 
 ```python
-raise RuntimeError(
-    f"All {total_attempts} retrieval attempts failed..."
-)
+raise RuntimeError(f"All {total_attempts} retrieval attempts failed...")
 ```
 
 **问题**:
@@ -931,6 +919,7 @@ class RetrievalFailureError(Exception):
         self.total_attempts = total_attempts
         self.failed_retrievers = failed_retrievers
         super().__init__(f"All {total_attempts} retrieval attempts failed...")
+
 
 raise RetrievalFailureError(total_attempts, unique_failed)
 ```

@@ -145,8 +145,8 @@ def mark_inflight(self, key: str) -> bool:
        str(getattr(settings, "redis_url", "")),
        decode_responses=True,
        socket_connect_timeout=0.2,  # 仅 0.2 秒，太短
-       socket_timeout=0.2,           # 仅 0.2 秒，太短
-       retry_on_timeout=False,       # 关闭重试
+       socket_timeout=0.2,  # 仅 0.2 秒，太短
+       retry_on_timeout=False,  # 关闭重试
        max_connections=50,
        health_check_interval=30,
    )
@@ -161,8 +161,8 @@ def mark_inflight(self, key: str) -> bool:
        str(getattr(settings, "redis_url", "")),
        max_connections=50,
        socket_keepalive=True,
-       socket_connect_timeout=5,     # 5秒，合理
-       socket_timeout=5,             # 5秒，合理
+       socket_connect_timeout=5,  # 5秒，合理
+       socket_timeout=5,  # 5秒，合理
        decode_responses=False,
        health_check_interval=30,
    )
@@ -183,42 +183,42 @@ def mark_inflight(self, key: str) -> bool:
 ```python
 def _get_redis_client():
     global _REDIS_CLIENT, _REDIS_UNAVAILABLE_UNTIL
-    
+
     if _REDIS_CLIENT is not None:
         return _REDIS_CLIENT
-    
+
     if _REDIS_UNAVAILABLE_UNTIL and time.monotonic() < _REDIS_UNAVAILABLE_UNTIL:
         return None
-    
+
     with _REDIS_LOCK:
         if _REDIS_CLIENT is not None:
             return _REDIS_CLIENT
-        
+
         if _REDIS_UNAVAILABLE_UNTIL and time.monotonic() < _REDIS_UNAVAILABLE_UNTIL:
             return None
-        
+
         settings = get_settings()
         try:
             import redis
-            
+
             # 关闭旧连接（如果存在）
             if _REDIS_CLIENT is not None:
                 try:
                     _REDIS_CLIENT.close()
                 except Exception as e:
                     logger.debug(f"Error closing old Redis connection: {e}")
-            
+
             # 创建新连接，使用合理的超时配置
             _REDIS_CLIENT = redis.from_url(
                 str(getattr(settings, "redis_url", "")),
                 decode_responses=True,
-                socket_connect_timeout=2.0,      # 增加到 2 秒
-                socket_timeout=2.0,              # 增加到 2 秒
-                retry_on_timeout=True,           # 启用重试
+                socket_connect_timeout=2.0,  # 增加到 2 秒
+                socket_timeout=2.0,  # 增加到 2 秒
+                retry_on_timeout=True,  # 启用重试
                 retry_on_error=[redis.ConnectionError, redis.TimeoutError],
                 max_connections=50,
                 health_check_interval=30,
-                socket_keepalive=True,           # 启用 keepalive
+                socket_keepalive=True,  # 启用 keepalive
                 socket_keepalive_options={
                     socket.TCP_KEEPIDLE: 60,
                     socket.TCP_KEEPINTVL: 10,
@@ -228,7 +228,7 @@ def _get_redis_client():
             _REDIS_CLIENT.ping()
             _REDIS_UNAVAILABLE_UNTIL = 0.0
             return _REDIS_CLIENT
-        
+
         except Exception as e:
             logger.warning(f"Redis connection failed: {e}")
             # 确保清理
@@ -238,7 +238,7 @@ def _get_redis_client():
                 except Exception:
                     pass
                 _REDIS_CLIENT = None
-            
+
             _REDIS_UNAVAILABLE_UNTIL = time.monotonic() + _redis_retry_cooldown_seconds()
             return None
 ```
@@ -557,21 +557,23 @@ async def get(self, key: str) -> Optional[Any]:
 ```python
 # app/api/application/lifespan.py
 
+
 async def warmup_cache():
     """预热高频查询缓存"""
     logger.info("Starting cache warmup...")
-    
+
     # 从数据库加载常见查询
     popular_queries = await db.fetch_popular_queries(limit=100)
-    
+
     for query in popular_queries:
         try:
             # 预执行查询，填充缓存
             await pipeline.execute(query)
         except Exception as e:
             logger.warning(f"Cache warmup failed for query: {e}")
-    
+
     logger.info("Cache warmup completed")
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -585,34 +587,35 @@ async def lifespan(app: FastAPI):
 ```python
 # app/services/caching/backup.py
 
+
 class CacheBackup:
     def __init__(self, cache_manager: CacheManager, backup_path: str):
         self.cache_manager = cache_manager
         self.backup_path = backup_path
-    
+
     async def backup(self):
         """定期备份热点缓存"""
         stats = self.cache_manager.get_stats()
         hot_keys = self._get_hot_keys(stats)
-        
+
         backup_data = {}
         for key in hot_keys:
             value = await self.cache_manager.l1_cache.get(key)
             if value is not None:
                 backup_data[key] = value
-        
+
         # 保存到磁盘
-        with open(self.backup_path, 'wb') as f:
+        with open(self.backup_path, "wb") as f:
             pickle.dump(backup_data, f)
-    
+
     async def restore(self):
         """从备份恢复缓存"""
         if not os.path.exists(self.backup_path):
             return
-        
-        with open(self.backup_path, 'rb') as f:
+
+        with open(self.backup_path, "rb") as f:
             backup_data = pickle.load(f)
-        
+
         for key, value in backup_data.items():
             await self.cache_manager.l1_cache.set(key, value)
 ```
@@ -667,16 +670,17 @@ class CacheBackup:
 ```python
 # tests/security/test_cache_isolation.py
 
+
 async def test_user_cache_isolation():
     """验证用户缓存隔离"""
     # 用户 A 查询
     result_a = await cache.get(key, user_id="user_a")
     await cache.set(key, {"data": "secret_a"}, user_id="user_a")
-    
+
     # 用户 B 不应该访问到用户 A 的数据
     result_b = await cache.get(key, user_id="user_b")
     assert result_b is None
-    
+
     # 无 user_id 不应该访问到任何数据
     result_none = await cache.get(key, user_id=None)
     assert result_none is None
@@ -687,11 +691,9 @@ async def test_user_cache_isolation():
 async def test_concurrent_inflight_marking():
     """验证并发场景下的 inflight 标记"""
     import asyncio
-    
-    results = await asyncio.gather(*[
-        cache.mark_inflight(key) for _ in range(100)
-    ])
-    
+
+    results = await asyncio.gather(*[cache.mark_inflight(key) for _ in range(100)])
+
     # 只有一个请求应该成功
     assert sum(results) == 1
 ```
@@ -707,7 +709,7 @@ locust -f tests/performance/cache_load_test.py --host=http://localhost:8000
 async def test_redis_failure_graceful_degradation():
     """验证 Redis 故障时的降级"""
     # 模拟 Redis 断开
-    with mock.patch('redis.Redis.get', side_effect=redis.ConnectionError):
+    with mock.patch("redis.Redis.get", side_effect=redis.ConnectionError):
         # 应该降级到内存缓存
         result = await cache.get(key)
         assert result is not None  # 从 L1 获取

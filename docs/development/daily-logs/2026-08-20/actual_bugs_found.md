@@ -237,25 +237,21 @@ async def test_real_bm25_search():
     from app.agents.rag.service import RAGAgentService
     from app.domain.contracts import RouteDecision
     from app.orchestration.request import OrchestrationRequest
-    
+
     route = RouteDecision(
         intent="knowledge_retrieval",
         confidence=0.9,
         requires_plan=False,
         allowed_capabilities=frozenset({"rag"}),
-        reason="test"
+        reason="test",
     )
-    
+
     service = RAGAgentService()
-    
+
     # 这应该真正调用 bm25_search
     # 如果参数顺序错误，会失败
-    result = await service.retrieve(
-        OrchestrationRequest(question="test query"),
-        route,
-        None
-    )
-    
+    result = await service.retrieve(OrchestrationRequest(question="test query"), route, None)
+
     # 如果没有抛出异常，说明要么：
     # 1. 参数顺序是对的（我们错了）
     # 2. 有其他机制处理了错误

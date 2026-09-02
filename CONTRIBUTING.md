@@ -241,13 +241,14 @@ tests/
 import pytest
 from app.agents.router_agent import RouterAgent
 
+
 def test_router_classifies_query_correctly():
     """Test that router correctly classifies query type."""
     agent = RouterAgent()
-    
+
     query = "What is the capital of France?"
     result = agent.classify(query)
-    
+
     assert result.route == "vector"
     assert result.confidence > 0.8
 ```
@@ -259,16 +260,14 @@ import pytest
 from fastapi.testclient import TestClient
 from app.api.main import app
 
+
 @pytest.mark.integration
 def test_query_endpoint_returns_valid_response():
     """Test end-to-end query processing."""
     client = TestClient(app)
-    
-    response = client.post(
-        "/api/query",
-        json={"query": "What is RAG?"}
-    )
-    
+
+    response = client.post("/api/query", json={"query": "What is RAG?"})
+
     assert response.status_code == 200
     assert "answer" in response.json()
     assert "citations" in response.json()

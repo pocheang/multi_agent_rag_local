@@ -100,7 +100,12 @@ dev = [
   "pytest-cov>=4.1.0",
   "pytest-xdist>=3.5.0",
   "reportlab>=4.0.0",
-  "ruff>=0.6.0",
+  # Pinned exactly, not floored. CI installed the newest ruff on every run, so
+  # its formatter changed under the repository: four consecutive runs failed
+  # `ruff format --check` on commits that were clean locally, with no code
+  # change between them. A formatter that moves on its own is a build that
+  # breaks for reasons nobody introduced.
+  "ruff==0.16.5",
   "pre-commit>=3.7.0"
 ]
 

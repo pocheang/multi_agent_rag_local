@@ -91,10 +91,10 @@ with self._lock:
 **修复**:
 ```python
 # 增加超时时间
-socket_connect_timeout=2.0,  # 从 0.2s → 2s
-socket_timeout=2.0,
-retry_on_timeout=True,       # 启用重试
-socket_keepalive=True,       # 保持连接活跃
+socket_connect_timeout = (2.0,)  # 从 0.2s → 2s
+socket_timeout = (2.0,)
+retry_on_timeout = (True,)  # 启用重试
+socket_keepalive = (True,)  # 保持连接活跃
 ```
 
 **影响**: 提高缓存可用性和稳定性

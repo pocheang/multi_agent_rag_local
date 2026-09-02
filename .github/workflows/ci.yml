@@ -24,7 +24,11 @@ jobs:
       # Lint first: it needs no project dependencies, so a style failure reports
       # in seconds instead of after the full install.
       - name: Install ruff
-        run: pip install "ruff>=0.6.0"
+        # Exact, and the same version pyproject's dev extra pins. `>=` meant CI
+        # picked up every new release, so the formatter changed without anyone
+        # touching the code -- which is how four green-locally commits failed
+        # here in a row.
+        run: pip install "ruff==0.16.5"
 
       - name: Lint
         run: ruff check .

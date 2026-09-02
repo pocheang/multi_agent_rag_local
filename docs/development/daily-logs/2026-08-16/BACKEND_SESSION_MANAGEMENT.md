@@ -357,14 +357,14 @@ curl -X PATCH http://localhost:8000/sessions/abc123 \
 ### 会话不存在
 
 ```python
-PATCH /sessions/nonexistent
+PATCH / sessions / nonexistent
 # 404 Not Found: "Session not found"
 ```
 
 ### 无效的 session_id
 
 ```python
-PATCH /sessions/invalid@id
+PATCH / sessions / invalid @ id
 # 400 Bad Request: "Invalid session_id format"
 ```
 

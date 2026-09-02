@@ -86,17 +86,15 @@ Create `citations.py` with line-anchored context extraction and marker normaliza
 import re
 from collections.abc import Collection
 
-_CONTEXT_LABEL_RE = re.compile(
-    r"(?m)^\s*\[([A-Za-z0-9_.-]+(?::[A-Za-z0-9_.-]+)?)\]\s+\S"
-)
-_CITATION_MARKER_RE = re.compile(
-    r"\[([A-Za-z0-9_.-]+:[A-Za-z0-9_.-]+)\]"
-)
+_CONTEXT_LABEL_RE = re.compile(r"(?m)^\s*\[([A-Za-z0-9_.-]+(?::[A-Za-z0-9_.-]+)?)\]\s+\S")
+_CITATION_MARKER_RE = re.compile(r"\[([A-Za-z0-9_.-]+:[A-Za-z0-9_.-]+)\]")
+
 
 def citation_labels_from_contexts(*contexts: str) -> frozenset[str]:
     """Return labels from leading `[label] content` evidence records."""
     combined = "\n".join(str(context or "") for context in contexts)
     return frozenset(match.group(1) for match in _CONTEXT_LABEL_RE.finditer(combined))
+
 
 def normalize_answer_citations(text: str, allowed_labels: Collection[str]) -> str:
     """Preserve allowed citations and remove non-allowlisted citation markers."""

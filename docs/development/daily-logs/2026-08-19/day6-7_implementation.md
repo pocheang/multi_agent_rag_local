@@ -59,9 +59,7 @@ semantic_cache = SemanticCache(
 
 # 查询时自动匹配相似查询
 query_embedding = embed_query(query)
-cached_result = await semantic_cache.get_similar(
-    query, query_embedding, prefix="retrieval"
-)
+cached_result = await semantic_cache.get_similar(query, query_embedding, prefix="retrieval")
 
 if cached_result:
     # 命中！相似查询已缓存
@@ -123,11 +121,11 @@ cached_results = await cache_manager.get("retrieval", query=query)
 if cached_results is None:
     results = await hybrid_retriever.retrieve(query)
     await cache_manager.set(
-        "retrieval", 
-        results, 
+        "retrieval",
+        results,
         l1_ttl=300,  # L1: 5分钟
         l2_ttl=3600,  # L2: 1小时
-        query=query
+        query=query,
     )
 ```
 
@@ -143,7 +141,7 @@ if embedding is None:
         "embedding",
         embedding,
         l1_ttl=600,  # 10分钟
-        query=query
+        query=query,
     )
 ```
 
@@ -240,34 +238,31 @@ semantic_cache = SemanticCache(
 from app.services.caching import CacheManager, SemanticCache
 from app.services.performance.monitor import get_monitor
 
+
 class RAGService:
     def __init__(self):
         self.cache_manager = CacheManager(l2_enabled=True)
         self.semantic_cache = SemanticCache(self.cache_manager)
         self.monitor = get_monitor()
-    
+
     async def retrieve(self, query: str):
         # 性能监控
         async with self.monitor.measure_async("retrieval"):
             # 检查语义缓存
             query_embedding = await self.embed_query(query)
-            cached = await self.semantic_cache.get_similar(
-                query, query_embedding, prefix="retrieval"
-            )
-            
+            cached = await self.semantic_cache.get_similar(query, query_embedding, prefix="retrieval")
+
             if cached:
                 self.monitor.increment_counter("cache_hits")
                 return cached
-            
+
             # 缓存未命中，执行检索
             self.monitor.increment_counter("cache_misses")
             results = await self._perform_retrieval(query)
-            
+
             # 缓存结果
-            await self.semantic_cache.set_with_embedding(
-                query, query_embedding, results, prefix="retrieval"
-            )
-            
+            await self.semantic_cache.set_with_embedding(query, query_embedding, results, prefix="retrieval")
+
             return results
 ```
 

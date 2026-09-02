@@ -186,20 +186,17 @@ SessionTemplateService
 使用轻量级LLM（Claude Haiku）从对话内容提取标签：
 
 ```python
-async def extract_auto_tags(
-    session_id: str,
-    messages: list[dict]
-) -> list[str]:
+async def extract_auto_tags(session_id: str, messages: list[dict]) -> list[str]:
     """
     从会话消息中提取标签
-    
+
     使用最近5-10条消息
     提取3-5个关键标签
     """
     # 收集最近消息
     recent = messages[-10:]
     content = "\n".join([m["content"] for m in recent])
-    
+
     # 使用Haiku提取
     prompt = f"""
     Analyze this conversation and extract 3-5 key tags.
@@ -207,13 +204,13 @@ async def extract_auto_tags(
     - Single words or short phrases (1-3 words)
     - In the same language as the conversation
     - Represent main topics discussed
-    
+
     Conversation:
     {content[:1000]}
-    
+
     Output format: tag1, tag2, tag3
     """
-    
+
     response = await call_haiku(prompt)
     tags = [t.strip() for t in response.split(",")]
     return tags[:5]

@@ -177,9 +177,7 @@ async def test_persist_is_a_noop_without_session_id(monkeypatch):
     store = _FakeHistoryStore()
     monkeypatch.setattr(advanced_rag, "_history_store_for_user", lambda user: store)
 
-    await advanced_rag._persist_exchange(
-        user={"user_id": "u1"}, session_id=None, question="q", answer="a", metadata={}
-    )
+    await advanced_rag._persist_exchange(user={"user_id": "u1"}, session_id=None, question="q", answer="a", metadata={})
 
     assert store.appended == []
 
@@ -323,82 +321,80 @@ async def _persist_exchange(
 把 `_require_permission(...)` 起至 `return result` 止的函数体替换为：
 
 ```python
-    _require_permission(user, "query:run", request, "advanced-rag")
+_require_permission(user, "query:run", request, "advanced-rag")
 
-    session_id = _require_valid_session_id(request_data.session_id) if request_data.session_id else None
+session_id = _require_valid_session_id(request_data.session_id) if request_data.session_id else None
 
-    tracker = AgentExecutionTracker.get_instance()
-    execution_id = tracker.start_execution(
-        request_data.query,
-        user_id=str(user.get("user_id", "") or "") or None,
-        profile="advanced",
+tracker = AgentExecutionTracker.get_instance()
+execution_id = tracker.start_execution(
+    request_data.query,
+    user_id=str(user.get("user_id", "") or "") or None,
+    profile="advanced",
+)
+try:
+    allowed_sources = _resolve_advanced_allowed_sources(user, request_data.allowed_sources)
+    memory_context = _build_memory_context_for_session(user, session_id, request_data.query)
+    conversation = (ConversationMessage(role="system", content=memory_context),) if memory_context else ()
+    pipeline_request = PipelineRequest(
+        question=request_data.query,
+        profile=PipelineProfile.ADVANCED,
+        session_id=session_id,
+        conversation=conversation,
+        user=PipelineUser(
+            user_id=str(user.get("user_id", "") or "") or None,
+            username=str(user.get("username", "") or "") or None,
+            role=str(user.get("role", "") or "") or None,
+            permissions=frozenset(user.get("permissions") or []),
+        ),
+        source_scope=SourceScope(allowed_sources=frozenset(allowed_sources)),
+        enable_decomposition=request_data.enable_decomposition,
+        enable_self_rag=request_data.enable_self_rag,
     )
-    try:
-        allowed_sources = _resolve_advanced_allowed_sources(user, request_data.allowed_sources)
-        memory_context = _build_memory_context_for_session(user, session_id, request_data.query)
-        conversation = (
-            (ConversationMessage(role="system", content=memory_context),) if memory_context else ()
-        )
-        pipeline_request = PipelineRequest(
-            question=request_data.query,
-            profile=PipelineProfile.ADVANCED,
-            session_id=session_id,
-            conversation=conversation,
-            user=PipelineUser(
-                user_id=str(user.get("user_id", "") or "") or None,
-                username=str(user.get("username", "") or "") or None,
-                role=str(user.get("role", "") or "") or None,
-                permissions=frozenset(user.get("permissions") or []),
-            ),
-            source_scope=SourceScope(allowed_sources=frozenset(allowed_sources)),
-            enable_decomposition=request_data.enable_decomposition,
-            enable_self_rag=request_data.enable_self_rag,
-        )
-        pipeline_result = await RAGPipeline().execute(pipeline_request)
-        plan_data = pipeline_result.execution_metadata.get("plan")
+    pipeline_result = await RAGPipeline().execute(pipeline_request)
+    plan_data = pipeline_result.execution_metadata.get("plan")
 
-        decomposed_query = (
-            _decomposed_query_from_plan(request_data.query, plan_data) if request_data.enable_decomposition else None
-        )
+    decomposed_query = (
+        _decomposed_query_from_plan(request_data.query, plan_data) if request_data.enable_decomposition else None
+    )
 
-        answer_quality = None
-        sub_query_results: list[SubQueryResult] = []
-        if request_data.enable_self_rag:
-            answer_quality, sub_query_results = await _run_self_rag_evaluation(
-                query=request_data.query,
-                pipeline_result=pipeline_result,
-                plan_data=plan_data,
-            )
-
-        metadata = _response_metadata(
-            pipeline_result_metadata=dict(pipeline_result.execution_metadata),
-            route=pipeline_result.route.route,
-            citations=[citation.model_dump(mode="json") for citation in pipeline_result.citations],
-            execution_id=execution_id,
-            session_id=session_id,
-        )
-        await _persist_exchange(
-            user=user,
-            session_id=session_id,
-            question=request_data.query,
-            answer=pipeline_result.answer,
-            metadata=metadata,
-        )
-
-        result = AdvancedRAGResult(
+    answer_quality = None
+    sub_query_results: list[SubQueryResult] = []
+    if request_data.enable_self_rag:
+        answer_quality, sub_query_results = await _run_self_rag_evaluation(
             query=request_data.query,
-            decomposed_query=decomposed_query,
-            sub_query_results=sub_query_results,
-            final_answer=pipeline_result.answer,
-            answer_quality=answer_quality,
-            metadata=metadata,
+            pipeline_result=pipeline_result,
+            plan_data=plan_data,
         )
-        tracker.complete_execution(execution_id, result.model_dump())
-        return result
-    except Exception as e:
-        tracker.fail_execution(execution_id, str(e))
-        logger.exception("Error processing advanced RAG query")
-        raise internal_error("Unable to process advanced query")
+
+    metadata = _response_metadata(
+        pipeline_result_metadata=dict(pipeline_result.execution_metadata),
+        route=pipeline_result.route.route,
+        citations=[citation.model_dump(mode="json") for citation in pipeline_result.citations],
+        execution_id=execution_id,
+        session_id=session_id,
+    )
+    await _persist_exchange(
+        user=user,
+        session_id=session_id,
+        question=request_data.query,
+        answer=pipeline_result.answer,
+        metadata=metadata,
+    )
+
+    result = AdvancedRAGResult(
+        query=request_data.query,
+        decomposed_query=decomposed_query,
+        sub_query_results=sub_query_results,
+        final_answer=pipeline_result.answer,
+        answer_quality=answer_quality,
+        metadata=metadata,
+    )
+    tracker.complete_execution(execution_id, result.model_dump())
+    return result
+except Exception as e:
+    tracker.fail_execution(execution_id, str(e))
+    logger.exception("Error processing advanced RAG query")
+    raise internal_error("Unable to process advanced query")
 ```
 
 **注意**：`tracker.start_execution` 必须保留在 `try` 之前（与现状一致），否则 `except` 分支引用的 `execution_id` 会未定义。
@@ -565,10 +561,12 @@ from app.orchestration.request import ConversationTurn, OrchestrationRequest
 
 
 def test_render_conversation_includes_both_roles():
-    rendered = _render_conversation((
-        ConversationTurn(role="user", content="Tell me about doc A."),
-        ConversationTurn(role="assistant", content="Doc A covers X."),
-    ))
+    rendered = _render_conversation(
+        (
+            ConversationTurn(role="user", content="Tell me about doc A."),
+            ConversationTurn(role="assistant", content="Doc A covers X."),
+        )
+    )
     assert "Tell me about doc A." in rendered
     assert "Doc A covers X." in rendered
 
@@ -578,9 +576,7 @@ def test_render_conversation_is_empty_for_no_turns():
 
 
 def test_render_conversation_is_bounded():
-    turns = tuple(
-        ConversationTurn(role="user", content="x" * 500) for _ in range(40)
-    )
+    turns = tuple(ConversationTurn(role="user", content="x" * 500) for _ in range(40))
     rendered = _render_conversation(turns)
     assert len(rendered) <= 4000
 
@@ -733,9 +729,7 @@ async def test_graph_retriever_selected_for_graph_and_hybrid(intent, route, grap
         web=_recorder("web", called),
     )
 
-    await service.retrieve(
-        OrchestrationRequest(question="q", profile="advanced"), _route(intent, route), None
-    )
+    await service.retrieve(OrchestrationRequest(question="q", profile="advanced"), _route(intent, route), None)
 
     assert ("graph" in called) is graph_expected
 ```
@@ -836,14 +830,12 @@ def test_unknown_language_falls_back_to_chinese():
 在 `app/orchestration/langgraph/nodes.py` 的 `clarification` 方法中，把：
 
 ```python
-        if result.action == "ask":
-            raise StageExecutionError(
-                "clarification",
-                RuntimeError(
-                    "interactive clarification is required; use the clarification API with the returned thread"
-                ),
-            )
-        complete_query = result.complete_query or request.question
+if result.action == "ask":
+    raise StageExecutionError(
+        "clarification",
+        RuntimeError("interactive clarification is required; use the clarification API with the returned thread"),
+    )
+complete_query = result.complete_query or request.question
 ```
 
 替换为：
@@ -1410,48 +1402,47 @@ logger = logging.getLogger(__name__)
 在 `RedisRateLimiter` 中新增一个惰性初始化的异步客户端与异步检查方法，与现有同步实现并列（滑动窗口算法逻辑与 `_check_redis` 保持一致，内存回退直接复用现有的 `_check_memory`，它是纯 CPU 操作，无需线程）：
 
 ```python
-    async def _get_async_client(self):
-        """Lazily create the asyncio Redis client, or None when unavailable."""
-        if self._async_client is not None:
-            return self._async_client
-        if not (REDIS_AVAILABLE and self._redis_url):
-            return None
-        try:
-            import redis.asyncio as aioredis
-
-            client = aioredis.from_url(self._redis_url, decode_responses=False)
-            await client.ping()
-            self._async_client = client
-        except Exception as exc:
-            logger.warning("RedisRateLimiter: async Redis unavailable (%s), using in-memory storage", exc)
-            self._async_client = None
+async def _get_async_client(self):
+    """Lazily create the asyncio Redis client, or None when unavailable."""
+    if self._async_client is not None:
         return self._async_client
+    if not (REDIS_AVAILABLE and self._redis_url):
+        return None
+    try:
+        import redis.asyncio as aioredis
 
-    async def check_rate_limit_async(
-        self, key: str, max_requests: int, window_seconds: int
-    ) -> tuple[bool, int | None]:
-        """Async sliding-window check; never blocks the event loop."""
-        client = await self._get_async_client()
-        if client is None:
-            return self._check_memory(key, max_requests, window_seconds)
-        try:
-            current_time = time.time()
-            window_start = current_time - window_seconds
-            pipe = client.pipeline()
-            pipe.zremrangebyscore(key, 0, window_start)
-            pipe.zcard(key)
-            pipe.zadd(key, {str(current_time): current_time})
-            pipe.expire(key, window_seconds + 1)
-            results = await pipe.execute()
-            if results[1] >= max_requests:
-                oldest = await client.zrange(key, 0, 0, withscores=True)
-                if oldest:
-                    return False, int(window_seconds - (current_time - oldest[0][1])) + 1
-                return False, window_seconds
-            return True, None
-        except Exception as exc:
-            logger.warning("Redis rate limit check failed (%s); falling back to memory", exc)
-            return self._check_memory(key, max_requests, window_seconds)
+        client = aioredis.from_url(self._redis_url, decode_responses=False)
+        await client.ping()
+        self._async_client = client
+    except Exception as exc:
+        logger.warning("RedisRateLimiter: async Redis unavailable (%s), using in-memory storage", exc)
+        self._async_client = None
+    return self._async_client
+
+
+async def check_rate_limit_async(self, key: str, max_requests: int, window_seconds: int) -> tuple[bool, int | None]:
+    """Async sliding-window check; never blocks the event loop."""
+    client = await self._get_async_client()
+    if client is None:
+        return self._check_memory(key, max_requests, window_seconds)
+    try:
+        current_time = time.time()
+        window_start = current_time - window_seconds
+        pipe = client.pipeline()
+        pipe.zremrangebyscore(key, 0, window_start)
+        pipe.zcard(key)
+        pipe.zadd(key, {str(current_time): current_time})
+        pipe.expire(key, window_seconds + 1)
+        results = await pipe.execute()
+        if results[1] >= max_requests:
+            oldest = await client.zrange(key, 0, 0, withscores=True)
+            if oldest:
+                return False, int(window_seconds - (current_time - oldest[0][1])) + 1
+            return False, window_seconds
+        return True, None
+    except Exception as exc:
+        logger.warning("Redis rate limit check failed (%s); falling back to memory", exc)
+        return self._check_memory(key, max_requests, window_seconds)
 ```
 
 在 `__init__` 中记录 `self._redis_url = redis_url` 与 `self._async_client = None`（同步客户端的建立逻辑保持不变）。
@@ -1517,14 +1508,15 @@ _current_event_reporter: ContextVar[Callable[[ExecutionEvent], Awaitable[None]] 
 把 `OrchestrationServices` 的三处相关代码改为：
 
 ```python
-    def bind_event_reporter(self, reporter: Callable[[ExecutionEvent], Awaitable[None]]) -> None:
-        _current_event_reporter.set(reporter)
-        if self._event_reporter_binder is not None:
-            self._event_reporter_binder(reporter)
+def bind_event_reporter(self, reporter: Callable[[ExecutionEvent], Awaitable[None]]) -> None:
+    _current_event_reporter.set(reporter)
+    if self._event_reporter_binder is not None:
+        self._event_reporter_binder(reporter)
 
-    async def report_event(self, event: ExecutionEvent) -> None:
-        reporter = _current_event_reporter.get() or _discard_event
-        await reporter(event)
+
+async def report_event(self, event: ExecutionEvent) -> None:
+    reporter = _current_event_reporter.get() or _discard_event
+    await reporter(event)
 ```
 
 并从 `__init__` 中删除 `self._event_reporter: Callable[...] = _discard_event` 这一行（`_event_reporter_binder` 保留）。

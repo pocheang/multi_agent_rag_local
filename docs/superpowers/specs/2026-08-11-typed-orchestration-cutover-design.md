@@ -111,6 +111,7 @@ class OrchestrationRequest:
     deadline: datetime
     retry_budget: RetryBudget
 
+
 class EvidenceBundle:
     route: RouteDecision
     plan: TaskPlan | None
@@ -118,11 +119,13 @@ class EvidenceBundle:
     citations: tuple[Citation, ...]
     diagnostics: RetrievalDiagnostics
 
+
 class ValidationStatus:
     state: Literal["validated", "degraded", "rejected"]
     approved: bool
     method: str
     issues: tuple[ValidationIssue, ...]
+
 
 class FinalAnswer:
     answer: str

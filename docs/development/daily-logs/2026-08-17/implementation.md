@@ -27,28 +27,36 @@ from enum import Enum
 from typing import Literal
 from pydantic import BaseModel, Field
 
+
 class RouterAction(str, Enum):
     """Router的决策动作"""
+
     CONTINUE = "CONTINUE"  # 信息充足，继续执行
     NEED_CLARIFICATION = "NEED_CLARIFICATION"  # 需要澄清
 
+
 class ClarificationQuestion(BaseModel):
     """澄清问题结构"""
+
     question: str = Field(..., description="需要追问的问题")
     options: list[str] = Field(default_factory=list, description="提供的选项（2-5个）")
     allow_custom_input: bool = Field(default=True, description="是否允许自定义输入")
     field_name: str = Field(..., description="缺失信息的字段名，如'scenario'")
 
+
 class ClarificationContext(BaseModel):
     """多轮澄清的上下文"""
+
     collected_info: dict[str, str] = Field(default_factory=dict, description="已收集的信息")
     asked_questions: list[str] = Field(default_factory=list, description="已询问的字段")
     clarification_round: int = Field(default=0, description="当前澄清轮次")
     max_rounds: int = Field(default=10, description="最大澄清轮次（动态设置）")
     intent: str = Field(default="", description="识别出的意图类型")
 
+
 class EnhancedRouteDecision(BaseModel):
     """增强的路由决策"""
+
     # 原有字段
     intent: str
     route: str | None = None
@@ -56,7 +64,7 @@ class EnhancedRouteDecision(BaseModel):
     requires_plan: bool
     allowed_capabilities: frozenset[str]
     reason: str
-    
+
     # 新增字段
     action: RouterAction = RouterAction.CONTINUE
     missing_information: list[str] = Field(default_factory=list)
@@ -85,31 +93,27 @@ def create_session(self, title: str | None = None, session_id: str | None = None
             "asked_questions": [],
             "clarification_round": 0,
             "max_rounds": 10,  # 默认最大值，实际由意图决定
-            "intent": ""
-        }
+            "intent": "",
+        },
     }
     with self._lock:
         self._write(session_id, data)
     return data
 
+
 # 新增方法：更新澄清上下文
-def update_clarification_context(
-    self, 
-    session_id: str, 
-    field_name: str, 
-    value: str
-) -> dict[str, Any] | None:
+def update_clarification_context(self, session_id: str, field_name: str, value: str) -> dict[str, Any] | None:
     """更新会话的澄清上下文"""
     try:
         session_id = validate_session_id(session_id)
     except ValueError:
         return None
-    
+
     with self._lock:
         data = self.get_session(session_id)
         if data is None:
             return None
-        
+
         ctx = data.get("clarification_context", {})
         if not isinstance(ctx, dict):
             ctx = {
@@ -117,23 +121,24 @@ def update_clarification_context(
                 "asked_questions": [],
                 "clarification_round": 0,
                 "max_rounds": 10,
-                "intent": ""
+                "intent": "",
             }
-        
+
         # 更新收集的信息
         ctx.setdefault("collected_info", {})[field_name] = value
-        
+
         # 记录已询问的字段
         if field_name not in ctx.get("asked_questions", []):
             ctx.setdefault("asked_questions", []).append(field_name)
-        
+
         # 增加轮次
         ctx["clarification_round"] = ctx.get("clarification_round", 0) + 1
-        
+
         data["clarification_context"] = ctx
         data["updated_at"] = self._now()
         self._write(session_id, data)
         return data
+
 
 # 新增方法：重置澄清上下文
 def reset_clarification_context(self, session_id: str) -> dict[str, Any] | None:
@@ -142,18 +147,18 @@ def reset_clarification_context(self, session_id: str) -> dict[str, Any] | None:
         session_id = validate_session_id(session_id)
     except ValueError:
         return None
-    
+
     with self._lock:
         data = self.get_session(session_id)
         if data is None:
             return None
-        
+
         data["clarification_context"] = {
             "collected_info": {},
             "asked_questions": [],
             "clarification_round": 0,
             "max_rounds": 10,
-            "intent": ""
+            "intent": "",
         }
         data["updated_at"] = self._now()
         self._write(session_id, data)
@@ -169,25 +174,20 @@ def reset_clarification_context(self, session_id: str) -> dict[str, Any] | None:
 
 import re
 from typing import Any
-from app.domain.contracts import (
-    EnhancedRouteDecision, 
-    RouterAction,
-    ClarificationQuestion,
-    ClarificationContext
-)
+from app.domain.contracts import EnhancedRouteDecision, RouterAction, ClarificationQuestion, ClarificationContext
 from app.orchestration.request import OrchestrationRequest
 from app.agents.router.service import RouterAgentService
 
 
 # 意图复杂度配置（决定最大澄清轮次）
 INTENT_COMPLEXITY = {
-    "simple_query": 2,           # 简单查询：最多2轮
-    "document_lookup": 3,        # 文档查找：最多3轮
-    "document_comparison": 5,    # 文档对比：最多5轮
-    "rag_design": 7,             # RAG设计：最多7轮（复杂）
-    "system_architecture": 8,    # 系统架构：最多8轮
-    "complex_analysis": 10,      # 复杂分析：最多10轮
-    "default": 5,                # 默认：5轮
+    "simple_query": 2,  # 简单查询：最多2轮
+    "document_lookup": 3,  # 文档查找：最多3轮
+    "document_comparison": 5,  # 文档对比：最多5轮
+    "rag_design": 7,  # RAG设计：最多7轮（复杂）
+    "system_architecture": 8,  # 系统架构：最多8轮
+    "complex_analysis": 10,  # 复杂分析：最多10轮
+    "default": 5,  # 默认：5轮
 }
 
 # 意图所需信息配置
@@ -200,27 +200,27 @@ INTENT_REQUIRED_INFO = {
                 question="这个 RAG 主要用于什么场景？",
                 options=["企业知识库", "客服问答", "代码知识库", "数据分析"],
                 allow_custom_input=True,
-                field_name="scenario"
+                field_name="scenario",
             ),
             "data_source": ClarificationQuestion(
                 question="数据来源是什么类型？",
                 options=["PDF文档", "数据库", "API接口", "网页爬取"],
                 allow_custom_input=True,
-                field_name="data_source"
+                field_name="data_source",
             ),
             "scale": ClarificationQuestion(
                 question="预计的数据规模大概有多大？",
                 options=["小型（<1GB）", "中型（1-10GB）", "大型（10-100GB）", "超大型（>100GB）"],
                 allow_custom_input=True,
-                field_name="scale"
+                field_name="scale",
             ),
             "performance_requirement": ClarificationQuestion(
                 question="对响应速度有什么要求？",
                 options=["实时（<1秒）", "快速（1-3秒）", "一般（3-5秒）", "可接受（>5秒）"],
                 allow_custom_input=True,
-                field_name="performance_requirement"
-            )
-        }
+                field_name="performance_requirement",
+            ),
+        },
     },
     "document_comparison": {
         "max_rounds": 5,  # 中等复杂度，最多5轮
@@ -230,21 +230,21 @@ INTENT_REQUIRED_INFO = {
                 question="需要比较哪些文档？",
                 options=[],  # 动态从文档库加载
                 allow_custom_input=True,
-                field_name="doc_ids"
+                field_name="doc_ids",
             ),
             "comparison_aspect": ClarificationQuestion(
                 question="比较什么方面？",
                 options=["价格", "功能", "性能", "时间"],
                 allow_custom_input=True,
-                field_name="comparison_aspect"
+                field_name="comparison_aspect",
             ),
             "output_format": ClarificationQuestion(
                 question="需要什么样的输出格式？",
                 options=["对比表格", "详细报告", "简要总结", "可视化图表"],
                 allow_custom_input=True,
-                field_name="output_format"
-            )
-        }
+                field_name="output_format",
+            ),
+        },
     },
     "specific_query": {
         "max_rounds": 3,  # 简单查询，最多3轮
@@ -254,126 +254,92 @@ INTENT_REQUIRED_INFO = {
                 question="你想查询哪个实体的信息？",
                 options=[],  # 从上下文提取
                 allow_custom_input=True,
-                field_name="entity"
+                field_name="entity",
             ),
             "attribute": ClarificationQuestion(
                 question="你想了解它的什么属性？",
                 options=["价格", "规格", "日期", "数量"],
                 allow_custom_input=True,
-                field_name="attribute"
-            )
-        }
-    }
+                field_name="attribute",
+            ),
+        },
+    },
 }
 
 
 class EnhancedRouterService:
     """增强的Router服务：澄清 + 分类"""
-    
+
     def __init__(self, base_router: RouterAgentService | None = None):
         self.base_router = base_router or RouterAgentService()
-    
+
     async def route(
-        self, 
-        request: OrchestrationRequest,
-        clarification_context: ClarificationContext | None = None
+        self, request: OrchestrationRequest, clarification_context: ClarificationContext | None = None
     ) -> EnhancedRouteDecision:
         """
         执行增强路由决策
-        
+
         1. 检查澄清上下文
         2. 分析意图
         3. 根据意图设置动态最大轮次
         4. 检查信息完整性
         5. 返回CONTINUE或NEED_CLARIFICATION
         """
-        
+
         # 初始化上下文
         if clarification_context is None:
             clarification_context = ClarificationContext()
-        
+
         # 从历史消息中提取已知信息
-        extracted_info = self._extract_info_from_history(
-            request.question,
-            request.memory_context
-        )
-        
+        extracted_info = self._extract_info_from_history(request.question, request.memory_context)
+
         # 合并已收集的信息和提取的信息
-        all_known_info = {
-            **clarification_context.collected_info,
-            **extracted_info
-        }
-        
+        all_known_info = {**clarification_context.collected_info, **extracted_info}
+
         # 识别意图
         intent = await self._identify_intent(request.question, all_known_info)
-        
+
         # 动态设置最大轮次（根据意图复杂度）
         if not clarification_context.intent or clarification_context.intent != intent:
             clarification_context.intent = intent
             clarification_context.max_rounds = self._get_max_rounds_for_intent(intent)
-        
+
         # 检查是否超过最大轮次
         if clarification_context.clarification_round >= clarification_context.max_rounds:
             # 超过最大轮次，强制继续（使用已有信息）
             base_decision = await self.base_router.route(request)
-            return self._to_enhanced_decision(
-                base_decision, 
-                RouterAction.CONTINUE,
-                clarification_context
-            )
-        
+            return self._to_enhanced_decision(base_decision, RouterAction.CONTINUE, clarification_context)
+
         # 从历史消息中提取已知信息
-        extracted_info = self._extract_info_from_history(
-            request.question,
-            request.memory_context
-        )
-        
+        extracted_info = self._extract_info_from_history(request.question, request.memory_context)
+
         # 合并已收集的信息和提取的信息
-        all_known_info = {
-            **clarification_context.collected_info,
-            **extracted_info
-        }
-        
+        all_known_info = {**clarification_context.collected_info, **extracted_info}
+
         # 识别意图
         intent = await self._identify_intent(request.question, all_known_info)
-        
+
         # 检查简单问题（不需要澄清）
         if self._is_simple_query(request.question, intent):
             base_decision = await self.base_router.route(request)
-            return self._to_enhanced_decision(
-                base_decision,
-                RouterAction.CONTINUE,
-                clarification_context
-            )
-        
+            return self._to_enhanced_decision(base_decision, RouterAction.CONTINUE, clarification_context)
+
         # 检查信息完整性
         missing = self._check_missing_info(intent, all_known_info)
-        
+
         if not missing:
             # 信息充足，继续执行
             base_decision = await self.base_router.route(request)
-            return self._to_enhanced_decision(
-                base_decision,
-                RouterAction.CONTINUE,
-                clarification_context
-            )
-        
+            return self._to_enhanced_decision(base_decision, RouterAction.CONTINUE, clarification_context)
+
         # 信息不足，选择下一个要问的问题
-        next_question = self._select_next_question(
-            intent,
-            missing,
-            clarification_context.asked_questions
-        )
-        
+        next_question = self._select_next_question(intent, missing, clarification_context.asked_questions)
+
         if next_question is None:
             # 没有更多问题可问，强制继续
             base_decision = await self.base_router.route(request)
-            return self._to_enhanced_decision(
-                base_decision,
-                RouterAction.CONTINUE,
-                clarification_context
-            )
-        
+            return self._to_enhanced_decision(base_decision, RouterAction.CONTINUE, clarification_context)
+
         # 返回需要澄清
         base_decision = await self.base_router.route(request)
         return self._to_enhanced_decision(
@@ -381,125 +347,119 @@ class EnhancedRouterService:
             RouterAction.NEED_CLARIFICATION,
             clarification_context,
             missing_information=missing,
-            clarification=next_question
+            clarification=next_question,
         )
-    
+
     def _get_max_rounds_for_intent(self, intent: str) -> int:
         """根据意图获取最大轮次"""
         config = INTENT_REQUIRED_INFO.get(intent)
         if config and "max_rounds" in config:
             return config["max_rounds"]
-        
+
         # 使用INTENT_COMPLEXITY作为fallback
         return INTENT_COMPLEXITY.get(intent, INTENT_COMPLEXITY["default"])
-    
-    def _extract_info_from_history(
-        self, 
-        current_question: str, 
-        memory_context: str
-    ) -> dict[str, str]:
+
+    def _extract_info_from_history(self, current_question: str, memory_context: str) -> dict[str, str]:
         """从历史消息中提取已知信息"""
         extracted = {}
-        
+
         # 场景识别
         scenario_patterns = {
             "企业知识库": r"企业|公司|组织|内部",
             "客服问答": r"客服|客户|服务|支持",
             "代码知识库": r"代码|编程|开发|技术文档",
-            "数据分析": r"数据|分析|统计|报表"
+            "数据分析": r"数据|分析|统计|报表",
         }
-        
+
         text = current_question + " " + memory_context
         for scenario, pattern in scenario_patterns.items():
             if re.search(pattern, text, re.IGNORECASE):
                 extracted["scenario"] = scenario
                 break
-        
+
         # 数据源识别
         if "pdf" in text.lower() or "文档" in text:
             extracted["data_source"] = "PDF文档"
         elif "数据库" in text or "database" in text.lower():
             extracted["data_source"] = "数据库"
-        
+
         return extracted
-    
+
     async def _identify_intent(self, question: str, known_info: dict[str, str]) -> str:
         """识别用户意图"""
         question_lower = question.lower()
-        
+
         # RAG设计意图
-        if any(keyword in question for keyword in ["设计", "搭建", "构建", "实现"]) and \
-           any(keyword in question for keyword in ["rag", "检索", "知识库"]):
+        if any(keyword in question for keyword in ["设计", "搭建", "构建", "实现"]) and any(
+            keyword in question for keyword in ["rag", "检索", "知识库"]
+        ):
             return "rag_design"
-        
+
         # 文档比较意图
         if any(keyword in question for keyword in ["比较", "对比", "差异"]):
             return "document_comparison"
-        
+
         # 特定查询意图
         if any(keyword in question for keyword in ["是什么", "有哪些", "什么时候"]):
             return "specific_query"
-        
+
         # 默认为一般查询
         return "general_query"
-    
+
     def _is_simple_query(self, question: str, intent: str) -> bool:
         """判断是否为简单问题（不需要澄清）"""
-        
+
         # 一般查询不需要澄清
         if intent == "general_query":
             return True
-        
+
         # 问题长度超过50字，认为信息充足
         if len(question) > 50:
             return True
-        
+
         # 包含具体实体/数字/日期
-        if re.search(r'\d+|具体的|明确的', question):
+        if re.search(r"\d+|具体的|明确的", question):
             return True
-        
+
         return False
-    
+
     def _check_missing_info(self, intent: str, known_info: dict[str, str]) -> list[str]:
         """检查缺失的信息"""
         config = INTENT_REQUIRED_INFO.get(intent)
         if config is None:
             return []
-        
+
         required_fields = config["fields"]
         missing = []
-        
+
         for field in required_fields:
             if field not in known_info or not known_info[field].strip():
                 missing.append(field)
-        
+
         return missing
-    
+
     def _select_next_question(
-        self,
-        intent: str,
-        missing_fields: list[str],
-        asked_questions: list[str]
+        self, intent: str, missing_fields: list[str], asked_questions: list[str]
     ) -> ClarificationQuestion | None:
         """选择下一个要问的问题"""
         config = INTENT_REQUIRED_INFO.get(intent)
         if config is None:
             return None
-        
+
         # 按优先级排序（第一个缺失的字段优先）
         for field in missing_fields:
             if field not in asked_questions:
                 return config["questions"].get(field)
-        
+
         return None
-    
+
     def _to_enhanced_decision(
         self,
         base_decision: Any,
         action: RouterAction,
         context: ClarificationContext,
         missing_information: list[str] | None = None,
-        clarification: ClarificationQuestion | None = None
+        clarification: ClarificationQuestion | None = None,
     ) -> EnhancedRouteDecision:
         """转换为增强的路由决策"""
         return EnhancedRouteDecision(
@@ -512,7 +472,7 @@ class EnhancedRouterService:
             action=action,
             missing_information=missing_information or [],
             clarification=clarification,
-            context=context
+            context=context,
         )
 ```
 
@@ -527,11 +487,7 @@ from fastapi import APIRouter, Depends, Request
 from typing import Any
 from pydantic import BaseModel
 
-from app.api.dependencies import (
-    _history_store_for_user,
-    _require_user,
-    _require_permission
-)
+from app.api.dependencies import _history_store_for_user, _require_user, _require_permission
 from app.agents.router.enhanced_service import EnhancedRouterService
 from app.domain.contracts import ClarificationContext
 from app.orchestration.request import OrchestrationRequest
@@ -541,6 +497,7 @@ router = APIRouter(prefix="/api/v1/clarification", tags=["clarification"])
 
 class ClarificationRequest(BaseModel):
     """澄清请求"""
+
     question: str
     session_id: str
     field_name: str | None = None  # 用户回答的字段
@@ -549,6 +506,7 @@ class ClarificationRequest(BaseModel):
 
 class ClarificationResponse(BaseModel):
     """澄清响应"""
+
     action: str  # CONTINUE | NEED_CLARIFICATION
     clarification: dict[str, Any] | None = None
     context: dict[str, Any]
@@ -557,58 +515,50 @@ class ClarificationResponse(BaseModel):
 
 @router.post("/check", response_model=ClarificationResponse)
 async def check_clarification(
-    req: ClarificationRequest,
-    request: Request,
-    user: dict[str, Any] = Depends(_require_user)
+    req: ClarificationRequest, request: Request, user: dict[str, Any] = Depends(_require_user)
 ):
     """检查是否需要澄清"""
     _require_permission(user, "query:execute", request, "query")
-    
+
     history_store = _history_store_for_user(user)
     session = history_store.get_session(req.session_id)
-    
+
     if session is None:
         session = history_store.create_session(session_id=req.session_id)
-    
+
     # 如果用户提供了答案，更新澄清上下文
     if req.field_name and req.answer:
-        history_store.update_clarification_context(
-            req.session_id,
-            req.field_name,
-            req.answer
-        )
+        history_store.update_clarification_context(req.session_id, req.field_name, req.answer)
         session = history_store.get_session(req.session_id)
-    
+
     # 获取澄清上下文
     ctx_data = session.get("clarification_context", {})
     context = ClarificationContext(**ctx_data)
-    
+
     # 构建请求
     orchestration_req = OrchestrationRequest(
         question=req.question,
         session_id=req.session_id,
         memory_context="",  # TODO: 从历史消息构建
         use_reasoning=False,
-        source_scope=None
+        source_scope=None,
     )
-    
+
     # 执行增强路由
     router_service = EnhancedRouterService()
     decision = await router_service.route(orchestration_req, context)
-    
+
     # 如果CONTINUE，重置澄清上下文
     if decision.action == "CONTINUE":
         history_store.reset_clarification_context(req.session_id)
-    
+
     return ClarificationResponse(
         action=decision.action.value,
         clarification=decision.clarification.model_dump() if decision.clarification else None,
         context=decision.context.model_dump(),
-        route={
-            "intent": decision.intent,
-            "route": decision.route,
-            "confidence": decision.confidence
-        } if decision.action == "CONTINUE" else None
+        route={"intent": decision.intent, "route": decision.route, "confidence": decision.confidence}
+        if decision.action == "CONTINUE"
+        else None,
     )
 ```
 
@@ -1174,12 +1124,9 @@ async def test_simple_query_continues():
     """简单问题应该直接CONTINUE"""
     service = EnhancedRouterService()
     request = OrchestrationRequest(
-        question="这个产品的价格是多少？",
-        session_id="test",
-        memory_context="",
-        use_reasoning=False
+        question="这个产品的价格是多少？", session_id="test", memory_context="", use_reasoning=False
     )
-    
+
     decision = await service.route(request)
     assert decision.action == RouterAction.CONTINUE
 
@@ -1189,12 +1136,9 @@ async def test_ambiguous_query_needs_clarification():
     """模糊问题应该请求澄清"""
     service = EnhancedRouterService()
     request = OrchestrationRequest(
-        question="帮我设计一个RAG",
-        session_id="test",
-        memory_context="",
-        use_reasoning=False
+        question="帮我设计一个RAG", session_id="test", memory_context="", use_reasoning=False
     )
-    
+
     decision = await service.route(request)
     assert decision.action == RouterAction.NEED_CLARIFICATION
     assert decision.clarification is not None
@@ -1206,32 +1150,29 @@ async def test_multi_round_clarification():
     """测试多轮澄清"""
     service = EnhancedRouterService()
     request = OrchestrationRequest(
-        question="帮我设计一个RAG",
-        session_id="test",
-        memory_context="",
-        use_reasoning=False
+        question="帮我设计一个RAG", session_id="test", memory_context="", use_reasoning=False
     )
-    
+
     # 第一轮
     context = ClarificationContext()
     decision1 = await service.route(request, context)
     assert decision1.action == RouterAction.NEED_CLARIFICATION
-    
+
     # 模拟用户回答
     context.collected_info["scenario"] = "企业知识库"
     context.clarification_round = 1
     context.asked_questions.append("scenario")
-    
+
     # 第二轮
     decision2 = await service.route(request, context)
     assert decision2.action == RouterAction.NEED_CLARIFICATION
     assert decision2.clarification.field_name == "data_source"
-    
+
     # 模拟第二次回答
     context.collected_info["data_source"] = "PDF文档"
     context.clarification_round = 2
     context.asked_questions.append("data_source")
-    
+
     # 第三轮应该CONTINUE
     decision3 = await service.route(request, context)
     assert decision3.action == RouterAction.CONTINUE
@@ -1242,15 +1183,12 @@ async def test_max_rounds_limit():
     """测试最大轮次限制"""
     service = EnhancedRouterService()
     request = OrchestrationRequest(
-        question="帮我设计一个RAG",
-        session_id="test",
-        memory_context="",
-        use_reasoning=False
+        question="帮我设计一个RAG", session_id="test", memory_context="", use_reasoning=False
     )
-    
+
     context = ClarificationContext(clarification_round=5, max_rounds=5)
     decision = await service.route(request, context)
-    
+
     # 超过最大轮次应该强制CONTINUE
     assert decision.action == RouterAction.CONTINUE
 
@@ -1263,12 +1201,12 @@ async def test_info_extraction_from_history():
         question="我想继续之前的RAG项目",
         session_id="test",
         memory_context="用户之前提到要做企业知识库，数据来源是PDF文档",
-        use_reasoning=False
+        use_reasoning=False,
     )
-    
+
     context = ClarificationContext()
     decision = await service.route(request, context)
-    
+
     # 应该从历史中提取到信息，不需要再问
     assert decision.action == RouterAction.CONTINUE
 ```
@@ -1290,42 +1228,47 @@ def client():
 
 def test_clarification_flow_end_to_end(client):
     """端到端澄清流程测试"""
-    
+
     # 1. 创建会话
     response = client.post("/sessions")
     assert response.status_code == 200
     session_id = response.json()["session_id"]
-    
+
     # 2. 第一次提问（触发澄清）
-    response = client.post("/api/v1/clarification/check", json={
-        "question": "帮我设计一个RAG",
-        "session_id": session_id
-    })
+    response = client.post(
+        "/api/v1/clarification/check", json={"question": "帮我设计一个RAG", "session_id": session_id}
+    )
     assert response.status_code == 200
     data = response.json()
     assert data["action"] == "NEED_CLARIFICATION"
     assert data["clarification"]["field_name"] == "scenario"
-    
+
     # 3. 回答第一个问题
-    response = client.post("/api/v1/clarification/check", json={
-        "question": "帮我设计一个RAG",
-        "session_id": session_id,
-        "field_name": "scenario",
-        "answer": "企业知识库"
-    })
+    response = client.post(
+        "/api/v1/clarification/check",
+        json={
+            "question": "帮我设计一个RAG",
+            "session_id": session_id,
+            "field_name": "scenario",
+            "answer": "企业知识库",
+        },
+    )
     assert response.status_code == 200
     data = response.json()
     assert data["action"] == "NEED_CLARIFICATION"
     assert data["clarification"]["field_name"] == "data_source"
     assert data["context"]["collected_info"]["scenario"] == "企业知识库"
-    
+
     # 4. 回答第二个问题
-    response = client.post("/api/v1/clarification/check", json={
-        "question": "帮我设计一个RAG",
-        "session_id": session_id,
-        "field_name": "data_source",
-        "answer": "PDF文档"
-    })
+    response = client.post(
+        "/api/v1/clarification/check",
+        json={
+            "question": "帮我设计一个RAG",
+            "session_id": session_id,
+            "field_name": "data_source",
+            "answer": "PDF文档",
+        },
+    )
     assert response.status_code == 200
     data = response.json()
     assert data["action"] == "CONTINUE"

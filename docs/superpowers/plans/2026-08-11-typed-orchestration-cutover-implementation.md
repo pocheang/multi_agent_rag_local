@@ -215,11 +215,14 @@ has none.
 - [ ] **Step 1: Write the route-matrix tests**
 
 ```python
-@pytest.mark.parametrize("profile,route", [
-    (PipelineProfile.STANDARD, "vector"),
-    (PipelineProfile.STRICT_QUALITY, "web"),
-    (PipelineProfile.ADVANCED, "react"),
-])
+@pytest.mark.parametrize(
+    "profile,route",
+    [
+        (PipelineProfile.STANDARD, "vector"),
+        (PipelineProfile.STRICT_QUALITY, "web"),
+        (PipelineProfile.ADVANCED, "react"),
+    ],
+)
 def test_profile_policy_executes_supported_routes(profile, route) -> None:
     ExecutionPolicy.for_profile(profile).validate_route(RouteDecision(route=route))
 
@@ -360,9 +363,7 @@ async def test_engine_runs_typed_stage_order() -> None:
 
 @pytest.mark.asyncio
 async def test_react_plan_runs_tools_before_finalization() -> None:
-    assert await run_recorded_engine(react_request) == [
-        "route", "plan", "retrieve", "tool", "synthesize", "finalize"
-    ]
+    assert await run_recorded_engine(react_request) == ["route", "plan", "retrieve", "tool", "synthesize", "finalize"]
 ```
 
 - [ ] **Step 2: Run tests and verify failure**
@@ -511,6 +512,7 @@ class ContextKey:
     user_id: str
     session_id: str
 
+
 _context_store: dict[ContextKey, ConversationContext] = {}
 ```
 
@@ -576,8 +578,10 @@ do not use its output for responses. Compare normalized terminal fields:
 ```python
 ShadowComparison(
     route_match=typed.route.route == legacy["route"],
-    citation_ids_match=..., validation_state=typed.validation.state,
-    typed_latency_ms=..., legacy_latency_ms=...
+    citation_ids_match=...,
+    validation_state=typed.validation.state,
+    typed_latency_ms=...,
+    legacy_latency_ms=...,
 )
 ```
 
@@ -625,6 +629,7 @@ LEGACY_EXECUTORS = {
     "app.workflow.enhanced_rag_workflow",
     "app.workflow.advanced_rag_workflow",
 }
+
 
 def test_production_modules_do_not_import_legacy_executors() -> None:
     assert find_production_importers(LEGACY_EXECUTORS) == []

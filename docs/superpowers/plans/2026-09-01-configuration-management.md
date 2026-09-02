@@ -94,13 +94,14 @@ class RemoteSettingsSource(PydanticBaseSettingsSource):
     让下层 source（.runtime/*.env → 默认值）接管。绝不阻塞启动。
     """
 
+
 # app/core/config.py
 class Settings(BaseSettings):
     @classmethod
-    def settings_customise_sources(cls, settings_cls, init_settings, env_settings,
-                                   dotenv_settings, file_secret_settings):
-        return (init_settings, env_settings, RemoteSettingsSource(settings_cls),
-                dotenv_settings, file_secret_settings)
+    def settings_customise_sources(
+        cls, settings_cls, init_settings, env_settings, dotenv_settings, file_secret_settings
+    ):
+        return (init_settings, env_settings, RemoteSettingsSource(settings_cls), dotenv_settings, file_secret_settings)
 ```
 
 后端是可换的：`RemoteConfigClient` 只有 `fetch` 和 `watch` 两个方法，Nacos 适配器

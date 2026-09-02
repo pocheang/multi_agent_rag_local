@@ -92,7 +92,7 @@ successful_retrievers = len(bundles)
 jobs = [
     ("vector", fn, req1),  # 成功
     ("vector", fn, req2),  # 成功
-    ("bm25", fn, req1),    # 失败
+    ("bm25", fn, req1),  # 失败
 ]
 # 结果
 bundles = [bundle1, bundle2]
@@ -132,8 +132,7 @@ total_attempts = len(jobs)  # 实际运行的检索任务数
 successful_attempts = len(bundles)
 unique_failed_retrievers = set(failed_retrievers)
 unique_successful_retrievers = set(
-    name for (name, _, _), result in zip(jobs, results, strict=True)
-    if not isinstance(result, BaseException)
+    name for (name, _, _), result in zip(jobs, results, strict=True) if not isinstance(result, BaseException)
 )
 ```
 
@@ -160,7 +159,7 @@ if evidence_count == 0:
                 f"DEGRADED: {successful_attempts} retrieval attempts succeeded "
                 f"({len(unique_successful_retrievers)} unique retrievers) "
                 f"but found no matching documents. Will proceed with fallback synthesis."
-            )
+            ),
         )
     )
 ```

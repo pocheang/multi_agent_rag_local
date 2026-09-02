@@ -65,16 +65,18 @@ def client(monkeypatch) -> TestClient:
     monkeypatch.setattr(
         documents_route,
         "delete_document_index",
-        lambda filename, remove_physical_file, source: performed.append(
-            {"op": "delete", "filename": filename, "source": source}
-        )
-        or {"ok": True, "filename": filename, "removed_chunks": 1},
+        lambda filename, remove_physical_file, source: (
+            performed.append({"op": "delete", "filename": filename, "source": source})
+            or {"ok": True, "filename": filename, "removed_chunks": 1}
+        ),
     )
     monkeypatch.setattr(
         documents_route,
         "rebuild_document_index",
-        lambda filename, source, user_id: performed.append({"op": "reindex", "filename": filename, "source": source})
-        or {"ok": True, "filename": filename, "removed_chunks": 0},
+        lambda filename, source, user_id: (
+            performed.append({"op": "reindex", "filename": filename, "source": source})
+            or {"ok": True, "filename": filename, "removed_chunks": 0}
+        ),
     )
 
     test_client = TestClient(main.app)

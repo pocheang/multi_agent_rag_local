@@ -328,7 +328,7 @@ DELETE /documents/report.pdf?source=/uploads/bob/report.pdf&remove_file=true
 
    ```python
    enabled = []
-   if readable_documents:            # allowed_sources is None or non-empty
+   if readable_documents:  # allowed_sources is None or non-empty
        enabled.extend((("vector", ...), ("bm25", ...)))
        if route.effective_route in {"graph", "hybrid"}:
            enabled.append(("graph", ...))
@@ -363,12 +363,18 @@ DELETE /documents/report.pdf?source=/uploads/bob/report.pdf&remove_file=true
 `owner: OwnerScope`，`where` 变为：
 
 ```python
-{"$and": [
-    {"source": {"$in": allowed_sources}},
-    {"$or": [{"owner_user_id": {"$eq": owner.user_id}},
-             {"visibility": {"$eq": "public"}},
-             {"tenant_id": {"$eq": "shared"}}]},
-]}
+{
+    "$and": [
+        {"source": {"$in": allowed_sources}},
+        {
+            "$or": [
+                {"owner_user_id": {"$eq": owner.user_id}},
+                {"visibility": {"$eq": "public"}},
+                {"tenant_id": {"$eq": "shared"}},
+            ]
+        },
+    ]
+}
 ```
 
 `source` 列表是从可见性规则**推导**出来的，`owner_user_id` 是入库时**独立写入**的，

@@ -48,14 +48,14 @@ INTENT_REQUIRED_INFO = {
             "data_source": ClarificationQuestion(...),
             "scale": ClarificationQuestion(...),
             "performance_requirement": ClarificationQuestion(...),
-        }
+        },
     },
     "simple_query": {
         "max_rounds": 2,
         "fields": ["entity"],
         "questions": {
             "entity": ClarificationQuestion(...),
-        }
+        },
     },
     # ...
 }
@@ -66,6 +66,7 @@ INTENT_REQUIRED_INFO = {
 ```python
 class ClarificationContext(BaseModel):
     """多轮澄清的上下文"""
+
     collected_info: dict[str, str] = Field(default_factory=dict)
     asked_questions: list[str] = Field(default_factory=list)
     clarification_round: int = Field(default=0)
@@ -100,31 +101,29 @@ graph TD
 
 ```python
 async def route(
-    self, 
-    request: OrchestrationRequest,
-    clarification_context: ClarificationContext | None = None
+    self, request: OrchestrationRequest, clarification_context: ClarificationContext | None = None
 ) -> EnhancedRouteDecision:
     # 1. 初始化
     if clarification_context is None:
         clarification_context = ClarificationContext()
-    
+
     # 2. 识别意图
     intent = await self._identify_intent(request.question, all_known_info)
-    
+
     # 3. 动态设置最大轮次
     if not clarification_context.intent or clarification_context.intent != intent:
         clarification_context.intent = intent
         clarification_context.max_rounds = self._get_max_rounds_for_intent(intent)
-    
+
     # 4. 检查轮次限制
     if clarification_context.clarification_round >= clarification_context.max_rounds:
         return CONTINUE  # 强制继续
-    
+
     # 5. 检查信息完整性
     missing = self._check_missing_info(intent, all_known_info)
     if not missing:
         return CONTINUE
-    
+
     # 6. 返回澄清问题
     return NEED_CLARIFICATION
 ```
@@ -359,34 +358,36 @@ async def test_intent_change_resets_max_rounds():
 ```python
 def test_full_clarification_with_dynamic_rounds(client):
     """测试完整的动态轮次流程"""
-    
+
     # 创建会话
     response = client.post("/sessions")
     session_id = response.json()["session_id"]
-    
+
     # 提问：复杂问题
-    response = client.post("/api/v1/clarification/check", json={
-        "question": "帮我设计一个RAG系统",
-        "session_id": session_id
-    })
+    response = client.post(
+        "/api/v1/clarification/check", json={"question": "帮我设计一个RAG系统", "session_id": session_id}
+    )
     data = response.json()
-    
+
     # 验证动态设置max_rounds
     assert data["context"]["intent"] == "rag_design"
     assert data["context"]["max_rounds"] == 7
     assert data["action"] == "NEED_CLARIFICATION"
-    
+
     # 模拟4轮回答
     for i in range(4):
-        response = client.post("/api/v1/clarification/check", json={
-            "question": "帮我设计一个RAG系统",
-            "session_id": session_id,
-            "field_name": f"field_{i}",
-            "answer": f"answer_{i}"
-        })
+        response = client.post(
+            "/api/v1/clarification/check",
+            json={
+                "question": "帮我设计一个RAG系统",
+                "session_id": session_id,
+                "field_name": f"field_{i}",
+                "answer": f"answer_{i}",
+            },
+        )
         data = response.json()
         assert data["context"]["clarification_round"] == i + 1
-    
+
     # 第4轮后信息充足，应该CONTINUE
     assert data["action"] == "CONTINUE"
     assert data["context"]["clarification_round"] < 7  # 未达到最大值
@@ -403,16 +404,17 @@ def test_full_clarification_with_dynamic_rounds(client):
 **新增配置**:
 ```python
 # 1. 添加意图复杂度配置
-INTENT_COMPLEXITY = { ... }
+INTENT_COMPLEXITY = {...}
 
 # 2. 在意图配置中添加max_rounds
 INTENT_REQUIRED_INFO = {
     "rag_design": {
         "max_rounds": 7,  # 新增
         "fields": [...],
-        "questions": {...}
+        "questions": {...},
     }
 }
+
 
 # 3. 在ClarificationContext中添加intent字段
 class ClarificationContext(BaseModel):

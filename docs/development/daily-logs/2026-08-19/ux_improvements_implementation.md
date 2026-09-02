@@ -150,6 +150,7 @@ engine = EnhancedOrchestrationEngine(
     enable_user_friendly_progress=True,
 )
 
+
 # 使用流式 API
 @router.post("/query/stream")
 async def query_stream(request: QueryRequest):
@@ -264,13 +265,15 @@ from app.domain.user_experience import (
     convert_to_user_friendly_error,
 )
 
+
 def test_progress_translator():
     translator = ProgressTranslator()
     progress = translator.translate("rag", "in_progress", "", "zh")
-    
+
     assert "搜索" in progress.user_message
     assert progress.icon == "📚"
     assert progress.progress_percent == 50
+
 
 def test_quality_card_builder():
     builder = QualityCardBuilder()
@@ -280,15 +283,16 @@ def test_quality_card_builder():
         citation_completeness=0.85,
         retrieval_scores=[0.9, 0.85, 0.88],
     )
-    
+
     assert card.confidence_level == "high"
     assert card.confidence_score == 87.0
     assert card.retrieval_quality == "excellent"
 
+
 def test_error_conversion():
     error = RuntimeError("All retrievers failed")
     user_error = convert_to_user_friendly_error(error, "zh")
-    
+
     assert "暂时" in user_error.user_title
     assert len(user_error.immediate_actions) > 0
 ```
@@ -300,18 +304,19 @@ def test_error_conversion():
 import pytest
 from app.orchestration.enhanced_engine import EnhancedOrchestrationEngine
 
+
 @pytest.mark.asyncio
 async def test_execute_stream_with_progress(engine, sample_request):
     events = []
-    
+
     async for event in engine.execute_stream(sample_request):
         events.append(event)
-    
+
     # 验证进度事件
     progress_events = [e for e in events if e["type"] == "status"]
     assert len(progress_events) > 0
     assert all("message" in e for e in progress_events)
-    
+
     # 验证最终答案包含质量卡片
     done_events = [e for e in events if e["type"] == "done"]
     assert len(done_events) == 1

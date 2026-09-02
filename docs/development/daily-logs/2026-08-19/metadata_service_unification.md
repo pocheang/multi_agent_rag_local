@@ -105,6 +105,7 @@ from app.services.sessions.metadata import (
 # Before
 from app.services.sessions.metadata import SessionCategory, SessionMetadata, MetadataUpdate
 from app.services.sessions.metadata_v2 import get_metadata_service_v2
+
 get_metadata_service = get_metadata_service_v2
 
 # After
@@ -149,16 +150,16 @@ from app.services.sessions.metadata import (
 {
     "total_sessions": len(self._sessions),
     "capacity": self._max_sessions,  # ❌ 测试期望 max_capacity
-    "utilization": ...
+    "utilization": ...,
     # ❌ 缺少 total_tags
 }
 
 # 修复后
 {
     "total_sessions": len(self._sessions),
-    "max_capacity": self._max_sessions,  # ✅ 
-    "total_tags": len(self.get_all_tags()),  # ✅ 
-    "utilization": ...
+    "max_capacity": self._max_sessions,  # ✅
+    "total_tags": len(self.get_all_tags()),  # ✅
+    "utilization": ...,
 }
 ```
 
@@ -323,8 +324,8 @@ grep -r "get_metadata_service_v2" app/ tests/
 ```python
 # ✅ DO: 直接修改
 class SessionMetadataService:
-    def new_feature(self):
-        ...
+    def new_feature(self): ...
+
 
 # ❌ DON'T: 创建新版本
 class SessionMetadataServiceV3:  # 永远不要这样做

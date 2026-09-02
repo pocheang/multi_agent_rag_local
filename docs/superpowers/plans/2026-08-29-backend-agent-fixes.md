@@ -866,11 +866,10 @@ git rm app/agents/tool/react.py
 In `app/services/observability/agent_health.py`, remove this method:
 
 ```python
-    @staticmethod
-    def validate_react_agent() -> dict[str, Any]:
-        """Validate ReAct Agent module availability."""
-        return _module_status("react", "app.agents.tool.react")
-
+@staticmethod
+def validate_react_agent() -> dict[str, Any]:
+    """Validate ReAct Agent module availability."""
+    return _module_status("react", "app.agents.tool.react")
 ```
 
 and remove its entry from `validate_all()`:
