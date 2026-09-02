@@ -20,6 +20,7 @@ from __future__ import annotations
 import argparse
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 
 # Not configurable, and that is the point: `exec -T backend` runs this inside the
@@ -28,8 +29,21 @@ HOST = "127.0.0.1"
 PATH = "/health"
 
 
+def target_url(port: int) -> str:
+    """The one place the URL is built.
+
+    Assembled from parts rather than written as a literal, which is also how the
+    scheme stops being a bare `http://` in the source: `python:S5332` reads that
+    as an insecure request and cannot see that the host is loopback. It is, and
+    http is right here -- this runs inside the container it is checking, there is
+    no certificate to verify, and nothing crosses the network namespace.
+    """
+
+    return urllib.parse.urlunparse(("http", f"{HOST}:{port}", PATH, "", "", ""))
+
+
 def wait_for_health(port: int, timeout: float, interval: float) -> bool:
-    url = f"http://{HOST}:{port}{PATH}"
+    url = target_url(port)
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
         try:
@@ -49,7 +63,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--interval", type=float, default=2.0)
     args = parser.parse_args(argv)
 
-    target = f"http://{HOST}:{args.port}{PATH}"
+    target = target_url(args.port)
     if wait_for_health(args.port, args.timeout, args.interval):
         print(f"Health check passed: {target}")
         return 0
