@@ -48,8 +48,20 @@ COPY scripts ./scripts
 COPY config ./config
 COPY deploy ./deploy
 
-# Create necessary directories
-RUN mkdir -p /app/data/chroma /app/data/chunks /app/logs
+# Run as a non-root user (docker:S6471). Port 8000 is unprivileged, so nothing
+# here needs the capability root was providing.
+#
+# The writable set is deliberately small and enumerated rather than a blanket
+# chown of /app: `data/` covers every path Settings creates at startup (chroma,
+# chunks, docs, sessions, uploads, app.db, history.db, sessions_cold),
+# `logs/`, and `.runtime/` for the snapshot the configuration centre writes
+# after a successful fetch. Application code stays read-only to the process,
+# which is most of the value of not being root.
+RUN useradd --system --create-home --uid 10001 querymind \
+    && mkdir -p /app/data/chroma /app/data/chunks /app/logs /app/.runtime \
+    && chown -R querymind:querymind /app/data /app/logs /app/.runtime
+
+USER querymind
 
 # Set environment variables
 ENV PYTHONUNBUFFERED=1

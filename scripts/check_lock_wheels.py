@@ -30,17 +30,36 @@ import urllib.request
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
+from packaging.markers import Marker
 from packaging.tags import Tag
 from packaging.utils import parse_wheel_filename
 
 # The platform CI and the image run on, and the one the locks are compiled for.
 TARGET_MINOR = 11
 
-_PINNED = re.compile(r"^([A-Za-z0-9][A-Za-z0-9._-]*)==(\S+?)(?:\s|\\|$)", re.M)
+_PINNED = re.compile(r"^([A-Za-z0-9][A-Za-z0-9._-]*)==(\S+?)(?:\s*;\s*(?P<marker>.*?))?\s*\\?$", re.M)
 _CPYTHON = re.compile(r"^cp3(\d+)$")
 
 ROOT = Path(__file__).resolve().parents[1]
 LOCKS = (ROOT / "requirements" / "ci.txt", ROOT / "requirements" / "runtime.txt")
+
+# The exports are universal -- one entry per package *per environment* -- so a
+# package appears more than once with different versions and different markers,
+# and the answer to "does this have a wheel" depends on which one linux/cp311
+# would install. Reading them without markers reported numpy, scipy and pywin32
+# as wheel-less: the first two because the last line won was the 3.12 pin, the
+# third because it is Windows-only and never installed here at all.
+INSTALL_ENVIRONMENT = {
+    "python_version": "3.11",
+    "python_full_version": "3.11.13",
+    "sys_platform": "linux",
+    "platform_system": "Linux",
+    "platform_machine": "x86_64",
+    "os_name": "posix",
+    "implementation_name": "cpython",
+    "platform_python_implementation": "CPython",
+    "extra": "",
+}
 
 
 def _platform_ok(platform: str) -> bool:
@@ -91,10 +110,22 @@ def _has_usable_wheel(name: str, version: str) -> bool | None:
     return False
 
 
+def _installed_here(lock: Path) -> dict[str, str]:
+    """The pins linux/cp311 would actually install, markers evaluated."""
+
+    pinned: dict[str, str] = {}
+    for match in _PINNED.finditer(lock.read_text(encoding="utf-8")):
+        name, version, marker = match.group(1), match.group(2), match.group("marker")
+        if marker and not Marker(marker).evaluate(INSTALL_ENVIRONMENT):
+            continue
+        pinned[name] = version
+    return pinned
+
+
 def main() -> int:
     pinned: dict[str, str] = {}
     for lock in LOCKS:
-        pinned.update(dict(_PINNED.findall(lock.read_text(encoding="utf-8"))))
+        pinned.update(_installed_here(lock))
 
     print(f"checking {len(pinned)} locked packages against PyPI for linux/cp311")
     with ThreadPoolExecutor(max_workers=16) as pool:

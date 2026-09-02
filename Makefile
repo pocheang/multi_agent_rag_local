@@ -19,13 +19,14 @@ fe-dev:
 fe-build:
 	cd frontend && npm run build
 
-# Recompile the dependency locks CI and the image install from. Takes minutes:
-# --generate-hashes fetches every archive to hash it. Compiled for the platform
-# they are used on, not the one you run this from, so the result is the same
-# whoever regenerates it. Needs `uv` (pip install uv).
+# uv.lock is the lock; requirements/*.txt are exports of it for pip, which
+# cannot read uv.lock. One resolution, so the three cannot disagree -- they used
+# to be two independent `uv pip compile` runs, which could. Takes minutes: the
+# hashes come from the real archives. Needs `uv` (pip install uv).
 lock:
-	uv pip compile pyproject.toml --python-platform linux --python-version 3.11 --generate-hashes --no-annotate -o requirements/runtime.txt
-	uv pip compile pyproject.toml --extra dev --python-platform linux --python-version 3.11 --generate-hashes --no-annotate -o requirements/ci.txt
+	uv lock
+	uv export --frozen --no-emit-project --no-dev --no-annotate --no-header -o requirements/runtime.txt
+	uv export --frozen --no-emit-project --extra dev --no-annotate --no-header -o requirements/ci.txt
 	conda run --no-capture-output -n rag-local python scripts/check_lock_wheels.py
 
 test:

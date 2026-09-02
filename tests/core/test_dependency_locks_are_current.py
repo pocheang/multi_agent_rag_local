@@ -32,8 +32,9 @@ LOCKS = {
     "ci.txt": ["dev"],  # plus the dev extra, which is what CI installs
 }
 
-# The environment the locks were compiled for: `uv pip compile --python-platform
-# linux --python-version 3.11`, matching the CI runner and the base image.
+# The environment the exports are read for. They are universal -- `uv export`
+# emits every environment with markers -- so this is what selects the lines that
+# linux/cp311 would install, which is the CI runner and the base image.
 LOCK_ENVIRONMENT = {
     "python_version": "3.11",
     "python_full_version": "3.11.0",
@@ -43,9 +44,10 @@ LOCK_ENVIRONMENT = {
     "os_name": "posix",
     "implementation_name": "cpython",
     "platform_python_implementation": "CPython",
+    "extra": "",
 }
 
-_PINNED = re.compile(r"^([A-Za-z0-9][A-Za-z0-9._-]*)==(\S+?)(?:\s|\\|$)")
+_PINNED = re.compile(r"^([A-Za-z0-9][A-Za-z0-9._-]*)==(\S+?)(?:\s*;\s*(?P<marker>.*?))?\s*\\?$")
 
 
 def _normalise(name: str) -> str:
@@ -53,11 +55,23 @@ def _normalise(name: str) -> str:
 
 
 def _locked_versions(lock: Path) -> dict[str, str]:
-    found = {}
+    """What LOCK_ENVIRONMENT would install, not every line in the file.
+
+    The exports are universal, so a package appears once per environment --
+    `numpy==2.4.6 ; python_full_version < '3.12'` and `numpy==2.5.2 ; >= '3.12'`
+    are both in there, as is Windows-only pywin32. Taking the last line for each
+    name answers a question nobody asked.
+    """
+
+    found: dict[str, str] = {}
     for line in lock.read_text(encoding="utf-8").splitlines():
         match = _PINNED.match(line)
-        if match:
-            found[_normalise(match.group(1))] = match.group(2)
+        if not match:
+            continue
+        marker = match.group("marker")
+        if marker and not packaging_markers.Marker(marker).evaluate(LOCK_ENVIRONMENT):
+            continue
+        found[_normalise(match.group(1))] = match.group(2)
     return found
 
 
@@ -67,6 +81,19 @@ def _direct_requirements(extras: list[str]) -> list[str]:
     for extra in extras:
         requirements += list(project["optional-dependencies"][extra])
     return requirements
+
+
+def test_uv_lock_is_the_source_the_exports_come_from() -> None:
+    """`requirements/*.txt` are exports, not resolutions of their own.
+
+    They were two independent `uv pip compile` runs until 2026-09-02, which could
+    disagree about a shared transitive dependency -- CI testing one version while
+    the image shipped another. `make lock` now runs `uv lock` once and exports
+    twice, so uv.lock going missing would leave the exports with nothing behind
+    them.
+    """
+
+    assert (ROOT / "uv.lock").is_file(), "uv.lock is missing; run `make lock`"
 
 
 @pytest.mark.parametrize("lock_name", sorted(LOCKS))
@@ -104,9 +131,12 @@ def test_every_direct_dependency_is_locked(lock_name: str) -> None:
 
 
 def test_the_ci_lock_is_a_superset_of_the_runtime_lock() -> None:
-    """They are compiled separately, so they can drift into disagreeing about a
-    shared transitive dependency -- which would mean CI testing one version and
-    the image shipping another."""
+    """Both come from one uv.lock, so this should hold by construction.
+
+    It is asserted anyway because it did not always: they were two independent
+    `uv pip compile` runs until 2026-09-02 and could disagree about a shared
+    transitive dependency, which would mean CI testing one version and the image
+    shipping another. This is what would catch a return to that."""
 
     runtime = _locked_versions(ROOT / "requirements" / "runtime.txt")
     ci = _locked_versions(ROOT / "requirements" / "ci.txt")
