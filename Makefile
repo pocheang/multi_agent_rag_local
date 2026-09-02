@@ -1,4 +1,4 @@
-.PHONY: install up api test lint fe-install fe-dev fe-build config-check config-render deploy deploy-dev deploy-monitoring
+.PHONY: install up api test lint lock fe-install fe-dev fe-build config-check config-render deploy deploy-dev deploy-monitoring
 
 install:
 	conda run -n rag-local pip install -e ".[dev]"
@@ -18,6 +18,14 @@ fe-dev:
 
 fe-build:
 	cd frontend && npm run build
+
+# Recompile the dependency locks CI and the image install from. Takes minutes:
+# --generate-hashes fetches every archive to hash it. Compiled for the platform
+# they are used on, not the one you run this from, so the result is the same
+# whoever regenerates it. Needs `uv` (pip install uv).
+lock:
+	uv pip compile pyproject.toml --python-platform linux --python-version 3.11 --generate-hashes --no-annotate -o requirements/runtime.txt
+	uv pip compile pyproject.toml --extra dev --python-platform linux --python-version 3.11 --generate-hashes --no-annotate -o requirements/ci.txt
 
 test:
 	conda run --no-capture-output -n rag-local pytest -q

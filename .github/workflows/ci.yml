@@ -36,13 +36,24 @@ jobs:
       - name: Format check
         run: ruff format --check .
 
+      - name: Install dependencies
+        # From the lock, not from the ranges in pyproject.toml: every version is
+        # pinned and every archive hashed, so pip refuses bytes that do not match
+        # and refuses to resolve anything the lock does not name. Regenerate with
+        # `make lock`; tests/core/test_dependency_locks_are_current.py fails if
+        # pyproject moves and the lock does not.
+        #
+        # --only-binary keeps setup.py from running. jieba is exempted because it
+        # publishes no wheel at all -- not for this platform, for any -- so that
+        # is one named package rather than dropping the protection for the other
+        # hundred and eighty.
+        run: 'pip install --only-binary :all: --no-binary jieba -r requirements/ci.txt'
+
       - name: Install package
-        # jieba is exempted because it publishes no wheel at all -- not for
-        # this platform, for any (`from versions: none`). Its setup.py does
-        # therefore run. That is a named, single-package hole rather than
-        # dropping the protection for the other forty dependencies, every one
-        # of which resolves to a wheel.
-        run: 'pip install --only-binary :all: --no-binary jieba -e ".[dev]"'
+        # Separately, and without dependencies: the hashes above imply
+        # --require-hashes, which will not accept an editable install, and the
+        # project itself is not a supply-chain input.
+        run: pip install -e . --no-deps
 
       - name: Endpoint census
         # Guards against a refactor silently dropping routers. Counts OpenAPI

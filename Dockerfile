@@ -13,10 +13,15 @@ RUN apt-get update && apt-get install -y \
 
 # Copy requirements
 COPY pyproject.toml ./
+COPY requirements/runtime.txt ./requirements/
 
-# Install Python dependencies
-RUN pip install --no-cache-dir --only-binary :all: --upgrade pip && \
-    pip install --no-cache-dir --only-binary :all: --no-binary jieba -e .
+# Install Python dependencies from the lock: pinned and hashed, so an image
+# rebuilt in six months installs what this one did. `pip install --upgrade pip`
+# used to lead this and was removed with the same reasoning -- an unpinned
+# upgrade is the floating dependency this file is trying to stop having, and the
+# image tag already fixes pip's version.
+RUN pip install --no-cache-dir --only-binary :all: --no-binary jieba -r requirements/runtime.txt && \
+    pip install --no-cache-dir -e . --no-deps
 
 # Production stage
 FROM python:3.11-slim
