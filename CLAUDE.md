@@ -1077,7 +1077,7 @@ A third makes it three. Do not add a pixel-diff CI gate for the reason above, an
 
 `tests/` was cleared ahead of the v0.7 rewrite and is being rebuilt incrementally: each bug
 fix lands with the regression test that would have caught it, rather than as a separate
-back-filling effort. As of 2026-09-01 there are 528 tests covering the chat round trip,
+back-filling effort. As of 2026-09-02 there are 531 tests covering the chat round trip,
 conversation context, graph routing, clarification, the async load guard, engine reuse,
 answer safety, reader-facing citation numbering, stage-timeout degradation, the governed
 tool stack with its multi-step loop and approve-then-resume cycle, retrieval
@@ -1233,6 +1233,19 @@ varies by version. Count OpenAPI operations instead; the current baseline is 151
   `remaining_ms` already clamps at 0. Exhaustion still surfaced, but as the next stage being
   clamped to a 0ms ceiling and cancelled — which reads in a trace as "that stage was slow"
   rather than "the request ran out of time".
+- **Lazy imports on the request path are a deadlock risk, not a startup optimization**
+  (found 2026-09-02 by running one query). `from ddgs import DDGS` does not import ddgs:
+  the name is a proxy whose metaclass runs `importlib.import_module` on the first *call*,
+  holding its own lock, and the module it imports calls `logging.getLogger` on the way in.
+  One query starts several web searches on separate worker threads, so those are several
+  concurrent first calls — three threads inside `_load_real`, one parked in
+  `logging.getLogger`. **It wedged the whole process, not just the request**: the stuck
+  thread holds the logging lock, so uvicorn's per-request access log blocks and `/health`
+  stops answering while the event loop sits idle and healthy. The tell is a hang at zero
+  CPU. `app/tools/web/search.py::_resolve_ddgs_eagerly` resolves it at import, when one
+  thread is running; `tests/services/test_web_search_import.py` asserts no first-call
+  import remains. The call site's `timeout=10` never applied — it bounds the HTTP request,
+  not the import.
 - **LLM request timeout**: `Settings.llm_request_timeout_seconds` is passed to the OpenAI and
   Anthropic chat clients. Without it a hung provider connection pinned a pool thread for the
   life of the process: an `asyncio` stage timeout unblocks the event loop but cannot cancel
