@@ -59,7 +59,7 @@ docker compose "${COMPOSE_ARGS[@]}" config -q
 docker compose "${COMPOSE_ARGS[@]}" up -d --build
 docker compose "${COMPOSE_ARGS[@]}" run --rm backend python deploy/scripts/init_app.py
 docker compose "${COMPOSE_ARGS[@]}" exec -T backend python deploy/scripts/healthcheck.py \
-  --url http://127.0.0.1:8000/health
+  --port 8000
 
 echo "QueryMind deployed: environment=$ENVIRONMENT profile=$PROFILE"
 if [[ "$ENVIRONMENT" == "development" ]]; then
