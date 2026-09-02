@@ -7,6 +7,12 @@ from typing import Any
 
 from .classification import ChunkType, classify_chunk_type
 
+# One definition of what a URL looks like. There were two: a substring test
+# for the two scheme literals here, and this pattern in extract_entities, so a
+# chunk could report has_url=False and still yield a URL. Case-insensitive
+# because both spellings occur in real documents and neither form caught it.
+_URL = re.compile(r"https?://\S+", re.IGNORECASE)
+
 # ============================================================================
 # 元数据增强
 # ============================================================================
@@ -59,7 +65,7 @@ def enhance_chunk_metadata(
     # 语义特征
     metadata["has_question"] = "?" in chunk_text or "？" in chunk_text
     metadata["has_code"] = any(marker in chunk_text for marker in ["```", "def ", "class ", "function"])
-    metadata["has_url"] = "http://" in chunk_text or "https://" in chunk_text
+    metadata["has_url"] = bool(_URL.search(chunk_text))
     metadata["has_email"] = "@" in chunk_text and "." in chunk_text
 
     # 上下文信息
@@ -182,7 +188,7 @@ def extract_entities(text: str) -> dict[str, list[str]]:
         entities["emails"] = list(set(emails))
 
     # URL
-    urls = re.findall(r"https?://[^\s]+", text)
+    urls = _URL.findall(text)
     if urls:
         entities["urls"] = list(set(urls))[:3]
 

@@ -4,6 +4,7 @@ import asyncio
 import hashlib
 import json
 import logging
+import re
 import time
 from abc import ABC, abstractmethod
 from collections import OrderedDict
@@ -11,6 +12,14 @@ from dataclasses import dataclass
 from typing import Any
 
 logger = logging.getLogger(__name__)
+
+# A cache namespace is a name. `clear_prefix` builds a Redis match pattern from
+# it, so a caller passing `*` is asking for a different operation than the one
+# the parameter names. Declared here, beside the code that builds the glob,
+# rather than only at the HTTP edge: the edge is where it is convenient to
+# check, and this is where it matters.
+CACHE_PREFIX_PATTERN = r"^[A-Za-z0-9_-]{1,64}$"
+_CACHE_PREFIX = re.compile(CACHE_PREFIX_PATTERN)
 
 
 @dataclass
@@ -398,7 +407,17 @@ class CacheManager:
             await self.l2_cache.delete(key)
 
     async def clear_prefix(self, prefix: str) -> None:
-        """Clear all entries with given prefix."""
+        """Clear all entries in one namespace.
+
+        Rejects anything that is not a namespace name. The Redis backend turns
+        this into `scan_iter(match=f"{prefix}:*")`, so `*` would clear every
+        namespace -- an operation this class already offers as `clear()`, and one
+        nobody should reach by accident through the parameter that names a single
+        one.
+        """
+
+        if not _CACHE_PREFIX.fullmatch(prefix or ""):
+            raise ValueError(f"cache prefix must match {CACHE_PREFIX_PATTERN}")
         await self.l1_cache.clear_prefix(prefix)
         if self.l2_cache:
             await self.l2_cache.clear_prefix(prefix)

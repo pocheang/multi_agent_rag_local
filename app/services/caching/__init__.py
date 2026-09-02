@@ -2,7 +2,7 @@
 
 import logging
 
-from app.services.caching.cache_manager import CacheManager
+from app.services.caching.cache_manager import CACHE_PREFIX_PATTERN, CacheManager
 
 logger = logging.getLogger(__name__)
 
@@ -70,4 +70,4 @@ def get_cache_manager() -> CacheManager:
     return _cache_manager_instance
 
 
-__all__ = ["initialize_cache_manager", "close_cache_manager", "get_cache_manager"]
+__all__ = ["CACHE_PREFIX_PATTERN", "initialize_cache_manager", "close_cache_manager", "get_cache_manager"]

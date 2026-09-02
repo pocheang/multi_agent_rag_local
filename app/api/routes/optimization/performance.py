@@ -1,15 +1,23 @@
 """Performance optimization API endpoints."""
 
 import logging
+from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 
 from app.api.deps.auth import require_admin
-from app.services.caching import get_cache_manager
+from app.services.caching import CACHE_PREFIX_PATTERN, get_cache_manager
 from app.services.optimization.memory_manager import MemoryManager, optimize_memory
 from app.services.performance.monitor import get_monitor
 
 logger = logging.getLogger(__name__)
+
+# A namespace name, not a glob. The value reaches `scan_iter(match=f"{prefix}:*")`,
+# so an unconstrained string is a Redis pattern: `*` clears everything, which is
+# a different operation from the one this parameter names (and one this endpoint
+# already offers by omitting the parameter). Admin-only either way, so the point
+# is that the parameter does what it says, not that it stops an attacker.
+CachePrefix = Annotated[str | None, Query(pattern=CACHE_PREFIX_PATTERN, max_length=64)]
 
 router = APIRouter(
     prefix="/optimization",
@@ -52,11 +60,12 @@ async def get_cache_stats():
 
 
 @router.post("/cache/clear")
-async def clear_cache(prefix: str | None = None):
+async def clear_cache(prefix: CachePrefix = None):
     """Clear cache (all or specific prefix).
 
     Args:
-        prefix: Optional cache prefix to clear
+        prefix: Optional cache namespace to clear. A name, not a pattern -- see
+            CachePrefix.
     """
     cache_manager = get_cache_manager()
 

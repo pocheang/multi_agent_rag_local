@@ -9,6 +9,7 @@ from collections.abc import AsyncIterator, Iterator
 from contextlib import asynccontextmanager, contextmanager
 
 from app.core.config import get_settings
+from app.services.observability.log_safety import key_ref
 from app.services.security.rate_limiter import SlidingWindowLimiter
 
 logger = logging.getLogger(__name__)
@@ -234,7 +235,7 @@ class QueryLoadGuard:
             except QueryRateLimitedError:
                 raise
             except (ValueError, TypeError, OSError) as e:
-                logger.debug(f"Redis rate limit check failed for user {user_key}: {e}")
+                logger.debug("query_guard_rate_check_failed user=%s error=%s", key_ref(user_key), str(e))
                 with self._acquire_memory(user_key):
                     yield
                 return
@@ -295,7 +296,7 @@ class QueryLoadGuard:
                     client.decr(waiting_key)
                 except (ValueError, TypeError, OSError) as e:
                     logger.warning(
-                        "query_guard_waiting_decr_failed user_key=%s error=%s", user_key, str(e), exc_info=True
+                        "query_guard_waiting_decr_failed user=%s error=%s", key_ref(user_key), str(e), exc_info=True
                     )
                     # Attempt to reset the counter if decrement fails repeatedly
                     try:
@@ -310,7 +311,7 @@ class QueryLoadGuard:
                     client.decr(inflight_key)
                 except (ValueError, TypeError, OSError) as e:
                     logger.warning(
-                        "query_guard_inflight_decr_failed user_key=%s error=%s", user_key, str(e), exc_info=True
+                        "query_guard_inflight_decr_failed user=%s error=%s", key_ref(user_key), str(e), exc_info=True
                     )
                     # Attempt to reset the counter if decrement fails repeatedly
                     try:

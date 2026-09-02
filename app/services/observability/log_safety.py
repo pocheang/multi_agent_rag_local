@@ -6,7 +6,12 @@ import hashlib
 import logging
 import re
 
-__all__ = ["install_control_character_escaping", "question_ref"]
+__all__ = ["install_control_character_escaping", "key_ref", "question_ref"]
+
+
+def _ref(prefix: str, text: str) -> str:
+    digest = hashlib.sha256(text.encode("utf-8")).hexdigest()[:12]
+    return f"{prefix}[{digest} len={len(text)}]"
 
 
 def question_ref(question: str | None) -> str:
@@ -22,9 +27,20 @@ def question_ref(question: str | None) -> str:
     reveals nothing on its own.
     """
 
-    text = str(question or "")
-    digest = hashlib.sha256(text.encode("utf-8")).hexdigest()[:12]
-    return f"q[{digest} len={len(text)}]"
+    return _ref("q", str(question or ""))
+
+
+def key_ref(key: str | None) -> str:
+    """The same handle, for an identifier used as a partition or rate-limit key.
+
+    A user id in a log line is not the disaster a question is, but it is still
+    the one field that ties every other line to a person, and it is reproduced
+    on paths that exist only to report a failure. The digest keeps what those
+    lines are for -- telling whether the failures are one user or many -- and
+    drops what they do not need.
+    """
+
+    return _ref("k", str(key or ""))
 
 
 # C0 and C1 control characters, minus tab: a tab cannot start a new log line and
