@@ -10,6 +10,9 @@
   "来源层"那一列——页面存在的全部理由——无从知道值是哪来的。接口的响应还叫 `applied_patch`。
   现在它改名 `recommend_replay_autotune` 且不改任何东西，应用走 `write_config_values()`，
   和管理员的编辑同一条路、同样的拒绝规则。**这条路径此前零测试覆盖，现在有 6 个。**
+- **版本历史与回滚已实测（§1 目标 3 的最后一块）。** 在真实 Nacos 上：`/cs/history` 列出 4 个版本
+  （含从管理页保存的那次），取旧版本内容、发布回去、再用应用自己的 source 链读——`RERANKER_TOP_N`
+  回到 5，`describe()` 报 `layer=config-centre`。注意 Nacos 历史条目存的是**变更前**的内容。
 - **`requires_restart` 全部核实过。** 29 个字段逐个查了绑定点：要么每次调用读 `get_settings()`，
   要么挂在 `RAGPipeline` 每请求新建的对象上，要么由重载重建。唯一例外是检索缓存——它在首次构造时
   把 TTL 烘死且存在模块级全局里——所以让 `apply_config_reload()` 清它，而不是在页面上加个警告。

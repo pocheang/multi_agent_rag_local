@@ -31,6 +31,8 @@ __all__ = [
 
 logger = logging.getLogger(__name__)
 
+_DEFAULT_DB_PATH = "./data/querymind.db"
+
 
 # ============================================================================
 # Database Schema
@@ -103,9 +105,15 @@ class SessionMetadataDB:
         if db_url.startswith("sqlite:///"):
             path_str = db_url[10:]  # Remove "sqlite:///"
             return Path(path_str).resolve()
-        else:
-            # Fallback
-            return Path("./data/querymind.db").resolve()
+        # Anything else is not supported -- this store is SQLite only -- and the
+        # fallback used to be silent. A deployment once set
+        # DATABASE_URL=postgresql+asyncpg://... in compose and nothing said that
+        # the application had ignored it and written a local file instead.
+        logger.warning(
+            "DATABASE_URL is not a sqlite:/// URL; this store is SQLite only and is using %s",
+            _DEFAULT_DB_PATH,
+        )
+        return Path(_DEFAULT_DB_PATH).resolve()
 
     def _connect(self) -> sqlite3.Connection:
         """Create database connection."""

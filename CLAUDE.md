@@ -861,10 +861,17 @@ this section exists.
 `app/services/connectors/{metadata_repository,repository}.py`). There is no shared connection
 pool and no PostgreSQL support: an async SQLAlchemy pool existed but was never used by
 any business code and was removed on 2026-08-29, along with the `asyncpg`/`aiosqlite`
-dependencies and `DATABASE_URL`.
+dependencies. `DATABASE_URL` **still exists** as a `Settings` field and is still read, by
+`app/services/sessions/metadata_db.py::_get_db_path` — but only the `sqlite:///` form is
+honoured, and anything else falls back to `./data/querymind.db`. That fallback used to be
+silent, which is how `deploy/compose/compose.yaml` came to hand the backend a
+`postgresql+asyncpg://` URL the application ignored; it logs a warning now, and the compose
+entry is gone.
 **Frontend**: React 18 + TypeScript + Vite + Zustand (state) + i18next (i18n)
 **Models**: OpenAI GPT-5.5 (primary, `OPENAI_CHAT_MODEL`), Claude Haiku (multimodal image description/OCR triage in `app/services/multimodal/image_processor.py`; not used for retrieval-quality batch scoring, see Quality Assurance section), Sentence-Transformers (embeddings)
-**Deployment**: Docker Compose with deployment scripts in `deploy/scripts/`
+**Deployment**: Docker Compose with deployment scripts in `deploy/scripts/`. The `postgres`
+service is behind the `with-n8n` profile, because n8n is the only thing that uses it — the
+backend is SQLite-only, and gating its startup on a database it never opens bought nothing.
 
 ## Development Patterns
 
