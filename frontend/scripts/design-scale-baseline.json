@@ -125,7 +125,7 @@
   },
   "src/styles/features/composer/actions.css": {
     "radii": 4,
-    "shadows": 7
+    "shadows": 6
   },
   "src/styles/features/composer/editor.css": {
     "radii": 0,

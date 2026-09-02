@@ -345,7 +345,14 @@ export function ChatPage({ user, onLogout, onUserRefresh }: Props) {
           onLogout={onLogout}
         />
 
-        <div className={`backdrop ${sidebarOpen ? "show" : ""}`} onClick={() => setSidebarOpen(false)} />
+        {/* Scenery, like the dialog backdrops: closing the sidebar is a mouse
+            convenience, and the sidebar's own Collapse button is the route that
+            a keyboard already has. */}
+        <div
+          className={`backdrop ${sidebarOpen ? "show" : ""}`}
+          role="presentation"
+          onClick={() => setSidebarOpen(false)}
+        />
 
         <main className="main">
           <ChatMessages

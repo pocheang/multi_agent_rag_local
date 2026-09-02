@@ -8,6 +8,8 @@ import hmac
 import logging
 from datetime import UTC, datetime
 
+from app.services.observability.log_safety import key_ref
+
 
 def _utcnow() -> datetime:
     """Return current UTC time as a naive datetime for backward compatibility.
@@ -73,7 +75,7 @@ class AdminTokenTracker:
             user_id: User ID who used the token
         """
         self._used_tokens[token_hash] = {"used_at": _utcnow(), "used_by": user_id}
-        logger.info(f"Token marked as used: hash={token_hash[:8]}..., user={user_id}")
+        logger.info("admin_token_used token=%s user=%s", key_ref(token_hash), key_ref(user_id))
 
     def cleanup_expired(self) -> int:
         """

@@ -177,11 +177,6 @@
   box-shadow:
     0 0 0 3px rgba(91, 140, 255, 0.16),
     0 4px 12px rgba(91, 140, 255, 0.18);
-  outline: none;
-  border-color: rgba(91, 140, 255, 0.68);
-  box-shadow:
-    0 0 0 3px rgba(91, 140, 255, 0.16),
-    0 4px 12px rgba(91, 140, 255, 0.18);
   background:
     linear-gradient(135deg, rgba(24, 36, 58, 0.96), rgba(18, 28, 48, 1)),
     radial-gradient(circle at 100% 0%, rgba(139, 122, 255, 0.18), transparent 50%);

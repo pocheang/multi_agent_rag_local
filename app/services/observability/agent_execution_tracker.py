@@ -1,4 +1,5 @@
 import asyncio
+import contextlib
 import logging
 import threading
 import uuid
@@ -9,6 +10,8 @@ from functools import wraps
 from typing import Any, Optional
 
 from pydantic import BaseModel, ConfigDict, Field
+
+from app.services.observability.log_safety import key_ref
 
 logger = logging.getLogger(__name__)
 
@@ -100,7 +103,7 @@ class AgentExecutionTracker:
         with self._traces_lock:
             self._traces[execution_id] = trace
 
-        logger.info(f"Started execution trace: {execution_id} for user: {user_id}")
+        logger.info("execution_trace_started execution=%s user=%s", execution_id, key_ref(user_id))
         return execution_id
 
     def record_agent_step(
@@ -518,13 +521,14 @@ class AgentExecutionTracker:
         """Stop background cleanup task."""
         if self._cleanup_task is not None and not self._cleanup_task.done():
             self._cleanup_task.cancel()
-            try:
+            # Absorbing it here is the point: this is the caller that asked for
+            # the cancellation one line above, and shutdown should not propagate
+            # it further. `suppress` rather than `except: pass` because the two
+            # differ in what a reader has to check -- one names the exception it
+            # is deliberately swallowing and covers exactly one statement, the
+            # other looks like the mistake `python:S7497` exists to catch.
+            with contextlib.suppress(asyncio.CancelledError):
                 await self._cleanup_task
-            except asyncio.CancelledError:
-                # Absorbing it here is the point: this is the caller that asked
-                # for the cancellation one line above, and shutdown should not
-                # propagate it further.
-                pass
         self._cleanup_task = None
         logger.info("Stopped execution tracker cleanup")
 

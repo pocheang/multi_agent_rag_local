@@ -120,12 +120,29 @@ def _config_layer(*candidates: Path) -> Path:
     raise FileNotFoundError(candidates[-1])
 
 
+def _resolved_output(output: Path, repo_root: Path) -> Path:
+    """Where the rendered environment may be written: inside the repository.
+
+    `--output` is a path off the command line and this function writes secrets to
+    it with mode 0600, so an unconstrained value is a write-anywhere primitive
+    with whatever rights the caller has -- `pythonsecurity:S8707`. The tool's
+    whole purpose is producing `.runtime/{env}.env` beside the config it renders
+    from, so containment costs nothing and the refusal names what happened.
+    """
+
+    resolved = (repo_root / output).resolve() if not output.is_absolute() else output.resolve()
+    if not resolved.is_relative_to(repo_root.resolve()):
+        raise ValueError(f"--output must stay inside the repository: {output}")
+    return resolved
+
+
 def render_environment(environment: str, profile: str, output: Path, repo_root: Path) -> dict[str, str]:
     """Render one complete runtime environment from canonical layers."""
     if environment not in VALID_ENVIRONMENTS:
         raise ValueError(f"unsupported environment: {environment}")
     if profile not in VALID_PROFILES:
         raise ValueError(f"unsupported profile: {profile}")
+    output = _resolved_output(output, repo_root)
     config_root = repo_root / "config"
     runtime_root = repo_root / ".runtime"
     base_file = _config_layer(config_root / "env" / "base.env", config_root / "env" / "base.env.example")
