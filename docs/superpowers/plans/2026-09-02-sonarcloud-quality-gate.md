@@ -24,7 +24,10 @@ SonarCloud 上 revision `5e60933`（当前 HEAD，分析时间 2026-09-02 05:58 
 `S2245`）、`legacy_service.py` 没有任何消费者（第 4 节 `S2083`）、CI 的 editable 安装是多余的
 （第 3 节供应链）。三样连同它们的 `Settings` 字段一起删了。
 
-**这一轮 CI 挂了三次，三次的教训是同一个**：
+**最终状态（`62ff13ef`）**：两个评级 B，CI 绿。新代码 7 条 LOW bug + 4 条 LOW vulnerability，
+**没有一条在 LOW 以上**。全量 bug 32 → 13，vulnerability 31 → 12。
+
+**这一轮 CI 挂了五次，五次的教训是同一个：相信了一个其实没有真正跑过的检查。**
 
 1. workflow YAML 没引号，`: ` 让 GitHub 读不了文件——**CI 一个 job 都没跑**，而 run 显示成
    `failure`，看上去像测试挂了。守卫：`tests/core/test_ci_workflow_is_loadable.py`。
@@ -33,7 +36,17 @@ SonarCloud 上 revision `5e60933`（当前 HEAD，分析时间 2026-09-02 05:58 
 3. `forbiddenfruit`（`blockbuster` 的依赖）也没有 wheel——**同一个问题的第二个实例，又用一次红色
    构建才发现**。守卫：`scripts/check_lock_wheels.py` 一次问完整个锁，`make lock` 会跑它。
 
-写那个脚本本身还有第四个教训：第一版精确匹配解释器 tag，报出九个"没有 wheel"的包，其中七个是错的
+4. **`pytest` 收集不到 `app`**。删掉 editable 安装之后，没有东西再把仓库根放进 `sys.path`：
+   `python -m pytest` 会放，`pytest` 控制台脚本不会，而 CI 跑的是后者——所以两步之前用
+   `python -c` 的 endpoint census 是过的，测试却在收集阶段就挂了。**这个问题挡了我三次验证**，因为
+   这台机器上还留着一个更早项目名的 editable 残留 `__editable__.multi_agent_local_rag-0.3.3.pth`
+   指着这个仓库：卸载 querymind 再跑，605 依然通过，我照这个报了两次"验证过"。把那个文件挪开之后，
+   裸 pytest 立刻以和 CI 一样的方式失败。修法是 `pythonpath = ["."]` 写进 pytest 配置，
+   而不是改调用命令——这样谁怎么跑都对。**那个残留 .pth 还在，会继续掩盖这一类失败，可以删掉。**
+5. **我加的那个脚本自己引入了一条 HIGH**（`S8707`：从 argv 取路径再打开）。它只有两个固定输入，
+   现在不接受任何参数——顺带让它在任何工作目录下都正确。
+
+写脚本本身还有一个教训：第一版精确匹配解释器 tag，报出九个"没有 wheel"的包，其中七个是错的
 ——stable ABI 的 wheel 声明的是**最低**解释器（`cp39-abi3` 在 3.11 上能装）。九个看起来都合理的答案，
 七个是错的，而照着改会把 `--no-binary` 扩大到半棵依赖树。
 
