@@ -94,8 +94,6 @@ def validate_environment(values: Mapping[str, str], environment: str) -> list[st
             errors.append("ANTHROPIC_API_KEY is required when MODEL_BACKEND=anthropic")
         if backend == "ollama" and not str(values.get("OLLAMA_BASE_URL", "")).strip():
             errors.append("OLLAMA_BASE_URL is required when MODEL_BACKEND=ollama")
-        if str(values.get("DEBUG", "")).strip().lower() == "true":
-            errors.append("DEBUG must not be true in production")
         origins = str(values.get("CORS_ALLOW_ORIGINS", "")).strip()
         if not origins or "*" in {part.strip() for part in origins.split(",")}:
             errors.append("CORS_ALLOW_ORIGINS must contain explicit production origins")

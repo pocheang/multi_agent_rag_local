@@ -4,7 +4,6 @@ services:
       - ${RUNTIME_ENV_FILE:-../../.runtime/development.env}
     environment:
       APP_ENV: development
-      DEBUG: "true"
     volumes:
       - ../../app:/app/app:ro
       - ../../scripts:/app/scripts:ro

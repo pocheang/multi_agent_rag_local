@@ -818,6 +818,17 @@ in the console". That function's limit is worth knowing: a value already read in
 module-level constant is not revisited, so the legacy constant block keeps its start-up
 values until the process restarts.
 
+**A key in a configuration layer that `Settings` does not know is dead**, and dead in the
+quietest way: validation is by alias with `extra="ignore"`, so an unrecognised key in
+`config/env/*` or `config/profiles/*` is dropped without an error, and the render step copies
+it into `.runtime/{APP_ENV}.env` where it looks exactly like a live setting. Two were found
+that way on 2026-09-01 — `QUERY_RESULT_CACHE_BACKEND`, a sibling of the real
+`RETRIEVAL_CACHE_BACKEND` that was never implemented, and `DEBUG`, which had no reader at all
+while `deploy/scripts/config.py` enforced "DEBUG must not be true in production", a safety
+rule about a value that could not have an effect. Both are gone, and
+`tests/core/test_config_layers_are_live.py` checks every committed layer key against the
+aliases, with a small allowlist for keys the deployment itself consumes.
+
 `tests/core/test_config_has_one_source.py` keeps it that way: an AST guard that every
 direct environment read in `app/` is in an allowlist keyed on `path::enclosing_function`
 **with a reason**. It carried a ratchet over the legacy constant block as well until that
@@ -1066,7 +1077,7 @@ A third makes it three. Do not add a pixel-diff CI gate for the reason above, an
 
 `tests/` was cleared ahead of the v0.7 rewrite and is being rebuilt incrementally: each bug
 fix lands with the regression test that would have caught it, rather than as a separate
-back-filling effort. As of 2026-09-01 there are 526 tests covering the chat round trip,
+back-filling effort. As of 2026-09-01 there are 528 tests covering the chat round trip,
 conversation context, graph routing, clarification, the async load guard, engine reuse,
 answer safety, reader-facing citation numbering, stage-timeout degradation, the governed
 tool stack with its multi-step loop and approve-then-resume cycle, retrieval

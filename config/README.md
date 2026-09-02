@@ -24,3 +24,10 @@ conda run -n rag-local python deploy/scripts/config.py render --environment deve
 Production secrets are generated locally by the deployment script. LLM API keys must be provided through the host environment or an approved secret injection mechanism.
 
 Canonical paths use config/env/ for environment overlays and config/profiles/ for runtime profiles.
+
+Every key in these files must be a `Settings` alias, or listed as deployment-only in
+`tests/core/test_config_layers_are_live.py`. `Settings` validates by alias and ignores
+everything else, so a key it does not recognise is dropped in silence and still appears in
+the rendered `.runtime/*.env` as though it were live — which is how `DEBUG` and
+`QUERY_RESULT_CACHE_BACKEND` survived here with no reader anywhere. The test fails on a new
+one.
