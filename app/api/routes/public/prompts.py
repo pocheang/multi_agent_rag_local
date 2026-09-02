@@ -21,20 +21,21 @@ from app.api.schemas import (
 )
 from app.api.transport.errors import not_found
 from app.services.security.prompt_checker import check_and_enhance_prompt
+from app.services.security.rbac import Permission
 
 router = APIRouter(prefix="/prompts", tags=["prompts"])
 
 
 @router.get("", response_model=list[PromptTemplate])
 def list_prompts(request: Request, user: dict[str, Any] = Depends(_require_user)):
-    _require_permission(user, "prompt:read", request, "prompt")
+    _require_permission(user, Permission.PROMPT_READ, request, "prompt")
     rows = prompt_store.list_prompts(user["user_id"])
     return [PromptTemplate(**x) for x in rows]
 
 
 @router.post("", response_model=PromptTemplate)
 def create_prompt(req: PromptTemplateCreateRequest, request: Request, user: dict[str, Any] = Depends(_require_user)):
-    _require_permission(user, "prompt:create", request, "prompt")
+    _require_permission(user, Permission.PROMPT_CREATE, request, "prompt")
     title, content = _normalize_prompt_fields(req.title, req.content)
     agent_class = _resolve_effective_agent_class(f"{title}\n{content}", None)
     row = prompt_store.create_prompt(user_id=user["user_id"], title=title, content=content, agent_class=agent_class)
@@ -51,7 +52,7 @@ def create_prompt(req: PromptTemplateCreateRequest, request: Request, user: dict
 
 @router.post("/check", response_model=PromptCheckResponse)
 def check_prompt(req: PromptCheckRequest, request: Request, user: dict[str, Any] = Depends(_require_user)):
-    _require_permission(user, "prompt:read", request, "prompt")
+    _require_permission(user, Permission.PROMPT_READ, request, "prompt")
     title, content = _normalize_prompt_fields(req.title, req.content)
     checked = check_and_enhance_prompt(title=title, content=content, use_reasoning=req.use_reasoning)
     _audit(request, action="prompt.check", resource_type="prompt", result="success", user=user)
@@ -62,7 +63,7 @@ def check_prompt(req: PromptCheckRequest, request: Request, user: dict[str, Any]
 def update_prompt(
     prompt_id: str, req: PromptTemplateUpdateRequest, request: Request, user: dict[str, Any] = Depends(_require_user)
 ):
-    _require_permission(user, "prompt:edit", request, "prompt", resource_id=prompt_id)
+    _require_permission(user, Permission.PROMPT_EDIT, request, "prompt", resource_id=prompt_id)
     title, content = _normalize_prompt_fields(req.title, req.content)
     agent_class = _resolve_effective_agent_class(f"{title}\n{content}", None)
     row = prompt_store.update_prompt(
@@ -82,7 +83,7 @@ def update_prompt(
 def list_prompt_versions(
     prompt_id: str, request: Request, limit: int = 20, user: dict[str, Any] = Depends(_require_user)
 ):
-    _require_permission(user, "prompt:read", request, "prompt", resource_id=prompt_id)
+    _require_permission(user, Permission.PROMPT_READ, request, "prompt", resource_id=prompt_id)
     rows = prompt_store.list_versions(user_id=user["user_id"], prompt_id=prompt_id, limit=limit)
     return {"items": rows, "count": len(rows)}
 
@@ -91,7 +92,7 @@ def list_prompt_versions(
 def approve_prompt_version(
     prompt_id: str, version_id: str, request: Request, user: dict[str, Any] = Depends(_require_user)
 ):
-    _require_permission(user, "prompt:edit", request, "prompt", resource_id=prompt_id)
+    _require_permission(user, Permission.PROMPT_EDIT, request, "prompt", resource_id=prompt_id)
     row = prompt_store.approve_version(
         user_id=user["user_id"],
         prompt_id=prompt_id,
@@ -115,7 +116,7 @@ def approve_prompt_version(
 def rollback_prompt_version(
     prompt_id: str, version_id: str, request: Request, user: dict[str, Any] = Depends(_require_user)
 ):
-    _require_permission(user, "prompt:edit", request, "prompt", resource_id=prompt_id)
+    _require_permission(user, Permission.PROMPT_EDIT, request, "prompt", resource_id=prompt_id)
     row = prompt_store.rollback_to_version(user_id=user["user_id"], prompt_id=prompt_id, version_id=version_id)
     if row is None:
         raise not_found("Prompt version")
@@ -132,7 +133,7 @@ def rollback_prompt_version(
 
 @router.delete("/{prompt_id}")
 def delete_prompt(prompt_id: str, request: Request, user: dict[str, Any] = Depends(_require_user)):
-    _require_permission(user, "prompt:delete", request, "prompt", resource_id=prompt_id)
+    _require_permission(user, Permission.PROMPT_DELETE, request, "prompt", resource_id=prompt_id)
     ok = prompt_store.delete_prompt(user_id=user["user_id"], prompt_id=prompt_id)
     if not ok:
         raise not_found("Prompt")

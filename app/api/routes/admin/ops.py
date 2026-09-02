@@ -50,6 +50,7 @@ from app.services.runtime.runtime_ops import (
     run_replay,
     system_resource_snapshot,
 )
+from app.services.security.rbac import Permission
 
 router = APIRouter(prefix="/admin/ops", tags=["admin", "ops"])
 
@@ -191,7 +192,7 @@ def _execute_standard_profile(question: str, *, user: dict[str, Any]) -> dict[st
 
 @router.get("/runtime")
 def admin_ops_runtime(request: Request, user: dict[str, Any] = Depends(_require_user)):
-    _require_permission(user, "admin:audit_read", request, "admin")
+    _require_permission(user, Permission.ADMIN_AUDIT_READ, request, "admin")
     return _runtime_snapshot_payload()
 
 
@@ -203,7 +204,7 @@ def admin_ops_overview(
     action_keyword: str | None = None,
     user: dict[str, Any] = Depends(_require_user),
 ):
-    _require_permission(user, "admin:audit_read", request, "admin")
+    _require_permission(user, Permission.ADMIN_AUDIT_READ, request, "admin")
     return _overview_payload(hours=hours, actor_user_id=actor_user_id, action_keyword=action_keyword)
 
 
@@ -215,7 +216,7 @@ def admin_ops_export_csv(
     action_keyword: str | None = None,
     user: dict[str, Any] = Depends(_require_user),
 ):
-    _require_permission(user, "admin:audit_read", request, "admin")
+    _require_permission(user, Permission.ADMIN_AUDIT_READ, request, "admin")
     overview = _overview_payload(hours=hours, actor_user_id=actor_user_id, action_keyword=action_keyword)
     cutoff = datetime.now(UTC) - timedelta(hours=max(1, min(int(hours or 24), 24 * 7)))
     window_rows = _filter_audit_rows(
@@ -276,7 +277,7 @@ def admin_ops_benchmark_trends(
     limit: int = 30,
     user: dict[str, Any] = Depends(_require_user),
 ):
-    _require_permission(user, "admin:audit_read", request, "admin")
+    _require_permission(user, Permission.ADMIN_AUDIT_READ, request, "admin")
     rows = read_benchmark_trends(limit=max(1, min(limit, 300)))
     return {"items": rows, "count": len(rows)}
 
@@ -294,7 +295,7 @@ def admin_ops_benchmark_run(
     occupied a threadpool worker the whole time.  Results land in the existing
     benchmark history, readable via ``GET /admin/ops/benchmark/trends``.
     """
-    _require_permission(user, "admin:ops_manage", request, "admin")
+    _require_permission(user, Permission.ADMIN_OPS_MANAGE, request, "admin")
     if max_queries < 1:
         raise bad_request("max_queries must be >= 1")
     queue = api_dependencies.get_query_runtime().shadow_queue
@@ -320,7 +321,7 @@ def admin_ops_audit_report_md(
     hours: int = 24,
     user: dict[str, Any] = Depends(_require_user),
 ):
-    _require_permission(user, "admin:audit_read", request, "admin")
+    _require_permission(user, Permission.ADMIN_AUDIT_READ, request, "admin")
     overview = _overview_payload(hours=hours, actor_user_id=None, action_keyword=None)
     alerts = _alerts_payload(hours=hours)
     lines = [
@@ -372,14 +373,14 @@ def admin_ops_replay_trends(
     limit: int = 30,
     user: dict[str, Any] = Depends(_require_user),
 ):
-    _require_permission(user, "admin:audit_read", request, "admin")
+    _require_permission(user, Permission.ADMIN_AUDIT_READ, request, "admin")
     rows = read_replay_trends(limit=max(1, min(limit, 300)))
     return {"items": rows, "count": len(rows)}
 
 
 @router.post("/autotune")
 def admin_ops_autotune(payload: dict[str, Any], request: Request, user: dict[str, Any] = Depends(_require_user)):
-    _require_permission(user, "admin:ops_manage", request, "admin")
+    _require_permission(user, Permission.ADMIN_OPS_MANAGE, request, "admin")
     target_p95 = float(payload.get("target_p95_ms", 3000) or 3000)
     target_grounding = float(payload.get("target_grounding", 0.65) or 0.65)
     try:
@@ -433,7 +434,7 @@ def admin_ops_replay_run(
     Same reasoning as the benchmark endpoint: up to 50 full RAG queries is
     minutes of work, not an HTTP request.
     """
-    _require_permission(user, "admin:ops_manage", request, "admin")
+    _require_permission(user, Permission.ADMIN_OPS_MANAGE, request, "admin")
     max_questions = max(1, min(int(payload.get("max_questions", 30) or 30), 50))
     history_store = _history_store_for_user(user)
     queue = api_dependencies.get_query_runtime().shadow_queue
@@ -471,7 +472,7 @@ def get_log_levels(
 
     Returns a dictionary of logger names and their current levels.
     """
-    _require_permission(user, "admin:ops_manage", request, "admin")
+    _require_permission(user, Permission.ADMIN_OPS_MANAGE, request, "admin")
     return list_log_levels()
 
 
@@ -493,7 +494,7 @@ def set_log_level(
     Returns:
         Updated log level configuration
     """
-    _require_permission(user, "admin:ops_manage", request, "admin")
+    _require_permission(user, Permission.ADMIN_OPS_MANAGE, request, "admin")
 
     logger_name = str(payload.get("logger", "")).strip()
     level_str = str(payload.get("level", "")).strip().upper()
@@ -525,7 +526,7 @@ def reset_log_levels(
 
     This is useful after debugging to restore normal logging behavior.
     """
-    _require_permission(user, "admin:ops_manage", request, "admin")
+    _require_permission(user, Permission.ADMIN_OPS_MANAGE, request, "admin")
 
     result = reset_logger_levels()
 

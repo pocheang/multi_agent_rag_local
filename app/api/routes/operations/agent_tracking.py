@@ -14,6 +14,7 @@ from app.services.observability.agent_execution_tracker import (
     AgentExecutionTracker,
     ExecutionTrace,
 )
+from app.services.security.rbac import Permission
 
 logger = logging.getLogger(__name__)
 
@@ -64,7 +65,7 @@ async def stream_execution(
     Streams agent steps as they complete during execution.
     User can only stream their own executions unless they are admin.
     """
-    _require_permission(user, "query:run", request, "agent-tracking")
+    _require_permission(user, Permission.QUERY_RUN, request, "agent-tracking")
     tracker = AgentExecutionTracker.get_instance()
     max_iterations = max(1, min(int(max_iterations or 600), 600))
 
@@ -130,7 +131,7 @@ async def get_execution_trace(
     Get the complete execution trace for a given execution ID.
     User can only view their own executions unless they are admin.
     """
-    _require_permission(user, "query:run", request, "agent-tracking")
+    _require_permission(user, Permission.QUERY_RUN, request, "agent-tracking")
     tracker = AgentExecutionTracker.get_instance()
     trace = tracker.get_execution_trace(execution_id)
 
@@ -147,7 +148,7 @@ async def get_execution_history(request: Request, user: dict[str, Any] = Depends
     Get recent execution traces.
     Users see only their own executions; admins see all.
     """
-    _require_permission(user, "query:run", request, "agent-tracking")
+    _require_permission(user, Permission.QUERY_RUN, request, "agent-tracking")
     if limit < 1 or limit > 100:
         raise bad_request("Limit must be between 1 and 100")
 
@@ -174,7 +175,7 @@ async def get_execution_status(
     Get the current status of an execution.
     User can only view their own executions unless they are admin.
     """
-    _require_permission(user, "query:run", request, "agent-tracking")
+    _require_permission(user, Permission.QUERY_RUN, request, "agent-tracking")
     tracker = AgentExecutionTracker.get_instance()
     trace = tracker.get_execution_trace(execution_id)
 
@@ -202,7 +203,7 @@ async def delete_execution_trace(
     Delete a specific execution trace.
     User can only delete their own executions unless they are admin.
     """
-    _require_permission(user, "query:run", request, "agent-tracking")
+    _require_permission(user, Permission.QUERY_RUN, request, "agent-tracking")
     tracker = AgentExecutionTracker.get_instance()
     trace = tracker.get_execution_trace(execution_id)
 
@@ -222,7 +223,7 @@ async def cleanup_old_traces(request: Request, user: dict[str, Any] = Depends(_r
     """
     Manually trigger cleanup of old execution traces - Admin only.
     """
-    _require_permission(user, "admin:ops_manage", request, "admin")
+    _require_permission(user, Permission.ADMIN_OPS_MANAGE, request, "admin")
     tracker = AgentExecutionTracker.get_instance()
     removed_count = tracker.cleanup_old_traces()
 

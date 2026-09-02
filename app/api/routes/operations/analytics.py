@@ -11,6 +11,7 @@ from fastapi.responses import Response
 
 from app.api.dependencies import _require_permission, _require_user
 from app.services.retrieval.logger import RetrievalLogger
+from app.services.security.rbac import Permission
 
 router = APIRouter(prefix="/api/analytics", tags=["analytics"])
 
@@ -24,7 +25,7 @@ async def get_analytics_overview(request: Request, user: dict[str, Any] = Depend
         AnalyticsOverview: Total statistics including query count, success rate,
                           performance metrics, and distribution by agent/route
     """
-    _require_permission(user, "admin:ops_manage", request, "admin")
+    _require_permission(user, Permission.ADMIN_OPS_MANAGE, request, "admin")
     logger = RetrievalLogger.get_instance()
     return logger.get_overview()
 
@@ -38,7 +39,7 @@ async def get_agent_stats(request: Request, user: dict[str, Any] = Depends(_requ
         list[AgentStats]: Performance statistics for each agent class,
                          sorted by query count descending
     """
-    _require_permission(user, "admin:ops_manage", request, "admin")
+    _require_permission(user, Permission.ADMIN_OPS_MANAGE, request, "admin")
     logger = RetrievalLogger.get_instance()
     return logger.get_agent_stats()
 
@@ -56,7 +57,7 @@ async def get_document_stats(
     Returns:
         list[DocumentStats]: Document usage statistics sorted by retrieval count
     """
-    _require_permission(user, "admin:ops_manage", request, "admin")
+    _require_permission(user, Permission.ADMIN_OPS_MANAGE, request, "admin")
     logger = RetrievalLogger.get_instance()
     return logger.get_document_stats(limit=limit)
 
@@ -76,7 +77,7 @@ async def export_logs(
     Returns:
         Response: Exported data with appropriate Content-Type headers
     """
-    _require_permission(user, "admin:ops_manage", request, "admin")
+    _require_permission(user, Permission.ADMIN_OPS_MANAGE, request, "admin")
     logger = RetrievalLogger.get_instance()
     data = logger.export_logs(format=format)
 

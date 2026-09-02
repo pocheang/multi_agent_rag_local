@@ -23,6 +23,7 @@ from app.services.legacy_graph_rag_admin import (
 from app.services.legacy_graph_rag_admin import (
     get_graph_rag_config_values as get_graph_rag_config_values_facade,
 )
+from app.services.security.rbac import Permission
 
 logger = logging.getLogger(__name__)
 
@@ -44,7 +45,7 @@ async def get_graph_rag_cache_stats(
 
     Requires admin permission.
     """
-    _require_permission(user, "admin:audit_read", request, "admin")
+    _require_permission(user, Permission.ADMIN_AUDIT_READ, request, "admin")
     stats = get_graph_rag_cache_stats_facade()
 
     # Calculate aggregate stats
@@ -84,7 +85,7 @@ async def clear_graph_rag_caches(
 
     Requires admin permission.
     """
-    _require_permission(user, "admin:ops_manage", request, "admin")
+    _require_permission(user, Permission.ADMIN_OPS_MANAGE, request, "admin")
     clear_graph_rag_caches_facade()
     logger.info("Graph RAG caches cleared by admin")
 
@@ -106,7 +107,7 @@ async def get_graph_rag_config(
 
     Requires admin permission.
     """
-    _require_permission(user, "admin:audit_read", request, "admin")
+    _require_permission(user, Permission.ADMIN_AUDIT_READ, request, "admin")
     from app.core.config import get_settings
 
     settings = get_settings()
@@ -149,7 +150,7 @@ async def graph_rag_health_check(
 
     Requires admin permission.
     """
-    _require_permission(user, "admin:audit_read", request, "admin")
+    _require_permission(user, Permission.ADMIN_AUDIT_READ, request, "admin")
     from app.graph.knowledge.client import Neo4jClient
 
     health = {

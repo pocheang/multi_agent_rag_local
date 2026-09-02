@@ -49,6 +49,7 @@ from app.services.documents.index_manager import (
 from app.services.documents.registry import get_document_by_source, merge_visible_document_status
 from app.services.parser_profiles import choose_parser_profile
 from app.services.runtime.ingest_queue import register_and_enqueue_uploads
+from app.services.security.rbac import Permission
 
 router = APIRouter(tags=["documents"])
 
@@ -133,7 +134,7 @@ def _approved_upload_visibility(requested_visibility: str, user: dict[str, Any])
 
 @router.get("/documents", response_model=list[IndexedFileSummary])
 def list_documents(request: Request, user: dict[str, Any] = Depends(_require_user)):
-    _require_permission(user, "document:read", request, "document")
+    _require_permission(user, Permission.DOCUMENT_READ, request, "document")
     rows = _list_visible_documents_for_user(user)
     return merge_visible_document_status(
         rows,
@@ -152,7 +153,7 @@ def delete_document(
     user: dict[str, Any] = Depends(_require_user),
 ):
     """Delete by filename. Refuses when the name is ambiguous -- prefer by-id."""
-    _require_permission(user, "document:manage_own", request, "document", resource_id=filename)
+    _require_permission(user, Permission.DOCUMENT_MANAGE_OWN, request, "document", resource_id=filename)
     row = _resolve_manageable_document(filename, user, normalize_string(source))
     return _perform_delete(row, filename, request, user, remove_file)
 
@@ -165,7 +166,7 @@ def delete_document_by_id(
     user: dict[str, Any] = Depends(_require_user),
 ):
     """Delete by immutable id. Unambiguous where a filename is not."""
-    _require_permission(user, "document:manage_own", request, "document", resource_id=document_id)
+    _require_permission(user, Permission.DOCUMENT_MANAGE_OWN, request, "document", resource_id=document_id)
     row = _resolve_manageable_document_by_id(document_id, user)
     filename = str((row or {}).get("filename", "") or "")
     return _perform_delete(row, filename, request, user, remove_file)
@@ -176,7 +177,7 @@ def reindex_document(
     filename: str, request: Request, source: str | None = None, user: dict[str, Any] = Depends(_require_user)
 ):
     """Reindex by filename. Refuses when the name is ambiguous -- prefer by-id."""
-    _require_permission(user, "document:manage_own", request, "document", resource_id=filename)
+    _require_permission(user, Permission.DOCUMENT_MANAGE_OWN, request, "document", resource_id=filename)
     row = _resolve_manageable_document(filename, user, normalize_string(source))
     return _perform_reindex(row, filename, request, user)
 
@@ -184,7 +185,7 @@ def reindex_document(
 @router.post("/documents/by-id/{document_id}/reindex", response_model=FileIndexActionResponse)
 def reindex_document_by_id(document_id: str, request: Request, user: dict[str, Any] = Depends(_require_user)):
     """Reindex by immutable id. Unambiguous where a filename is not."""
-    _require_permission(user, "document:manage_own", request, "document", resource_id=document_id)
+    _require_permission(user, Permission.DOCUMENT_MANAGE_OWN, request, "document", resource_id=document_id)
     row = _resolve_manageable_document_by_id(document_id, user)
     filename = str((row or {}).get("filename", "") or "")
     return _perform_reindex(row, filename, request, user)
@@ -288,7 +289,7 @@ def _perform_reindex(
 
 @router.get("/documents/index-health", response_model=IndexHealthResponse)
 def document_index_health(request: Request, user: dict[str, Any] = Depends(_require_user)):
-    _require_permission(user, "admin:ops_manage", request, "admin")
+    _require_permission(user, Permission.ADMIN_OPS_MANAGE, request, "admin")
     report = build_index_health_report()
     return report
 
@@ -300,7 +301,7 @@ async def upload_files(
     visibility: Annotated[str, Form()] = "private",
     user: dict[str, Any] = Depends(_require_user),
 ):
-    _require_permission(user, "upload:create", request, "document")
+    _require_permission(user, Permission.UPLOAD_CREATE, request, "document")
     limiter_key = f"upload:{user['user_id']}:{_client_ip(request)}"
     if not upload_limiter.try_acquire(limiter_key):
         _audit(request, action="upload.create", resource_type="document", result="rate_limited", user=user)

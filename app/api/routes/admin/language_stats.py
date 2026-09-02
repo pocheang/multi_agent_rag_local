@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends, Request
 
 from app.api.dependencies import _require_permission, _require_user
 from app.services.language.analytics import LanguageAnalytics
+from app.services.security.rbac import Permission
 
 router = APIRouter(prefix="/admin/language", tags=["admin", "language"])
 
@@ -28,7 +29,7 @@ async def get_language_statistics(
             - session_count: Number of unique sessions
             - recent_events: Last 100 events
     """
-    _require_permission(user, "admin:audit_read", request, "admin")
+    _require_permission(user, Permission.ADMIN_AUDIT_READ, request, "admin")
 
     analytics = LanguageAnalytics.get_instance()
     return analytics.get_statistics()
@@ -51,7 +52,7 @@ async def get_session_language_statistics(
     Returns:
         dict with session-specific language statistics
     """
-    _require_permission(user, "admin:audit_read", request, "admin")
+    _require_permission(user, Permission.ADMIN_AUDIT_READ, request, "admin")
 
     analytics = LanguageAnalytics.get_instance()
     return analytics.get_session_statistics(session_id)
@@ -70,7 +71,7 @@ async def clear_language_statistics(
     Returns:
         dict with success message
     """
-    _require_permission(user, "admin:ops_manage", request, "admin")
+    _require_permission(user, Permission.ADMIN_OPS_MANAGE, request, "admin")
 
     analytics = LanguageAnalytics.get_instance()
     analytics.clear_statistics()

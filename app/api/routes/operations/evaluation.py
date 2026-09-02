@@ -19,6 +19,7 @@ from app.evaluation import (
     load_test_queries,
 )
 from app.evaluation.baselines.api_retriever import SUPPORTED_SYSTEMS, SystemName, create_api_retriever
+from app.services.security.rbac import Permission
 
 logger = logging.getLogger(__name__)
 
@@ -129,7 +130,7 @@ def list_queries(
     Returns:
         List of test queries
     """
-    _require_permission(user, "admin:ops_manage", request, "admin")
+    _require_permission(user, Permission.ADMIN_OPS_MANAGE, request, "admin")
     try:
         queries = load_test_queries(_resolve_query_file(query_file))
 
@@ -162,7 +163,7 @@ def run_evaluation(request_data: RunEvaluationRequest, request: Request, user: d
 
     Note: This endpoint requires retriever implementation to be completed.
     """
-    _require_permission(user, "admin:ops_manage", request, "admin")
+    _require_permission(user, Permission.ADMIN_OPS_MANAGE, request, "admin")
     try:
         # Load test queries
         all_queries = load_test_queries(_resolve_query_file(request_data.query_file))
@@ -219,7 +220,7 @@ def get_results(run_id: str, request: Request, user: dict[str, Any] = Depends(_r
     Returns:
         Evaluation results
     """
-    _require_permission(user, "admin:ops_manage", request, "admin")
+    _require_permission(user, Permission.ADMIN_OPS_MANAGE, request, "admin")
     if not _RUN_ID_PATTERN.fullmatch(str(run_id or "")):
         raise bad_request("invalid run_id")
     results_path = _EVALUATION_ROOT / "results" / f"{run_id}.json"
@@ -246,7 +247,7 @@ def compare_systems(
 
     Note: This endpoint requires retriever implementation to be completed.
     """
-    _require_permission(user, "admin:ops_manage", request, "admin")
+    _require_permission(user, Permission.ADMIN_OPS_MANAGE, request, "admin")
     try:
         # Load test queries
         queries = load_test_queries(_resolve_query_file(request_data.query_file))
@@ -284,7 +285,7 @@ def list_systems(request: Request, user: dict[str, Any] = Depends(_require_user)
     Returns:
         Dictionary of available system names
     """
-    _require_permission(user, "admin:ops_manage", request, "admin")
+    _require_permission(user, Permission.ADMIN_OPS_MANAGE, request, "admin")
     return {
         "systems": list(SUPPORTED_SYSTEMS),
         "count": len(SUPPORTED_SYSTEMS),

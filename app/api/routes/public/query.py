@@ -46,6 +46,7 @@ from app.pipeline.rag_pipeline import RAGPipeline
 from app.services.observability.agent_execution_tracker import AgentExecutionTracker
 from app.services.observability.log_safety import question_ref
 from app.services.query.decomposer import DEFAULT_MAX_SUB_QUERIES
+from app.services.security.rbac import Permission
 
 logger = logging.getLogger(__name__)
 
@@ -337,7 +338,7 @@ async def _process_advanced_rag_query_impl(
     Returns:
         AdvancedRAGResult with complete processing results
     """
-    _require_permission(user, "query:run", request, "advanced-rag")
+    _require_permission(user, Permission.QUERY_RUN, request, "advanced-rag")
 
     session_id = _require_valid_session_id(request_data.session_id) if request_data.session_id else None
 

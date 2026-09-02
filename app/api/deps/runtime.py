@@ -17,6 +17,7 @@ from app.orchestration.answer_stream import AnswerStreamStore, get_default_answe
 from app.orchestration.execution_events import ExecutionEventStore, get_default_execution_event_store
 from app.orchestration.request import RequestActor
 from app.services.connectors.management import ConnectorManagementService
+from app.services.security.rbac import Permission
 
 
 @dataclass(frozen=True, slots=True)
@@ -122,5 +123,5 @@ def require_request_actor(user: dict[str, Any] = Depends(_require_user)) -> Requ
 
 def require_trace_actor(request: Request, user: dict[str, Any] = Depends(_require_user)) -> RequestActor:
     """Authorize trace access at the HTTP edge, then expose only a bounded actor."""
-    _require_permission(user, "query:run", request, "orchestration")
+    _require_permission(user, Permission.QUERY_RUN, request, "orchestration")
     return require_request_actor(user)

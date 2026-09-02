@@ -42,6 +42,7 @@ from app.services.security.admin_security import (
     validate_reason,
     validate_ticket_id,
 )
+from app.services.security.rbac import Permission
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
@@ -68,7 +69,7 @@ def _audit_detail(**fields: Any) -> str:
 @router.get("/users", response_model=list[AdminUserSummary])
 def admin_list_users(request: Request, user: dict[str, Any] = Depends(_require_user)):
     """List all users (admin only)."""
-    _require_permission(user, "admin:user_manage", request, "admin")
+    _require_permission(user, Permission.ADMIN_USER_MANAGE, request, "admin")
     rows = auth_service.list_users()
     return [AdminUserSummary(**x) for x in rows]
 
@@ -81,7 +82,7 @@ def admin_add_user_credits(
     user: dict[str, Any] = Depends(_require_user),
 ):
     """Add chat credits to a non-admin user and record the adjustment."""
-    _require_permission(user, "admin:user_manage", request, "admin", resource_id=user_id)
+    _require_permission(user, Permission.ADMIN_USER_MANAGE, request, "admin", resource_id=user_id)
     try:
         row = auth_service.add_user_credits(user_id=user_id, amount=req.amount)
     except Exception as exc:
@@ -108,7 +109,7 @@ def admin_add_user_credits(
 @router.get("")
 def admin_page(request: Request, user: dict[str, Any] = Depends(_require_user)):
     """Admin portal landing page."""
-    _require_permission(user, "admin:user_manage", request, "admin")
+    _require_permission(user, Permission.ADMIN_USER_MANAGE, request, "admin")
     return {"ok": True, "message": "admin portal"}
 
 
@@ -117,7 +118,7 @@ def admin_update_user_role(
     user_id: str, req: AdminRoleUpdateRequest, request: Request, user: dict[str, Any] = Depends(_require_user)
 ):
     """Update user role with security checks."""
-    _require_permission(user, "admin:user_manage", request, "admin", resource_id=user_id)
+    _require_permission(user, Permission.ADMIN_USER_MANAGE, request, "admin", resource_id=user_id)
 
     # Security: Prevent self-modification
     check_self_modification(user_id, user, "admin.user.role_update", _audit, request)
@@ -150,7 +151,7 @@ def admin_create_user_as_admin(
     req: AdminCreateAdminRequest, request: Request, user: dict[str, Any] = Depends(_require_user)
 ):
     """Create new admin user with approval token validation."""
-    _require_permission(user, "admin:user_manage", request, "admin")
+    _require_permission(user, Permission.ADMIN_USER_MANAGE, request, "admin")
 
     approval_token = req.approval_token or ""
     actor_user_id = str(user.get("user_id", ""))
@@ -209,7 +210,7 @@ def admin_reset_user_approval_token(
     user: dict[str, Any] = Depends(_require_user),
 ):
     """Reset admin approval token with security checks."""
-    _require_permission(user, "admin:user_manage", request, "admin", resource_id=user_id)
+    _require_permission(user, Permission.ADMIN_USER_MANAGE, request, "admin", resource_id=user_id)
 
     # Security: Prevent self-modification
     check_self_modification(user_id, user, "admin.user.reset_approval_token", _audit, request)
@@ -271,7 +272,7 @@ def admin_reset_user_password(
     user: dict[str, Any] = Depends(_require_user),
 ):
     """Reset user password with approval token validation."""
-    _require_permission(user, "admin:user_manage", request, "admin", resource_id=user_id)
+    _require_permission(user, Permission.ADMIN_USER_MANAGE, request, "admin", resource_id=user_id)
 
     target = auth_service.get_user_profile(user_id)
     if not target:
@@ -323,7 +324,7 @@ def admin_update_user_status(
     user_id: str, req: AdminStatusUpdateRequest, request: Request, user: dict[str, Any] = Depends(_require_user)
 ):
     """Update user status with self-modification check."""
-    _require_permission(user, "admin:user_manage", request, "admin", resource_id=user_id)
+    _require_permission(user, Permission.ADMIN_USER_MANAGE, request, "admin", resource_id=user_id)
 
     # Security: Prevent self-modification
     check_self_modification(user_id, user, "admin.user.status_update", _audit, request)
@@ -356,7 +357,7 @@ def admin_update_user_classification(
     user: dict[str, Any] = Depends(_require_user),
 ):
     """Update user classification with improved error handling."""
-    _require_permission(user, "admin:user_manage", request, "admin", resource_id=user_id)
+    _require_permission(user, Permission.ADMIN_USER_MANAGE, request, "admin", resource_id=user_id)
 
     try:
         row = auth_service.update_user_classification(
@@ -399,7 +400,7 @@ def admin_list_audit_logs(
     user: dict[str, Any] = Depends(_require_user),
 ):
     """List audit logs with rate limiting."""
-    _require_permission(user, "admin:audit_read", request, "admin")
+    _require_permission(user, Permission.ADMIN_AUDIT_READ, request, "admin")
     rows = auth_service.list_audit_logs(
         limit=limit,
         actor_user_id=actor_user_id,
@@ -421,6 +422,6 @@ def admin_system_logs(
     user: dict[str, Any] = Depends(_require_user),
 ):
     """Get system logs (admin only)."""
-    _require_permission(user, "admin:audit_read", request, "admin")
+    _require_permission(user, Permission.ADMIN_AUDIT_READ, request, "admin")
     rows = list_captured_logs(limit=limit, level=level, logger_keyword=logger, keyword=keyword)
     return {"items": rows, "count": len(rows)}

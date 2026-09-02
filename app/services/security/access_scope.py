@@ -10,7 +10,7 @@ from app.core.config import Settings, get_settings
 from app.domain.knowledge import AccessScope
 from app.services.documents.index_manager import list_indexed_files
 from app.services.runtime.rag_runtime_scope import is_under_path
-from app.services.security.rbac import can
+from app.services.security.rbac import Permission, can
 
 if TYPE_CHECKING:
     from app.orchestration.request import RequestActor, RequestScope
@@ -105,7 +105,7 @@ class AccessScopeResolver:
             "permissions": actor.permissions,
             "acl_tags": requested_scope.acl_tags or frozenset(),
         }
-        if not can("document:read", actor_dict) and "document:read" not in actor.permissions:
+        if not can(Permission.DOCUMENT_READ, actor_dict) and Permission.DOCUMENT_READ not in actor.permissions:
             raise AccessScopeError("document read permission is required")
 
         visible_rows = [dict(row) for row in self._document_provider(actor_dict)]

@@ -24,6 +24,7 @@ from app.api.transport.errors import bad_request
 from app.core.config import get_settings
 from app.core.config_schema import describe
 from app.core.remote_config import RemoteDocuments, remote_config_enabled
+from app.services.security.rbac import Permission
 
 logger = logging.getLogger(__name__)
 
@@ -41,7 +42,7 @@ class ConfigValues(BaseModel):
 def admin_config_schema(request: Request, user: dict[str, Any] = Depends(_require_user)):
     """Every editable field, its current value, and which layer supplied it."""
 
-    _require_permission(user, "admin:ops_manage", request, "admin")
+    _require_permission(user, Permission.ADMIN_OPS_MANAGE, request, "admin")
     documents = RemoteDocuments() if remote_config_enabled() else None
     return {
         "config_centre_enabled": remote_config_enabled(),
@@ -65,7 +66,7 @@ def admin_save_config(payload: ConfigValues, request: Request, user: dict[str, A
     changed is worse than one that refuses.
     """
 
-    _require_permission(user, "admin:ops_manage", request, "admin")
+    _require_permission(user, Permission.ADMIN_OPS_MANAGE, request, "admin")
     if not payload.values:
         raise bad_request("no values to save")
 

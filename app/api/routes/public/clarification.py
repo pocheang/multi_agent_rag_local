@@ -17,6 +17,7 @@ from app.api.dependencies import (
 )
 from app.domain.contracts import ClarificationContext, ClarificationQuestion
 from app.orchestration.request import OrchestrationRequest, RequestActor, RequestScope
+from app.services.security.rbac import Permission
 
 router = APIRouter(prefix="/api/v1/clarification", tags=["clarification"])
 
@@ -73,7 +74,7 @@ async def check_clarification(
     Raises:
         HTTPException: If session not found
     """
-    _require_permission(user, "query:run", request, "query")
+    _require_permission(user, Permission.QUERY_RUN, request, "query")
     req.session_id = _require_valid_session_id(req.session_id)
     tenant_id = str(user.get("tenant_id", "") or user.get("user_id", "") or "")
     user_id = str(user.get("user_id", "") or "")
@@ -95,7 +96,7 @@ async def check_clarification(
     # Get or create session
     session = history_store.get_session(req.session_id)
     if session is None:
-        _require_permission(user, "session:create", request, "session")
+        _require_permission(user, Permission.SESSION_CREATE, request, "session")
         session = history_store.create_session(session_id=req.session_id)
 
     # If user provided an answer, update clarification context
@@ -225,7 +226,7 @@ async def reset_clarification(
     Raises:
         HTTPException: If session not found or permission denied
     """
-    _require_permission(user, "query:run", request, "query")
+    _require_permission(user, Permission.QUERY_RUN, request, "query")
     session_id = _require_valid_session_id(session_id)
 
     history_store = _history_store_for_user(user)
@@ -256,7 +257,7 @@ async def get_clarification_context(
     Raises:
         HTTPException: If session not found or permission denied
     """
-    _require_permission(user, "query:run", request, "query")
+    _require_permission(user, Permission.QUERY_RUN, request, "query")
     session_id = _require_valid_session_id(session_id)
 
     history_store = _history_store_for_user(user)

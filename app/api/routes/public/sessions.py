@@ -31,19 +31,20 @@ from app.services.query.input_normalizer import (
     normalize_user_question,
 )
 from app.services.query.intent import is_casual_chat_query
+from app.services.security.rbac import Permission
 
 router = APIRouter(prefix="/sessions", tags=["sessions"])
 
 
 @router.get("", response_model=list[SessionSummary])
 def list_sessions(request: Request, user: dict[str, Any] = Depends(_require_user)):
-    _require_permission(user, "session:read", request, "session")
+    _require_permission(user, Permission.SESSION_READ, request, "session")
     return _history_store_for_user(user).list_sessions()
 
 
 @router.post("", response_model=SessionDetail)
 def create_session(request: Request, user: dict[str, Any] = Depends(_require_user)):
-    _require_permission(user, "session:create", request, "session")
+    _require_permission(user, Permission.SESSION_CREATE, request, "session")
     session = _history_store_for_user(user).create_session()
     _audit(
         request,
@@ -59,7 +60,7 @@ def create_session(request: Request, user: dict[str, Any] = Depends(_require_use
 @router.get("/{session_id}", response_model=SessionDetail)
 def get_session(session_id: str, request: Request, user: dict[str, Any] = Depends(_require_user)):
     session_id = _require_valid_session_id(session_id)
-    _require_permission(user, "session:read", request, "session", resource_id=session_id)
+    _require_permission(user, Permission.SESSION_READ, request, "session", resource_id=session_id)
     data = _history_store_for_user(user).get_session(session_id)
     if data is None:
         raise not_found("Session")
@@ -69,7 +70,7 @@ def get_session(session_id: str, request: Request, user: dict[str, Any] = Depend
 @router.delete("/{session_id}")
 def delete_session(session_id: str, request: Request, user: dict[str, Any] = Depends(_require_user)):
     session_id = _require_valid_session_id(session_id)
-    _require_permission(user, "session:delete", request, "session", resource_id=session_id)
+    _require_permission(user, Permission.SESSION_DELETE, request, "session", resource_id=session_id)
     ok = _history_store_for_user(user).delete_session(session_id)
     if not ok:
         raise not_found("Session")
@@ -88,7 +89,7 @@ def update_session(
 ):
     """Update session properties (title, pinned status, etc.)"""
     session_id = _require_valid_session_id(session_id)
-    _require_permission(user, "session:update", request, "session", resource_id=session_id)
+    _require_permission(user, Permission.SESSION_UPDATE, request, "session", resource_id=session_id)
 
     store = _history_store_for_user(user)
 
@@ -146,7 +147,7 @@ def update_session(
 @router.get("/{session_id}/memories/long", response_model=list[LongTermMemoryItem])
 def list_long_term_memories(session_id: str, request: Request, user: dict[str, Any] = Depends(_require_user)):
     session_id = _require_valid_session_id(session_id)
-    _require_permission(user, "session:read", request, "session", resource_id=session_id)
+    _require_permission(user, Permission.SESSION_READ, request, "session", resource_id=session_id)
     rows = _memory_store_for_user(user).list_long_term(session_id)
     return [LongTermMemoryItem(**x) for x in rows]
 
@@ -156,7 +157,7 @@ def delete_long_term_memory(
     session_id: str, memory_id: str, request: Request, user: dict[str, Any] = Depends(_require_user)
 ):
     session_id = _require_valid_session_id(session_id)
-    _require_permission(user, "session:read", request, "session", resource_id=session_id)
+    _require_permission(user, Permission.SESSION_READ, request, "session", resource_id=session_id)
     ok = _memory_store_for_user(user).delete_long_term(session_id=session_id, candidate_id=memory_id)
     if not ok:
         raise not_found("Memory")
@@ -176,7 +177,7 @@ def update_session_message(
     user: dict[str, Any] = Depends(_require_user),
 ):
     session_id = _require_valid_session_id(session_id)
-    _require_permission(user, "message:edit", request, "message", resource_id=message_id)
+    _require_permission(user, Permission.MESSAGE_EDIT, request, "message", resource_id=message_id)
     history_store = _history_store_for_user(user)
     current = history_store.get_message(session_id=session_id, message_id=message_id)
     if current is None:
@@ -243,7 +244,7 @@ def delete_session_message(
     session_id: str, message_id: str, request: Request, user: dict[str, Any] = Depends(_require_user)
 ):
     session_id = _require_valid_session_id(session_id)
-    _require_permission(user, "message:delete", request, "message", resource_id=message_id)
+    _require_permission(user, Permission.MESSAGE_DELETE, request, "message", resource_id=message_id)
     data = _history_store_for_user(user).delete_message(session_id=session_id, message_id=message_id)
     if data is None:
         raise not_found("Message")

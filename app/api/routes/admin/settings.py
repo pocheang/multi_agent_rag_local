@@ -42,6 +42,7 @@ from app.services.models.config_store import (
 from app.services.models.runtime import probe_chat_model_configuration
 from app.services.observability.alerting import emit_alert
 from app.services.security.network import OutboundURLValidationError
+from app.services.security.rbac import Permission
 
 router = APIRouter(tags=["admin", "settings"])
 
@@ -53,7 +54,7 @@ def get_available_model_catalog(user: dict[str, Any] = Depends(_require_user)):
 
 @router.get("/admin/model-settings", response_model=AdminModelSettingsResponse)
 def admin_get_model_settings(request: Request, user: dict[str, Any] = Depends(_require_user)):
-    _require_permission(user, "admin:ops_manage", request, "admin")
+    _require_permission(user, Permission.ADMIN_OPS_MANAGE, request, "admin")
     return _admin_model_settings_view(get_global_model_settings())
 
 
@@ -63,7 +64,7 @@ def admin_save_model_settings(
     request: Request,
     user: dict[str, Any] = Depends(_require_user),
 ):
-    _require_permission(user, "admin:ops_manage", request, "admin")
+    _require_permission(user, Permission.ADMIN_OPS_MANAGE, request, "admin")
     try:
         saved, reindex_result = apply_global_model_settings(req.model_dump())
     except ModelSettingsReindexError as e:
@@ -108,7 +109,7 @@ def admin_test_model_settings(
     request: Request,
     user: dict[str, Any] = Depends(_require_user),
 ):
-    _require_permission(user, "admin:ops_manage", request, "admin")
+    _require_permission(user, Permission.ADMIN_OPS_MANAGE, request, "admin")
     try:
         probe_payload = global_model_settings_probe_payload(req.model_dump())
     except OutboundURLValidationError as e:
@@ -139,7 +140,7 @@ def admin_test_model_settings(
 
 @router.post("/admin/config/reload")
 def admin_reload_config(request: Request, user: dict[str, Any] = Depends(_require_user)):
-    _require_permission(user, "admin:ops_manage", request, "admin")
+    _require_permission(user, Permission.ADMIN_OPS_MANAGE, request, "admin")
     new_settings = apply_config_reload()
     _audit(
         request,

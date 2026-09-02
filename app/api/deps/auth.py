@@ -8,6 +8,7 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from app.api.transport.errors import forbidden
 from app.services.auth.auth_service import AuthDBService
+from app.services.security.rbac import Permission
 
 auth_scheme = HTTPBearer(auto_error=False)
 auth_service = AuthDBService()
@@ -144,5 +145,5 @@ def require_admin(
     user: dict[str, Any] = Depends(_require_user),
 ) -> dict[str, Any]:
     """Require an active administrator for standalone admin routers."""
-    _require_permission(user, "admin:audit_read", request, "admin")
+    _require_permission(user, Permission.ADMIN_AUDIT_READ, request, "admin")
     return user
