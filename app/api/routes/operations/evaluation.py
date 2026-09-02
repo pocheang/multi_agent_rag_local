@@ -18,7 +18,7 @@ from app.evaluation import (
     TestQuery,
     load_test_queries,
 )
-from app.evaluation.baselines.api_retriever import SUPPORTED_SYSTEMS, create_api_retriever
+from app.evaluation.baselines.api_retriever import SUPPORTED_SYSTEMS, SystemName, create_api_retriever
 
 logger = logging.getLogger(__name__)
 
@@ -38,7 +38,7 @@ router = APIRouter(prefix="/api/evaluation", tags=["evaluation"])
 
 # Request/Response models
 class RunEvaluationRequest(BaseModel):
-    system: str  # "vector_only", "hybrid", "rerank"
+    system: SystemName
     queries: list[str] | None = None  # Optional: specific query IDs
     query_file: str = "data/evaluation/demo_queries.json"
 
@@ -52,7 +52,7 @@ class RunEvaluationResponse(BaseModel):
 
 
 class CompareSystemsRequest(BaseModel):
-    systems: list[str]  # List of system names to compare
+    systems: list[SystemName]
     query_file: str = "data/evaluation/demo_queries.json"
 
 
@@ -71,11 +71,11 @@ class SystemComparisonResponse(BaseModel):
     metrics: EvaluationMetricsResponse
 
 
-def get_retriever(system_name: str):
+def get_retriever(system_name: SystemName):
     """Get retriever instance by system name.
 
     Args:
-        system_name: "vector_only", "hybrid", or "rerank"
+        system_name: one of SUPPORTED_SYSTEMS
 
     Returns:
         SimpleRetriever instance configured for the system

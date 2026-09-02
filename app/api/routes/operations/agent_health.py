@@ -12,6 +12,7 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException
 
 from app.api.deps.auth import require_admin
+from app.api.routes.internal.path_params import ExecutionId
 from app.services.legacy_agent_health import (
     available_agent_health_checks,
     get_agent_config_values,
@@ -139,7 +140,7 @@ async def get_agent_execution_status() -> dict[str, Any]:
 
 
 @router.get("/trace/{execution_id}", dependencies=[Depends(require_admin)])
-async def get_execution_trace(execution_id: str) -> dict[str, Any]:
+async def get_execution_trace(execution_id: ExecutionId) -> dict[str, Any]:
     """
     Get detailed execution trace for a specific query.
 

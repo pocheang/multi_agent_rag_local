@@ -1,7 +1,6 @@
 from app.services.auth.audit_logger import AuditLogger
 from app.services.auth.auth_service import AuthDBService
 from app.services.auth.encryption import decrypt_secret_text, encrypt_secret_text
-from app.services.auth.legacy_service import AuthService
 from app.services.auth.password_utils import generate_salt, hash_password, verify_password
 from app.services.auth.session_manager import SessionManager
 from app.services.auth.user_manager import UserManager
@@ -16,7 +15,6 @@ from app.services.auth.validation import (
 
 __all__ = [
     "AuthDBService",
-    "AuthService",
     "AuditLogger",
     "SessionManager",
     "UserManager",

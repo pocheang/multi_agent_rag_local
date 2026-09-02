@@ -4,12 +4,13 @@ from __future__ import annotations
 
 import asyncio
 import json
-from typing import Annotated, Literal
+from typing import Literal
 
-from fastapi import APIRouter, Depends, Path, Request
+from fastapi import APIRouter, Depends, Request
 from fastapi.responses import StreamingResponse
 
 from app.api.deps.runtime import get_answer_stream_store, get_execution_event_store, require_trace_actor
+from app.api.routes.internal.path_params import ExecutionId
 from app.api.transport.errors import forbidden, not_found
 from app.domain.events import ExecutionEvent
 from app.orchestration.answer_stream import AnswerStreamStore
@@ -70,7 +71,7 @@ def _ensure_trace_access(trace: ExecutionTrace, actor: RequestActor) -> None:
 
 @router.get("/executions/{execution_id}/events")
 async def stream_execution_events(
-    execution_id: Annotated[str, Path(max_length=128)],
+    execution_id: ExecutionId,
     request: Request,
     actor: RequestActor = Depends(require_trace_actor),
     event_store: ExecutionEventStore = Depends(get_execution_event_store),

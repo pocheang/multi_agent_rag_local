@@ -276,8 +276,6 @@ class Settings(BaseSettings):
     auto_ingest_watch_docs: bool = Field(default=True, alias="AUTO_INGEST_WATCH_DOCS")
     auto_ingest_watch_uploads: bool = Field(default=True, alias="AUTO_INGEST_WATCH_UPLOADS")
     auto_ingest_recursive: bool = Field(default=True, alias="AUTO_INGEST_RECURSIVE")
-    users_file: str = Field(default="./data/security/users.json", alias="USERS_FILE")
-    auth_sessions_file: str = Field(default="./data/security/auth_sessions.json", alias="AUTH_SESSIONS_FILE")
     auth_token_ttl_hours: int = Field(default=24, alias="AUTH_TOKEN_TTL_HOURS")
     auth_expose_token_in_response: bool = Field(default=False, alias="AUTH_EXPOSE_TOKEN_IN_RESPONSE")
     auth_cookie_name: str = Field(default="auth_token", alias="AUTH_COOKIE_NAME")
@@ -463,14 +461,6 @@ class Settings(BaseSettings):
         return Path(self.uploads_dir)
 
     @property
-    def users_path(self) -> Path:
-        return Path(self.users_file)
-
-    @property
-    def auth_sessions_path(self) -> Path:
-        return Path(self.auth_sessions_file)
-
-    @property
     def router_calibration_path(self) -> Path:
         return Path(self.router_calibration_path_str)
 
@@ -546,8 +536,6 @@ def get_settings() -> Settings:
     settings.parent_store_path.parent.mkdir(parents=True, exist_ok=True)
     settings.sessions_path.mkdir(parents=True, exist_ok=True)
     settings.uploads_path.mkdir(parents=True, exist_ok=True)
-    settings.users_path.parent.mkdir(parents=True, exist_ok=True)
-    settings.auth_sessions_path.parent.mkdir(parents=True, exist_ok=True)
     settings.app_db_path.parent.mkdir(parents=True, exist_ok=True)
     settings.history_sqlite_path.parent.mkdir(parents=True, exist_ok=True)
     settings.history_cold_path.mkdir(parents=True, exist_ok=True)

@@ -8,6 +8,7 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
 from app.api.dependencies import _require_permission, _require_user
+from app.api.routes.internal.path_params import ExecutionId
 from app.api.transport.errors import bad_request, forbidden, not_found
 from app.services.observability.agent_execution_tracker import (
     AgentExecutionTracker,
@@ -52,7 +53,10 @@ class ExecutionStatus(BaseModel):
 
 @router.get("/stream/{execution_id}")
 async def stream_execution(
-    execution_id: str, request: Request, user: dict[str, Any] = Depends(_require_user), max_iterations: int = 600
+    execution_id: ExecutionId,
+    request: Request,
+    user: dict[str, Any] = Depends(_require_user),
+    max_iterations: int = 600,
 ):
     """
     Server-Sent Events (SSE) endpoint for real-time execution tracking.
@@ -119,7 +123,9 @@ async def stream_execution(
 
 
 @router.get("/trace/{execution_id}", response_model=ExecutionTrace)
-async def get_execution_trace(execution_id: str, request: Request, user: dict[str, Any] = Depends(_require_user)):
+async def get_execution_trace(
+    execution_id: ExecutionId, request: Request, user: dict[str, Any] = Depends(_require_user)
+):
     """
     Get the complete execution trace for a given execution ID.
     User can only view their own executions unless they are admin.
@@ -161,7 +167,9 @@ async def get_execution_history(request: Request, user: dict[str, Any] = Depends
 
 
 @router.get("/status/{execution_id}", response_model=ExecutionStatus)
-async def get_execution_status(execution_id: str, request: Request, user: dict[str, Any] = Depends(_require_user)):
+async def get_execution_status(
+    execution_id: ExecutionId, request: Request, user: dict[str, Any] = Depends(_require_user)
+):
     """
     Get the current status of an execution.
     User can only view their own executions unless they are admin.
@@ -187,7 +195,9 @@ async def get_execution_status(execution_id: str, request: Request, user: dict[s
 
 
 @router.delete("/trace/{execution_id}")
-async def delete_execution_trace(execution_id: str, request: Request, user: dict[str, Any] = Depends(_require_user)):
+async def delete_execution_trace(
+    execution_id: ExecutionId, request: Request, user: dict[str, Any] = Depends(_require_user)
+):
     """
     Delete a specific execution trace.
     User can only delete their own executions unless they are admin.

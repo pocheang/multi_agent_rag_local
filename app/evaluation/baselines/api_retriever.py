@@ -4,17 +4,24 @@ from __future__ import annotations
 
 import logging
 import time
+from typing import Literal, get_args
 
 from app.core.config import get_settings
 from app.evaluation.models import RetrievalResult
 from app.retrievers.hybrid.retriever import hybrid_search_with_diagnostics
 from app.retrievers.stores.vector import similarity_search
 
-__all__ = ["SUPPORTED_SYSTEMS", "SimpleRetriever", "create_api_retriever"]
+__all__ = ["SUPPORTED_SYSTEMS", "SimpleRetriever", "SystemName", "create_api_retriever"]
 
 logger = logging.getLogger(__name__)
 
-SUPPORTED_SYSTEMS = ("vector_only", "hybrid")
+# One definition, two shapes. The type is the source of truth and the tuple is
+# derived from it, so a baseline cannot be accepted by the API without being
+# declared here, nor declared here without the API accepting it. The API used to
+# take a bare `str`, which meant an unknown name travelled as far as
+# `create_api_retriever` before being rejected -- and was logged on the way.
+SystemName = Literal["vector_only", "hybrid"]
+SUPPORTED_SYSTEMS: tuple[SystemName, ...] = get_args(SystemName)
 
 
 class SimpleRetriever:

@@ -81,7 +81,7 @@ export function useChatActions(params: UseChatActionsParams) {
   } = params;
 
   const notify = (text: string, kind: Toast["kind"] = "info", ttl = 2400) => {
-    const id = `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+    const id = crypto.randomUUID();
     setToasts((prev) => [...prev, { id, text, kind }]);
     window.setTimeout(() => setToasts((prev) => prev.filter((x) => x.id !== id)), ttl);
   };

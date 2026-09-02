@@ -21,7 +21,10 @@ from app.core.config import validate_security_settings
 from app.core.remote_config import watch_remote_config
 from app.graph.knowledge.client import Neo4jClient
 from app.services.observability.log_buffer import setup_log_capture
+from app.services.observability.log_safety import install_control_character_escaping
 
+# Before the capture handler, so nothing it buffers can carry a forged line.
+install_control_character_escaping()
 setup_log_capture()
 logger = logging.getLogger(__name__)
 _auto_ingest_thread: threading.Thread | None = None
