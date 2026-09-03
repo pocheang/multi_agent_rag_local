@@ -205,161 +205,199 @@ def decide_route(
         LegacyRouteDecision: Route decision with route, skill, and agent class
     """
     forced = _normalize_agent_class_hint(agent_class_hint)
-
     if is_smalltalk_query(question):
-        raw_confidence = 0.95  # High confidence for smalltalk detection
-        calibrator = _get_calibrator()
-        calibrated_confidence = calibrator.calibrate(raw_confidence) if calibrator else raw_confidence
+        return _smalltalk_decision(forced)
 
-        return LegacyRouteDecision(
-            route=ROUTE_VECTOR,
-            reason=_append_reason(
-                "smalltalk_local_only",
-                f"forced_agent_class={forced}" if forced else "",
-            ),
-            skill=SKILL_DEFAULT,
-            agent_class=forced or AGENT_CLASS_GENERAL,
-            confidence=calibrated_confidence,
-            raw_confidence=raw_confidence,
-        )
-
-    # Select intent classification method
-    if forced:
-        agent_class = forced
-        classification_method = "forced"
-        confidence = 1.0
-    elif use_llm_intent:
-        try:
-            intent_result = classify_intent_with_llm(question)
-            agent_class = intent_result["agent_class"]
-            confidence = intent_result.get("confidence", 0.5)
-            classification_method = f"llm(confidence={confidence:.2f})"
-            logger.info(f"LLM intent classification: {agent_class} (confidence={confidence:.2f})")
-        except Exception as e:
-            logger.warning(f"LLM intent classification failed, fallback to rule-based: {e}")
-            agent_class = classify_agent_class(question)
-            confidence = 0.5
-            classification_method = "rule_fallback"
-    else:
-        agent_class = classify_agent_class(question)
-        confidence = 0.5
-        classification_method = "rule_based"
-
-    # Determine skill based on agent class and question
-    if agent_class == "cybersecurity":
-        skill = pick_cyber_skill(question)
-    elif agent_class == "pdf_text":
-        skill = "pdf_text_reader"
-    elif "compare" in question.lower() or "difference" in question.lower():
-        skill = "compare_entities"
-    elif "timeline" in question.lower() or "history" in question.lower():
-        skill = "timeline_builder"
-    else:
-        skill = SKILL_DEFAULT
-
+    agent_class, intent_confidence, classification_method = _classify(question, forced, use_llm_intent)
+    skill = _skill_for(agent_class, question)
     forced_reason = f"forced_agent_class={forced}" if forced else ""
 
-    # Get route decision from LLM
     try:
-        model = get_reasoning_model() if use_reasoning else get_chat_model()
-        prompt = f"""{ROUTER_PROMPT}
-
-Question: {question}
-Agent class: {agent_class}
-Suggested skill: {skill}"""
-        response = model.invoke(prompt)
-        response_text = response.content if hasattr(response, "content") else str(response)
-
-        route_data = _extract_json(response_text)
-
-        raw_route = normalize_string(route_data.get("route", ROUTE_VECTOR), lowercase=True)
-        route = raw_route if raw_route in VALID_ROUTES else ROUTE_VECTOR
-
-        reason = normalize_string(route_data.get("reason", "llm_decision")) or "llm_decision"
-        if raw_route and raw_route not in VALID_ROUTES:
-            reason = _append_reason(reason, f"invalid_route={raw_route}")
-
-        llm_skill = normalize_string(route_data.get("skill", skill), lowercase=True)
-        if llm_skill and llm_skill != "...":
-            if llm_skill in VALID_SKILLS:
-                skill = llm_skill
-            else:
-                reason = _append_reason(reason, f"invalid_skill={llm_skill}")
-                # Keep the pre-determined skill (don't override with invalid value)
-
-        # Web route downgrade (configurable)
-        # Reason: In production, we prioritize local knowledge base first to reduce latency
-        # and API costs. Web search is only used when explicitly enabled or local retrieval fails.
-        if route == ROUTE_WEB and get_settings().enable_web_route_downgrade:
-            route = ROUTE_VECTOR
-            reason = _append_reason(reason, "web_downgraded_to_local_first")
-            logger.debug("Web route downgraded to vector (ENABLE_WEB_ROUTE_DOWNGRADE=True)")
-
-        if forced_reason:
-            reason = _append_reason(reason, forced_reason)
-
-        # Extract LLM confidence if provided (for route decision confidence)
-        llm_confidence = route_data.get("confidence")
-        if llm_confidence is not None and isinstance(llm_confidence, int | float):
-            route_confidence = float(llm_confidence)
-            # Clamp to valid range
-            route_confidence = max(0.0, min(1.0, route_confidence))
-        else:
-            route_confidence = 0.7  # Default if not provided
-
-        # Check if confidence is too low and trigger fallback
-        if route_confidence < ROUTER_LOW_CONFIDENCE_THRESHOLD:
-            logger.info(f"Low confidence detected: {route_confidence:.2f} < {ROUTER_LOW_CONFIDENCE_THRESHOLD}")
-
-            # Try fallback with reasoning model
-            fallback_result = _try_fallback_with_reasoning(question, agent_class, skill, route_confidence)
-
-            if fallback_result is not None:
-                # Fallback succeeded with reasoning model
-                route, reason, route_confidence = fallback_result
-                if forced_reason:
-                    reason = _append_reason(reason, forced_reason)
-            else:
-                # Fallback to safe route (vector)
-                logger.warning(
-                    f"Fallback to safe route: original_route={route}, original_confidence={route_confidence:.2f}"
-                )
-                route = ROUTE_VECTOR
-                reason = _append_reason(reason, "fallback_safe_route")
-                if forced_reason:
-                    reason = _append_reason(reason, forced_reason)
-                # Keep low confidence to indicate uncertainty
-                route_confidence = max(0.5, route_confidence)
-
+        route, reason, skill, route_confidence = _llm_route(
+            question, agent_class, skill, use_reasoning=use_reasoning, forced_reason=forced_reason
+        )
         logger.info(
             f"Route decision: route={route}, skill={skill}, "
             f"agent_class={agent_class}, method={classification_method}, "
-            f"intent_confidence={confidence:.2f}, route_confidence={route_confidence:.2f}"
+            f"intent_confidence={intent_confidence:.2f}, route_confidence={route_confidence:.2f}"
         )
-
     except Exception as e:
         logger.exception(f"Router LLM call failed: {e}")
         route = ROUTE_VECTOR
         reason = _append_reason(f"router_invoke_error:{type(e).__name__}", forced_reason)
         route_confidence = 0.5  # Low confidence for error case
 
-    # Apply confidence calibration
     raw_confidence = route_confidence
-    calibrator = _get_calibrator()
-    if calibrator is not None:
-        calibrated_confidence = calibrator.calibrate(raw_confidence)
-        logger.debug(f"Calibrated confidence: {raw_confidence:.2f} -> {calibrated_confidence:.2f}")
-    else:
-        calibrated_confidence = raw_confidence
-
     return LegacyRouteDecision(
         route=route,
         reason=reason,
         skill=skill,
         agent_class=agent_class,
-        confidence=calibrated_confidence,
+        confidence=_calibrated(raw_confidence),
         raw_confidence=raw_confidence,
     )
+
+
+def _smalltalk_decision(forced: str | None) -> LegacyRouteDecision:
+    """Greetings need no retrieval and no model call to establish that."""
+
+    raw_confidence = 0.95  # High confidence for smalltalk detection
+    return LegacyRouteDecision(
+        route=ROUTE_VECTOR,
+        reason=_append_reason("smalltalk_local_only", f"forced_agent_class={forced}" if forced else ""),
+        skill=SKILL_DEFAULT,
+        agent_class=forced or AGENT_CLASS_GENERAL,
+        confidence=_calibrated(raw_confidence),
+        raw_confidence=raw_confidence,
+    )
+
+
+def _classify(question: str, forced: str | None, use_llm_intent: bool) -> tuple[str, float, str]:
+    """Which agent class this question belongs to, and how that was decided.
+
+    Three ways in, and the caller's hint outranks both classifiers.
+    """
+
+    if forced:
+        return forced, 1.0, "forced"
+    if not use_llm_intent:
+        return classify_agent_class(question), 0.5, "rule_based"
+    try:
+        intent_result = classify_intent_with_llm(question)
+        agent_class = intent_result["agent_class"]
+        confidence = intent_result.get("confidence", 0.5)
+        logger.info(f"LLM intent classification: {agent_class} (confidence={confidence:.2f})")
+        return agent_class, confidence, f"llm(confidence={confidence:.2f})"
+    except Exception as e:
+        logger.warning(f"LLM intent classification failed, fallback to rule-based: {e}")
+        return classify_agent_class(question), 0.5, "rule_fallback"
+
+
+def _skill_for(agent_class: str, question: str) -> str:
+    """The skill to suggest to the router, from the agent class or the wording.
+
+    A proposal, not a decision: the model is shown this and may replace it with
+    any skill in VALID_SKILLS.
+    """
+
+    if agent_class == "cybersecurity":
+        return pick_cyber_skill(question)
+    if agent_class == "pdf_text":
+        return "pdf_text_reader"
+    lowered = question.lower()
+    if "compare" in lowered or "difference" in lowered:
+        return "compare_entities"
+    if "timeline" in lowered or "history" in lowered:
+        return "timeline_builder"
+    return SKILL_DEFAULT
+
+
+def _llm_route(
+    question: str, agent_class: str, skill: str, *, use_reasoning: bool, forced_reason: str
+) -> tuple[str, str, str, float]:
+    """Ask the model for a route, and trust none of what comes back unchecked."""
+
+    model = get_reasoning_model() if use_reasoning else get_chat_model()
+    prompt = f"""{ROUTER_PROMPT}
+
+Question: {question}
+Agent class: {agent_class}
+Suggested skill: {skill}"""
+    response = model.invoke(prompt)
+    response_text = response.content if hasattr(response, "content") else str(response)
+    route_data = _extract_json(response_text)
+
+    route, reason = _validated_route(route_data)
+    skill, reason = _validated_skill(route_data, skill, reason)
+
+    # Web route downgrade (configurable)
+    # Reason: In production, we prioritize local knowledge base first to reduce latency
+    # and API costs. Web search is only used when explicitly enabled or local retrieval fails.
+    if route == ROUTE_WEB and get_settings().enable_web_route_downgrade:
+        route = ROUTE_VECTOR
+        reason = _append_reason(reason, "web_downgraded_to_local_first")
+        logger.debug("Web route downgraded to vector (ENABLE_WEB_ROUTE_DOWNGRADE=True)")
+
+    if forced_reason:
+        reason = _append_reason(reason, forced_reason)
+
+    route_confidence = _stated_confidence(route_data)
+    if route_confidence < ROUTER_LOW_CONFIDENCE_THRESHOLD:
+        route, reason, route_confidence = _recover_low_confidence(
+            question, agent_class, skill, route, reason, route_confidence, forced_reason
+        )
+    return route, reason, skill, route_confidence
+
+
+def _validated_route(route_data: dict) -> tuple[str, str]:
+    """A route outside VALID_ROUTES becomes vector, and the reason records what was asked for."""
+
+    raw_route = normalize_string(route_data.get("route", ROUTE_VECTOR), lowercase=True)
+    route = raw_route if raw_route in VALID_ROUTES else ROUTE_VECTOR
+    reason = normalize_string(route_data.get("reason", "llm_decision")) or "llm_decision"
+    if raw_route and raw_route not in VALID_ROUTES:
+        reason = _append_reason(reason, f"invalid_route={raw_route}")
+    return route, reason
+
+
+def _validated_skill(route_data: dict, skill: str, reason: str) -> tuple[str, str]:
+    """An unrecognised skill keeps the one already chosen rather than overriding it."""
+
+    llm_skill = normalize_string(route_data.get("skill", skill), lowercase=True)
+    if not llm_skill or llm_skill == "...":
+        return skill, reason
+    if llm_skill in VALID_SKILLS:
+        return llm_skill, reason
+    return skill, _append_reason(reason, f"invalid_skill={llm_skill}")
+
+
+def _stated_confidence(route_data: dict) -> float:
+    """The model's own confidence, clamped -- or 0.7 when it did not offer one."""
+
+    value = route_data.get("confidence")
+    if value is not None and isinstance(value, int | float):
+        return max(0.0, min(1.0, float(value)))
+    return 0.7  # Default if not provided
+
+
+def _recover_low_confidence(
+    question: str,
+    agent_class: str,
+    skill: str,
+    route: str,
+    reason: str,
+    route_confidence: float,
+    forced_reason: str,
+) -> tuple[str, str, float]:
+    """Re-ask with the reasoning model, and fall back to vector if that fails too.
+
+    The confidence is floored at 0.5 rather than raised to it: a safe route
+    chosen because nothing better was available should still read as uncertain.
+    """
+
+    logger.info(f"Low confidence detected: {route_confidence:.2f} < {ROUTER_LOW_CONFIDENCE_THRESHOLD}")
+    fallback_result = _try_fallback_with_reasoning(question, agent_class, skill, route_confidence)
+    if fallback_result is not None:
+        route, reason, route_confidence = fallback_result
+    else:
+        logger.warning(f"Fallback to safe route: original_route={route}, original_confidence={route_confidence:.2f}")
+        route = ROUTE_VECTOR
+        reason = _append_reason(reason, "fallback_safe_route")
+        route_confidence = max(0.5, route_confidence)
+    if forced_reason:
+        reason = _append_reason(reason, forced_reason)
+    return route, reason, route_confidence
+
+
+def _calibrated(raw_confidence: float) -> float:
+    """What the caller is told. `raw_confidence` is what the calibrator is later trained on."""
+
+    calibrator = _get_calibrator()
+    if calibrator is None:
+        return raw_confidence
+    calibrated = calibrator.calibrate(raw_confidence)
+    logger.debug(f"Calibrated confidence: {raw_confidence:.2f} -> {calibrated:.2f}")
+    return calibrated
 
 
 def decide_route_simple(question: str) -> str:
