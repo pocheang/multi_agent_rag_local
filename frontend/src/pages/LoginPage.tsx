@@ -312,7 +312,7 @@ export function LoginPage({ onLogin }: Props) {
                 <button type="button" className="social-btn google-btn" onClick={handleGoogleLogin}>
                   <span className="social-icon social-icon-google" aria-hidden="true">
                     G
-                  </span>
+                  </span>{" "}
                   Google
                 </button>
                 <button type="button" className="social-btn github-btn" onClick={handleGitHubLogin}>
@@ -320,7 +320,7 @@ export function LoginPage({ onLogin }: Props) {
                     <svg viewBox="0 0 24 24" focusable="false">
                       <path d="M12 2a10 10 0 0 0-3.16 19.49c.5.1.68-.21.68-.48v-1.68c-2.77.6-3.35-1.18-3.35-1.18c-.45-1.15-1.1-1.46-1.1-1.46c-.9-.61.07-.6.07-.6c1 .07 1.52 1.02 1.52 1.02c.88 1.5 2.3 1.07 2.86.82c.09-.64.35-1.08.64-1.32c-2.21-.25-4.54-1.11-4.54-4.93c0-1.09.39-1.98 1.03-2.67c-.11-.25-.45-1.27.1-2.64c0 0 .84-.27 2.75 1.02A9.53 9.53 0 0 1 12 6.84a9.5 9.5 0 0 1 2.5.34c1.9-1.29 2.74-1.02 2.74-1.02c.56 1.37.22 2.39.11 2.64c.64.69 1.03 1.58 1.03 2.67c0 3.83-2.33 4.67-4.55 4.92c.36.31.68.92.68 1.86v2.76c0 .27.18.58.69.48A10 10 0 0 0 12 2Z" />
                     </svg>
-                  </span>
+                  </span>{" "}
                   GitHub
                 </button>
               </div>

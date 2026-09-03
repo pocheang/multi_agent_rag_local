@@ -20,10 +20,25 @@ export class ApiError extends Error {
   }
 }
 
+/**
+ * Strip trailing slashes.
+ *
+ * Deliberately not `/\/+$/`: an anchored run like that makes the engine try
+ * every shorter run before failing (typescript:S8786), and this says the same
+ * thing in the same space. It was written four times in this file.
+ */
+function withoutTrailingSlashes(value: string): string {
+  let result = value;
+  while (result.endsWith("/")) {
+    result = result.slice(0, -1);
+  }
+  return result;
+}
+
 function resolveApiBase() {
   const raw = String(import.meta.env.VITE_API_BASE_URL || "").trim();
   if (!raw) return "";
-  const cleaned = raw.replace(/\/+$/, "");
+  const cleaned = withoutTrailingSlashes(raw);
 
   if (typeof window === "undefined") return cleaned;
   try {
@@ -35,7 +50,7 @@ function resolveApiBase() {
       (pageHost === "localhost" || pageHost === "127.0.0.1");
     if (!isLoopbackPair || apiHost === pageHost) return cleaned;
     parsed.hostname = pageHost;
-    return parsed.toString().replace(/\/+$/, "");
+    return withoutTrailingSlashes(parsed.toString());
   } catch {
     return cleaned.startsWith("/") ? cleaned : `/${cleaned}`;
   }
@@ -44,7 +59,7 @@ function resolveApiBase() {
 function resolveAppBasePrefix() {
   const raw = String(import.meta.env.BASE_URL || "/").trim();
   if (!raw || raw === "/") return "";
-  const normalized = raw.replace(/\/+$/, "");
+  const normalized = withoutTrailingSlashes(raw);
   if (!normalized || normalized === "/") return "";
   return normalized.startsWith("/") ? normalized : `/${normalized}`;
 }
@@ -74,12 +89,7 @@ export function toUrl(path: string) {
     let absoluteOrigin = "";
     try {
       const parsed = new URL(API_BASE);
-      // Trailing slashes without a regex: /\/+$/ backtracks over a long run
-      // of them (typescript:S8786), and this is as short either way.
-      basePath = parsed.pathname;
-      while (basePath.endsWith("/")) {
-        basePath = basePath.slice(0, -1);
-      }
+      basePath = withoutTrailingSlashes(parsed.pathname);
       absoluteOrigin = parsed.origin;
     } catch {
       // Relative API prefixes are handled directly.

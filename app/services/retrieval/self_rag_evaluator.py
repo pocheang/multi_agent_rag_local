@@ -190,7 +190,9 @@ Feedback: [brief explanation]"""
             Relevance score (0-1)
         """
         # Look for score in format "Score: 8/10" or "8/10"
-        match = re.search(r"(\d+\.?\d*)\s*/\s*10", response)
+        # Unambiguous: `\d+\.?\d*` can divide one run of digits many ways, and
+        # the engine tries them all when no "/10" follows (python:S8786).
+        match = re.search(r"(\d{1,10}(?:\.\d{1,10})?)[ \t]{0,8}/[ \t]{0,8}10", response)
         if match:
             return float(match.group(1)) / 10
 

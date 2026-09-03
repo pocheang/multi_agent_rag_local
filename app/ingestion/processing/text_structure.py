@@ -39,8 +39,11 @@ class OCRTextStructurer:
 
         # 表格模式
         self.table_patterns = [
-            re.compile(r"[|｜]\s*.+\s*[|｜]"),
-            re.compile(r"\t.+\t"),
+            # A cell does not contain its own delimiter (python:S8786); these
+            # answer a yes/no question, so matching to the first one is the
+            # same answer as matching to the last.
+            re.compile(r"[|｜][^|｜\n]+[|｜]"),
+            re.compile(r"\t[^\t\n]+\t"),
         ]
 
         # CJK 标点符号

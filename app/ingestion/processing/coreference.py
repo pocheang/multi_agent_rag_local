@@ -36,7 +36,9 @@ def simple_coreference_resolution(text: str) -> str:
 def split_into_sentences(text: str) -> list[str]:
     """Split text into sentences."""
     # Simple sentence splitting
-    sentences = re.split(r"[.!?]+\s+", text)
+    # Possessive: shortening the run of punctuation still leaves punctuation,
+    # never the whitespace that follows it, so backtracking only costs time.
+    sentences = re.split(r"[.!?]++\s+", text)
     return [s.strip() for s in sentences if s.strip()]
 
 

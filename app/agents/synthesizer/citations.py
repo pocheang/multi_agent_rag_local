@@ -140,7 +140,7 @@ def _tidy_spacing(text: str) -> str:
     # Possessive: backtracking into the run can only end on another
     # space, so it never finds a match and only costs time (S8786).
     tidied = re.sub(r"[ \t]++([,.;:!?])", r"\1", str(text or ""))
-    tidied = re.sub(r"(?<!\n)[ \t]{2,}", " ", tidied)
+    tidied = re.sub(r"(?<!\n)[ \t]{2,}+", " ", tidied)
     return tidied.strip()
 
 

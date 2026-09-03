@@ -46,7 +46,6 @@ export function MessageCard({ message, onEditMessage, onRemoveMessage }: Props) 
     <>
     <article
       className={`bubble ${isAssistant ? "assistant" : "user"}`}
-      role="article"
       aria-label={isAssistant ? t("components.messages.assistantReply") : t("components.messages.userMessage")}
     >
       <div className="message-head">
