@@ -1110,7 +1110,7 @@ A third makes it three. Do not add a pixel-diff CI gate for the reason above, an
 
 `tests/` was cleared ahead of the v0.7 rewrite and is being rebuilt incrementally: each bug
 fix lands with the regression test that would have caught it, rather than as a separate
-back-filling effort. As of 2026-09-03 there are 1092 tests covering the chat round trip,
+back-filling effort. As of 2026-09-03 there are 1167 tests covering the chat round trip,
 conversation context, graph routing, clarification, the async load guard, engine reuse,
 answer safety, reader-facing citation numbering, stage-timeout degradation, the governed
 tool stack with its multi-step loop and approve-then-resume cycle, retrieval
@@ -1121,9 +1121,12 @@ machinery that produced it, a router cache that opens no event loop, a guard tha
 Settings field has a reader, a guard that no module reads the environment behind
 `Settings`'s back, the configuration-centre source with its three-step degradation, the
 admin configuration surface with the writes it refuses, one vocabulary for audit actions,
-an ASCII API document, and a grounding SLO that measures answers.
+an ASCII API document, a grounding SLO that measures answers, and the five functions
+unpicked in the 2026-09-03 complexity pass -- document ingestion, the distributed query
+guard, candidate collection, route selection and the document visibility rules, each
+characterized against its old implementation before being split.
 
-**That count is not 1092 independent assertions, and the number before it was stale.** Two
+**That count is not 1167 independent assertions, and the number before it was stale.** Two
 guards are parametrized one case per module — the audit-action scan over `app/` (376) and
 the ASCII scan over `app/api` (60) — so they grow with the codebase rather than with
 coverage. The real baseline on 2026-09-03 was 651, not the 538 this paragraph claimed:
@@ -1133,7 +1136,7 @@ covered the day it is added, where one test looping inside a single assertion re
 first offender and stops — but it does mean this total is not comparable across the change
 that introduced them.
 
-`tests/security/` (610 of those, 378 being the per-module audit-action scan) pins the
+`tests/security/` (625 of those, 378 being the per-module audit-action scan) pins the
 user-data isolation invariants — see
 `docs/superpowers/plans/2026-08-29-user-data-isolation.md`. That plan is complete
 (phases 0-4) and all 8 of its `xfail(strict=True)` markers are cleared; keep using the same
