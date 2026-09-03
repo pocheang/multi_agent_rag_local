@@ -68,46 +68,12 @@ def collect_candidates(
     rrf_k = int(getattr(settings, "hybrid_rrf_k", 60) or 60)
     flags = strategy_flags()
 
-    # Use dynamic parameters if provided, otherwise use adaptive params or settings
-    if dynamic_top_k is not None:
-        vector_top_k = dynamic_top_k
-        bm25_top_k = dynamic_top_k
-        reranker_top_n = int(getattr(settings, "reranker_top_n", 5) or 5)
-    else:
-        vector_top_k, bm25_top_k, reranker_top_n = adaptive_retrieval_params(query, settings, flags["dynamic"])
-
-    # Use dynamic weights if provided, otherwise use settings
-    if dynamic_vector_weight is not None and dynamic_bm25_weight is not None:
-        vector_weight = dynamic_vector_weight
-        bm25_weight = dynamic_bm25_weight
-    else:
-        vector_weight, bm25_weight = hybrid_weights(settings)
-
-    variants = _rewrite(
-        query,
-        enable_llm=bool(
-            flags["rewrite"]
-            and getattr(settings, "query_rewrite_enabled", True)
-            and getattr(settings, "query_rewrite_with_llm", False)
-        ),
-        use_reasoning=False,
-        enable_decompose=bool(flags["decompose"] and getattr(settings, "query_decompose_enabled", True)),
-        max_variants=int(getattr(settings, "query_rewrite_max_variants", 6) or 6),
-    )
-    if not variants:
-        variants = [query]
-
-    seen_variants = set()
-    unique_variants = []
-    for v in variants:
-        v_normalized = v.strip().lower()
-        if v_normalized not in seen_variants:
-            seen_variants.add(v_normalized)
-            unique_variants.append(v)
-    variants = unique_variants
+    vector_top_k, bm25_top_k, reranker_top_n = _retrieval_width(query, settings, flags, dynamic_top_k)
+    vector_weight, bm25_weight = _fusion_weights(settings, dynamic_vector_weight, dynamic_bm25_weight)
+    variants = _query_variants(query, settings, flags, _rewrite)
 
     merged: dict[str, dict] = {}
-    scores = defaultdict(float)
+    scores: dict[str, float] = defaultdict(float)
     allowed_set = set(allowed_sources) if allowed_sources is not None else None
     diag = {
         "rewrites": list(variants),
@@ -123,67 +89,176 @@ def collect_candidates(
     }
 
     for variant in variants:
-        if precomputed_vector_results and variant in precomputed_vector_results:
-            vector_results = precomputed_vector_results[variant]
-        elif precomputed_raw_vector_results and variant in precomputed_raw_vector_results:
-            vector_results = filter_vector_results(
-                precomputed_raw_vector_results[variant], score_threshold=vector_threshold
-            )
-        else:
-            vector_results = _vector(variant, k=vector_top_k, allowed_sources=allowed_sources)
-            vector_results = filter_vector_results(vector_results, score_threshold=vector_threshold)
+        vector_results = _vector_hits(
+            variant,
+            vector_fn=_vector,
+            allowed_sources=allowed_sources,
+            top_k=vector_top_k,
+            threshold=vector_threshold,
+            precomputed=precomputed_vector_results,
+            precomputed_raw=precomputed_raw_vector_results,
+        )
         diag["vector_hits_by_rewrite"][variant] = len(vector_results)
-        for idx, (doc, score) in enumerate(vector_results, start=1):
-            metadata = dict(doc.metadata)
-            source = str(metadata.get("source", "") or "")
-            if allowed_set is not None and source not in allowed_set:
-                continue
-            item_id = metadata.get("chunk_id") or f"vector::{idx}::{metadata.get('source', 'unknown')}"
-            merged.setdefault(
-                item_id,
-                {
-                    "id": item_id,
-                    "text": doc.page_content,
-                    "metadata": metadata,
-                    "dense_score": float(score),
-                    "retrieval_sources": ["vector"],
-                },
-            )
-            existing_dense = merged[item_id].get("dense_score")
-            if not isinstance(existing_dense, int | float) or float(score) > float(existing_dense):
-                merged[item_id]["dense_score"] = float(score)
-            scores[item_id] += vector_weight * rrf_score(idx, rrf_k)
+        _merge_vector_hits(merged, scores, vector_results, allowed_set, vector_weight, rrf_k)
 
         sparse = _bm25(variant, k=bm25_top_k, allowed_sources=allowed_sources)
         diag["bm25_hits_by_rewrite"][variant] = len(sparse)
-        for idx, item in enumerate(sparse, start=1):
-            source = str((item.get("metadata", {}) or {}).get("source", "") or "")
-            if allowed_set is not None and source not in allowed_set:
-                continue
-            item_id = item["id"]
-            existing = merged.get(item_id)
-            if existing:
-                if "bm25" not in existing["retrieval_sources"]:
-                    existing["retrieval_sources"].append("bm25")
-                existing["bm25_score"] = max(float(existing.get("bm25_score", 0.0)), float(item.get("bm25_score", 0.0)))
-            else:
-                merged[item_id] = {
-                    "id": item_id,
-                    "text": item["text"],
-                    "metadata": item.get("metadata", {}),
-                    "bm25_score": float(item.get("bm25_score", 0.0)),
-                    "retrieval_sources": ["bm25"],
-                }
-            scores[item_id] += bm25_weight * rrf_score(idx, rrf_k)
+        _merge_bm25_hits(merged, scores, sparse, allowed_set, bm25_weight, rrf_k)
+
+    fused = _fuse(merged, scores, settings, flags)
+    diag["candidate_count"] = len(fused)
+    return fused, diag
+
+
+def _retrieval_width(query: str, settings, flags: dict, dynamic_top_k: int | None) -> tuple[int, int, int]:
+    """How wide to search. A caller-supplied width wins over the adaptive one."""
+
+    if dynamic_top_k is None:
+        return adaptive_retrieval_params(query, settings, flags["dynamic"])
+    # The caller sized the search, not the rerank: feeding the reranker more
+    # candidates while holding its output fixed only discards the extra ones.
+    return dynamic_top_k, dynamic_top_k, int(getattr(settings, "reranker_top_n", 5) or 5)
+
+
+def _fusion_weights(settings, dynamic_vector_weight: float | None, dynamic_bm25_weight: float | None):
+    """Both dynamic weights or neither -- one of a normalized pair means nothing on its own."""
+
+    if dynamic_vector_weight is not None and dynamic_bm25_weight is not None:
+        return dynamic_vector_weight, dynamic_bm25_weight
+    return hybrid_weights(settings)
+
+
+def _query_variants(query: str, settings, flags: dict, rewrite_fn) -> list[str]:
+    """The queries to actually search for, deduplicated but in the order proposed.
+
+    Case and surrounding space do not make a different search, and a rewriter
+    that returns nothing leaves the question as asked.
+    """
+
+    variants = rewrite_fn(
+        query,
+        enable_llm=bool(
+            flags["rewrite"]
+            and getattr(settings, "query_rewrite_enabled", True)
+            and getattr(settings, "query_rewrite_with_llm", False)
+        ),
+        use_reasoning=False,
+        enable_decompose=bool(flags["decompose"] and getattr(settings, "query_decompose_enabled", True)),
+        max_variants=int(getattr(settings, "query_rewrite_max_variants", 6) or 6),
+    )
+    if not variants:
+        variants = [query]
+
+    seen: set[str] = set()
+    unique: list[str] = []
+    for variant in variants:
+        normalized = variant.strip().lower()
+        if normalized not in seen:
+            seen.add(normalized)
+            unique.append(variant)
+    return unique
+
+
+def _vector_hits(
+    variant: str,
+    *,
+    vector_fn,
+    allowed_sources: list[str] | None,
+    top_k: int,
+    threshold: float,
+    precomputed: dict[str, list] | None,
+    precomputed_raw: dict[str, list] | None,
+) -> list[tuple]:
+    """Vector hits for one variant, from whichever of the three sources has them.
+
+    ``precomputed`` is taken as already filtered; ``precomputed_raw`` and a live
+    search are not.
+    """
+
+    if precomputed and variant in precomputed:
+        return precomputed[variant]
+    if precomputed_raw and variant in precomputed_raw:
+        return filter_vector_results(precomputed_raw[variant], score_threshold=threshold)
+    results = vector_fn(variant, k=top_k, allowed_sources=allowed_sources)
+    return filter_vector_results(results, score_threshold=threshold)
+
+
+def _merge_vector_hits(
+    merged: dict[str, dict],
+    scores: dict[str, float],
+    vector_results: list[tuple],
+    allowed_set: set[str] | None,
+    vector_weight: float,
+    rrf_k: int,
+) -> None:
+    """Fold one variant's dense hits in, scoring by rank and keeping the best score.
+
+    The source check repeats what the store was asked to scope: this is the
+    second of the two independent checks, on what actually came back.
+    """
+
+    for idx, (doc, score) in enumerate(vector_results, start=1):
+        metadata = dict(doc.metadata)
+        source = str(metadata.get("source", "") or "")
+        if allowed_set is not None and source not in allowed_set:
+            continue
+        item_id = metadata.get("chunk_id") or f"vector::{idx}::{metadata.get('source', 'unknown')}"
+        merged.setdefault(
+            item_id,
+            {
+                "id": item_id,
+                "text": doc.page_content,
+                "metadata": metadata,
+                "dense_score": float(score),
+                "retrieval_sources": ["vector"],
+            },
+        )
+        existing_dense = merged[item_id].get("dense_score")
+        if not isinstance(existing_dense, int | float) or float(score) > float(existing_dense):
+            merged[item_id]["dense_score"] = float(score)
+        scores[item_id] += vector_weight * rrf_score(idx, rrf_k)
+
+
+def _merge_bm25_hits(
+    merged: dict[str, dict],
+    scores: dict[str, float],
+    sparse: list[dict],
+    allowed_set: set[str] | None,
+    bm25_weight: float,
+    rrf_k: int,
+) -> None:
+    """Fold one variant's sparse hits in, recording both retrievers where they agree."""
+
+    for idx, item in enumerate(sparse, start=1):
+        source = str((item.get("metadata", {}) or {}).get("source", "") or "")
+        if allowed_set is not None and source not in allowed_set:
+            continue
+        item_id = item["id"]
+        existing = merged.get(item_id)
+        if existing:
+            if "bm25" not in existing["retrieval_sources"]:
+                existing["retrieval_sources"].append("bm25")
+            existing["bm25_score"] = max(float(existing.get("bm25_score", 0.0)), float(item.get("bm25_score", 0.0)))
+        else:
+            merged[item_id] = {
+                "id": item_id,
+                "text": item["text"],
+                "metadata": item.get("metadata", {}),
+                "bm25_score": float(item.get("bm25_score", 0.0)),
+                "retrieval_sources": ["bm25"],
+            }
+        scores[item_id] += bm25_weight * rrf_score(idx, rrf_k)
+
+
+def _fuse(merged: dict[str, dict], scores: dict[str, float], settings, flags: dict) -> list[dict]:
+    """Rank the merged candidates by their fused RRF score plus rank features."""
 
     fused = []
     for item_id, item in merged.items():
         candidate = dict(item)
-        candidate["hybrid_score"] = float(scores[item_id])
         feature_score = rank_feature_score(candidate, settings) if flags["rank_feature"] else 0.0
         candidate["rank_feature_score"] = feature_score
-        candidate["hybrid_score"] = float(candidate["hybrid_score"] + feature_score)
+        candidate["hybrid_score"] = float(scores[item_id]) + feature_score
         fused.append(candidate)
     fused.sort(key=lambda x: x.get("hybrid_score", 0.0), reverse=True)
-    diag["candidate_count"] = len(fused)
-    return fused, diag
+    return fused
