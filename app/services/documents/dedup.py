@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 import hashlib
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 from uuid import uuid4
@@ -90,6 +90,150 @@ async def _replace_file_atomically(target: Path, chunks: list[bytes]) -> None:
         raise
 
 
+_VALID_VISIBILITIES = frozenset({"private", "public"})
+
+
+def _normalized_visibility(value: str | None) -> str:
+    """Anything that is not a visibility this system knows is private."""
+
+    normalized = str(value or "private").strip().lower()
+    return normalized if normalized in _VALID_VISIBILITIES else "private"
+
+
+def _resolve_visibility(
+    *,
+    role: str,
+    requested_visibility: str,
+    visibility_applied: str | None,
+    public_visibility_approved: bool | None,
+) -> str:
+    """What these documents will actually be indexed as.
+
+    Two ways in. The public route decides authorization itself and passes the
+    already-approved answer; every other caller gets the compatibility rule,
+    where only an admin may ask for public.
+
+    Approval must be exactly ``True``. A missing answer is not a yes, which is
+    the whole point of the check: this is the last place a private document can
+    stop being private.
+    """
+
+    if visibility_applied is None:
+        requested = _normalized_visibility(requested_visibility)
+        return requested if str(role).lower() == "admin" else "private"
+
+    applied = _normalized_visibility(visibility_applied)
+    if applied == "public" and public_visibility_approved is not True:
+        return "private"
+    return applied
+
+
+def _sanitized_upload_name(raw_filename: str) -> str | None:
+    """The name this file will be stored under, or None if it is not one we will write.
+
+    The caller has already reduced the upload to its basename, so this is about
+    what the name *is*: dot- and underscore-prefixed names are ours, not a
+    caller's, and a name that empties out has nothing left to store.
+    """
+
+    safe = raw_filename.replace("/", "").replace("\\", "").replace("..", "")
+    if not safe or safe.startswith(".") or safe.startswith("_"):
+        return None
+    return safe
+
+
+@dataclass
+class _ReadUpload:
+    """One upload, read once: kept in memory, hashed, and capped on the way through."""
+
+    chunks: list[bytes]
+    head: bytes
+    size: int
+    sha256: str
+
+
+async def _read_upload(
+    uploaded_file: Any,
+    *,
+    safe_filename: str,
+    read_chunk: int,
+    max_file_bytes: int,
+    max_total_bytes: int,
+    total_so_far: int,
+) -> _ReadUpload:
+    """Read, hash and cap in one pass.
+
+    Both caps are tested per chunk rather than after the read, so an oversized
+    upload costs the bytes already read and stops there. The first 16 bytes are
+    kept separately: that is what the signature check looks at, and it has to be
+    available before deciding whether to keep the rest.
+    """
+
+    head = b""
+    size = 0
+    chunks: list[bytes] = []
+    digest = hashlib.sha256()
+    try:
+        while True:
+            chunk = await uploaded_file.read(read_chunk)
+            if not chunk:
+                break
+            if len(head) < 16:
+                head = (head + chunk)[:16]
+            size += len(chunk)
+            if size > max_file_bytes:
+                raise UploadPayloadTooLargeError(
+                    f"文件 '{safe_filename}' 过大",
+                    file_size=size,
+                    max_file_size=max_file_bytes,
+                    filename=safe_filename,
+                )
+            if total_so_far + size > max_total_bytes:
+                raise UploadPayloadTooLargeError(
+                    "上传总大小超过限制",
+                    total_size=total_so_far + size,
+                    max_total_size=max_total_bytes,
+                )
+            chunks.append(chunk)
+            digest.update(chunk)
+    finally:
+        await uploaded_file.close()
+    return _ReadUpload(chunks=chunks, head=head, size=size, sha256=digest.hexdigest())
+
+
+def _existing_duplicate(sha256: str, owner_user_id: str) -> dict | None:
+    """A previous upload of this user's with the same hash, still on disk and unchanged.
+
+    The index can outlive the file it points at, so a row alone is not evidence:
+    the stored copy is re-hashed before this request is told it already has one.
+    """
+
+    duplicate = find_duplicate_for_user(sha256, owner_user_id)
+    if duplicate is None:
+        return None
+    source = Path(str(duplicate.get("source", "") or ""))
+    if not source.is_file() or compute_sha256(source) != sha256:
+        return None
+    return duplicate
+
+
+@dataclass
+class _UploadBatch:
+    """The running state of one request's uploads.
+
+    Six accumulators that only ever move together, including the byte total the
+    per-request cap is measured against -- which is what makes it a batch rather
+    than a list of files.
+    """
+
+    saved: list[StoredUpload] = field(default_factory=list)
+    skipped: list[str] = field(default_factory=list)
+    duplicates: list[str] = field(default_factory=list)
+    reused_document_ids: list[str] = field(default_factory=list)
+    pending_hashes: set[str] = field(default_factory=set)
+    total_bytes: int = 0
+
+
 async def store_uploaded_files(
     *,
     files: list[Any],
@@ -113,123 +257,136 @@ async def store_uploaded_files(
     if len(files) > max_files:
         raise UploadStorageError(f"too many files, max={max_files}")
 
-    normalized_visibility = str(requested_visibility or "private").strip().lower()
-    if normalized_visibility not in {"private", "public"}:
-        normalized_visibility = "private"
-    if visibility_applied is None:
-        # Compatibility fallback for non-route callers. Public-route authorization
-        # supplies the already-approved visibility instead.
-        applied_visibility = normalized_visibility if str(role).lower() == "admin" else "private"
-    else:
-        applied_visibility = str(visibility_applied or "private").strip().lower()
-        if applied_visibility not in {"private", "public"}:
-            applied_visibility = "private"
-        if applied_visibility == "public" and public_visibility_approved is not True:
-            applied_visibility = "private"
+    applied_visibility = _resolve_visibility(
+        role=role,
+        requested_visibility=requested_visibility,
+        visibility_applied=visibility_applied,
+        public_visibility_approved=public_visibility_approved,
+    )
 
-    saved_uploads: list[StoredUpload] = []
-    skipped_files: list[str] = []
-    duplicate_files: list[str] = []
-    reused_document_ids: list[str] = []
-    pending_hashes: set[str] = set()
-    total_uploaded_bytes = 0
-    read_chunk = max(16 * 1024, int(read_chunk_bytes))
+    # Every file this user uploads lands here, and that layout is what document
+    # visibility falls back to for rows indexed before owner metadata existed.
     user_upload_root = uploads_path / owner_user_id
     user_upload_root.mkdir(parents=True, exist_ok=True)
 
+    batch = _UploadBatch()
     for uploaded_file in files:
-        if not uploaded_file.filename:
-            continue
-
-        raw_filename = Path(uploaded_file.filename).name
-        safe_filename = raw_filename.replace("/", "").replace("\\", "").replace("..", "")
-        if not safe_filename or safe_filename.startswith(".") or safe_filename.startswith("_"):
-            skipped_files.append(raw_filename)
-            continue
-
-        suffix = Path(safe_filename).suffix.lower()
-        if suffix not in supported_suffixes:
-            skipped_files.append(safe_filename)
-            continue
-
-        target = user_upload_root / safe_filename
-        file_uploaded_bytes = 0
-        file_head = b""
-        file_chunks: list[bytes] = []
-        file_digest = hashlib.sha256()
-        try:
-            while True:
-                chunk = await uploaded_file.read(read_chunk)
-                if not chunk:
-                    break
-                if len(file_head) < 16:
-                    file_head = (file_head + chunk)[:16]
-                file_uploaded_bytes += len(chunk)
-                total_uploaded_bytes += len(chunk)
-                if file_uploaded_bytes > max_file_bytes:
-                    raise UploadPayloadTooLargeError(
-                        f"文件 '{safe_filename}' 过大",
-                        file_size=file_uploaded_bytes,
-                        max_file_size=max_file_bytes,
-                        filename=safe_filename,
-                    )
-                if total_uploaded_bytes > max_total_bytes:
-                    raise UploadPayloadTooLargeError(
-                        "上传总大小超过限制",
-                        total_size=total_uploaded_bytes,
-                        max_total_size=max_total_bytes,
-                    )
-                file_chunks.append(chunk)
-                file_digest.update(chunk)
-        finally:
-            await uploaded_file.close()
-
-        if file_uploaded_bytes <= 0:
-            continue
-        if suffix in signature_suffixes and not is_valid_signature(suffix, file_head):
-            raise UploadInvalidFileError(f"invalid file signature: {safe_filename}")
-
-        sha256 = file_digest.hexdigest()
-        duplicate = find_duplicate_for_user(sha256, owner_user_id)
-        if duplicate is not None:
-            duplicate_source = Path(str(duplicate.get("source", "") or ""))
-            if not duplicate_source.is_file() or compute_sha256(duplicate_source) != sha256:
-                duplicate = None
-        if duplicate is not None:
-            duplicate_files.append(safe_filename)
-            if duplicate.get("document_id"):
-                reused_document_ids.append(str(duplicate["document_id"]))
-            continue
-
-        if sha256 in pending_hashes:
-            duplicate_files.append(safe_filename)
-            continue
-
-        try:
-            await _replace_file_atomically(target, file_chunks)
-        except Exception as exc:
-            raise UploadWriteError(f"Failed to write file: {safe_filename}") from exc
-
-        pending_hashes.add(sha256)
-
-        agent_class = agent_class_for_upload(safe_filename)
-        saved_uploads.append(
-            StoredUpload(
-                path=target,
-                filename=safe_filename,
-                sha256=sha256,
-                agent_class=agent_class,
-                parser_profile=parser_profile_for_upload(target, agent_class),
-            )
+        await _store_one_upload(
+            uploaded_file,
+            batch=batch,
+            owner_user_id=owner_user_id,
+            user_upload_root=user_upload_root,
+            max_file_bytes=max_file_bytes,
+            max_total_bytes=max_total_bytes,
+            read_chunk=max(16 * 1024, int(read_chunk_bytes)),
+            supported_suffixes=supported_suffixes,
+            signature_suffixes=signature_suffixes,
+            is_valid_signature=is_valid_signature,
+            agent_class_for_upload=agent_class_for_upload,
+            parser_profile_for_upload=parser_profile_for_upload,
         )
 
     return UploadStorageResult(
-        saved_uploads=saved_uploads,
-        skipped_files=skipped_files,
-        duplicate_files=duplicate_files,
-        reused_document_ids=reused_document_ids,
+        saved_uploads=batch.saved,
+        skipped_files=batch.skipped,
+        duplicate_files=batch.duplicates,
+        reused_document_ids=batch.reused_document_ids,
         visibility_applied=applied_visibility,
     )
+
+
+async def _store_one_upload(
+    uploaded_file: Any,
+    *,
+    batch: _UploadBatch,
+    owner_user_id: str,
+    user_upload_root: Path,
+    max_file_bytes: int,
+    max_total_bytes: int,
+    read_chunk: int,
+    supported_suffixes: set[str],
+    signature_suffixes: set[str],
+    is_valid_signature: Callable[[str, bytes], bool],
+    agent_class_for_upload: Callable[[str], str],
+    parser_profile_for_upload: Callable[[Path, str], dict[str, Any]],
+) -> None:
+    """Everything that happens to one uploaded file, in the order it happens.
+
+    Screen the name, read it once under both caps, check the signature, check it
+    against what is already stored and against the rest of this request, and only
+    then write it. Refusals raise and abandon the whole request; a file that is
+    merely uninteresting is recorded and skipped.
+    """
+
+    if not uploaded_file.filename:
+        return
+
+    raw_filename = Path(uploaded_file.filename).name
+    safe_filename = _sanitized_upload_name(raw_filename)
+    if safe_filename is None:
+        batch.skipped.append(raw_filename)
+        return
+
+    suffix = Path(safe_filename).suffix.lower()
+    if suffix not in supported_suffixes:
+        batch.skipped.append(safe_filename)
+        return
+
+    upload = await _read_upload(
+        uploaded_file,
+        safe_filename=safe_filename,
+        read_chunk=read_chunk,
+        max_file_bytes=max_file_bytes,
+        max_total_bytes=max_total_bytes,
+        total_so_far=batch.total_bytes,
+    )
+    batch.total_bytes += upload.size
+    if upload.size <= 0:
+        return
+
+    # The extension is the caller's claim; the first bytes are the evidence.
+    if suffix in signature_suffixes and not is_valid_signature(suffix, upload.head):
+        raise UploadInvalidFileError(f"invalid file signature: {safe_filename}")
+
+    if _record_if_duplicate(upload.sha256, safe_filename, owner_user_id=owner_user_id, batch=batch):
+        return
+
+    target = user_upload_root / safe_filename
+    try:
+        await _replace_file_atomically(target, upload.chunks)
+    except Exception as exc:
+        raise UploadWriteError(f"Failed to write file: {safe_filename}") from exc
+
+    batch.pending_hashes.add(upload.sha256)
+    agent_class = agent_class_for_upload(safe_filename)
+    batch.saved.append(
+        StoredUpload(
+            path=target,
+            filename=safe_filename,
+            sha256=upload.sha256,
+            agent_class=agent_class,
+            parser_profile=parser_profile_for_upload(target, agent_class),
+        )
+    )
+
+
+def _record_if_duplicate(sha256: str, safe_filename: str, *, owner_user_id: str, batch: _UploadBatch) -> bool:
+    """Two kinds of duplicate: one this user already has, and one earlier in this request.
+
+    Only the first can hand back a document id to reuse -- the other copy in this
+    request has not been indexed yet either.
+    """
+
+    duplicate = _existing_duplicate(sha256, owner_user_id)
+    if duplicate is not None:
+        batch.duplicates.append(safe_filename)
+        if duplicate.get("document_id"):
+            batch.reused_document_ids.append(str(duplicate["document_id"]))
+        return True
+    if sha256 in batch.pending_hashes:
+        batch.duplicates.append(safe_filename)
+        return True
+    return False
 
 
 def compute_sha256(path: Path) -> str:
