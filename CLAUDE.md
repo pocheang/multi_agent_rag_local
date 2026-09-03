@@ -467,6 +467,39 @@ BM25 IDF is negative for a term present in most documents, so in a small scope (
 now a routine case) every term scores below zero and matching documents get dropped. A
 negative `bm25_score` in the output is normal and harmless: RRF fuses on rank, not score.
 
+### Audit log vocabulary
+
+Action names have one definition, `app/services/security/audit_actions.py::AuditAction`
+(added 2026-09-03). Forty-nine names are written at some seventy call sites across
+`app/api`, read back by string comparison in `app/services/runtime/runtime_ops.py`, and
+listed again in the admin console's filter — three lists that had to agree, with nothing
+checking that they did.
+
+**Unlike the permission vocabulary next door, a divergence here fails silently**, and two
+had already happened when the enum was introduced. The console offered
+`admin.user.create`, `admin.user.password_reset` and `admin.user.approval_token_reset`
+against a backend that writes `create_admin`, `reset_password` and
+`reset_approval_token`; the filter is a substring match, so four of its sixteen options
+(`query.stream` was the fourth) could only ever return nothing. And `build_ops_alerts`
+averaged the grounding ratio over rows with action `query.run`, which nothing has ever
+written. A counter that matches no row reports zero and a filter that matches no row
+reports "no results" — neither looks like a defect to anyone.
+
+`StrEnum`, so members are strings: `sqlite3` and `json.dumps` both see `"auth.login"` and
+no call site changed behaviour. What changed is that a name that does not exist is an
+`AttributeError` at import.
+
+`tests/security/test_audit_action_vocabulary.py` scans every module in `app/` for a
+literal equal to any member — which is how twelve *positional* call sites in
+`admin/users.py` turned up, passed to `handle_service_exception` and
+`check_self_modification` rather than to `_audit` — and checks the console's list against
+the enum, and that the list is declared once. It was declared twice in `frontend/src`,
+identically, which is how the first divergence went unnoticed.
+
+**The three `query.*` actions are written only when a query is *refused*.** No successful
+query is audited, which is why nothing carries a per-answer quality metric — see Answer
+quality telemetry under Important Notes for where that goes instead.
+
 ### Knowledge Agent and retrieval execution
 
 Source selection and retrieval execution are separate jobs, and since 2026-08-30
@@ -1077,7 +1110,7 @@ A third makes it three. Do not add a pixel-diff CI gate for the reason above, an
 
 `tests/` was cleared ahead of the v0.7 rewrite and is being rebuilt incrementally: each bug
 fix lands with the regression test that would have caught it, rather than as a separate
-back-filling effort. As of 2026-09-02 there are 538 tests covering the chat round trip,
+back-filling effort. As of 2026-09-03 there are 1092 tests covering the chat round trip,
 conversation context, graph routing, clarification, the async load guard, engine reuse,
 answer safety, reader-facing citation numbering, stage-timeout degradation, the governed
 tool stack with its multi-step loop and approve-then-resume cycle, retrieval
@@ -1086,10 +1119,22 @@ complexity- and plan-driven retrieval width, caller deadlines, skill-shaped synt
 follow-up completion, answer provenance, an answer that shows the reader none of the
 machinery that produced it, a router cache that opens no event loop, a guard that every
 Settings field has a reader, a guard that no module reads the environment behind
-`Settings`'s back, the configuration-centre source with its three-step degradation, and the
-admin configuration surface with the writes it refuses.
+`Settings`'s back, the configuration-centre source with its three-step degradation, the
+admin configuration surface with the writes it refuses, one vocabulary for audit actions,
+an ASCII API document, and a grounding SLO that measures answers.
 
-`tests/security/` (154 of those) pins the user-data isolation invariants — see
+**That count is not 1092 independent assertions, and the number before it was stale.** Two
+guards are parametrized one case per module — the audit-action scan over `app/` (376) and
+the ASCII scan over `app/api` (60) — so they grow with the codebase rather than with
+coverage. The real baseline on 2026-09-03 was 651, not the 538 this paragraph claimed:
+the count had not been updated since 2026-09-02 while tests kept landing with fixes.
+Parametrizing per module is deliberate — a failure names the file, and a new module is
+covered the day it is added, where one test looping inside a single assertion reports the
+first offender and stops — but it does mean this total is not comparable across the change
+that introduced them.
+
+`tests/security/` (610 of those, 378 being the per-module audit-action scan) pins the
+user-data isolation invariants — see
 `docs/superpowers/plans/2026-08-29-user-data-isolation.md`. That plan is complete
 (phases 0-4) and all 8 of its `xfail(strict=True)` markers are cleared; keep using the same
 pattern for a new gap, so a fix that makes the test pass fails the suite until the marker
@@ -1151,6 +1196,17 @@ varies by version. Count OpenAPI operations instead; the current baseline is 151
 - **Do not commit** files in `.gitignore`: `internal_docs/`, `.env`, `data/chroma/`, logs
 - **Document organization**: Use `docs/development/daily-logs/YYYY-MM-DD/` for daily work logs (create manually).
 - **Bilingual system**: UI and responses support Chinese/English. Language detection is automatic via `language_analytics.py` (100% Chinese or 100% English, no mixing)
+- **The OpenAPI document is ASCII**, pinned by
+  `tests/api/test_openapi_descriptions_are_ascii.py`, which walks every `description=`
+  keyword in `app/api`. The bilingual rule above is about prose shown to *users* — the
+  Chinese and English question sets live in `app/agents/clarification/rules.py`; the API
+  document is developer-facing and was already English in 80-odd places. The one router
+  that was not had its bytes double-encoded (the UTF-8 encoding of a latin-1 misreading of
+  UTF-8), so it served `å¼€å§‹æ—¥æœŸ` where the author typed `开始日期`. Nothing failed —
+  a mangled description is still a valid string, and only a reader of the docs page would
+  ever see it, which is why it survived. That was the only file in the repository in that
+  state; the check is a whole-repo decode looking for character runs that round-trip back
+  to CJK.
 - **SSE streaming**: One subscription
   (`GET /api/v1/orchestration/executions/{execution_id}/events`, served by
   `app/api/routes/public/orchestration.py`) carries two event names. The query endpoint
@@ -1177,6 +1233,34 @@ varies by version. Count OpenAPI operations instead; the current baseline is 151
   emitted is tracked as a string rather than a length, because redaction changes lengths and
   offset arithmetic desyncs. Both redaction pattern sets had their whitespace quantifiers
   bounded (`\s*` → `\s{0,8}`) so a partial buffer cannot make a pattern scan unboundedly.
+- **Answer quality telemetry rides the request's own metrics row**, not the audit log
+  (wired 2026-09-03). `record_grounding_support`
+  (`app/api/transport/middleware.py`) puts the answer's `support_ratio` on the row
+  `request_timing_middleware` writes, and `build_ops_alerts` reads it from the same
+  `request_rows` its p95 comes from — one window and one definition of "the last N hours"
+  for both SLOs, with no new store, retention policy or schema. Before this the SLO
+  averaged over audit rows with action `query.run`, which nothing writes, so an average
+  over zero samples was **1.0**: a perfect grounding ratio published for a metric never
+  once observed, and an alert structurally incapable of firing. Absence is now absence
+  (`None`), which is a different claim from 1.0.
+
+  **Not the audit log**, which is where the dead code pointed: its read path is
+  `list_audit_logs(limit=2000)`, one window shared by every reader, and a row per query
+  would flush every login failure out of it. Degrading the security audit view to feed a
+  monitoring metric is the wrong trade.
+
+  **The carrier is `request.state`, and it has to be.** The metrics row is written in the
+  middleware's `finally`, after the endpoint returned; `request.state` is backed by the
+  ASGI scope dict that `call_next` hands downstream and reads back. A ContextVar cannot
+  do this — `call_next` runs the endpoint in its own task, so nothing it sets is visible
+  up there, and the failure would look exactly like the `query.run` one: plumbing that
+  reads empty forever. `tests/services/test_ops_slo_grounding.py` drives a real app
+  through `TestClient` rather than asserting it in prose.
+
+  Two limits, both already true of the p95 beside it: the ring is process-local, so a
+  restart empties it and each worker sees only its own. Crossing that boundary is a
+  time-series-database decision, not a change to these five lines.
+
 - **Answer provenance**: what a message may claim about where it came from is computed in
   one place — `retrieval_summary` (`app/api/routes/internal/pipeline_contract.py`), from the
   knowledge diagnostics both entry points already carry. **`used` means a source contributed
