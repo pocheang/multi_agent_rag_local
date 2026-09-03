@@ -41,6 +41,7 @@ class _FakeParsed:
     document: _FakeEvidenceDocument
     parser: str = "fake"
     images: tuple[Any, ...] = ()
+    tables: tuple[Any, ...] = ()
 
 
 @dataclass

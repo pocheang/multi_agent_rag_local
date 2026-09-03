@@ -1,4 +1,5 @@
 import logging
+import re
 from pathlib import Path
 from typing import Any
 
@@ -38,7 +39,9 @@ def ingest_paths(
 ) -> dict:
     """Load, index and graph-extract a set of files, and report what happened."""
 
-    docs, parsed_documents, images_indexed = _load_documents(paths, metadata_overrides_by_source, persist_evidence)
+    docs, parsed_documents, images_indexed, tables_indexed = _load_documents(
+        paths, metadata_overrides_by_source, persist_evidence
+    )
     if not docs:
         # Deliberately shorter than the result below: there is no chunk, page or
         # manifest to report. Evidence has still been persisted for whatever
@@ -60,6 +63,7 @@ def ingest_paths(
         "chunks_indexed": len(chunks),
         "triplets_written": count_triplets,
         "images_indexed": images_indexed,
+        "tables_indexed": tables_indexed,
         "pages_by_source": {source: len(pages) for source, pages in pages_by_source.items()},
         "evidence_manifests": [
             {
@@ -76,7 +80,7 @@ def _load_documents(
     paths: list[Path],
     metadata_overrides_by_source: dict[str, dict[str, Any]] | None,
     persist_evidence: bool,
-) -> tuple[list[Any], list[ParsedDocument], int]:
+) -> tuple[list[Any], list[ParsedDocument], int, int]:
     """Parse each file and stamp every document it yields with its provenance.
 
     Metadata is layered loader < caller override < canonical, so the identifiers
@@ -86,6 +90,7 @@ def _load_documents(
     docs: list[Any] = []
     parsed_documents: list[ParsedDocument] = []
     images_indexed = 0
+    tables_indexed = 0
     for path in paths:
         source = str(path)
         metadata = dict((metadata_overrides_by_source or {}).get(source, {}))
@@ -98,9 +103,10 @@ def _load_documents(
             if image_id in image_artifacts:
                 doc.metadata["artifact_uri"] = image_artifacts[image_id]
         images_indexed += _index_images(parsed, image_artifacts, canonical)
+        tables_indexed += _index_tables(parsed, canonical)
         docs.extend(loaded)
         parsed_documents.append(parsed)
-    return docs, parsed_documents, images_indexed
+    return docs, parsed_documents, images_indexed, tables_indexed
 
 
 # The multimodal source retrieves images by the text something managed to read out
@@ -177,6 +183,87 @@ def _readable_image_text(image: Any, ocr_image_bytes: Any, source: Path) -> str:
             if content and _IMAGE_ERROR_MARKER not in content:
                 parts.append(content.strip())
     return "\n\n".join(part for part in parts if part)[:4000]
+
+
+def _index_tables(
+    parsed: ParsedDocument,
+    canonical: dict[str, Any],
+) -> int:
+    """Index each table as a unit, and report how many became searchable.
+
+    The chunker splits by size, so a table longer than a chunk is cut across
+    several of them and none of the fragments carries the header row -- the
+    classic way a retrieved table answers a question wrongly. Indexed whole, one
+    hit is the whole table.
+
+    Synchronous for the same reason as `_index_images`: this runs in a worker
+    thread, and nothing here needs an event loop.
+    """
+
+    if not parsed.tables:
+        return 0
+
+    from app.services.multimodal.models import TableContent
+    from app.services.multimodal.table_extractor import TableExtractor
+
+    extractor = TableExtractor()
+    indexed = 0
+    for table in parsed.tables:
+        headers, rows = _table_from_markdown(str(table.markdown or ""))
+        if not headers and not rows:
+            continue
+        sheet = str(getattr(table, "sheet", "") or "")
+        try:
+            extractor.index_table(
+                TableContent(
+                    table_id=table.table_id,
+                    doc_id=str(canonical.get("document_id", "") or ""),
+                    page_number=table.page,
+                    headers=headers,
+                    rows=rows,
+                    summary=f"Table on page {table.page}" + (f" (sheet: {sheet})" if sheet else ""),
+                    metadata={
+                        "document_id": str(canonical.get("document_id", "") or ""),
+                        "tenant_id": str(canonical.get("tenant_id", "") or ""),
+                        "owner_user_id": str(canonical.get("owner_user_id", "") or ""),
+                        "visibility": str(canonical.get("visibility", "private") or "private"),
+                        "version": int(canonical.get("version", 1) or 1),
+                        "source": str(canonical.get("source", "") or ""),
+                        "num_rows": len(rows),
+                        "num_cols": len(headers),
+                        "extraction_method": "loader_markdown",
+                    },
+                )
+            )
+            indexed += 1
+        except Exception as e:
+            logger.warning(f"table_index_failed table_id={table.table_id} error={e}")
+    return indexed
+
+
+def _table_from_markdown(markdown: str) -> tuple[list[str], list[list[str]]]:
+    """Recover the header and body of a pipe table the loader rendered.
+
+    The loader had the rows and flattened them; reading them back makes the
+    header a header again, which is the part a fragment loses.
+    """
+
+    lines = [line.strip() for line in markdown.splitlines() if line.strip().startswith("|")]
+    if not lines:
+        return [], []
+    parsed_rows = [_markdown_cells(line) for line in lines]
+    body = [row for row in parsed_rows[1:] if not _is_separator_row(row)]
+    return parsed_rows[0], body
+
+
+def _markdown_cells(line: str) -> list[str]:
+    # Split on pipes the loader did not escape; it writes cell content with `\|`.
+    parts = re.split(r"(?<!\\)\|", line)[1:-1]
+    return [part.replace("\\|", "|").strip() for part in parts]
+
+
+def _is_separator_row(cells: list[str]) -> bool:
+    return bool(cells) and all(set(cell) <= {"-", ":", " "} and cell for cell in cells)
 
 
 def _pages_by_source(docs: list[Any]) -> dict[str, set[int]]:

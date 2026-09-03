@@ -5,7 +5,6 @@ import logging
 from pathlib import Path
 from typing import Any
 
-import fitz  # PyMuPDF
 import pandas as pd
 
 from app.core.config import get_settings
@@ -126,6 +125,8 @@ class TableExtractor:
         tables: list[TableContent] = []
 
         try:
+            import fitz  # PyMuPDF, from the optional `multimodal` extra
+
             with fitz.open(str(pdf_path)) as doc:
                 for page_num in range(len(doc)):
                     page = doc[page_num]
@@ -312,8 +313,11 @@ class TableExtractor:
             logger.exception("Error formatting table as text")
             return f"[Table {table.table_id}]"
 
-    async def index_table(self, table: TableContent, collection_name: str = "table_summaries") -> None:
+    def index_table(self, table: TableContent, collection_name: str = "table_summaries") -> None:
         """Index table content in vector database.
+
+        Synchronous: it awaits nothing, and its caller is document ingestion,
+        which runs in a worker thread where an event loop must not be driven.
 
         Args:
             table: TableContent object
@@ -336,6 +340,10 @@ class TableExtractor:
                         "doc_id": table.doc_id,
                         "document_id": table.metadata.get("document_id", table.doc_id),
                         "tenant_id": table.metadata.get("tenant_id", "shared"),
+                        # Absent keys do not match `$eq`, so a table indexed
+                        # without these is invisible rather than public.
+                        "owner_user_id": table.metadata.get("owner_user_id", ""),
+                        "visibility": table.metadata.get("visibility", "private"),
                         "version": table.metadata.get("version", 1),
                         "page_number": table.page_number,
                         "source": table.metadata.get("source", table.doc_id),

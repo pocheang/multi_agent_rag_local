@@ -6,8 +6,6 @@ import re
 from dataclasses import dataclass
 from pathlib import Path
 
-import fitz  # PyMuPDF
-
 from app.core.config import get_settings
 from app.services.multimodal.models import (
     ChartContent,
@@ -111,6 +109,8 @@ class SmartChunker:
         current_section: Section | None = None
 
         try:
+            import fitz  # PyMuPDF, from the optional `multimodal` extra
+
             with fitz.open(str(pdf_path)) as doc:
                 for page_num in range(len(doc)):
                     page = doc[page_num]
@@ -224,6 +224,8 @@ class SmartChunker:
         sections: list[Section] = []
 
         try:
+            import fitz  # PyMuPDF, from the optional `multimodal` extra
+
             with fitz.open(str(pdf_path)) as doc:
                 for page_num in range(len(doc)):
                     page = doc[page_num]

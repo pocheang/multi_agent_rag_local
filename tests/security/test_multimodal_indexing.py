@@ -183,3 +183,69 @@ def test_the_text_modality_is_gone() -> None:
     # The name survives in the comment explaining its absence; the query does not.
     source = inspect.getsource(MultiModalRetriever)
     assert 'get_collection(name="text_chunks")' not in source
+
+
+@dataclass
+class _Table:
+    table_id: str = "tbl-1"
+    page: int = 3
+    markdown: str = "| Region | Q3 |\n| --- | --- |\n| APAC | 120 |\n| EMEA | 98 |"
+    sheet: str | None = "Revenue"
+
+
+@dataclass
+class _ParsedWithTables:
+    tables: tuple[_Table, ...] = ()
+    images: tuple[_Image, ...] = ()
+
+
+@pytest.fixture
+def table_indexer(monkeypatch: pytest.MonkeyPatch) -> _Indexed:
+    recorded = _Indexed()
+
+    class _FakeExtractor:
+        def index_table(self, table, collection_name: str = "table_summaries") -> None:
+            recorded.calls.append(table)
+
+    monkeypatch.setattr("app.services.multimodal.table_extractor.TableExtractor", _FakeExtractor)
+    return recorded
+
+
+def test_a_table_is_indexed_whole_with_its_header_and_its_owner(table_indexer: _Indexed) -> None:
+    """The header is the part a size-split fragment loses."""
+
+    count = ingest_module._index_tables(_ParsedWithTables(tables=(_Table(),)), CANONICAL)
+
+    assert count == 1
+    (written,) = table_indexer.calls
+    assert written.headers == ["Region", "Q3"]
+    assert written.rows == [["APAC", "120"], ["EMEA", "98"]]
+    assert written.metadata["owner_user_id"] == "alice"
+    assert written.metadata["visibility"] == "private"
+    assert written.metadata["num_cols"] == 2
+
+
+def test_a_table_that_parsed_to_nothing_is_not_indexed(table_indexer: _Indexed) -> None:
+    assert ingest_module._index_tables(_ParsedWithTables(tables=(_Table(markdown="(no table)"),)), CANONICAL) == 0
+    assert table_indexer.calls == []
+
+
+def test_a_document_with_no_tables_writes_nothing(table_indexer: _Indexed) -> None:
+    assert ingest_module._index_tables(_ParsedWithTables(), CANONICAL) == 0
+
+
+def test_an_escaped_pipe_stays_inside_its_cell() -> None:
+    headers, rows = ingest_module._table_from_markdown("| a \\| b | c |\n| --- | --- |\n| 1 | 2 |")
+
+    assert headers == ["a | b", "c"]
+    assert rows == [["1", "2"]]
+
+
+def test_a_question_about_a_table_reaches_the_source_that_holds_whole_tables() -> None:
+    """Indexing tables as units buys nothing if nothing selects the source."""
+
+    from app.agents.knowledge.service import _VISUAL_QUERY_PATTERN, _matches
+
+    for question in ("这个表格里第三行是什么", "what does the table say about revenue"):
+        assert _matches(question.lower(), _VISUAL_QUERY_PATTERN), question
+    assert not _matches("what was the total revenue", _VISUAL_QUERY_PATTERN)

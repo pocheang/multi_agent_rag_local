@@ -96,9 +96,9 @@ class KnowledgeAgentService:
         elif _matches(lowered, r"关系|关联|依赖|上下游|路径|拓扑|relationship|dependency|connected|graph"):
             selected.append("graph")
             reasons.append("relationship query")
-        if _matches(lowered, r"图片|图表|架构图|流程图|统计图|页面布局|image|diagram|chart|figure|visual"):
+        if _matches(lowered, _VISUAL_QUERY_PATTERN):
             selected.append("multimodal")
-            reasons.append("visual evidence required")
+            reasons.append("visual or tabular evidence required")
         if _matches(lowered, r"我的偏好|我之前|上次|长期记忆|remember|my preference|last time"):
             selected.append("memory")
             reasons.append("governed long-term context")
@@ -299,6 +299,13 @@ def _has_no_documents(scope: AccessScope | None) -> bool:
     omit a scope. Only an explicitly empty scope counts.
     """
     return scope is not None and not (scope.document_ids or scope.allowed_sources)
+
+
+# What sends a question to the multimodal source. Tables are in it because
+# that source holds each table whole: the chunker splits by size, so a table
+# longer than a chunk reaches the corpus as fragments that have lost their
+# header row -- which is the classic way a retrieved table answers wrongly.
+_VISUAL_QUERY_PATTERN = r"图片|图表|架构图|流程图|统计图|页面布局|表格|image|diagram|chart|figure|visual|table"
 
 
 def _matches(text: str, pattern: str) -> bool:
