@@ -249,3 +249,35 @@ def test_a_question_about_a_table_reaches_the_source_that_holds_whole_tables() -
     for question in ("这个表格里第三行是什么", "what does the table say about revenue"):
         assert _matches(question.lower(), _VISUAL_QUERY_PATTERN), question
     assert not _matches("what was the total revenue", _VISUAL_QUERY_PATTERN)
+
+
+@pytest.mark.parametrize(
+    ("module", "call"),
+    [
+        ("app.services.multimodal.image_processor", "images"),
+        ("app.services.multimodal.table_extractor", "tables"),
+    ],
+)
+def test_indexing_degrades_when_the_optional_extra_is_absent(
+    monkeypatch: pytest.MonkeyPatch, module: str, call: str
+) -> None:
+    """`multimodal` is an optional extra; ingesting a document is not optional.
+
+    This is the third time a module-scope import of an optional package has
+    reached a required path -- PyMuPDF twice, then pandas, which CI caught and
+    this machine could not because it has all of them installed. Wrapping the
+    import is the guard that does not need updating when the next one appears.
+    """
+
+    import sys
+
+    # An entry of None makes `import module` raise, which is what a missing
+    # dependency looks like from the caller's side.
+    monkeypatch.setitem(sys.modules, module, None)
+
+    if call == "images":
+        assert (
+            ingest_module._index_images(_Parsed(images=(_Image("img-1", description="a chart"),)), {}, CANONICAL) == 0
+        )
+    else:
+        assert ingest_module._index_tables(_ParsedWithTables(tables=(_Table(),)), CANONICAL) == 0

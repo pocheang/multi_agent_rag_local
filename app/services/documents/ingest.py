@@ -131,9 +131,14 @@ def _index_images(
     if not parsed.images:
         return 0
 
-    from app.ingestion.extraction.ocr import ocr_image_bytes
-    from app.services.multimodal.image_processor import ImageProcessor
-    from app.services.multimodal.models import ImageContent
+    try:
+        from app.ingestion.extraction.ocr import ocr_image_bytes
+        from app.services.multimodal.image_processor import ImageProcessor
+        from app.services.multimodal.models import ImageContent
+    except ImportError as e:
+        # The `multimodal` extra is optional and ingesting a document is not.
+        logger.info(f"image_indexing_unavailable error={e}")
+        return 0
 
     processor = ImageProcessor()
     source = Path(str(canonical.get("source", "") or ""))
@@ -203,8 +208,14 @@ def _index_tables(
     if not parsed.tables:
         return 0
 
-    from app.services.multimodal.models import TableContent
-    from app.services.multimodal.table_extractor import TableExtractor
+    try:
+        from app.services.multimodal.models import TableContent
+        from app.services.multimodal.table_extractor import TableExtractor
+    except ImportError as e:
+        # As above: without the extra a document still ingests, with no tables
+        # indexed rather than no ingest at all.
+        logger.info(f"table_indexing_unavailable error={e}")
+        return 0
 
     extractor = TableExtractor()
     indexed = 0

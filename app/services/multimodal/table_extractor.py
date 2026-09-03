@@ -1,11 +1,14 @@
 """Table extraction service for multi-modal RAG."""
 
+from __future__ import annotations
+
 import hashlib
 import logging
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-import pandas as pd
+if TYPE_CHECKING:  # pandas is the optional `multimodal` extra
+    import pandas as pd
 
 from app.core.config import get_settings
 from app.services.multimodal.models import TableContent
@@ -60,6 +63,7 @@ class TableExtractor:
         tables: list[TableContent] = []
 
         try:
+            import pandas as pd
             import pdfplumber
 
             with pdfplumber.open(str(pdf_path)) as pdf:
@@ -126,6 +130,7 @@ class TableExtractor:
 
         try:
             import fitz  # PyMuPDF, from the optional `multimodal` extra
+            import pandas as pd
 
             with fitz.open(str(pdf_path)) as doc:
                 for page_num in range(len(doc)):
@@ -213,6 +218,8 @@ class TableExtractor:
         Returns:
             Summary text
         """
+        import pandas as pd  # optional `multimodal` extra
+
         try:
             summary_parts = []
 
@@ -263,6 +270,8 @@ class TableExtractor:
         Returns:
             pandas DataFrame
         """
+        import pandas as pd  # optional `multimodal` extra
+
         return pd.DataFrame(table.rows, columns=table.headers)
 
     def format_table_as_markdown(self, table: TableContent) -> str:
