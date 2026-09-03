@@ -173,7 +173,6 @@ class VectorRAGConfig(BaseModel):
     top_k: int = Field(default=10, ge=1, le=100)
     score_threshold: float = Field(default=0.5, ge=0.0, le=1.0)
     enable_query_expansion: bool = Field(default=True)
-    enable_evaluation: bool = Field(default=False)
     retrieval_strategy: str = Field(default="hybrid")
     dynamic_parameters: bool = Field(default=True)
 

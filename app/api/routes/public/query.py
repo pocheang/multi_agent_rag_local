@@ -10,7 +10,6 @@ from fastapi import APIRouter, Depends, Request
 from pydantic import BaseModel, Field
 
 from app.agents.rag.service import RetrievalFailureError
-from app.agents.shared.config import get_vector_rag_config
 from app.api.dependencies import (
     _build_memory_context_for_session,
     _history_store_for_user,
@@ -482,10 +481,18 @@ async def get_config():
     Every value here used to come from an environment variable that nothing else
     reads: `ENABLE_QUERY_DECOMPOSITION` against a real switch named
     `QUERY_DECOMPOSE_ENABLED` that defaults to *on*, so the page said "false"
-    while the feature ran; `ENABLE_SELF_RAG` against a gate that lives on
-    `VectorRAGConfig`; and a `max_sub_queries` unrelated to the bound the
-    decomposer enforces. A configuration page that reports something other than
-    the running configuration is worse than no page.
+    while the feature ran; `ENABLE_SELF_RAG` against `VectorRAGConfig.enable_evaluation`,
+    which turned out to gate nothing at all; and a `max_sub_queries` unrelated to
+    the bound the decomposer enforces. A configuration page that reports something
+    other than the running configuration is worse than no page.
+
+    The first pass at this endpoint corrected two of the three and left Self-RAG
+    pointing at `enable_evaluation`, believing it was the real gate. It was not:
+    it reached a placeholder that reported `evaluated_count` without evaluating,
+    behind an evaluator the agent's one construction site never supplied a client
+    for. The placeholder is gone, and this now reads the flag the caller actually
+    sets. Everything here is pinned by tests/api/test_advanced_rag_config.py --
+    the reason the third key survived the first pass is that nothing checked it.
     """
 
     settings = get_settings()
@@ -495,7 +502,12 @@ async def get_config():
             "max_sub_queries": DEFAULT_MAX_SUB_QUERIES,
         },
         "self_rag": {
-            "enabled_by_default": get_vector_rag_config().enable_evaluation,
+            # The request flag is the switch: Self-RAG runs in _run_self_rag_evaluation
+            # when the caller asks for it. VectorRAGConfig.enable_evaluation used to be
+            # reported here and gated nothing -- it reached a placeholder that returned
+            # "evaluated_count" without evaluating, behind an evaluator the one
+            # construction site never supplied a client for.
+            "enabled_by_default": bool(AdvancedRAGRequest.model_fields["enable_self_rag"].default),
             "relevance_threshold": settings.self_rag_relevance_threshold,
             "quality_threshold": settings.self_rag_quality_threshold,
         },

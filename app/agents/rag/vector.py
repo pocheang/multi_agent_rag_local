@@ -41,19 +41,15 @@ class UnifiedVectorRAGAgent(BaseAgent):
     - Query expansion
     - Dynamic parameter tuning
     - Agent class filtering
-    - Optional Self-RAG evaluation
     - Standardized error handling and result format
     """
 
-    def __init__(
-        self, config: dict[str, Any] | None = None, llm_client=None, dependencies: dict[str, Any] | None = None
-    ):
+    def __init__(self, config: dict[str, Any] | None = None, dependencies: dict[str, Any] | None = None):
         """
         Initialize unified vector RAG agent.
 
         Args:
             config: Optional configuration override
-            llm_client: Optional LLM client for Self-RAG evaluation
         """
         super().__init__(config)
 
@@ -66,25 +62,12 @@ class UnifiedVectorRAGAgent(BaseAgent):
         self._get_sources_by_agent_class = self._dependencies.get(
             "get_sources_by_agent_class", get_sources_by_agent_class
         )
-        self.llm_client = llm_client
-
-        # Initialize Self-RAG evaluator if enabled
-        self.self_rag_evaluator = None
-        if self.get_config_value("enable_evaluation", False) and llm_client:
-            try:
-                from app.services.retrieval.self_rag_evaluator import SelfRAGEvaluator
-
-                self.self_rag_evaluator = SelfRAGEvaluator(llm_client)
-                logger.info("Self-RAG evaluation enabled")
-            except ImportError:
-                logger.warning("Self-RAG evaluator not available")
 
     def execute(
         self,
         query: str,
         allowed_sources: list[str] | None = None,
         agent_class: str | None = None,
-        enable_evaluation: bool | None = None,
         *,
         owner: OwnerScope | None,
         **kwargs,
@@ -96,7 +79,6 @@ class UnifiedVectorRAGAgent(BaseAgent):
             query: User query
             allowed_sources: Optional list of allowed document sources
             agent_class: Agent class for automatic document filtering
-            enable_evaluation: Whether to enable Self-RAG evaluation
             owner: Caller identity for the store's own metadata check; keyword-only
                 and defaultless so a caller cannot drop it by omission
             **kwargs: Additional parameters
@@ -104,9 +86,6 @@ class UnifiedVectorRAGAgent(BaseAgent):
         Returns:
             Dictionary with retrieval results
         """
-        if enable_evaluation is None:
-            enable_evaluation = self.vector_config.enable_evaluation
-
         # Step 1: Apply dynamic parameter tuning
         dynamic_params = self._apply_dynamic_tuning(query)
 
@@ -124,12 +103,7 @@ class UnifiedVectorRAGAgent(BaseAgent):
         context = self._build_context(results)
         effective_hits = self._count_effective_hits(results)
 
-        # Step 6: Self-RAG evaluation (optional)
-        evaluation_result = None
-        if enable_evaluation and self.self_rag_evaluator:
-            evaluation_result = self._evaluate_retrieval(query, citations)
-
-        # Step 7: Build result
+        # Step 6: Build result
         return self._build_result(
             context=context,
             citations=citations,
@@ -138,7 +112,6 @@ class UnifiedVectorRAGAgent(BaseAgent):
             diagnostics=diagnostics,
             query=query,
             search_query=search_query,
-            evaluation=evaluation_result,
             dynamic_params=dynamic_params,
         )
 
@@ -268,23 +241,6 @@ class UnifiedVectorRAGAgent(BaseAgent):
                 effective_count += 1
         return effective_count
 
-    def _evaluate_retrieval(self, query: str, citations: list[dict[str, Any]]) -> dict[str, Any] | None:
-        """Evaluate retrieval quality with Self-RAG."""
-        if not self.self_rag_evaluator:
-            return None
-
-        try:
-            # Convert citations to document format
-            documents = [{"content": c["content"], "source": c["source"]} for c in citations]
-
-            # This would be async in real implementation
-            # For now, return placeholder
-            logger.info("Self-RAG evaluation would run here")
-            return {"enabled": True, "evaluated_count": len(documents), "note": "Self-RAG evaluation placeholder"}
-        except Exception as e:
-            logger.warning(f"Self-RAG evaluation failed: {e}", exc_info=True)
-            return {"enabled": True, "error": str(e)}
-
     def _build_result(
         self,
         context: str,
@@ -294,7 +250,6 @@ class UnifiedVectorRAGAgent(BaseAgent):
         diagnostics: dict[str, Any],
         query: str,
         search_query: str,
-        evaluation: dict[str, Any] | None,
         dynamic_params: dict[str, Any],
     ) -> dict[str, Any]:
         """Build final result dictionary."""
@@ -322,10 +277,6 @@ class UnifiedVectorRAGAgent(BaseAgent):
             "effective_hit_count": effective_hit_count,
             "retrieval_diagnostics": diagnostics,
         }
-
-        # Add evaluation results if available
-        if evaluation:
-            result["evaluation"] = evaluation
 
         return result
 
