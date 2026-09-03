@@ -13,8 +13,17 @@ jobs:
   backend:
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    # Job level, not step level: a step's own `env:` is not readable from that
+    # step's `if:`, and the scan below is conditional on this being set.
+    env:
+      SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          # Sonar reads SCM blame to decide what counts as new code, and every
+          # condition on this project's quality gate is a new-code condition. A
+          # shallow clone has no blame to read.
+          fetch-depth: 0
 
       - uses: actions/setup-python@v5
         with:
@@ -78,7 +87,28 @@ jobs:
           assert n >= 140, f'endpoint count collapsed to {n}'"
 
       - name: Tests
-        run: pytest tests/ -q
+        # Coverage is written whether or not the scan below runs, so an upload
+        # that never happens shows up as a missing report rather than as a
+        # metric that quietly stays empty -- which is the state this project was
+        # in until now: Automatic Analysis cannot read a coverage report, so the
+        # suite's coverage had never reached SonarCloud at all.
+        run: pytest tests/ -q --cov=app --cov-report=xml:coverage.xml
+
+      - name: Coverage total
+        # One line in the log, so the number is visible on a run where the scan
+        # is skipped.
+        run: >-
+          python -c "import xml.etree.ElementTree as ET;
+          rate = float(ET.parse('coverage.xml').getroot().get('line-rate', 0));
+          print('line coverage: {:.1f}%'.format(rate * 100))"
+
+      - name: SonarCloud scan
+        # Skipped until a SONAR_TOKEN secret exists, so this change lands green
+        # and is switched on deliberately. Turning it on also means turning
+        # Automatic Analysis off in SonarCloud: the scanner refuses to run while
+        # that is enabled. See sonar-project.properties.
+        if: env.SONAR_TOKEN != ''
+        uses: SonarSource/sonarqube-scan-action@v8
 
   frontend:
     runs-on: ubuntu-latest
