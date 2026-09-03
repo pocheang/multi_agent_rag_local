@@ -264,12 +264,8 @@ def test_a_failed_batch_insert_reports_no_triplets_and_still_closes_the_client(w
     assert wiring.closed == 1
 
 
-def test_an_unreadable_page_number_leaves_the_source_with_no_pages(wiring: _Calls, monkeypatch) -> None:
-    """`setdefault` runs before `int()`, so the source is registered and stays empty.
-
-    Reported as a count of 0 rather than omitted. Pinned as-is: this describes the
-    function being refactored, and changing it is a separate decision from moving it.
-    """
+def test_an_unreadable_page_number_leaves_the_source_out_rather_than_at_zero(wiring: _Calls, monkeypatch) -> None:
+    """A count of 0 would claim the document has no pages, which is a different thing."""
 
     def load(path: Path, metadata: dict[str, Any]):
         parsed = _FakeParsed(_FakeEvidenceDocument(source=str(path), document_id=f"doc-{path.stem}"))
@@ -279,5 +275,5 @@ def test_an_unreadable_page_number_leaves_the_source_with_no_pages(wiring: _Call
 
     result = ingest_module.ingest_paths([Path("a.pdf")])
 
-    assert result["pages_by_source"] == {"a.pdf": 0}
+    assert result["pages_by_source"] == {}
     assert result["chunks_indexed"] == 1

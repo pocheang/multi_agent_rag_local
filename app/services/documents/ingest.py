@@ -103,19 +103,19 @@ def _load_documents(
 def _pages_by_source(docs: list[Any]) -> dict[str, set[int]]:
     """Which pages each source contributed.
 
-    A source whose page numbers are all unreadable is registered with an empty
-    set rather than left out -- ``setdefault`` runs before ``int()``.
+    A source whose page numbers are all unreadable contributes no entry. It used
+    to contribute an empty one, reported downstream as a page count of 0, because
+    ``setdefault`` ran before ``int()`` and left the set behind when the parse
+    raised. "This document has no readable page numbers" and "this document has
+    no pages" are different claims, and only the first one was ever true.
     """
 
     pages_by_source: dict[str, set[int]] = {}
     for doc in docs:
         source = str((doc.metadata or {}).get("source", ""))
-        page = (doc.metadata or {}).get("page")
+        page = _optional_int((doc.metadata or {}).get("page"))
         if source and page is not None:
-            try:
-                pages_by_source.setdefault(source, set()).add(int(page))
-            except (ValueError, TypeError):
-                pass
+            pages_by_source.setdefault(source, set()).add(page)
     return pages_by_source
 
 
