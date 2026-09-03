@@ -156,7 +156,6 @@ def _build_splitter(chunk_size: int, chunk_overlap: int, separators: list[str]):
 
 def split_documents_enhanced(
     documents: list[Any],
-    enable_classification: bool = True,
     enable_metadata_enhancement: bool = True,
 ) -> tuple[list[Any], list[dict[str, Any]]]:
     """
@@ -164,8 +163,12 @@ def split_documents_enhanced(
 
     Args:
         documents: List of documents
-        enable_classification: Enable chunk classification
-        enable_metadata_enhancement: Enable metadata enhancement
+        enable_metadata_enhancement: Enable metadata enhancement, which is also
+            what performs chunk classification -- `enhance_chunk_metadata` calls
+            `classify_chunk_type`. There used to be a separate
+            `enable_classification` parameter here, documented as "Enable chunk
+            classification" and read by nothing: passing False left classification
+            running, and only this switch ever turned it off.
 
     Returns:
         (child_chunks, parent_records)
@@ -260,4 +263,4 @@ def split_documents_enhanced(
 
 def split_documents(documents: list[Any]) -> tuple[list[Any], list[dict[str, Any]]]:
     """Backward compatible document splitting."""
-    return split_documents_enhanced(documents, True, True)
+    return split_documents_enhanced(documents, enable_metadata_enhancement=True)
