@@ -25,9 +25,9 @@ logger = logging.getLogger(__name__)
 # Every date parameter below goes through parse_date, which is
 # datetime.fromisoformat -- so all of them accept the same thing, and saying so
 # in one place is what keeps the two wordings from drifting apart again.
-_START_DATE_DESC = "开始日期 (ISO format: YYYY-MM-DD)"
-_END_DATE_DESC = "结束日期 (ISO format: YYYY-MM-DD)"
-_USER_FILTER_DESC = "筛选特定用户"
+_START_DATE_DESC = "Start date (ISO format: YYYY-MM-DD)"
+_END_DATE_DESC = "End date (ISO format: YYYY-MM-DD)"
+_USER_FILTER_DESC = "Filter to a single user"
 
 router = APIRouter(
     prefix="/api/v1/admin/web-activity",
@@ -106,7 +106,7 @@ async def get_web_activity_stats(
 async def get_web_activity_report(
     start_date: str | None = Query(None, description=_START_DATE_DESC),
     end_date: str | None = Query(None, description=_END_DATE_DESC),
-    format: str = Query("html", description="输出格式: text, json, html"),
+    format: str = Query("html", description="Output format: text, json, or html"),
 ):
     if format not in ["text", "json", "html"]:
         raise HTTPException(status_code=400, detail="Invalid format. Must be: text, json, or html")
@@ -123,8 +123,8 @@ async def get_web_activity_logs(
     start_date: str | None = Query(None, description=_START_DATE_DESC),
     end_date: str | None = Query(None, description=_END_DATE_DESC),
     user_id: str | None = Query(None, description=_USER_FILTER_DESC),
-    limit: int = Query(100, description="返回记录数限制", ge=1, le=1000),
-    offset: int = Query(0, description="跳过记录数", ge=0),
+    limit: int = Query(100, description="Maximum records to return", ge=1, le=1000),
+    offset: int = Query(0, description="Records to skip", ge=0),
 ):
     start = parse_date(start_date)
     end = parse_date(end_date)
@@ -136,7 +136,7 @@ async def get_web_activity_logs(
 async def get_top_websites(
     start_date: str | None = Query(None, description=_START_DATE_DESC),
     end_date: str | None = Query(None, description=_END_DATE_DESC),
-    limit: int = Query(20, description="返回数量", ge=1, le=100),
+    limit: int = Query(20, description="Maximum entries to return", ge=1, le=100),
 ):
     analysis = get_activity_analyzer().analyze(start_date=parse_date(start_date), end_date=parse_date(end_date))
     return analysis["top_websites"][:limit]
@@ -146,7 +146,7 @@ async def get_top_websites(
 async def get_top_users(
     start_date: str | None = Query(None, description=_START_DATE_DESC),
     end_date: str | None = Query(None, description=_END_DATE_DESC),
-    limit: int = Query(20, description="返回数量", ge=1, le=100),
+    limit: int = Query(20, description="Maximum entries to return", ge=1, le=100),
 ):
     analysis = get_activity_analyzer().analyze(start_date=parse_date(start_date), end_date=parse_date(end_date))
     return analysis["top_users"][:limit]
@@ -169,7 +169,7 @@ async def get_hourly_distribution(
 async def export_logs(
     start_date: str | None = Query(None, description=_START_DATE_DESC),
     end_date: str | None = Query(None, description=_END_DATE_DESC),
-    format: str = Query("csv", description="导出格式: csv, json"),
+    format: str = Query("csv", description="Export format: csv or json"),
 ):
     if format not in ["csv", "json"]:
         raise HTTPException(status_code=400, detail="Invalid format. Must be: csv or json")
@@ -192,7 +192,7 @@ async def export_logs(
 
 
 @router.get("/dashboard", response_class=HTMLResponse)
-async def get_dashboard(days: int = Query(7, description="显示最近几天的数据", ge=1, le=90)):
+async def get_dashboard(days: int = Query(7, description="Days of data to display", ge=1, le=90)):
     end_date = datetime.now()
     start_date = end_date - timedelta(days=days)
     return get_activity_analyzer().generate_report(start_date=start_date, end_date=end_date, output_format="html")
@@ -200,8 +200,8 @@ async def get_dashboard(days: int = Query(7, description="显示最近几天的�
 
 @router.get("/alerts")
 async def get_alerts(
-    hours: int = Query(24, description="获取最近几小时的告警", ge=1, le=168),
-    level: str | None = Query(None, description="告警级别筛选: info, warning, error, critical"),
+    hours: int = Query(24, description="Hours of alerts to return", ge=1, le=168),
+    level: str | None = Query(None, description="Filter by alert level: info, warning, error, or critical"),
     current_user: dict[str, Any] = Depends(_require_user),
 ):
     alerts = get_alert_system().get_recent_alerts(hours=hours, level=get_alert_level(level) if level else None)
@@ -223,7 +223,7 @@ async def get_alerts(
 
 @router.get("/alerts/summary")
 async def get_alert_summary(
-    hours: int = Query(24, description="统计最近几小时", ge=1, le=168),
+    hours: int = Query(24, description="Hours to summarise", ge=1, le=168),
     current_user: dict[str, Any] = Depends(_require_user),
 ):
     return get_alert_system().get_alert_summary(hours=hours)
@@ -231,7 +231,7 @@ async def get_alert_summary(
 
 @router.post("/backup")
 async def backup_data(
-    days: int = Query(7, description="备份最近几天的数据", ge=1, le=90),
+    days: int = Query(7, description="Days of data to back up", ge=1, le=90),
     current_user: dict[str, Any] = Depends(_require_user),
 ):
     return get_data_manager().backup_logs(days=days)
@@ -239,7 +239,7 @@ async def backup_data(
 
 @router.post("/archive")
 async def archive_old_data(
-    days: int = Query(30, description="归档超过几天的数据", ge=7, le=180),
+    days: int = Query(30, description="Archive data older than this many days", ge=7, le=180),
     current_user: dict[str, Any] = Depends(_require_user),
 ):
     return get_data_manager().archive_old_logs(days=days)
@@ -247,7 +247,7 @@ async def archive_old_data(
 
 @router.delete("/cleanup")
 async def cleanup_old_data(
-    days: int = Query(90, description="清理超过几天的数据", ge=30, le=365),
+    days: int = Query(90, description="Delete data older than this many days", ge=30, le=365),
     current_user: dict[str, Any] = Depends(_require_user),
 ):
     return get_data_manager().clean_old_logs(days=days)
