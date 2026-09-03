@@ -22,6 +22,15 @@ from app.services.evidence.models import (
 
 OFFICE_EXTENSIONS = frozenset({".docx", ".pptx", ".xlsx", ".xls"})
 
+# The two formats read straight out of the OOXML archive -- workbooks are routed
+# to _load_workbook before either reader below is reached. A table rather than
+# "docx, otherwise pptx", so a format added above raises here instead of being
+# silently read as a slide deck.
+_ARCHIVE_PREFIXES = {
+    ".docx": {"pages": "word/", "media": "word/media/"},
+    ".pptx": {"pages": "ppt/slides/", "media": "ppt/media/"},
+}
+
 
 def load_office_document(path: Path, document: EvidenceDocument) -> ParsedDocument:
     suffix = path.suffix.lower()
@@ -172,7 +181,7 @@ def _docling_markdown(path: Path) -> str:
 
 
 def _archive_pages(path: Path, suffix: str) -> list[str]:
-    prefix = "word/" if suffix == ".docx" else "ppt/slides/"
+    prefix = _ARCHIVE_PREFIXES[suffix]["pages"]
     with zipfile.ZipFile(path) as archive:
         names = sorted(name for name in archive.namelist() if name.startswith(prefix) and name.endswith(".xml"))
         texts: list[str] = []
@@ -185,7 +194,7 @@ def _archive_pages(path: Path, suffix: str) -> list[str]:
 
 
 def _archive_images(path: Path, document: EvidenceDocument) -> tuple[ImageBlock, ...]:
-    prefix = "word/media/" if path.suffix.lower() == ".docx" else "ppt/media/"
+    prefix = _ARCHIVE_PREFIXES[path.suffix.lower()]["media"]
     with zipfile.ZipFile(path) as archive:
         page_by_name = _ppt_image_pages(archive) if path.suffix.lower() == ".pptx" else {}
         names = sorted(name for name in archive.namelist() if name.startswith(prefix) and not name.endswith("/"))
