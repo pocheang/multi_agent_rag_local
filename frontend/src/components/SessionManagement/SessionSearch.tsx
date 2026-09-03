@@ -202,7 +202,7 @@ export const SessionSearch: React.FC<SessionSearchProps> = ({ onSelectSession })
                   type="number"
                   className="filter-input"
                   value={minQueries || ''}
-                  onChange={(e) => setMinQueries(e.target.value ? parseInt(e.target.value) : undefined)}
+                  onChange={(e) => setMinQueries(e.target.value ? Number.parseInt(e.target.value, 10) : undefined)}
                   min={0}
                   placeholder="0"
                 />
@@ -215,7 +215,7 @@ export const SessionSearch: React.FC<SessionSearchProps> = ({ onSelectSession })
                   type="number"
                   className="filter-input"
                   value={maxQueries || ''}
-                  onChange={(e) => setMaxQueries(e.target.value ? parseInt(e.target.value) : undefined)}
+                  onChange={(e) => setMaxQueries(e.target.value ? Number.parseInt(e.target.value, 10) : undefined)}
                   min={0}
                   placeholder="∞"
                 />

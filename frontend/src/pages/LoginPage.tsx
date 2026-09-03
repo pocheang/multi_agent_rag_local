@@ -7,7 +7,12 @@ import { validateUsername, validatePassword } from "@/lib/validation";
 import { useFormState } from "@/hooks/useFormState";
 import { AuthInput } from "@/components/AuthInput";
 import { LanguageToggle } from "@/components/LanguageToggle";
-import { secureGetItem, secureSetItem, secureRemoveItem, secureHasItem } from "@/lib/secureStorage";
+import {
+  forgetRememberedUsername,
+  hasRememberedUsername,
+  rememberUsername,
+  rememberedUsername,
+} from "@/lib/rememberedUsername";
 
 // Route-specific CSS (code-split by Vite)
 import "@/styles/pages/auth-entry.css";
@@ -21,10 +26,10 @@ export function LoginPage({ onLogin }: Props) {
   const [searchParams, setSearchParams] = useSearchParams();
   const mode = searchParams.get("mode") === "register" ? "register" : "login";
 
-  const [username, setUsername] = useState(secureGetItem("remembered_username") || "");
+  const [username, setUsername] = useState(rememberedUsername());
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
-  const [rememberMe, setRememberMe] = useState(secureHasItem("remembered_username"));
+  const [rememberMe, setRememberMe] = useState(hasRememberedUsername());
   const { status, setStatus, error, setError, loading, setLoading } = useFormState();
 
   const loginValid = useMemo(() => validateUsername(username) && password.length > 0, [username, password]);
@@ -52,9 +57,9 @@ export function LoginPage({ onLogin }: Props) {
     try {
       const data = await authApi.login(username.trim(), password);
       if (rememberMe) {
-        secureSetItem("remembered_username", username.trim());
+        rememberUsername(username.trim());
       } else {
-        secureRemoveItem("remembered_username");
+        forgetRememberedUsername();
       }
       onLogin(data.user);
     } catch (e) {
