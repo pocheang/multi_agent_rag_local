@@ -1146,11 +1146,44 @@ already runs two systems — the 73 legacy sheets and Tailwind — and is spendi
 A third makes it three. Do not add a pixel-diff CI gate for the reason above, and do not
 "fix" a cascade problem by re-freezing the design baseline.
 
+### Regular expressions
+
+Sixteen patterns in this repository backtracked super-linearly (`S8786`, fixed
+2026-09-03), and the fix has three shapes, in order of preference:
+
+- **A negated class instead of a greedy `.`** -- `\|[^|\n]+\|` rather than
+  `\|.+\|`. This is usually not a performance change at all but a statement:
+  a table cell does not contain its own delimiter, and saying so removes the
+  ambiguity the engine was exploring.
+- **A bounded quantifier** -- `\s{0,8}` rather than `\s*`, the form the
+  streaming redactor already used.
+- **A possessive quantifier** (`[ \t]++`, Python 3.11+) where backtracking into
+  the run could never succeed anyway, so the bound would be arbitrary.
+
+**Two of the sixteen were wrong, not merely slow, and for the same reason:
+`\s` matches a newline.** Under `re.MULTILINE` that let a pattern anchored with
+`^...$` reach past the end of the line it started on -- the clarification parser
+paired a bare `-` on one line with a field name several lines below it, and the
+lock parser could pick up an environment marker belonging to the next
+requirement. Prefer `[ \t]` whenever the intent is "spaces within this line".
+
+**Anything reading text a user or a document supplied is worth measuring rather
+than reasoning about.** The clarification parser took 117ms on 800 lines of
+whitespace and grew with the square; it takes 0.4ms now. But do not assert the
+timing in a test -- a clock is a bad thing to assert on in CI. Assert the
+property that removed it, which for both of these was "this matches within one
+line".
+
+Changing a pattern is a behaviour change until proven otherwise, and the proof is
+cheap: run the old and the new against the same inputs and diff. That is how the
+three structure detectors in `app/agents/rag/config.py` and the lock parser were
+verified (60 inputs and 336 pins respectively, zero differences).
+
 ### Testing Strategy
 
 `tests/` was cleared ahead of the v0.7 rewrite and is being rebuilt incrementally: each bug
 fix lands with the regression test that would have caught it, rather than as a separate
-back-filling effort. As of 2026-09-03 there are 1201 tests covering the chat round trip,
+back-filling effort. As of 2026-09-03 there are 1220 tests covering the chat round trip,
 conversation context, graph routing, clarification, the async load guard, engine reuse,
 answer safety, reader-facing citation numbering, stage-timeout degradation, the governed
 tool stack with its multi-step loop and approve-then-resume cycle, retrieval
@@ -1164,9 +1197,10 @@ admin configuration surface with the writes it refuses, one vocabulary for audit
 an ASCII API document, a grounding SLO that measures answers, and the five functions
 unpicked in the 2026-09-03 complexity pass -- document ingestion, the distributed query
 guard, candidate collection, route selection, the document visibility rules and upload
-storage, each characterized against its old implementation before being split.
+storage, each characterized against its old implementation before being split, and the
+regular expressions that backtracked super-linearly over user-supplied text.
 
-**That count is not 1201 independent assertions, and the number before it was stale.** Two
+**That count is not 1220 independent assertions, and the number before it was stale.** Two
 guards are parametrized one case per module — the audit-action scan over `app/` (376) and
 the ASCII scan over `app/api` (60) — so they grow with the codebase rather than with
 coverage. The real baseline on 2026-09-03 was 651, not the 538 this paragraph claimed:
@@ -1304,6 +1338,48 @@ varies by version. Count OpenAPI operations instead; the current baseline is 151
   restart empties it and each worker sees only its own. Crossing that boundary is a
   time-series-database decision, not a change to these five lines.
 
+- **Both Dockerfile stages install with `--no-install-recommends`**, and name
+  `ca-certificates` explicitly rather than receiving it as a recommends of
+  `curl` (`docker:S6500`). Dropping recommends without naming it would have left
+  TLS trust resting on what the base image happens to ship, which is the sort of
+  thing that works until the base image changes.
+- **A convenience must never be able to fail a login** (2026-09-03). The login
+  form's "remember me" stored the username through a module called
+  `secureStorage`, which XOR'd it against a key hardcoded three lines above and
+  base64'd the result. `btoa` throws above code unit 255, so a Chinese username
+  threw inside the login handler's `try`, *before* `onLogin` -- the server had
+  accepted the credentials, the exception was caught as a login failure, and the
+  user saw a generic error that repeated until they unticked the box. In an
+  application whose reason for existing is that it works in Chinese.
+  `frontend/src/lib/rememberedUsername.ts` replaces it: a remembered username is
+  a convenience, not a secret, so it is stored as itself, and every access is
+  wrapped because a private window throws on read too. The lesson is not about
+  base64 -- it is that the failure of something optional was inside the path of
+  something that is not.
+- **Third-party GitHub Actions are pinned to a commit**, not a tag
+  (`githubactions:S7637`). A tag on somebody else's repository can be moved, and
+  these steps run with the workflow's secrets. GitHub's own `actions/*` keep
+  their major tags: nobody else can move a tag in that namespace.
+  `tests/core/test_ci_workflow_is_loadable.py` enforces it, because the rule
+  itself lives in SonarCloud and only runs after a push -- the feedback loop for
+  a one-line mistake was a full CI run plus an analysis.
+- **`evidence_dedup_key` returns `(kind, payload)`**, both two long. The two
+  kinds are computed from different fields, so nothing but the kind keeps a
+  content key and a provenance key out of each other's way in the same
+  dictionary; a variable-length tuple with a discriminant at position zero only
+  implied that.
+- **`python:S7503` is 39 open findings and 32 of them are correct.** "async
+  without await" cannot see a contract: 22 of those functions are awaited, 4 are
+  closures handed to `run_with_timeout`, 3 are default callbacks awaited through
+  a variable, and 3 are gathered as coroutines. The remaining 7 have no caller
+  because their *classes* have none -- `ImageProcessor`, `ChartAnalyzer`,
+  `TableExtractor` and `SmartChunker` are never constructed anywhere in `app/`,
+  and nothing outside `app/services/multimodal/` imports the package. Removing
+  their `async` would satisfy the rule and leave the dead code; whether that
+  subsystem stays is the actual question. The same goes for `python:S7484` on
+  `agent_tracking.py`'s SSE poll: no client calls that endpoint, and
+  `AgentExecutionTracker` is `threading.Lock`-based, so an `asyncio.Event` there
+  would need `call_soon_threadsafe` -- the defect class fixed twice already.
 - **Answer provenance**: what a message may claim about where it came from is computed in
   one place — `retrieval_summary` (`app/api/routes/internal/pipeline_contract.py`), from the
   knowledge diagnostics both entry points already carry. **`used` means a source contributed
