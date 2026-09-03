@@ -50,6 +50,7 @@ from app.services.runtime.runtime_ops import (
     run_replay,
     system_resource_snapshot,
 )
+from app.services.security.audit_actions import AuditAction
 from app.services.security.rbac import Permission
 
 router = APIRouter(prefix="/admin/ops", tags=["admin", "ops"])
@@ -306,7 +307,7 @@ def admin_ops_benchmark_run(
         raise service_unavailable("background queue is full; retry shortly")
     _audit(
         request,
-        action="admin.ops.benchmark.run",
+        action=AuditAction.ADMIN_OPS_BENCHMARK_RUN,
         resource_type="admin",
         result="accepted",
         user=user,
@@ -342,7 +343,7 @@ def admin_ops_audit_report_md(
         "",
         f"- p95_latency_ms: {alerts.get('slo', {}).get('p95_latency_ms', 0)}",
         f"- error_rate_percent: {alerts.get('slo', {}).get('error_rate_percent', 0)}",
-        f"- grounding_support_ratio_avg: {alerts.get('slo', {}).get('grounding_support_ratio_avg', 0)}",
+        f"- grounding_support_ratio_avg: {alerts.get('slo', {}).get('grounding_support_ratio_avg') or 'n/a'}",
         "",
         "## Top Actions",
         "",
@@ -407,7 +408,7 @@ def admin_ops_autotune(payload: dict[str, Any], request: Request, user: dict[str
     applied = bool(written)
     _audit(
         request,
-        action="admin.ops.autotune",
+        action=AuditAction.ADMIN_OPS_AUTOTUNE,
         resource_type="admin",
         result="success" if applied or not patch else "failure",
         user=user,
@@ -448,7 +449,7 @@ def admin_ops_replay_run(
         raise service_unavailable("background queue is full; retry shortly")
     _audit(
         request,
-        action="admin.ops.replay.run",
+        action=AuditAction.ADMIN_OPS_REPLAY_RUN,
         resource_type="admin",
         result="accepted",
         user=user,
@@ -506,7 +507,7 @@ def set_log_level(
     # Audit the change
     _audit(
         request,
-        action="admin.logging.set_level",
+        action=AuditAction.ADMIN_LOGGING_SET_LEVEL,
         resource_type="admin",
         result="success",
         user=user,
@@ -532,7 +533,7 @@ def reset_log_levels(
 
     _audit(
         request,
-        action="admin.logging.reset",
+        action=AuditAction.ADMIN_LOGGING_RESET,
         resource_type="admin",
         result="success",
         user=user,

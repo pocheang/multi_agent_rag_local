@@ -31,6 +31,7 @@ from app.services.query.input_normalizer import (
     normalize_user_question,
 )
 from app.services.query.intent import is_casual_chat_query
+from app.services.security.audit_actions import AuditAction
 from app.services.security.rbac import Permission
 
 router = APIRouter(prefix="/sessions", tags=["sessions"])
@@ -48,7 +49,7 @@ def create_session(request: Request, user: dict[str, Any] = Depends(_require_use
     session = _history_store_for_user(user).create_session()
     _audit(
         request,
-        action="session.create",
+        action=AuditAction.SESSION_CREATE,
         resource_type="session",
         result="success",
         user=user,
@@ -75,7 +76,12 @@ def delete_session(session_id: str, request: Request, user: dict[str, Any] = Dep
     if not ok:
         raise not_found("Session")
     _audit(
-        request, action="session.delete", resource_type="session", result="success", user=user, resource_id=session_id
+        request,
+        action=AuditAction.SESSION_DELETE,
+        resource_type="session",
+        result="success",
+        user=user,
+        resource_id=session_id,
     )
     return {"ok": True, "session_id": session_id}
 
@@ -112,7 +118,7 @@ def update_session(
 
         _audit(
             request,
-            action="session.rename",
+            action=AuditAction.SESSION_RENAME,
             resource_type="session",
             result="success",
             user=user,
@@ -129,7 +135,7 @@ def update_session(
 
         _audit(
             request,
-            action="session.pin" if pinned else "session.unpin",
+            action=AuditAction.SESSION_PIN if pinned else "session.unpin",
             resource_type="session",
             result="success",
             user=user,
@@ -162,7 +168,12 @@ def delete_long_term_memory(
     if not ok:
         raise not_found("Memory")
     _audit(
-        request, action="memory.long.delete", resource_type="memory", result="success", user=user, resource_id=memory_id
+        request,
+        action=AuditAction.MEMORY_LONG_DELETE,
+        resource_type="memory",
+        result="success",
+        user=user,
+        resource_id=memory_id,
     )
     return {"ok": True, "memory_id": memory_id}
 
@@ -234,7 +245,12 @@ def update_session_message(
             _promote_long_term_memory(user=user, session_id=session_id, question=content, result=result)
             credit.commit()
     _audit(
-        request, action="message.update", resource_type="message", result="success", user=user, resource_id=message_id
+        request,
+        action=AuditAction.MESSAGE_UPDATE,
+        resource_type="message",
+        result="success",
+        user=user,
+        resource_id=message_id,
     )
     return data
 
@@ -249,6 +265,11 @@ def delete_session_message(
     if data is None:
         raise not_found("Message")
     _audit(
-        request, action="message.delete", resource_type="message", result="success", user=user, resource_id=message_id
+        request,
+        action=AuditAction.MESSAGE_DELETE,
+        resource_type="message",
+        result="success",
+        user=user,
+        resource_id=message_id,
     )
     return data

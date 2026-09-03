@@ -50,6 +50,7 @@ from app.services.documents.index_manager import (
 from app.services.documents.registry import get_document_by_source, merge_visible_document_status
 from app.services.parser_profiles import choose_parser_profile
 from app.services.runtime.ingest_queue import register_and_enqueue_uploads
+from app.services.security.audit_actions import AuditAction
 from app.services.security.rbac import Permission
 
 router = APIRouter(tags=["documents"])
@@ -217,7 +218,7 @@ def _perform_delete(
     remove_file: bool,
 ) -> FileIndexActionResponse:
     if row is None:
-        _deny_unresolved("document.delete", request, user, filename)
+        _deny_unresolved(AuditAction.DOCUMENT_DELETE, request, user, filename)
     source = str(row.get("source", "") or "")
     try:
         _require_registered_filename_source(filename, source)
@@ -226,7 +227,7 @@ def _perform_delete(
         )
         _audit(
             request,
-            action="document.delete",
+            action=AuditAction.DOCUMENT_DELETE,
             resource_type="document",
             result="success",
             user=user,
@@ -237,7 +238,7 @@ def _perform_delete(
     except ValueError as e:
         _audit(
             request,
-            action="document.delete",
+            action=AuditAction.DOCUMENT_DELETE,
             resource_type="document",
             result="failed",
             user=user,
@@ -254,7 +255,7 @@ def _perform_reindex(
     user: dict[str, Any],
 ) -> FileIndexActionResponse:
     if row is None:
-        _deny_unresolved("document.reindex", request, user, filename)
+        _deny_unresolved(AuditAction.DOCUMENT_REINDEX, request, user, filename)
     source = str(row.get("source", "") or "")
     try:
         _require_registered_filename_source(filename, source)
@@ -267,7 +268,7 @@ def _perform_reindex(
         )
         _audit(
             request,
-            action="document.reindex",
+            action=AuditAction.DOCUMENT_REINDEX,
             resource_type="document",
             result="success",
             user=user,
@@ -278,7 +279,7 @@ def _perform_reindex(
     except ValueError as e:
         _audit(
             request,
-            action="document.reindex",
+            action=AuditAction.DOCUMENT_REINDEX,
             resource_type="document",
             result="failed",
             user=user,
@@ -305,7 +306,7 @@ async def upload_files(
     _require_permission(user, Permission.UPLOAD_CREATE, request, "document")
     limiter_key = f"upload:{user['user_id']}:{_client_ip(request)}"
     if not upload_limiter.try_acquire(limiter_key):
-        _audit(request, action="upload.create", resource_type="document", result="rate_limited", user=user)
+        _audit(request, action=AuditAction.UPLOAD_CREATE, resource_type="document", result="rate_limited", user=user)
         raise rate_limited("Upload rate limit exceeded. Maximum 20 uploads per hour.")
 
     visibility_applied, public_visibility_approved = _approved_upload_visibility(visibility, user)
@@ -364,7 +365,7 @@ async def upload_files(
         if storage_result.duplicate_files and not storage_result.skipped_files:
             _audit(
                 request,
-                action="document.upload",
+                action=AuditAction.DOCUMENT_UPLOAD,
                 resource_type="document",
                 result="success",
                 user=user,
@@ -395,7 +396,7 @@ async def upload_files(
     except Exception as e:
         _audit(
             request,
-            action="document.upload",
+            action=AuditAction.DOCUMENT_UPLOAD,
             resource_type="document",
             result="failed",
             user=user,
@@ -412,11 +413,18 @@ async def upload_files(
             acl_tags=tuple(str(value) for value in user.get("acl_tags", ()) or ()),
         )
     except Exception as e:
-        _audit(request, action="document.upload", resource_type="document", result="failed", user=user, detail=str(e))
+        _audit(
+            request,
+            action=AuditAction.DOCUMENT_UPLOAD,
+            resource_type="document",
+            result="failed",
+            user=user,
+            detail=str(e),
+        )
         raise internal_error("upload ingest failed")
     _audit(
         request,
-        action="document.upload",
+        action=AuditAction.DOCUMENT_UPLOAD,
         resource_type="document",
         result="success",
         user=user,

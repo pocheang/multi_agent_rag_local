@@ -24,6 +24,7 @@ from app.api.transport.errors import bad_request
 from app.core.config import get_settings
 from app.core.config_schema import describe
 from app.core.remote_config import RemoteDocuments, remote_config_enabled
+from app.services.security.audit_actions import AuditAction
 from app.services.security.rbac import Permission
 
 logger = logging.getLogger(__name__)
@@ -75,7 +76,7 @@ def admin_save_config(payload: ConfigValues, request: Request, user: dict[str, A
     except ConfigWriteRefused as exc:
         _audit(
             request,
-            action="admin.config.save",
+            action=AuditAction.ADMIN_CONFIG_SAVE,
             resource_type="admin",
             result="failure",
             user=user,
@@ -85,7 +86,7 @@ def admin_save_config(payload: ConfigValues, request: Request, user: dict[str, A
 
     _audit(
         request,
-        action="admin.config.save",
+        action=AuditAction.ADMIN_CONFIG_SAVE,
         resource_type="admin",
         result="success",
         resource_id=",".join(written),

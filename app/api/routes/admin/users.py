@@ -42,6 +42,7 @@ from app.services.security.admin_security import (
     validate_reason,
     validate_ticket_id,
 )
+from app.services.security.audit_actions import AuditAction
 from app.services.security.rbac import Permission
 
 router = APIRouter(prefix="/admin", tags=["admin"])
@@ -86,13 +87,13 @@ def admin_add_user_credits(
     try:
         row = auth_service.add_user_credits(user_id=user_id, amount=req.amount)
     except Exception as exc:
-        handle_service_exception(exc, _audit, request, "admin.user.credits_add", user, user_id)
+        handle_service_exception(exc, _audit, request, AuditAction.ADMIN_USER_CREDITS_ADD, user, user_id)
     if row is None:
         raise not_found("User")
 
     _audit(
         request,
-        action="admin.user.credits_add",
+        action=AuditAction.ADMIN_USER_CREDITS_ADD,
         resource_type="user_credits",
         result="success",
         user=user,
@@ -121,7 +122,7 @@ def admin_update_user_role(
     _require_permission(user, Permission.ADMIN_USER_MANAGE, request, "admin", resource_id=user_id)
 
     # Security: Prevent self-modification
-    check_self_modification(user_id, user, "admin.user.role_update", _audit, request)
+    check_self_modification(user_id, user, AuditAction.ADMIN_USER_ROLE_UPDATE, _audit, request)
 
     # Security: Prevent direct admin promotion
     check_admin_role_change(req.role)
@@ -129,14 +130,14 @@ def admin_update_user_role(
     try:
         row = auth_service.update_user_role(user_id=user_id, role=req.role)
     except Exception as e:
-        handle_service_exception(e, _audit, request, "admin.user.role_update", user, user_id)
+        handle_service_exception(e, _audit, request, AuditAction.ADMIN_USER_ROLE_UPDATE, user, user_id)
 
     if row is None:
         raise not_found("User")
 
     _audit(
         request,
-        action="admin.user.role_update",
+        action=AuditAction.ADMIN_USER_ROLE_UPDATE,
         resource_type="user",
         result="success",
         user=user,
@@ -158,7 +159,7 @@ def admin_create_user_as_admin(
 
     # Security: Validate approval token (single-use, timing-attack resistant)
     token_ok, token_mode = validate_and_check_approval_token(
-        approval_token, actor_user_id, "admin.user.create_admin", _audit, request, user
+        approval_token, actor_user_id, AuditAction.ADMIN_USER_CREATE_ADMIN, _audit, request, user
     )
 
     ticket_id = (req.ticket_id or "").strip()
@@ -183,11 +184,11 @@ def admin_create_user_as_admin(
             admin_approval_token_hash=new_admin_approval_hash,
         )
     except Exception as e:
-        handle_service_exception(e, _audit, request, "admin.user.create_admin", user)
+        handle_service_exception(e, _audit, request, AuditAction.ADMIN_USER_CREATE_ADMIN, user)
 
     _audit(
         request,
-        action="admin.user.create_admin",
+        action=AuditAction.ADMIN_USER_CREATE_ADMIN,
         resource_type="user",
         result="success",
         user=user,
@@ -213,7 +214,7 @@ def admin_reset_user_approval_token(
     _require_permission(user, Permission.ADMIN_USER_MANAGE, request, "admin", resource_id=user_id)
 
     # Security: Prevent self-modification
-    check_self_modification(user_id, user, "admin.user.reset_approval_token", _audit, request)
+    check_self_modification(user_id, user, AuditAction.ADMIN_USER_RESET_APPROVAL_TOKEN, _audit, request)
 
     target = auth_service.get_user_profile(user_id)
     if not target:
@@ -226,7 +227,7 @@ def admin_reset_user_approval_token(
 
     # Security: Validate approval token
     token_ok, token_mode = validate_and_check_approval_token(
-        approval_token, actor_user_id, "admin.user.reset_approval_token", _audit, request, user, user_id
+        approval_token, actor_user_id, AuditAction.ADMIN_USER_RESET_APPROVAL_TOKEN, _audit, request, user, user_id
     )
 
     ticket_id = (req.ticket_id or "").strip()
@@ -248,7 +249,7 @@ def admin_reset_user_approval_token(
 
     _audit(
         request,
-        action="admin.user.reset_approval_token",
+        action=AuditAction.ADMIN_USER_RESET_APPROVAL_TOKEN,
         resource_type="user",
         result="success",
         user=user,
@@ -283,7 +284,7 @@ def admin_reset_user_password(
 
     # Security: Validate approval token
     token_ok, token_mode = validate_and_check_approval_token(
-        approval_token, actor_user_id, "admin.user.reset_password", _audit, request, user, user_id
+        approval_token, actor_user_id, AuditAction.ADMIN_USER_RESET_PASSWORD, _audit, request, user, user_id
     )
 
     ticket_id = (req.ticket_id or "").strip()
@@ -296,14 +297,14 @@ def admin_reset_user_password(
     try:
         row = auth_service.update_user_password(user_id=user_id, password=new_password)
     except Exception as e:
-        handle_service_exception(e, _audit, request, "admin.user.reset_password", user, user_id)
+        handle_service_exception(e, _audit, request, AuditAction.ADMIN_USER_RESET_PASSWORD, user, user_id)
 
     if row is None:
         raise not_found("User")
 
     _audit(
         request,
-        action="admin.user.reset_password",
+        action=AuditAction.ADMIN_USER_RESET_PASSWORD,
         resource_type="user",
         result="success",
         user=user,
@@ -327,19 +328,19 @@ def admin_update_user_status(
     _require_permission(user, Permission.ADMIN_USER_MANAGE, request, "admin", resource_id=user_id)
 
     # Security: Prevent self-modification
-    check_self_modification(user_id, user, "admin.user.status_update", _audit, request)
+    check_self_modification(user_id, user, AuditAction.ADMIN_USER_STATUS_UPDATE, _audit, request)
 
     try:
         row = auth_service.update_user_status(user_id=user_id, status=req.status)
     except Exception as e:
-        handle_service_exception(e, _audit, request, "admin.user.status_update", user, user_id)
+        handle_service_exception(e, _audit, request, AuditAction.ADMIN_USER_STATUS_UPDATE, user, user_id)
 
     if row is None:
         raise not_found("User")
 
     _audit(
         request,
-        action="admin.user.status_update",
+        action=AuditAction.ADMIN_USER_STATUS_UPDATE,
         resource_type="user",
         result="success",
         user=user,
@@ -368,14 +369,14 @@ def admin_update_user_classification(
             data_scope=req.data_scope,
         )
     except Exception as e:
-        handle_service_exception(e, _audit, request, "admin.user.classification_update", user, user_id)
+        handle_service_exception(e, _audit, request, AuditAction.ADMIN_USER_CLASSIFICATION_UPDATE, user, user_id)
 
     if row is None:
         raise not_found("User")
 
     _audit(
         request,
-        action="admin.user.classification_update",
+        action=AuditAction.ADMIN_USER_CLASSIFICATION_UPDATE,
         resource_type="user",
         result="success",
         user=user,

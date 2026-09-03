@@ -20,6 +20,7 @@ from app.api.schemas import (
     PromptTemplateUpdateRequest,
 )
 from app.api.transport.errors import not_found
+from app.services.security.audit_actions import AuditAction
 from app.services.security.prompt_checker import check_and_enhance_prompt
 from app.services.security.rbac import Permission
 
@@ -41,7 +42,7 @@ def create_prompt(req: PromptTemplateCreateRequest, request: Request, user: dict
     row = prompt_store.create_prompt(user_id=user["user_id"], title=title, content=content, agent_class=agent_class)
     _audit(
         request,
-        action="prompt.create",
+        action=AuditAction.PROMPT_CREATE,
         resource_type="prompt",
         result="success",
         user=user,
@@ -55,7 +56,7 @@ def check_prompt(req: PromptCheckRequest, request: Request, user: dict[str, Any]
     _require_permission(user, Permission.PROMPT_READ, request, "prompt")
     title, content = _normalize_prompt_fields(req.title, req.content)
     checked = check_and_enhance_prompt(title=title, content=content, use_reasoning=req.use_reasoning)
-    _audit(request, action="prompt.check", resource_type="prompt", result="success", user=user)
+    _audit(request, action=AuditAction.PROMPT_CHECK, resource_type="prompt", result="success", user=user)
     return PromptCheckResponse(**checked)
 
 
@@ -75,7 +76,14 @@ def update_prompt(
     )
     if row is None:
         raise not_found("Prompt")
-    _audit(request, action="prompt.update", resource_type="prompt", result="success", user=user, resource_id=prompt_id)
+    _audit(
+        request,
+        action=AuditAction.PROMPT_UPDATE,
+        resource_type="prompt",
+        result="success",
+        user=user,
+        resource_id=prompt_id,
+    )
     return PromptTemplate(**row)
 
 
@@ -103,7 +111,7 @@ def approve_prompt_version(
         raise not_found("Prompt version")
     _audit(
         request,
-        action="prompt.version.approve",
+        action=AuditAction.PROMPT_VERSION_APPROVE,
         resource_type="prompt",
         result="success",
         user=user,
@@ -122,7 +130,7 @@ def rollback_prompt_version(
         raise not_found("Prompt version")
     _audit(
         request,
-        action="prompt.version.rollback",
+        action=AuditAction.PROMPT_VERSION_ROLLBACK,
         resource_type="prompt",
         result="success",
         user=user,
@@ -137,5 +145,12 @@ def delete_prompt(prompt_id: str, request: Request, user: dict[str, Any] = Depen
     ok = prompt_store.delete_prompt(user_id=user["user_id"], prompt_id=prompt_id)
     if not ok:
         raise not_found("Prompt")
-    _audit(request, action="prompt.delete", resource_type="prompt", result="success", user=user, resource_id=prompt_id)
+    _audit(
+        request,
+        action=AuditAction.PROMPT_DELETE,
+        resource_type="prompt",
+        result="success",
+        user=user,
+        resource_id=prompt_id,
+    )
     return {"ok": True, "prompt_id": prompt_id}

@@ -43,6 +43,7 @@ from app.services.query.guard import QueryLoadGuard, QueryOverloadedError, Query
 from app.services.runtime.auto_ingest_watcher import AutoIngestWatcher
 from app.services.runtime.background_queue import BackgroundTaskQueue
 from app.services.runtime.runtime_metrics import RuntimeMetrics
+from app.services.security.audit_actions import AuditAction
 from app.services.security.quota import QuotaGuard
 from app.services.security.rate_limiter import SlidingWindowLimiter
 
@@ -67,7 +68,7 @@ def _reserve_chat_credit(request: Request, user: dict[str, Any], resource_type: 
     except (QueryRateLimitedError, QueryOverloadedError) as exc:
         _audit(
             request,
-            action="query.load_guard",
+            action=AuditAction.QUERY_LOAD_GUARD,
             resource_type=resource_type,
             result="blocked",
             user=user,
@@ -79,7 +80,7 @@ def _reserve_chat_credit(request: Request, user: dict[str, Any], resource_type: 
     except InsufficientCreditsError as exc:
         _audit(
             request,
-            action="query.credit_reserve",
+            action=AuditAction.QUERY_CREDIT_RESERVE,
             resource_type=resource_type,
             result="blocked",
             user=user,

@@ -41,6 +41,7 @@ from app.services.models.config_store import (
 )
 from app.services.models.runtime import probe_chat_model_configuration
 from app.services.observability.alerting import emit_alert
+from app.services.security.audit_actions import AuditAction
 from app.services.security.network import OutboundURLValidationError
 from app.services.security.rbac import Permission
 
@@ -87,7 +88,7 @@ def admin_save_model_settings(
         runtime_metrics.inc("admin_model_settings_embedding_reindex_total")
     _audit(
         request,
-        action="admin.model_settings.save",
+        action=AuditAction.ADMIN_MODEL_SETTINGS_SAVE,
         resource_type="admin",
         result="success",
         user=user,
@@ -120,7 +121,7 @@ def admin_test_model_settings(
     if result["ok"]:
         _audit(
             request,
-            action="admin.model_settings.test",
+            action=AuditAction.ADMIN_MODEL_SETTINGS_TEST,
             resource_type="admin",
             result="success",
             user=user,
@@ -129,7 +130,7 @@ def admin_test_model_settings(
     else:
         _audit(
             request,
-            action="admin.model_settings.test",
+            action=AuditAction.ADMIN_MODEL_SETTINGS_TEST,
             resource_type="admin",
             result="failed",
             user=user,
@@ -144,7 +145,7 @@ def admin_reload_config(request: Request, user: dict[str, Any] = Depends(_requir
     new_settings = apply_config_reload()
     _audit(
         request,
-        action="admin.config.reload",
+        action=AuditAction.ADMIN_CONFIG_RELOAD,
         resource_type="admin",
         result="success",
         user=user,
@@ -203,7 +204,7 @@ def test_user_api_settings(req: UserApiSettings, request: Request, user: dict[st
     if result["ok"]:
         _audit(
             request,
-            action="user.api_settings.test",
+            action=AuditAction.USER_API_SETTINGS_TEST,
             resource_type="settings",
             result="success",
             user=user,
@@ -212,7 +213,7 @@ def test_user_api_settings(req: UserApiSettings, request: Request, user: dict[st
     else:
         _audit(
             request,
-            action="user.api_settings.test",
+            action=AuditAction.USER_API_SETTINGS_TEST,
             resource_type="settings",
             result="failed",
             user=user,

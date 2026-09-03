@@ -35,6 +35,7 @@ from app.api.transport.errors import (
 from app.api.utils.string_utils import normalize_string
 from app.services.auth.auth_service import GoogleUserCreationError, PasswordChangeError
 from app.services.auth.oauth_state import OAuthStateStore
+from app.services.security.audit_actions import AuditAction
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -66,14 +67,22 @@ def register(req: AuthCredentials, request: Request):
     ip = _client_ip(request)
     register_key = f"register::{ip}"
     if not register_limiter.try_acquire(register_key):
-        _audit(request, action="auth.register", resource_type="auth", result="blocked", detail="register_rate_limited")
+        _audit(
+            request,
+            action=AuditAction.AUTH_REGISTER,
+            resource_type="auth",
+            result="blocked",
+            detail="register_rate_limited",
+        )
         raise rate_limited("too many register attempts, retry later")
     try:
         user = auth_service.register(req.username, req.password)
     except ValueError as exc:
-        _audit(request, action="auth.register", resource_type="auth", result="failed", detail=str(exc))
+        _audit(request, action=AuditAction.AUTH_REGISTER, resource_type="auth", result="failed", detail=str(exc))
         raise bad_request(str(exc))
-    _audit(request, action="auth.register", resource_type="auth", result="success", resource_id=user["user_id"])
+    _audit(
+        request, action=AuditAction.AUTH_REGISTER, resource_type="auth", result="success", resource_id=user["user_id"]
+    )
     return AuthUser(**user)
 
 
@@ -86,7 +95,9 @@ def login(req: AuthCredentials, request: Request, response: Response):
         # 获取限流详细信息
         limit_info = login_limiter.get_limit_info(login_key)
 
-        _audit(request, action="auth.login", resource_type="auth", result="blocked", detail="login_rate_limited")
+        _audit(
+            request, action=AuditAction.AUTH_LOGIN, resource_type="auth", result="blocked", detail="login_rate_limited"
+        )
 
         # 构建友好的错误消息
         retry_minutes = limit_info["retry_after"] // 60
@@ -114,12 +125,12 @@ def login(req: AuthCredentials, request: Request, response: Response):
         payload = auth_service.login(req.username, req.password)
     except ValueError as exc:
         login_limiter.record(login_key)
-        _audit(request, action="auth.login", resource_type="auth", result="failed", detail=str(exc))
+        _audit(request, action=AuditAction.AUTH_LOGIN, resource_type="auth", result="failed", detail=str(exc))
         raise unauthorized("invalid credentials")
     login_limiter.reset(login_key)
     _audit(
         request,
-        action="auth.login",
+        action=AuditAction.AUTH_LOGIN,
         resource_type="auth",
         result="success",
         resource_id=payload["user"]["user_id"],
@@ -138,7 +149,12 @@ def logout(request: Request, response: Response, auth: tuple[dict[str, Any], str
     auth_service.logout(token)
     _clear_auth_cookie(response)
     _audit(
-        request, action="auth.logout", resource_type="auth", result="success", user=user, resource_id=user["user_id"]
+        request,
+        action=AuditAction.AUTH_LOGOUT,
+        resource_type="auth",
+        result="success",
+        user=user,
+        resource_id=user["user_id"],
     )
     return {"ok": True}
 
@@ -161,7 +177,7 @@ def update_profile(
         raise not_found("User")
     _audit(
         request,
-        action="profile.updated",
+        action=AuditAction.PROFILE_UPDATED,
         resource_type="user",
         result="success",
         user=user,
@@ -204,7 +220,7 @@ def change_password(
     except PasswordChangeError as exc:
         _audit(
             request,
-            action="auth.change_password",
+            action=AuditAction.AUTH_CHANGE_PASSWORD,
             resource_type="auth",
             result="failed",
             user=user,
@@ -217,7 +233,7 @@ def change_password(
     except Exception as exc:
         _audit(
             request,
-            action="auth.change_password",
+            action=AuditAction.AUTH_CHANGE_PASSWORD,
             resource_type="auth",
             result="failed",
             user=user,
@@ -232,7 +248,7 @@ def change_password(
         _set_auth_cookie(response, new_session["token"])
         _audit(
             request,
-            action="auth.change_password",
+            action=AuditAction.AUTH_CHANGE_PASSWORD,
             resource_type="auth",
             result="success",
             user=user,
@@ -250,7 +266,7 @@ def change_password(
         _clear_auth_cookie(response)
         _audit(
             request,
-            action="auth.change_password",
+            action=AuditAction.AUTH_CHANGE_PASSWORD,
             resource_type="auth",
             result="success_needs_reauth",
             user=user,
@@ -288,7 +304,7 @@ async def google_callback(request: Request) -> RedirectResponse:
     if state_error == "invalid_state":
         _audit(
             request,
-            action="auth.google_callback",
+            action=AuditAction.AUTH_GOOGLE_CALLBACK,
             resource_type="auth",
             result="blocked",
             detail="invalid_state",
@@ -297,7 +313,7 @@ async def google_callback(request: Request) -> RedirectResponse:
     if state_error == "security_check_failed":
         _audit(
             request,
-            action="auth.google_callback",
+            action=AuditAction.AUTH_GOOGLE_CALLBACK,
             resource_type="auth",
             result="blocked",
             detail=f"ip_mismatch: {stored_ip} != {current_ip}",
@@ -312,7 +328,7 @@ async def google_callback(request: Request) -> RedirectResponse:
         if not user_info or not user_info.get("email"):
             _audit(
                 request,
-                action="auth.google_callback",
+                action=AuditAction.AUTH_GOOGLE_CALLBACK,
                 resource_type="auth",
                 result="failed",
                 detail="no_email_in_response",
@@ -328,7 +344,7 @@ async def google_callback(request: Request) -> RedirectResponse:
         except GoogleUserCreationError as exc:
             _audit(
                 request,
-                action="auth.google_register",
+                action=AuditAction.AUTH_GOOGLE_REGISTER,
                 resource_type="auth",
                 result="failed",
                 detail=f"user_creation_failed: {exc}",
@@ -340,7 +356,7 @@ async def google_callback(request: Request) -> RedirectResponse:
         if not login_result["created"]:
             _audit(
                 request,
-                action="auth.google_login",
+                action=AuditAction.AUTH_GOOGLE_LOGIN,
                 resource_type="auth",
                 result="success",
                 user=user,
@@ -350,7 +366,7 @@ async def google_callback(request: Request) -> RedirectResponse:
         else:
             _audit(
                 request,
-                action="auth.google_register",
+                action=AuditAction.AUTH_GOOGLE_REGISTER,
                 resource_type="auth",
                 result="success",
                 user=user,
@@ -364,7 +380,7 @@ async def google_callback(request: Request) -> RedirectResponse:
     except Exception as exc:
         _audit(
             request,
-            action="auth.google_callback",
+            action=AuditAction.AUTH_GOOGLE_CALLBACK,
             resource_type="auth",
             result="failed",
             detail=f"oauth_error: {exc}",

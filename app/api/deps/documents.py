@@ -15,6 +15,7 @@ from app.core.config import get_settings
 from app.ingestion.loaders import IMAGE_EXTENSIONS
 from app.services.agent_classifier import classify_agent_class
 from app.services.security.access_scope import list_visible_document_rows
+from app.services.security.audit_actions import AuditAction
 
 logger = logging.getLogger(__name__)
 
@@ -138,7 +139,7 @@ def _enforce_result_source_scope(
         allowed_sources,
         audit=lambda outcome, detail: audit_fn(
             request,
-            action="query.source_scope",
+            action=AuditAction.QUERY_SOURCE_SCOPE,
             resource_type="query",
             result=outcome,
             user=user,

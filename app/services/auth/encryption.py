@@ -5,6 +5,8 @@ import logging
 import secrets
 from typing import Any
 
+from app.services.security.audit_actions import AuditAction
+
 logger = logging.getLogger(__name__)
 
 
@@ -88,7 +90,7 @@ def decrypt_api_settings_payload(payload: dict[str, Any], key: bytes, audit_logg
         if audit_logger:
             try:
                 audit_logger.log(
-                    action="api_key.decryption_failed",
+                    action=AuditAction.API_KEY_DECRYPTION_FAILED,
                     resource_type="api_settings",
                     result="failed",
                     detail=f"decryption_error: {type(e).__name__}",
@@ -102,7 +104,7 @@ def decrypt_api_settings_payload(payload: dict[str, Any], key: bytes, audit_logg
         if audit_logger:
             try:
                 audit_logger.log(
-                    action="api_key.decryption_error",
+                    action=AuditAction.API_KEY_DECRYPTION_ERROR,
                     resource_type="api_settings",
                     result="failed",
                     detail=f"unexpected_error: {type(e).__name__}",

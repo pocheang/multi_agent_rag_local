@@ -15,6 +15,7 @@ from urllib.parse import urlparse
 
 from app.core.config import get_settings
 from app.domain.text import normalize_string
+from app.services.security.audit_actions import AuditAction
 
 _LOCK = threading.Lock()
 _STATE: dict[str, Any] = {
@@ -157,18 +158,18 @@ def build_ops_overview(
     login_success = sum(
         1
         for row in window_rows
-        if str(row.get("action", "")) == "auth.login" and str(row.get("result", "")).lower() == "success"
+        if str(row.get("action", "")) == AuditAction.AUTH_LOGIN and str(row.get("result", "")).lower() == "success"
     )
     login_failed = sum(
         1
         for row in window_rows
-        if str(row.get("action", "")) == "auth.login" and str(row.get("result", "")).lower() != "success"
+        if str(row.get("action", "")) == AuditAction.AUTH_LOGIN and str(row.get("result", "")).lower() != "success"
     )
     query_requests = sum(1 for row in window_rows if str(row.get("action", "")).startswith("query."))
     upload_requests = sum(
         1
         for row in window_rows
-        if str(row.get("action", "")) == "document.upload" and str(row.get("result", "")).lower() == "success"
+        if str(row.get("action", "")) == AuditAction.DOCUMENT_UPLOAD and str(row.get("result", "")).lower() == "success"
     )
 
     bucket_counter: dict[str, dict[str, int]] = {}
@@ -252,13 +253,16 @@ def build_ops_alerts(
     error_rate = (errors / total) * 100 if total > 0 else 0.0
     durations = sorted(int(row.get("duration_ms", 0) or 0) for row in request_rows)
     p95 = durations[max(0, int(len(durations) * 0.95) - 1)] if durations else 0
+    # Nothing writes a grounding ratio into the audit log today.  This filtered on
+    # action "query.run", which no call site has ever produced -- the three query.*
+    # actions are written only when a query is *refused* -- so the list was always
+    # empty and the average of zero samples was 1.0: a perfect score reported for a
+    # metric never observed.  Absence is now absence, and any row that does start
+    # carrying the ratio is picked up without this having to name the action first.
     grounding_values = [
-        value
-        for row in window_rows
-        if str(row.get("action", "")).strip() == "query.run"
-        if (value := extract_grounding_support(str(row.get("detail", "")))) is not None
+        value for row in window_rows if (value := extract_grounding_support(str(row.get("detail", "")))) is not None
     ]
-    grounding_avg = (sum(grounding_values) / len(grounding_values)) if grounding_values else 1.0
+    grounding_avg = (sum(grounding_values) / len(grounding_values)) if grounding_values else None
 
     alerts: list[dict[str, Any]] = []
     if p95 > p95_latency_threshold:
@@ -267,7 +271,7 @@ def build_ops_alerts(
         alerts.append(
             {"type": "error_rate", "severity": "high", "value": round(error_rate, 2), "threshold": error_rate_threshold}
         )
-    if grounding_avg < grounding_threshold:
+    if grounding_avg is not None and grounding_avg < grounding_threshold:
         alerts.append(
             {
                 "type": "grounding_support",
@@ -283,7 +287,7 @@ def build_ops_alerts(
         "slo": {
             "p95_latency_ms": p95,
             "error_rate_percent": round(error_rate, 2),
-            "grounding_support_ratio_avg": round(grounding_avg, 3),
+            "grounding_support_ratio_avg": None if grounding_avg is None else round(grounding_avg, 3),
         },
         "alerts": alerts,
     }

@@ -4,25 +4,8 @@ import { useMemo } from "react";
 import { AdminAuditLogTable } from "@/pages/admin/AdminAuditLogTable";
 import { AdminFormSelect } from "@/components/AdminFormField";
 import { AdminPagination } from "@/components/AdminPagination";
+import { ACTION_KEYWORD_OPTIONS } from "@/pages/admin/constants";
 
-const ACTION_KEYWORD_OPTIONS = [
-  "auth.login",
-  "auth.logout",
-  "session.create",
-  "session.delete",
-  "query.stream",
-  "document.upload",
-  "document.delete",
-  "prompt.create",
-  "prompt.update",
-  "prompt.delete",
-  "admin.user.create",
-  "admin.user.role_update",
-  "admin.user.status_update",
-  "admin.user.classification_update",
-  "admin.user.password_reset",
-  "admin.user.approval_token_reset",
-];
 
 type Props = {
   logs: AuditLogEntry[];

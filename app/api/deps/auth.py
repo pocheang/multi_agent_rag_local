@@ -8,6 +8,7 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from app.api.transport.errors import forbidden
 from app.services.auth.auth_service import AuthDBService
+from app.services.security.audit_actions import AuditAction
 from app.services.security.rbac import Permission
 
 auth_scheme = HTTPBearer(auto_error=False)
@@ -84,7 +85,7 @@ def _require_user(
     if user_status != "active":
         _audit(
             request,
-            action="auth.access_denied",
+            action=AuditAction.AUTH_ACCESS_DENIED,
             resource_type="session",
             result="blocked_inactive_user",
             user=user,
@@ -130,7 +131,7 @@ def _require_permission(
     if not can(permission, user):
         _audit(
             request,
-            action="auth.permission_denied",
+            action=AuditAction.AUTH_PERMISSION_DENIED,
             resource_type=resource_type,
             result="denied",
             user=user,
