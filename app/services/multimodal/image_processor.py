@@ -8,7 +8,6 @@ from io import BytesIO
 from pathlib import Path
 from typing import Any
 
-import fitz  # PyMuPDF
 from PIL import Image
 
 from app.core.config import get_settings
@@ -65,6 +64,8 @@ class ImageProcessor:
         images: list[ImageContent] = []
 
         try:
+            import fitz  # PyMuPDF, from the optional `multimodal` extra
+
             with fitz.open(str(pdf_path)) as doc:
                 for page_num in range(len(doc)):
                     page = doc[page_num]
@@ -490,8 +491,11 @@ class ImageProcessor:
         ).uri
         return result.content
 
-    async def index_image(self, image: ImageContent, collection_name: str = "image_descriptions") -> None:
+    def index_image(self, image: ImageContent, collection_name: str = "image_descriptions") -> None:
         """Index image content in vector database.
+
+        Synchronous: it awaits nothing, and its caller is document ingestion,
+        which runs in a worker thread where an event loop must not be driven.
 
         Args:
             image: ImageContent with description
@@ -516,6 +520,8 @@ class ImageProcessor:
                         "doc_id": image.doc_id,
                         "document_id": image.document_id,
                         "tenant_id": image.tenant_id,
+                        "owner_user_id": image.owner_user_id,
+                        "visibility": image.visibility,
                         "version": image.version,
                         "page_number": image.page_number,
                         "image_id": image.image_id,
@@ -548,6 +554,8 @@ class ImageProcessor:
                             "doc_id": image.doc_id,
                             "document_id": image.document_id,
                             "tenant_id": image.tenant_id,
+                            "owner_user_id": image.owner_user_id,
+                            "visibility": image.visibility,
                             "version": image.version,
                             "page_number": image.page_number,
                             "image_id": image.image_id,

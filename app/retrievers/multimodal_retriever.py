@@ -67,7 +67,10 @@ class MultiModalRetriever:
         Returns:
             List of RetrievalResult objects
         """
-        modalities = modalities or ["text", "image", "table", "chart"]
+        # No text modality: it queried a `text_chunks` collection nothing has ever
+        # created, logging a traceback per query, and text is what the `vector`
+        # source is for. This source contributes what that one cannot.
+        modalities = modalities or ["image", "table", "chart"]
         top_k = top_k or self.default_top_k
         where = _scope_filter(scope)
         if where is None:
@@ -137,50 +140,6 @@ class MultiModalRetriever:
             if item is not None and _matches_scope(item, row.metadata, scope):
                 evidence.append(item)
         return tuple(evidence)
-
-    async def _retrieve_text(self, query: str, top_k: int, **kwargs: Any) -> list[RetrievalResult]:
-        """Retrieve text chunks."""
-        try:
-            from app.retrievers.stores.vector import get_chroma_client
-
-            client = get_chroma_client()
-            collection = client.get_collection(name="text_chunks")
-
-            # Query collection
-            results = collection.query(
-                query_texts=[query],
-                n_results=top_k,
-                where=kwargs.get("where"),
-                include=["documents", "metadatas", "distances"],
-            )
-
-            # Convert to RetrievalResult
-            retrieval_results: list[RetrievalResult] = []
-
-            if results["ids"] and results["ids"][0]:
-                for i, doc_id in enumerate(results["ids"][0]):
-                    metadata = results["metadatas"][0][i] if results["metadatas"] else {}
-                    distance = results["distances"][0][i] if results["distances"] else 1.0
-
-                    # Convert distance to similarity score (inverse)
-                    score = 1.0 / (1.0 + distance)
-
-                    result = RetrievalResult(
-                        id=doc_id,
-                        content=results["documents"][0][i],
-                        score=score,
-                        modality="text",
-                        doc_id=metadata.get("doc_id", ""),
-                        page_number=metadata.get("page_number", 0),
-                        metadata=metadata,
-                    )
-                    retrieval_results.append(result)
-
-            return retrieval_results
-
-        except Exception:
-            logger.exception("Text retrieval error")
-            return []
 
     async def _retrieve_images(self, query: str, top_k: int, **kwargs: Any) -> list[RetrievalResult]:
         """Retrieve image descriptions."""
@@ -472,7 +431,10 @@ class MultiModalRetriever:
         Returns:
             Dictionary mapping modality to results
         """
-        modalities = modalities or ["text", "image", "table", "chart"]
+        # No text modality: it queried a `text_chunks` collection nothing has ever
+        # created, logging a traceback per query, and text is what the `vector`
+        # source is for. This source contributes what that one cannot.
+        modalities = modalities or ["image", "table", "chart"]
         if doc_id not in scope.document_ids:
             return {modality: [] for modality in modalities}
 
@@ -535,9 +497,20 @@ class MultiModalRetriever:
 
 
 def _scope_filter(scope: AccessScope) -> dict[str, Any] | None:
-    """Build a Chroma filter that never searches outside the authorized tenant."""
+    """Build a Chroma filter that never searches outside the authorized tenant.
+
+    Two independent checks, the same pair `similarity_search` applies: the source
+    or document list, which is *derived* from the caller's visible documents, and
+    the owner metadata, which is written independently at index time. A bug in one
+    does not widen what the other allows.
+    """
+
+    from app.retrievers.stores.vector import OwnerScope, _owner_clause
 
     constraints: list[dict[str, Any]] = [{"tenant_id": scope.tenant_id}]
+    owner = OwnerScope.from_access_scope(scope)
+    if owner is not None:
+        constraints.append(_owner_clause(owner))
     if scope.document_ids:
         document_ids = sorted(scope.document_ids)
         constraints.append(

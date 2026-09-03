@@ -277,3 +277,48 @@ def test_an_unreadable_page_number_leaves_the_source_out_rather_than_at_zero(wir
 
     assert result["pages_by_source"] == {}
     assert result["chunks_indexed"] == 1
+
+
+def test_a_documents_images_are_indexed_and_counted(wiring: _Calls, monkeypatch) -> None:
+    """The multimodal source reads what this writes; before it, nothing did."""
+
+    @dataclass
+    class _Image:
+        image_id: str = "img-1"
+        page: int = 1
+        filename: str = "figure-1.png"
+        data: bytes = b""
+        ocr_text: str = "Deployment topology"
+        description: str = ""
+
+    def load(path: Path, metadata: dict[str, Any]):
+        parsed = _FakeParsed(
+            _FakeEvidenceDocument(source=str(path), document_id=f"doc-{path.stem}"),
+            images=(_Image(),),
+        )
+        return parsed, [Document(page_content="body", metadata={"page": 1})]
+
+    indexed: list[object] = []
+
+    class _FakeProcessor:
+        def index_image(self, image, collection_name: str = "image_descriptions") -> None:
+            indexed.append(image)
+
+    monkeypatch.setattr(ingest_module, "load_document_with_evidence", load)
+    monkeypatch.setattr("app.services.multimodal.image_processor.ImageProcessor", _FakeProcessor)
+
+    result = ingest_module.ingest_paths([Path("a.pdf")])
+
+    assert result["images_indexed"] == 1
+    assert indexed and "Deployment topology" in indexed[0].description
+
+
+def test_the_empty_result_reports_no_images_key(wiring: _Calls, monkeypatch) -> None:
+    """The short result keeps its three keys; images_indexed belongs to the full one."""
+
+    def parses_to_nothing(path: Path, metadata: dict[str, Any]):
+        return _FakeParsed(_FakeEvidenceDocument(source=str(path))), []
+
+    monkeypatch.setattr(ingest_module, "load_document_with_evidence", parses_to_nothing)
+
+    assert "images_indexed" not in ingest_module.ingest_paths([Path("a.pdf")])

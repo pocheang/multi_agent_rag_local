@@ -20,6 +20,10 @@ class ImageContent:
     created_at: datetime = field(default_factory=datetime.utcnow)
     metadata: dict[str, Any] = field(default_factory=dict)
     tenant_id: str = "shared"
+    owner_user_id: str = ""
+    # Fail closed: an image whose visibility nobody set is nobody's to read
+    # but its owner's.
+    visibility: str = "private"
     version: int = 1
     artifact_uri: str | None = None
     masked_artifact_uri: str | None = None

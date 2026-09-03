@@ -38,7 +38,7 @@ def ingest_paths(
 ) -> dict:
     """Load, index and graph-extract a set of files, and report what happened."""
 
-    docs, parsed_documents = _load_documents(paths, metadata_overrides_by_source, persist_evidence)
+    docs, parsed_documents, images_indexed = _load_documents(paths, metadata_overrides_by_source, persist_evidence)
     if not docs:
         # Deliberately shorter than the result below: there is no chunk, page or
         # manifest to report. Evidence has still been persisted for whatever
@@ -59,6 +59,7 @@ def ingest_paths(
         "loaded_documents": len(sources),
         "chunks_indexed": len(chunks),
         "triplets_written": count_triplets,
+        "images_indexed": images_indexed,
         "pages_by_source": {source: len(pages) for source, pages in pages_by_source.items()},
         "evidence_manifests": [
             {
@@ -75,7 +76,7 @@ def _load_documents(
     paths: list[Path],
     metadata_overrides_by_source: dict[str, dict[str, Any]] | None,
     persist_evidence: bool,
-) -> tuple[list[Any], list[ParsedDocument]]:
+) -> tuple[list[Any], list[ParsedDocument], int]:
     """Parse each file and stamp every document it yields with its provenance.
 
     Metadata is layered loader < caller override < canonical, so the identifiers
@@ -84,6 +85,7 @@ def _load_documents(
 
     docs: list[Any] = []
     parsed_documents: list[ParsedDocument] = []
+    images_indexed = 0
     for path in paths:
         source = str(path)
         metadata = dict((metadata_overrides_by_source or {}).get(source, {}))
@@ -95,9 +97,86 @@ def _load_documents(
             image_id = str(doc.metadata.get("image_id", "") or "")
             if image_id in image_artifacts:
                 doc.metadata["artifact_uri"] = image_artifacts[image_id]
+        images_indexed += _index_images(parsed, image_artifacts, canonical)
         docs.extend(loaded)
         parsed_documents.append(parsed)
-    return docs, parsed_documents
+    return docs, parsed_documents, images_indexed
+
+
+# The multimodal source retrieves images by the text something managed to read out
+# of them. Nothing was ever writing that text, so `image_descriptions` did not
+# exist and the source returned nothing on every visual question it was selected
+# for. This is the producer.
+_IMAGE_ERROR_MARKER = "[image_ocr_error]"
+
+
+def _index_images(
+    parsed: ParsedDocument,
+    image_artifacts: dict[str, str],
+    canonical: dict[str, Any],
+) -> int:
+    """Index each of a document's images, and report how many became searchable.
+
+    Synchronous on purpose. `ingest_paths` is reached from ``asyncio.to_thread``,
+    where driving an event loop is the defect this repository has fixed twice, and
+    nothing here needs one: `ocr_image_bytes` is synchronous and so is the store.
+    """
+
+    if not parsed.images:
+        return 0
+
+    from app.ingestion.extraction.ocr import ocr_image_bytes
+    from app.services.multimodal.image_processor import ImageProcessor
+    from app.services.multimodal.models import ImageContent
+
+    processor = ImageProcessor()
+    source = Path(str(canonical.get("source", "") or ""))
+    indexed = 0
+
+    for image in parsed.images:
+        text = _readable_image_text(image, ocr_image_bytes, source)
+        if not text:
+            # An image nothing could read is not evidence. Indexing the reason --
+            # "Tesseract executable not found" -- would make the diagnostic itself
+            # retrievable, which is worse than the image being absent.
+            continue
+        try:
+            processor.index_image(
+                ImageContent(
+                    image_id=image.image_id,
+                    doc_id=str(canonical.get("document_id", "") or ""),
+                    page_number=image.page,
+                    image_data=b"",  # the bytes live in the artifact store, not the index
+                    description=text,
+                    tenant_id=str(canonical.get("tenant_id", "") or ""),
+                    owner_user_id=str(canonical.get("owner_user_id", "") or ""),
+                    visibility=str(canonical.get("visibility", "private") or "private"),
+                    version=int(canonical.get("version", 1) or 1),
+                    artifact_uri=image_artifacts.get(image.image_id, ""),
+                    metadata={"source": str(canonical.get("source", "") or ""), "filename": image.filename},
+                )
+            )
+            indexed += 1
+        except Exception as e:
+            logger.warning(f"image_index_failed image_id={image.image_id} error={e}")
+    return indexed
+
+
+def _readable_image_text(image: Any, ocr_image_bytes: Any, source: Path) -> str:
+    """Whatever was actually read out of this image, or "" if that was nothing."""
+
+    parts = [str(image.description or "").strip(), str(image.ocr_text or "").strip()]
+    if not any(parts) and image.data:
+        try:
+            documents = ocr_image_bytes(image.data, source, page=image.page)
+        except Exception as e:
+            logger.warning(f"image_ocr_failed image_id={image.image_id} error={e}")
+            documents = []
+        for document in documents:
+            content = str(getattr(document, "page_content", "") or "")
+            if content and _IMAGE_ERROR_MARKER not in content:
+                parts.append(content.strip())
+    return "\n\n".join(part for part in parts if part)[:4000]
 
 
 def _pages_by_source(docs: list[Any]) -> dict[str, set[int]]:
