@@ -273,6 +273,25 @@ and graph context are real evidence with no version to point at. Requiring one t
 every marker aimed at them was silently dropped, so a web-routed answer returned no
 citations at all and finished `degraded`.
 
+**Self-RAG runs where the caller asks for it, and nowhere else** (2026-09-03).
+`_run_self_rag_evaluation` in `app/api/routes/public/query.py` is the only Self-RAG there
+is: it awaits `SelfRAGEvaluator` properly and is gated by the request's `enable_self_rag`.
+There used to be a second one in `app/agents/rag/vector.py` -- a `_evaluate_retrieval` that
+returned `{"enabled": True, "evaluated_count": N}` beside a comment saying the real
+implementation would be async. It had never run: the agent's one construction site supplies
+no `llm_client`, so the evaluator was always `None`; the branch was additionally gated on
+`VectorRAGConfig.enable_evaluation`, default false; and `run_vector_rag` rebuilt the result
+from five keys, dropping `evaluation` anyway.
+
+Connecting it was never the option: the evaluator's methods are coroutines, `execute` is
+synchronous and reached from `asyncio.to_thread`, and driving a coroutine from there is the
+defect already fixed twice in this repository. It is deleted, along with the config field
+`GET /api/advanced-rag/config` was reporting as `self_rag.enabled_by_default` -- a field
+that gated nothing, reading `false` for the same reason the real switch does, which is why
+nobody noticed. That endpoint now reports the request flag, and
+`tests/api/test_advanced_rag_config.py` asserts each key follows the thing that gates it
+rather than asserting a value.
+
 **Dormant by design (2026-08-29)**: the following exist and are reachable but are
 switched off on the live request path. Turning any of them on is a cost/latency
 decision, not a bug fix — do not "fix" them by flipping the flag.
@@ -391,6 +410,23 @@ gets stored, so persisting it does not widen what a database read exposes — bu
 rotating or regenerating `API_SETTINGS_ENCRYPTION_KEY` turns stored credentials
 from *absent* into *undecryptable*.
 
+### Upload storage
+
+`store_uploaded_files` (`app/services/documents/dedup.py`) is the front door for user
+documents, and three of its decisions outlive the request. The directory a file lands in
+(`uploads_path/<owner_user_id>/`) is what document visibility falls back to for rows
+indexed before owner metadata existed; the visibility it resolves is what the row is
+indexed with; and the hash it computes is what stops the same file being stored twice.
+
+Two rules worth keeping in mind before changing it. **Public needs an approval that is
+exactly `True`** -- a missing answer is not a yes, and this is the last place a private
+document can stop being private. And **an index row is not evidence that a file exists**:
+`_existing_duplicate` re-hashes the stored copy before telling a request it already has
+the file, because the index can outlive what it points at.
+
+`tests/security/test_upload_storage.py` pins the refusals, which are the direction that
+fails open.
+
 ### User Data Isolation
 
 Retrieval is scoped, not just filtered afterwards (fixed 2026-08-30). Two properties
@@ -430,8 +466,12 @@ reach. **This means chunks indexed before ingest wrote owner metadata are invisi
 the clause is on — `$eq` does not match an absent key (verified on chromadb 1.5.9). Reindex
 any pre-existing store before deploying.** Every `similarity_search` call site must pass an
 owner; `tests/security/test_no_unrestricted_retrieval.py` enumerates them via AST and keeps
-the two genuinely caller-less ones in a documented allowlist. A partial guard would be
-worse than none.
+the one genuinely caller-less site in a documented allowlist -- the offline evaluation
+harness, which has no request and no user. A partial guard would be worse than none. The
+second entry was `candidate_collection`'s default `vector_fn`, an ownerless
+`similarity_search` kept out of reach by every live caller injecting an owner-bound
+partial; `vector_fn` is required and defaultless now, so the module no longer reaches the
+store at all and the entry is gone rather than reworded.
 
 **The owner must survive every hop, not just the call site** (fixed 2026-08-30). The AST
 guard only sees direct `similarity_search` calls, so it passed the whole time the graph
@@ -1110,7 +1150,7 @@ A third makes it three. Do not add a pixel-diff CI gate for the reason above, an
 
 `tests/` was cleared ahead of the v0.7 rewrite and is being rebuilt incrementally: each bug
 fix lands with the regression test that would have caught it, rather than as a separate
-back-filling effort. As of 2026-09-03 there are 1167 tests covering the chat round trip,
+back-filling effort. As of 2026-09-03 there are 1201 tests covering the chat round trip,
 conversation context, graph routing, clarification, the async load guard, engine reuse,
 answer safety, reader-facing citation numbering, stage-timeout degradation, the governed
 tool stack with its multi-step loop and approve-then-resume cycle, retrieval
@@ -1123,10 +1163,10 @@ Settings field has a reader, a guard that no module reads the environment behind
 admin configuration surface with the writes it refuses, one vocabulary for audit actions,
 an ASCII API document, a grounding SLO that measures answers, and the five functions
 unpicked in the 2026-09-03 complexity pass -- document ingestion, the distributed query
-guard, candidate collection, route selection and the document visibility rules, each
-characterized against its old implementation before being split.
+guard, candidate collection, route selection, the document visibility rules and upload
+storage, each characterized against its old implementation before being split.
 
-**That count is not 1167 independent assertions, and the number before it was stale.** Two
+**That count is not 1201 independent assertions, and the number before it was stale.** Two
 guards are parametrized one case per module — the audit-action scan over `app/` (376) and
 the ASCII scan over `app/api` (60) — so they grow with the codebase rather than with
 coverage. The real baseline on 2026-09-03 was 651, not the 538 this paragraph claimed:
@@ -1136,7 +1176,7 @@ covered the day it is added, where one test looping inside a single assertion re
 first offender and stops — but it does mean this total is not comparable across the change
 that introduced them.
 
-`tests/security/` (625 of those, 378 being the per-module audit-action scan) pins the
+`tests/security/` (652 of those, 378 being the per-module audit-action scan) pins the
 user-data isolation invariants — see
 `docs/superpowers/plans/2026-08-29-user-data-isolation.md`. That plan is complete
 (phases 0-4) and all 8 of its `xfail(strict=True)` markers are cleared; keep using the same
