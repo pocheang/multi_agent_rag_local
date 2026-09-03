@@ -36,7 +36,53 @@ def ingest_paths(
     parser_profiles_by_source: dict[str, dict[str, Any]] | None = None,
     persist_evidence: bool = True,
 ) -> dict:
-    docs = []
+    """Load, index and graph-extract a set of files, and report what happened."""
+
+    docs, parsed_documents = _load_documents(paths, metadata_overrides_by_source, persist_evidence)
+    if not docs:
+        # Deliberately shorter than the result below: there is no chunk, page or
+        # manifest to report. Evidence has still been persisted for whatever
+        # parsed to no text -- this discards the manifest it just wrote.
+        return {"loaded_documents": 0, "chunks_indexed": 0, "triplets_written": 0}
+
+    pages_by_source = _pages_by_source(docs)
+    sources = {str((doc.metadata or {}).get("source", "")) for doc in docs}
+    sources.discard("")
+
+    chunks, parent_records = split_documents(docs)
+    records = _write_records(chunks, parent_records, reset_vector_store=reset_vector_store)
+    _rebuild_vector_index(chunks, [record["id"] for record in records], reset_vector_store=reset_vector_store)
+    count_triplets = _write_graph_triplets(chunks, parser_profiles_by_source)
+
+    return {
+        # Files, not Document objects: one PDF arrives as one Document per page.
+        "loaded_documents": len(sources),
+        "chunks_indexed": len(chunks),
+        "triplets_written": count_triplets,
+        "pages_by_source": {source: len(pages) for source, pages in pages_by_source.items()},
+        "evidence_manifests": [
+            {
+                "document_id": parsed.document.document_id,
+                "version": parsed.document.version,
+                "tenant_id": parsed.document.tenant_id,
+            }
+            for parsed in parsed_documents
+        ],
+    }
+
+
+def _load_documents(
+    paths: list[Path],
+    metadata_overrides_by_source: dict[str, dict[str, Any]] | None,
+    persist_evidence: bool,
+) -> tuple[list[Any], list[ParsedDocument]]:
+    """Parse each file and stamp every document it yields with its provenance.
+
+    Metadata is layered loader < caller override < canonical, so the identifiers
+    the rest of the system scopes on cannot be overwritten by a caller.
+    """
+
+    docs: list[Any] = []
     parsed_documents: list[ParsedDocument] = []
     for path in paths:
         source = str(path)
@@ -51,15 +97,16 @@ def ingest_paths(
                 doc.metadata["artifact_uri"] = image_artifacts[image_id]
         docs.extend(loaded)
         parsed_documents.append(parsed)
-    if not docs:
-        return {"loaded_documents": 0, "chunks_indexed": 0, "triplets_written": 0}
+    return docs, parsed_documents
 
-    # Count unique source files (not Document objects)
-    unique_sources = {str((doc.metadata or {}).get("source", "")) for doc in docs}
-    unique_sources.discard("")  # Remove empty strings
-    files_loaded = len(unique_sources)
 
-    # Collect page information for each source
+def _pages_by_source(docs: list[Any]) -> dict[str, set[int]]:
+    """Which pages each source contributed.
+
+    A source whose page numbers are all unreadable is registered with an empty
+    set rather than left out -- ``setdefault`` runs before ``int()``.
+    """
+
     pages_by_source: dict[str, set[int]] = {}
     for doc in docs:
         source = str((doc.metadata or {}).get("source", ""))
@@ -69,22 +116,31 @@ def ingest_paths(
                 pages_by_source.setdefault(source, set()).add(int(page))
             except (ValueError, TypeError):
                 pass
+    return pages_by_source
 
-    chunks, parent_records = split_documents(docs)
+
+def _write_records(chunks: list[Any], parent_records: list[dict], *, reset_vector_store: bool) -> list[dict]:
+    """Persist the corpus and parent rows, and hand each chunk its record metadata.
+
+    A reset run starts from nothing; every other run merges by id, so re-ingesting
+    one file replaces its rows and leaves the rest of the corpus alone.
+    """
+
     records = documents_to_records(chunks)
     for chunk, record in zip(chunks, records, strict=False):
         chunk.metadata = record["metadata"]
 
     existing = [] if reset_vector_store else read_corpus_records()
-    merged_records = _merge_records_by_id(existing, records)
-    write_corpus_records(merged_records)
+    write_corpus_records(_merge_records_by_id(existing, records))
 
     existing_parents = [] if reset_vector_store else read_parent_records()
-    merged_parents = _merge_records_by_id(existing_parents, parent_records)
-    write_parent_records(merged_parents)
+    write_parent_records(_merge_records_by_id(existing_parents, parent_records))
 
     reset_bm25_cache()
+    return records
 
+
+def _rebuild_vector_index(chunks: list[Any], record_ids: list[str], *, reset_vector_store: bool) -> None:
     store = get_vector_store()
     if reset_vector_store:
         try:
@@ -92,12 +148,19 @@ def ingest_paths(
         except (RuntimeError, ValueError) as e:
             logger.warning(f"vector_store_delete_collection_failed: {e}", exc_info=True)
         clear_vector_store_cache()
-        store = get_vector_store()
-    add_documents(chunks, ids=[record["id"] for record in records])
+        get_vector_store()  # reopen behind the cleared cache, so the collection exists again
+    add_documents(chunks, ids=record_ids)
     clear_retrieval_cache()
 
-    count_triplets = 0
-    client = None
+
+def _write_graph_triplets(chunks: list[Any], parser_profiles_by_source: dict[str, dict[str, Any]] | None) -> int:
+    """Extract and insert graph triplets, or return 0 without disturbing the run.
+
+    Neo4j is optional throughout this system, so every failure here -- an absent
+    server, an unparseable chunk, a rejected batch -- costs the triplets and
+    nothing else.
+    """
+
     try:
         client = Neo4jClient()
     except (ImportError, RuntimeError, ValueError) as e:
@@ -106,98 +169,102 @@ def ingest_paths(
             f"Error: {e}. Check NEO4J_URI and credentials in environment.",
             exc_info=True,
         )
-        client = None
+        return 0
 
-    if client is not None:
+    try:
+        rows, extraction_errors = _triplet_rows(chunks, parser_profiles_by_source)
+        return _insert_triplets(client, rows, extraction_errors)
+    except Exception as e:
+        logger.exception(f"Unexpected error during graph ingestion: {e}")
+        return 0
+    finally:
+        client.close()
+
+
+def _triplet_rows(
+    chunks: list[Any], parser_profiles_by_source: dict[str, dict[str, Any]] | None
+) -> tuple[list[dict[str, Any]], int]:
+    """Every triplet the chunks yield, gathered for one batch insert.
+
+    A chunk that will not parse costs that chunk and is counted rather than
+    raised: the rest of the batch is still worth inserting.
+    """
+
+    rows: list[dict[str, Any]] = []
+    extraction_errors = 0
+    for chunk_idx, chunk in enumerate(chunks):
+        source = str(chunk.metadata.get("source", "unknown"))
+        profile = (parser_profiles_by_source or {}).get(source, {})
+        if profile.get("enable_graph") is False:
+            continue
+        provenance = _chunk_provenance(chunk, chunk_idx, source)
+        min_confidence = float(profile.get("graph_min_confidence", 0.5) or 0.5)
         try:
-            # Collect all triplets first for batch processing (10x performance improvement)
-            triplets_to_insert = []
-            extraction_errors = 0
-
-            for chunk_idx, chunk in enumerate(chunks):
-                text = chunk.page_content
-                source = str(chunk.metadata.get("source", "unknown"))
-                profile = (parser_profiles_by_source or {}).get(source, {})
-                if profile.get("enable_graph") is False:
-                    continue
-                chunk_id = str(chunk.metadata.get("chunk_id", ""))
-                document_id = str(chunk.metadata.get("document_id", "") or "")
-                tenant_id = str(chunk.metadata.get("tenant_id", "") or "")
-                version_raw = chunk.metadata.get("version")
-                try:
-                    version = int(version_raw) if version_raw is not None else None
-                except (TypeError, ValueError):
-                    version = None
-                page_raw = chunk.metadata.get("page")
-                try:
-                    page = int(page_raw) if page_raw is not None else None
-                except (TypeError, ValueError):
-                    page = None
-                    logger.debug(f"Invalid page number '{page_raw}' in chunk {chunk_idx} from {source}")
-
-                min_confidence = float(profile.get("graph_min_confidence", 0.5) or 0.5)
-
-                try:
-                    for triplet in extract_graph_triplets(text, min_confidence=min_confidence):
-                        triplets_to_insert.append(
-                            {
-                                "head": triplet.head,
-                                "relation": triplet.relation,
-                                "tail": triplet.tail,
-                                "source": source,
-                                "chunk_id": chunk_id,
-                                "page": page,
-                                "document_id": document_id,
-                                "version": version,
-                                "tenant_id": tenant_id,
-                                "owner_user_id": str(chunk.metadata.get("owner_user_id", "") or ""),
-                                "visibility": str(chunk.metadata.get("visibility", "private") or "private"),
-                                "acl_tags": str(chunk.metadata.get("acl_tags", "") or ""),
-                                "confidence": triplet.confidence,
-                            }
-                        )
-                except Exception as e:
-                    extraction_errors += 1
-                    logger.warning(f"Failed to extract triplets from chunk {chunk_idx} (source: {source}): {e}")
-
-            # Batch insert all triplets at once
-            if triplets_to_insert:
-                try:
-                    count_triplets = client.batch_upsert_triplets(triplets_to_insert)
-                    if extraction_errors > 0:
-                        logger.warning(
-                            f"Graph extraction completed with {extraction_errors} errors. "
-                            f"Successfully inserted {count_triplets} triplets."
-                        )
-                except Exception:
-                    logger.exception(
-                        f"Failed to batch insert {len(triplets_to_insert)} triplets to Neo4j. "
-                        f"Graph features may be incomplete."
-                    )
-            elif extraction_errors > 0:
-                logger.warning(
-                    f"No triplets extracted due to {extraction_errors} extraction errors. "
-                    f"Check document format and extraction settings."
+            for triplet in extract_graph_triplets(chunk.page_content, min_confidence=min_confidence):
+                rows.append(
+                    {
+                        "head": triplet.head,
+                        "relation": triplet.relation,
+                        "tail": triplet.tail,
+                        **provenance,
+                        "confidence": triplet.confidence,
+                    }
                 )
         except Exception as e:
-            logger.exception(f"Unexpected error during graph ingestion: {e}")
-        finally:
-            client.close()
+            extraction_errors += 1
+            logger.warning(f"Failed to extract triplets from chunk {chunk_idx} (source: {source}): {e}")
+    return rows, extraction_errors
 
+
+def _chunk_provenance(chunk: Any, chunk_idx: int, source: str) -> dict[str, Any]:
+    """The scoping fields every triplet carries back to the chunk it came from."""
+
+    page_raw = chunk.metadata.get("page")
+    page = _optional_int(page_raw)
+    if page is None and page_raw is not None:
+        logger.debug(f"Invalid page number '{page_raw}' in chunk {chunk_idx} from {source}")
     return {
-        "loaded_documents": files_loaded,
-        "chunks_indexed": len(chunks),
-        "triplets_written": count_triplets,
-        "pages_by_source": {k: len(v) for k, v in pages_by_source.items()},
-        "evidence_manifests": [
-            {
-                "document_id": parsed.document.document_id,
-                "version": parsed.document.version,
-                "tenant_id": parsed.document.tenant_id,
-            }
-            for parsed in parsed_documents
-        ],
+        "source": source,
+        "chunk_id": str(chunk.metadata.get("chunk_id", "")),
+        "page": page,
+        "document_id": str(chunk.metadata.get("document_id", "") or ""),
+        "version": _optional_int(chunk.metadata.get("version")),
+        "tenant_id": str(chunk.metadata.get("tenant_id", "") or ""),
+        "owner_user_id": str(chunk.metadata.get("owner_user_id", "") or ""),
+        "visibility": str(chunk.metadata.get("visibility", "private") or "private"),
+        "acl_tags": str(chunk.metadata.get("acl_tags", "") or ""),
     }
+
+
+def _optional_int(value: Any) -> int | None:
+    if value is None:
+        return None
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _insert_triplets(client: Neo4jClient, rows: list[dict[str, Any]], extraction_errors: int) -> int:
+    if not rows:
+        if extraction_errors > 0:
+            logger.warning(
+                f"No triplets extracted due to {extraction_errors} extraction errors. "
+                f"Check document format and extraction settings."
+            )
+        return 0
+
+    try:
+        count = client.batch_upsert_triplets(rows)
+    except Exception:
+        logger.exception(f"Failed to batch insert {len(rows)} triplets to Neo4j. Graph features may be incomplete.")
+        return 0
+
+    if extraction_errors > 0:
+        logger.warning(
+            f"Graph extraction completed with {extraction_errors} errors. Successfully inserted {count} triplets."
+        )
+    return count
 
 
 def ingest_docs_dir(data_dir: Path, reset_vector_store: bool = True) -> dict:
