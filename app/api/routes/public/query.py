@@ -25,6 +25,7 @@ from app.api.deps.auth import require_admin
 from app.api.deps.documents import _allowed_sources_for_user
 from app.api.routes.internal.pipeline_contract import retrieval_summary
 from app.api.transport.errors import internal_error, service_unavailable
+from app.api.transport.middleware import record_grounding_support
 from app.core.config import get_settings
 from app.domain.advanced_rag import (
     AdvancedRAGResult,
@@ -387,6 +388,9 @@ async def _process_advanced_rag_query_impl(
                 plan_data=plan_data,
             )
 
+        # Rides the request's own metrics row, which is the window build_ops_alerts
+        # already reads for its p95 -- see record_grounding_support.
+        record_grounding_support(request, pipeline_result.execution_metadata)
         metadata = _response_metadata(
             pipeline_result_metadata=dict(pipeline_result.execution_metadata),
             route=pipeline_result.route.route,

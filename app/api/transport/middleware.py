@@ -6,6 +6,7 @@ import threading
 import time
 import uuid
 from collections import deque
+from collections.abc import Mapping
 from datetime import UTC, datetime
 from typing import Any
 
@@ -33,6 +34,27 @@ def _metrics() -> deque[dict[str, Any]]:
     if _request_metrics is None:
         _request_metrics = deque(maxlen=get_settings().request_metrics_maxlen)
     return _request_metrics
+
+
+def record_grounding_support(request: Request, execution_metadata: Mapping[str, Any]) -> None:
+    """Attach this answer's grounding ratio to the request's own metrics row.
+
+    The row is written in ``request_timing_middleware``'s ``finally``, after the
+    endpoint has returned, so the value has to travel on ``request.state`` --
+    which is backed by the shared ASGI scope dict that ``call_next`` hands
+    downstream and reads back.  A ContextVar cannot carry it: ``call_next`` runs
+    the endpoint in its own task, so nothing it sets is visible up here.
+
+    This is where a per-answer quality metric belongs, rather than in the audit
+    log: ``build_ops_alerts`` already reads these rows for its p95, so the SLO
+    gets one window and one source, and the ring is bounded, where one audit row
+    per query would flush every login failure out of the 2000-row window that
+    ``list_audit_logs`` hands its readers.
+    """
+
+    ratio = (execution_metadata.get("grounding") or {}).get("support_ratio")
+    if isinstance(ratio, int | float) and not isinstance(ratio, bool):
+        request.state.grounding_support = float(ratio)
 
 
 async def request_timing_middleware(request: Request, call_next):
@@ -113,6 +135,9 @@ async def request_timing_middleware(request: Request, call_next):
             "status_code": status_code,
             "duration_ms": elapsed_ms,
             "error": error_text,
+            # None on every request that did not produce an answer, which is what
+            # keeps the grounding SLO's denominator honest.
+            "grounding_support": getattr(request.state, "grounding_support", None),
         }
         with _request_metrics_lock:
             _metrics().append(metric)

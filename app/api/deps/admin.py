@@ -3,7 +3,6 @@ Admin-related helper functions for the QueryMind API.
 """
 
 import os
-import re
 import sys
 import time
 from datetime import UTC, datetime
@@ -66,24 +65,6 @@ def _parse_request_ts(value: str | None) -> datetime:
     if dt.tzinfo is None:
         return dt.replace(tzinfo=UTC)
     return dt.astimezone(UTC)
-
-
-def _extract_grounding_support_from_detail(detail: str | None) -> float | None:
-    """Extract grounding support score from detail string."""
-    text = str(detail or "")
-    m = re.search(r"grounding_support=([0-9]*\.?[0-9]+)", text)
-    if not m:
-        return None
-    try:
-        v = float(m.group(1))
-    except (ValueError, TypeError):
-        # Invalid float format
-        return None
-    if v < 0:
-        return 0.0
-    if v > 1:
-        return 1.0
-    return v
 
 
 def _load_benchmark_queries(path: Path, limit: int = 100) -> list[str]:

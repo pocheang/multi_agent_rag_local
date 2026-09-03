@@ -242,7 +242,6 @@ def build_ops_alerts(
     window_hours: int,
     window_rows: list[dict[str, Any]],
     request_rows: list[dict[str, Any]],
-    extract_grounding_support: Callable[[str], float | None],
     p95_latency_threshold: int,
     error_rate_threshold: float,
     grounding_threshold: float,
@@ -253,15 +252,12 @@ def build_ops_alerts(
     error_rate = (errors / total) * 100 if total > 0 else 0.0
     durations = sorted(int(row.get("duration_ms", 0) or 0) for row in request_rows)
     p95 = durations[max(0, int(len(durations) * 0.95) - 1)] if durations else 0
-    # Nothing writes a grounding ratio into the audit log today.  This filtered on
-    # action "query.run", which no call site has ever produced -- the three query.*
-    # actions are written only when a query is *refused* -- so the list was always
-    # empty and the average of zero samples was 1.0: a perfect score reported for a
-    # metric never observed.  Absence is now absence, and any row that does start
-    # carrying the ratio is picked up without this having to name the action first.
-    grounding_values = [
-        value for row in window_rows if (value := extract_grounding_support(str(row.get("detail", "")))) is not None
-    ]
+    # Same rows as the p95 above: one window and one source for both SLOs.  This
+    # used to scan *audit* rows for action "query.run", which no call site has
+    # ever written -- the three query.* actions are recorded only when a query is
+    # refused -- so the list was always empty and an average over zero samples
+    # was 1.0, reporting a perfect ratio for a metric never once observed.
+    grounding_values = [float(value) for row in request_rows if (value := row.get("grounding_support")) is not None]
     grounding_avg = (sum(grounding_values) / len(grounding_values)) if grounding_values else None
 
     alerts: list[dict[str, Any]] = []

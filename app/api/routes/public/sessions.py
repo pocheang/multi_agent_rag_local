@@ -24,6 +24,7 @@ from app.api.schemas import (
     SessionSummary,
 )
 from app.api.transport.errors import bad_request, not_found
+from app.api.transport.middleware import record_grounding_support
 from app.pipeline.contracts import PipelineUser
 from app.services.query.input_normalizer import (
     enhance_user_question_for_completion,
@@ -226,6 +227,7 @@ def update_session_message(
                 ),
                 session_id=session_id,
             )
+            record_grounding_support(request, result)
             data = history_store.upsert_assistant_after_user(
                 session_id=session_id,
                 user_message_id=message_id,
