@@ -17,7 +17,7 @@ from app.retrievers.hybrid import candidate_collection, parent_expansion, retrie
 
 def test_retriever_source_has_no_global_assignment():
     source = inspect.getsource(retriever)
-    for attr in ("build_rewrite_queries", "safe_similarity_search", "bm25_search"):
+    for attr in ("build_rewrite_queries", "bm25_search"):
         assert f"candidate_collection.{attr} =" not in source, (
             f"retriever.py must not reassign candidate_collection.{attr}"
         )
@@ -28,8 +28,24 @@ def test_collect_candidates_accepts_injected_callables():
     params = inspect.signature(candidate_collection.collect_candidates).parameters
     for name in ("rewrite_fn", "vector_fn", "bm25_fn"):
         assert name in params, f"collect_candidates must accept {name}"
-        assert params[name].default is None
         assert params[name].kind is inspect.Parameter.KEYWORD_ONLY
+    assert params["rewrite_fn"].default is None
+    assert params["bm25_fn"].default is None
+
+
+def test_the_vector_hop_cannot_be_defaulted_away():
+    """The one primitive that reaches the store takes no default.
+
+    A default here can only be an ownerless `similarity_search`: this function
+    has no OwnerScope to bind. One used to sit in the module, kept out of reach
+    by every live caller injecting an owner-bound partial, and kept honest by an
+    entry in OWNERLESS_CALL_SITES rather than by the signature.
+    """
+
+    params = inspect.signature(candidate_collection.collect_candidates).parameters
+
+    assert params["vector_fn"].default is inspect.Parameter.empty
+    assert not hasattr(candidate_collection, "safe_similarity_search")
 
 
 def test_expand_to_parent_context_accepts_injected_lookup():
@@ -80,7 +96,6 @@ def test_injected_callables_are_actually_used():
 def test_module_globals_survive_a_collect_call():
     before = (
         candidate_collection.build_rewrite_queries,
-        candidate_collection.safe_similarity_search,
         candidate_collection.bm25_search,
         parent_expansion.get_parent_text_map,
     )
@@ -98,7 +113,6 @@ def test_module_globals_survive_a_collect_call():
 
     after = (
         candidate_collection.build_rewrite_queries,
-        candidate_collection.safe_similarity_search,
         candidate_collection.bm25_search,
         parent_expansion.get_parent_text_map,
     )

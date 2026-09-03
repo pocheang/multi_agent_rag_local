@@ -6,21 +6,9 @@ from app.retrievers.bm25_retriever import bm25_search
 from app.retrievers.hybrid.fusion import hybrid_weights, rrf_score
 from app.retrievers.hybrid.rank_features import rank_feature_score
 from app.retrievers.hybrid.strategy import strategy_flags
-from app.retrievers.stores.vector import similarity_search
 from app.services.query.rule_rewrite import build_rewrite_queries
 
 logger = logging.getLogger(__name__)
-
-
-def safe_similarity_search(
-    query: str,
-    k: int,
-    allowed_sources: list[str] | None = None,
-):
-    """Wrapper for similarity search with optional source filtering."""
-    if allowed_sources is None:
-        return similarity_search(query, k=k)
-    return similarity_search(query, k=k, allowed_sources=allowed_sources)
 
 
 def filter_vector_results(vector_results, score_threshold: float) -> list[tuple]:
@@ -51,19 +39,28 @@ def collect_candidates(
     dynamic_vector_weight: float | None = None,
     dynamic_bm25_weight: float | None = None,
     *,
+    vector_fn,
     rewrite_fn=None,
-    vector_fn=None,
     bm25_fn=None,
 ) -> tuple[list[dict], dict]:
     """Collect and fuse candidates from vector and BM25 retrieval.
 
     ``rewrite_fn`` / ``vector_fn`` / ``bm25_fn`` let a caller substitute the
-    retrieval primitives for one call.  They default to this module's own
-    implementations; callers previously achieved the same effect by reassigning
-    module globals, which raced across concurrent requests.
+    retrieval primitives for one call; callers previously achieved the same
+    effect by reassigning module globals, which raced across concurrent
+    requests.
+
+    ``vector_fn`` is required and has no default, where the other two are
+    optional.  The difference is ownership: the vector hop is the one that
+    reaches the store, and the store's own metadata check needs an ``OwnerScope``
+    this function has no way to supply.  The default that used to sit here called
+    ``similarity_search`` without one -- unreachable in practice, since the live
+    caller injects an owner-bound partial, but a ready-made way back to an
+    ownership-blind search for the next caller who omits the argument.  Omitting
+    it is now a TypeError.
     """
     _rewrite = rewrite_fn or build_rewrite_queries
-    _vector = vector_fn or safe_similarity_search
+    _vector = vector_fn
     _bm25 = bm25_fn or bm25_search
     rrf_k = int(getattr(settings, "hybrid_rrf_k", 60) or 60)
     flags = strategy_flags()

@@ -165,10 +165,6 @@ _OWNER_POSITION = 4
 
 # Call sites that legitimately have no caller identity to pass, and why.
 OWNERLESS_CALL_SITES: dict[str, str] = {
-    "app/retrievers/hybrid/candidate_collection.py": (
-        "legacy default for collect_candidates' vector_fn; the live path always injects "
-        "retriever._safe_similarity_search, which is owner-bound via functools.partial"
-    ),
     "app/evaluation/baselines/api_retriever.py": (
         "offline evaluation harness measuring retrieval quality over a fixed corpus; it has no request and no user"
     ),
