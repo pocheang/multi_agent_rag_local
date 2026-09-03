@@ -74,7 +74,12 @@ export function toUrl(path: string) {
     let absoluteOrigin = "";
     try {
       const parsed = new URL(API_BASE);
-      basePath = parsed.pathname.replace(/\/+$/, "");
+      // Trailing slashes without a regex: /\/+$/ backtracks over a long run
+      // of them (typescript:S8786), and this is as short either way.
+      basePath = parsed.pathname;
+      while (basePath.endsWith("/")) {
+        basePath = basePath.slice(0, -1);
+      }
       absoluteOrigin = parsed.origin;
     } catch {
       // Relative API prefixes are handled directly.

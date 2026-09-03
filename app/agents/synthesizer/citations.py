@@ -137,7 +137,9 @@ def _reference_key(item: EvidenceItem) -> tuple[str, int | None]:
 
 def _tidy_spacing(text: str) -> str:
     """Close the gap a removed marker leaves without disturbing line structure."""
-    tidied = re.sub(r"[ \t]+([,.;:!?])", r"\1", str(text or ""))
+    # Possessive: backtracking into the run can only end on another
+    # space, so it never finds a match and only costs time (S8786).
+    tidied = re.sub(r"[ \t]++([,.;:!?])", r"\1", str(text or ""))
     tidied = re.sub(r"(?<!\n)[ \t]{2,}", " ", tidied)
     return tidied.strip()
 

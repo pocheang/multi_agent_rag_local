@@ -195,7 +195,12 @@ def max_rounds_for(intent: str) -> int:
 def _structured_fields(text: str) -> dict[str, str]:
     supported = {field_name for questions in _QUESTIONS_ZH.values() for field_name in questions}
     extracted: dict[str, str] = {}
-    for field_name, value in re.findall(r"(?im)^\s*-\s*([a-z_]+)\s*:\s*(.+?)\s*$", text):
+    # Bounded, and confined to one line: this reads user-supplied text,
+    # and `\s` matches newlines, so under (?m) the old pattern could pair a
+    # dash on one line with a field name on another (python:S8786).
+    for field_name, value in re.findall(
+        r"(?im)^[ \t]{0,8}-[ \t]{0,8}([a-z_]+)[ \t]{0,8}:[ \t]{0,8}(.+?)[ \t]{0,8}$", text
+    ):
         if field_name in supported and value.strip():
             extracted[field_name] = value.strip()
     return extracted

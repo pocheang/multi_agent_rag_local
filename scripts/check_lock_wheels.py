@@ -37,7 +37,13 @@ from packaging.utils import parse_wheel_filename
 # The platform CI and the image run on, and the one the locks are compiled for.
 TARGET_MINOR = 11
 
-_PINNED = re.compile(r"^([A-Za-z0-9][A-Za-z0-9._-]*)==(\S+?)(?:\s*;\s*(?P<marker>.*?))?\s*\\?$", re.M)
+_PINNED = re.compile(
+    # Every quantifier is bounded and none of them may cross a line: `\s`
+    # matches a newline, and under re.M that let `\s*;\s*` reach past the
+    # end of one requirement into the next line (python:S8786).
+    r"^([A-Za-z0-9][A-Za-z0-9._-]*)==([^\s;]+)(?:[ \t]{0,8};[ \t]{0,8}(?P<marker>[^\n]*?))?[ \t]{0,8}\\?$",
+    re.M,
+)
 _CPYTHON = re.compile(r"^cp3(\d+)$")
 
 ROOT = Path(__file__).resolve().parents[1]

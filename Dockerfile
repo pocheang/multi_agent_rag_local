@@ -4,9 +4,16 @@ FROM python:3.11-slim as builder
 # Set working directory
 WORKDIR /app
 
-# Install system dependencies
-RUN apt-get update && apt-get install -y \
+# Install system dependencies.
+#
+# --no-install-recommends (docker:S6500): a recommended package is somebody
+# else's opinion about what usually goes with this one, and each is more image
+# and more surface. ca-certificates is then listed by name for exactly that
+# reason -- it is a recommends of curl, so dropping recommends without naming it
+# would leave TLS trust resting on what the base image happens to ship.
+RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
+    ca-certificates \
     curl \
     git \
     && rm -rf /var/lib/apt/lists/*
@@ -33,8 +40,10 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
-# Install runtime dependencies
-RUN apt-get update && apt-get install -y \
+# Install runtime dependencies. See the builder stage for why recommends are off
+# and why the CA bundle is named rather than inherited.
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ca-certificates \
     curl \
     && rm -rf /var/lib/apt/lists/*
 

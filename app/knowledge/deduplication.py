@@ -11,27 +11,29 @@ from app.domain.contracts import EvidenceItem
 _SPACE_RE = re.compile(r"\s+")
 
 
-def evidence_dedup_key(item: EvidenceItem) -> tuple[object, ...]:
-    """Prefer immutable artifact identifiers and fall back to canonical content."""
+def evidence_dedup_key(item: EvidenceItem) -> tuple[str, tuple[object, ...]]:
+    """Prefer immutable artifact identifiers and fall back to canonical content.
+
+    Always ``(kind, payload)``. The two kinds are computed from different fields
+    and would otherwise be free to meet in the same dictionary, so the kind is
+    not decoration -- it is the only thing keeping a content key and a
+    provenance key apart. Keeping it out of the payload says that, where a
+    variable-length tuple with a discriminant at position zero only implied it.
+    """
 
     if item.chunk_id or item.image_id:
-        return (
-            "provenance",
-            item.document_id,
-            item.version,
-            item.chunk_id,
-            item.image_id,
-        )
+        return ("provenance", (item.document_id, item.version, item.chunk_id, item.image_id))
+
     canonical_content = _SPACE_RE.sub(" ", item.content).strip().lower()
     digest = hashlib.sha256(canonical_content.encode("utf-8")).hexdigest()
-    return ("content", item.source.strip().lower(), item.page, digest)
+    return ("content", (item.source.strip().lower(), item.page, digest))
 
 
 def deduplicate_evidence(items: Iterable[EvidenceItem]) -> tuple[EvidenceItem, ...]:
     """Keep the highest score for each artifact and merge retriever labels."""
 
-    winners: dict[tuple[object, ...], EvidenceItem] = {}
-    labels: dict[tuple[object, ...], set[str]] = {}
+    winners: dict[tuple[str, tuple[object, ...]], EvidenceItem] = {}
+    labels: dict[tuple[str, tuple[object, ...]], set[str]] = {}
     for item in items:
         key = evidence_dedup_key(item)
         labels.setdefault(key, set()).update(_retriever_labels(item.retriever))

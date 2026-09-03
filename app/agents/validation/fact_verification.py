@@ -276,7 +276,9 @@ def extract_claims(answer: str, config: FactVerificationConfig | None = None) ->
                 valid_citations.append(cit)
 
         # Remove citation markers from claim text
-        clean_sentence = re.sub(r"\s*\[[^\]]+\]\s*", " ", sentence).strip()
+        # Bounded whitespace, as elsewhere in this repository: an unbounded
+        # `\s*` beside a bracket group backtracks over a long run (S8786).
+        clean_sentence = re.sub(r"\s{0,8}\[[^\]]+\]\s{0,8}", " ", sentence).strip()
         clean_sentence = re.sub(r"\s+", " ", clean_sentence)  # Normalize whitespace
 
         if len(clean_sentence) < config.min_clean_claim_length:  # Skip if too short after removing citations
