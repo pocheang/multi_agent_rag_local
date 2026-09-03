@@ -621,6 +621,66 @@ raw turns do not — and `_render_turns` skips it when building the rewrite prom
 rounds are not shown twice in two formats. One consequence of the old shape: the
 `max_turns=12` bound in `_render_conversation` was dead, because there was only ever one turn.
 
+### Multimodal retrieval
+
+`multimodal` is a retrieval source the Knowledge Agent selects on visual or
+tabular wording (`_VISUAL_QUERY_PATTERN` in `app/agents/knowledge/service.py`).
+Until 2026-09-03 it was selected and returned nothing, every time, for three
+independent reasons: `_retrieve_text` queried a collection named `text_chunks`
+where the real one is `local_rag_collection`, so it logged a traceback per query;
+`image_descriptions` and `table_summaries` were written by methods with no
+caller; and the source spent a retrieval slot -- one the planner can otherwise
+give to `web` -- to return nothing on exactly the questions it exists for.
+
+**Ingestion is the producer now.** `_index_images` and `_index_tables`
+(`app/services/documents/ingest.py`) run inside `ingest_paths` and report
+`images_indexed` / `tables_indexed` in its result.
+
+**Images** are indexed with whatever was actually read out of them -- the
+loader's description or OCR text, or `ocr_image_bytes` run here when the loader
+left it bare. An image nothing could read is skipped rather than indexed with the
+reason: "Tesseract executable not found" as retrievable evidence is worse than
+the image being absent.
+
+**Tables are indexed whole, and that is the point of them.** The chunker splits
+by size and knows nothing about tables. Measured on a 40-row table: seven child
+chunks, and *only the first carries the header row*. Parent expansion does not
+rescue it either -- the second parent holds sixteen rows and no header. So a
+question about a row in the middle retrieves `| Region-30 | 130 | 230 | 330 |`
+with nothing to say which column is which, and the model answers from position.
+It does not fail; it is confidently wrong. `_table_from_markdown` reads the
+header and body back out of the pipe table the loader rendered, so `headers` is a
+header again.
+
+**Charts are inert on purpose.** `ChartContent` is only ever produced by
+`ChartAnalyzer` looking at an image with a vision model, so there is nothing to
+index without one. The retriever's chart path skips a missing collection quietly
+rather than erroring, so it costs nothing while it waits. That is the difference
+between it and the text modality, which was deleted: text is what the `vector`
+source is for, and this source contributes what that one cannot.
+
+**These collections sit outside the corpus `similarity_search` guards**, so both
+of that function's checks are reproduced here deliberately. `_scope_filter`
+constrains by tenant *and* by source or document *and* by `_owner_clause` -- the
+same helper the store uses, not a second implementation -- and `index_image` /
+`index_table` write `owner_user_id` and `visibility` alongside the tenant. An
+absent key does not match `$eq`, so anything indexed without those fields is
+invisible rather than public, which is why `visibility` defaults to private
+rather than to `""`. `tests/security/test_multimodal_indexing.py` pins the
+refusals.
+
+**Everything on this path is synchronous, and that shaped it.** `ingest_paths` is
+reached from `asyncio.to_thread`; `index_image` and `index_table` were `async`
+while awaiting nothing, and dropping the keyword is what let ingestion call them
+at all rather than driving an event loop from a worker thread.
+
+**PyMuPDF is the optional `multimodal` extra and must stay a lazy import.** Three
+modules imported it at module scope, which was survivable only while nothing
+imported them -- ingestion does now, so on an installation without the extra the
+first document containing an image or a table would have crashed the ingest. All
+four modules import without it, which is what `app/services/multimodal/__init__.py`
+has always claimed.
+
 ### Retrieval Strategy
 
 **Hybrid Retrieval** ([app/retrievers/hybrid/retriever.py](app/retrievers/hybrid/retriever.py)):
@@ -1183,7 +1243,7 @@ verified (60 inputs and 336 pins respectively, zero differences).
 
 `tests/` was cleared ahead of the v0.7 rewrite and is being rebuilt incrementally: each bug
 fix lands with the regression test that would have caught it, rather than as a separate
-back-filling effort. As of 2026-09-03 there are 1220 tests covering the chat round trip,
+back-filling effort. As of 2026-09-03 there are 1236 tests covering the chat round trip,
 conversation context, graph routing, clarification, the async load guard, engine reuse,
 answer safety, reader-facing citation numbering, stage-timeout degradation, the governed
 tool stack with its multi-step loop and approve-then-resume cycle, retrieval
@@ -1198,9 +1258,10 @@ an ASCII API document, a grounding SLO that measures answers, and the five funct
 unpicked in the 2026-09-03 complexity pass -- document ingestion, the distributed query
 guard, candidate collection, route selection, the document visibility rules and upload
 storage, each characterized against its old implementation before being split, and the
-regular expressions that backtracked super-linearly over user-supplied text.
+regular expressions that backtracked super-linearly over user-supplied text, and the
+multimodal source that had never had anything to retrieve.
 
-**That count is not 1220 independent assertions, and the number before it was stale.** Two
+**That count is not 1236 independent assertions, and the number before it was stale.** Two
 guards are parametrized one case per module — the audit-action scan over `app/` (376) and
 the ASCII scan over `app/api` (60) — so they grow with the codebase rather than with
 coverage. The real baseline on 2026-09-03 was 651, not the 538 this paragraph claimed:
@@ -1210,7 +1271,7 @@ covered the day it is added, where one test looping inside a single assertion re
 first offender and stops — but it does mean this total is not comparable across the change
 that introduced them.
 
-`tests/security/` (652 of those, 378 being the per-module audit-action scan) pins the
+`tests/security/` (666 of those, 378 being the per-module audit-action scan) pins the
 user-data isolation invariants — see
 `docs/superpowers/plans/2026-08-29-user-data-isolation.md`. That plan is complete
 (phases 0-4) and all 8 of its `xfail(strict=True)` markers are cleared; keep using the same
