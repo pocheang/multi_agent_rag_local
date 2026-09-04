@@ -133,8 +133,18 @@ The system has **3 primary components** and **3 optional components**:
 4. **Planner** - Task decomposition for complex queries
 5. **Tool Runner** - Governed connector actions, selected by a model from a
    schema-declared catalogue (`app/agents/tool/selector.py` + `service.py`,
-   reworked 2026-08-30). One action is registered today (disabling an owned
-   integration). Selection is **multi-step**: select → invoke → observe → repeat,
+   reworked 2026-08-30). Two actions are registered (2026-09-04): a `read` that
+   lists the caller's own connectors (`querymind_connector_list_owned`) and a
+   `write` that disables one (`querymind_connector_disable_owned`). The read is
+   what makes the loop worth having -- it is how the model finds the id of a
+   connector before acting on it, and `operation="read"` skips approval entirely
+   so it costs the user no confirmation. Its summary is composed from
+   `connector_id` and `status` alone, never `ConnectorView.name`: a read-only
+   tool's summary *is* fed back as a `ToolObservation`, `name` is user-authored
+   free text, and a summary built from a `^[a-z][a-z0-9_-]{0,63}$` id and a
+   two-value Literal is structurally incapable of carrying an instruction. That
+   is what makes the read-then-write composition safe rather than untested, and
+   `tests/security/test_connector_list_tool_scoping.py` pins it. Selection is **multi-step**: select → invoke → observe → repeat,
    bounded by `TOOL_MAX_STEPS` (default 3) and by the shared
    `STAGE_TIMEOUT_TOOL_MS` ceiling. The loop stops on anything other than a clean
    success — an `approval_required` result means the action has *not* happened,
