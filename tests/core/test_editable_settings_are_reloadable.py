@@ -1,0 +1,116 @@
+"""An admin-editable field must not be read through a frozen Settings object.
+
+CLAUDE.md makes an audited claim: `requires_restart` is False on every editable
+field, because "each consumer either reads `get_settings()` per use, or is held
+by an object `RAGPipeline` builds per request, or is rebuilt by the reload".
+
+There is a third shape it does not cover. Six modules bind
+`settings = get_settings()` at *module scope*. `get_settings` is `lru_cache`d and
+a reload calls `cache_clear()`, which builds a **new** object -- so those modules
+keep the one they captured at import, for the life of the process.
+
+Nothing is broken today: none of the editable fields is read through one of them,
+which is why this file asserts rather than ratchets. But the claim holds by
+coincidence, not by construction. Adding a field to `config_schema.py` that
+happens to be read in one of those modules would break it silently, and silently
+is the whole problem: `POST /admin/config/values` would report success, the
+console would show the new value, and the running process would keep the old one
+until restart.
+
+That failure mode is already documented once, for `CASCADE_*` and the module
+global `_get_validation_cascade` caches. This is the same hazard reached from a
+different direction, so it gets a guard rather than a paragraph.
+
+Both sides are discovered, not listed: a seventh frozen module or a thirtieth
+editable field is covered the day it is added.
+"""
+
+from __future__ import annotations
+
+import ast
+import re
+from pathlib import Path
+
+REPO = Path(__file__).resolve().parents[2]
+CONFIG = REPO / "app" / "core" / "config.py"
+SCHEMA = REPO / "app" / "core" / "config_schema.py"
+
+
+def _editable_fields() -> dict[str, str]:
+    """Admin-editable aliases mapped to their Settings attribute names."""
+
+    aliases = set(re.findall(r'EditableField\(\s*"([A-Z0-9_]+)"', SCHEMA.read_text(encoding="utf-8")))
+    declared = re.findall(
+        r'^\s*(\w+)\s*:.*alias="([A-Z0-9_]+)"',
+        CONFIG.read_text(encoding="utf-8"),
+        re.MULTILINE,
+    )
+    return {field: alias for field, alias in declared if alias in aliases}
+
+
+def _modules_that_freeze_settings() -> list[Path]:
+    """Modules binding `settings = get_settings()` at module scope."""
+
+    frozen: list[Path] = []
+    for path in sorted((REPO / "app").rglob("*.py")):
+        if "__pycache__" in path.parts:
+            continue
+        try:
+            tree = ast.parse(path.read_text(encoding="utf-8", errors="ignore"))
+        except SyntaxError:  # pragma: no cover - not expected in first-party code
+            continue
+        for node in tree.body:  # module scope only
+            if not isinstance(node, ast.Assign) or not isinstance(node.value, ast.Call):
+                continue
+            call = node.value.func
+            name = call.id if isinstance(call, ast.Name) else getattr(call, "attr", "")
+            if name == "get_settings" and any(
+                isinstance(target, ast.Name) and target.id == "settings" for target in node.targets
+            ):
+                frozen.append(path)
+                break
+    return frozen
+
+
+def test_some_modules_do_freeze_settings():
+    """Guards the guard: if this stops finding any, the test below is vacuous and
+    the assertion that matters would pass for the wrong reason."""
+
+    assert _modules_that_freeze_settings(), "no module binds settings at import; this file's premise is stale"
+
+
+def test_editable_fields_are_all_declared_in_settings():
+    """A `config_schema.py` alias that matches no field is a knob the console
+    offers and nothing implements."""
+
+    aliases = set(re.findall(r'EditableField\(\s*"([A-Z0-9_]+)"', SCHEMA.read_text(encoding="utf-8")))
+    resolved = set(_editable_fields().values())
+
+    assert aliases == resolved, f"editable aliases with no Settings field: {sorted(aliases - resolved)}"
+
+
+def test_no_editable_field_is_read_through_a_frozen_settings_object():
+    """The claim CLAUDE.md audits, enforced instead of re-audited.
+
+    A hit here does not mean "delete the field". It means that field cannot
+    honestly carry `requires_restart=False` until its reader stops holding an
+    import-time Settings -- so either the reader switches to `get_settings()` per
+    use, or the field leaves the editable allowlist.
+    """
+
+    editable = _editable_fields()
+    offenders: list[str] = []
+
+    for path in _modules_that_freeze_settings():
+        text = path.read_text(encoding="utf-8", errors="ignore")
+        for field, alias in editable.items():
+            # Both spellings: settings.field, and getattr(settings, "field", ...)
+            direct = rf"\bsettings\.{re.escape(field)}\b"
+            indirect = rf'getattr\(\s*settings\s*,\s*"{re.escape(field)}"'
+            if re.search(direct, text) or re.search(indirect, text):
+                offenders.append(f"{path.relative_to(REPO).as_posix()} reads {alias} ({field})")
+
+    assert not offenders, (
+        "these admin-editable settings are read from a Settings frozen at import, "
+        "so a console edit would report success and change nothing until restart:\n  " + "\n  ".join(sorted(offenders))
+    )

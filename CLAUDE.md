@@ -1192,7 +1192,18 @@ column had no way to know. It now recommends, and applying inherits every refusa
 the one for a value the process environment pins.
 
 `requires_restart` is `False` on every editable field, and that is an audited claim rather
-than a default: each consumer either reads `get_settings()` per use, or is held by an object
+than a default -- and since 2026-09-04 an enforced one:
+`tests/core/test_editable_settings_are_reloadable.py` fails if an editable field is read
+through a `settings = get_settings()` bound at *module scope*. Six modules do that
+(`app/api/dependencies.py`, `deps/{admin,documents,sessions}.py`,
+`utils/{auth_helpers,memory_helpers}.py`); `get_settings` is `lru_cache`d and a reload
+calls `cache_clear()`, which builds a new object, so those six keep the one they captured
+at import for the life of the process. No editable field is read through them today, which
+is why the test asserts rather than ratchets -- but it held by coincidence rather than by
+construction, and the failure it prevents is silent: the console would report success and
+the process would keep the old value. Same hazard as the `CASCADE_*` module global next
+door, reached from a different direction. Verified able to fail by adding `MODEL_BACKEND`
+(read in `deps/admin.py`) to the allowlist. The audit itself: each consumer either reads `get_settings()` per use, or is held by an object
 `RAGPipeline` builds per request, or is rebuilt by the reload. The retrieval cache was the
 one exception — it bakes its TTL in at construction and lives in a module global — so the
 reload clears it rather than the page carrying a caveat.
@@ -1538,7 +1549,7 @@ verified (60 inputs and 336 pins respectively, zero differences).
 
 `tests/` was cleared ahead of the v0.7 rewrite and is being rebuilt incrementally: each bug
 fix lands with the regression test that would have caught it, rather than as a separate
-back-filling effort. As of 2026-09-04 there are 1401 tests covering the chat round trip,
+back-filling effort. As of 2026-09-04 there are 1404 tests covering the chat round trip,
 conversation context, graph routing, clarification, the async load guard, engine reuse,
 answer safety, reader-facing citation numbering, stage-timeout degradation, the governed
 tool stack with its multi-step loop and approve-then-resume cycle, retrieval
