@@ -283,6 +283,12 @@ class RAGAgentService:
         result is acceptable.
         """
 
+        # `plan` is genuinely unused *here*, and that is now the right shape
+        # rather than the bug it used to be. The plan's sub-queries reach
+        # retrieval through `KnowledgeStrategy.sources[].queries`, seeded by
+        # `KnowledgeAgentService._source_plan`; this method executes a strategy
+        # and has no business re-deriving one. Reading the plan again here is how
+        # the two would disagree about what was searched.
         del plan
         if "rag" not in route.allowed_capabilities:
             return ContextBundle()

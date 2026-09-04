@@ -618,6 +618,14 @@ quality telemetry under Important Notes for where that goes instead.
 
 ### Knowledge Agent and retrieval execution
 
+**The Knowledge Agent is not an agent.** `app/orchestration/capabilities.py` constructs
+`KnowledgeAgentService()` with no `decider`, so `_rule_strategy` -- a set of regexes over
+the question plus the route's hints -- is the only path that runs in production. The
+`StrategyDecider` seam is real and `_bounded` polices what one would return, but nothing is
+plugged into it. That is a defensible design (fast, deterministic, auditable); it is
+recorded here because the name promises otherwise and the next reader will go looking for
+an LLM that is not there.
+
 Source selection and retrieval execution are separate jobs, and since 2026-08-30
 they are separated properly. `KnowledgeAgentService.decide` picks the sources;
 `RAGAgentService.retrieve(request, route, plan, strategy, scope)` runs exactly
@@ -833,6 +841,35 @@ has always claimed.
   concatenation cost nothing. Round-robin restores "position
   reflects rank within a query" while keeping the agreement signal -- an item several
   queries return still accumulates one RRF contribution per query.
+- **Planner sub-queries reach the retrievers** (wired 2026-09-04). `PlannedTask.prompt` had
+  exactly one reader in all of `app/` (`rag_pipeline.py`, for a diagnostics dict), because
+  `_source_plan` hardcoded `queries=(query,)` and `RAGAgentService.retrieve` opened with
+  `del plan`. A decomposed question therefore ran one search on the original wording --
+  while the API returned the sub-queries to the client as `decomposed_query`, reporting
+  work that never happened. `_source_plan` now builds `(question, *sub_queries)`.
+
+  Four things about that shape are load-bearing. **The original question stays at index
+  0**, because `KnowledgeOrchestrator` reads `sources[0].queries[0]` twice -- as
+  `primary_query`, the single string reranking scores every candidate against, and as the
+  rewriter's input -- so a sub-query there would rerank the whole result set against one
+  facet. **De-duplication uses one shared definition** (`app/knowledge/queries.py`,
+  imported by both the agent and the orchestrator; the agent must not import the
+  orchestrator): a direct plan's single task prompt *is* the question, and
+  `reciprocal_rank_fuse` accumulates per appearance, so a duplicate silently double-weights
+  everything it returns. **`web` and `memory` are excluded** -- `_retrieve_web` calls
+  `run_web_research` per query and concurrent `DDGS()` construction has wedged this process
+  at zero CPU before, so an N-fold multiplier on third-party search is the worst failure
+  mode available here. **The cap is enforced twice** from one constant
+  (`MAX_PLAN_QUERIES_PER_SOURCE`), in `_source_plan` and in `_bounded`, because `_bounded`
+  only runs on the decider path and `capabilities.py` constructs the agent with no decider
+  -- a cap there alone would guard a path that does not exist in production.
+
+  `_comparison_plan` now emits the bare target rather than "Retrieve authoritative evidence
+  about X": those prompts are search queries now, and `bm25_search` matches on shared term
+  membership, so the English boilerplate would have made every chunk containing "evidence"
+  a candidate for a comparison usually asked in Chinese. Note that `_comparison_plan` runs
+  *before* the `enable_decomposition` check in `PlannerAgentService.plan`, so
+  comparison-shaped questions get multi-query retrieval by default.
 - **Graph retrieval**: runs for both the `graph` and `hybrid` routes (fixed 2026-08-29; `graph` previously degraded silently to vector+BM25)
 - **Two-phase retrieval** (added 2026-08-31): `KnowledgeOrchestrator` runs sources in one
   `asyncio.gather` because they are independent. An adapter that implements

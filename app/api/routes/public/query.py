@@ -163,7 +163,15 @@ def _decomposed_query_from_plan(query: str, plan_data: dict[str, Any] | None) ->
     """Build a DecomposedQuery from the plan the pipeline actually ran, or None if it
     never decomposed (a single-task plan means decomposition didn't fire for this query)."""
     tasks = (plan_data or {}).get("tasks") or []
-    sub_queries = [str(task.get("prompt", "")).strip() for task in tasks if str(task.get("prompt", "")).strip()]
+    # Retrieval tasks only. A plan's synthesis task depends on the others and its
+    # prompt is an instruction to a model ("Combine the retrieved subtask
+    # evidence..."), never a query anything searched for -- reporting it as a
+    # sub-query described work that did not happen.
+    sub_queries = [
+        str(task.get("prompt", "")).strip()
+        for task in tasks
+        if str(task.get("prompt", "")).strip() and not task.get("depends_on")
+    ]
     if len(sub_queries) <= 1:
         return None
     strategy = "sequential" if any(task.get("depends_on") for task in tasks) else "parallel"

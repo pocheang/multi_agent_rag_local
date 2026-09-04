@@ -16,6 +16,7 @@ from app.knowledge.adapters import KnowledgeAdapter, build_default_adapters
 from app.knowledge.context import ContextBuilder
 from app.knowledge.deduplication import deduplicate_evidence
 from app.knowledge.fusion import reciprocal_rank_fuse, rerank_evidence
+from app.knowledge.queries import unique_queries as _unique_queries
 from app.privacy.dlp import mask_evidence
 from app.services.query.rule_rewrite import build_rewrite_queries
 
@@ -320,19 +321,6 @@ class KnowledgeOrchestrator:
 def _flatten_items(outcomes: Sequence[_SourceOutcome]) -> tuple[EvidenceItem, ...]:
     """Only completed sources: a timed-out source has no results, not zero results."""
     return tuple(item for outcome in outcomes if outcome.status == "completed" for item in outcome.items)
-
-
-def _unique_queries(values: Sequence[str]) -> tuple[str, ...]:
-    seen: set[str] = set()
-    result: list[str] = []
-    for value in values:
-        query = str(value or "").strip()
-        normalized = " ".join(query.lower().split())
-        if not query or normalized in seen:
-            continue
-        seen.add(normalized)
-        result.append(query)
-    return tuple(result)
 
 
 def _outcome_event(outcome: _SourceOutcome) -> ExecutionEvent:

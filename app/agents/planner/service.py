@@ -115,8 +115,15 @@ def _comparison_plan(question: str, route: RouteDecision) -> TaskPlan | None:
         return None
     retrieval_tasks = tuple(
         PlannedTask(
+            # The bare target, not "Retrieve authoritative evidence about X".
+            # These prompts are search queries now (see
+            # `KnowledgeAgentService._source_plan`), and `bm25_search` matches on
+            # shared term membership -- so the English boilerplate would make
+            # every chunk containing "evidence" a candidate for a comparison that
+            # is usually asked in Chinese. It also means the sub-queries the API
+            # reports are the ones that were actually searched.
             task_id=f"retrieve-{index}",
-            prompt=f"Retrieve authoritative evidence about {target}",
+            prompt=target,
             parallel_group="comparison-evidence",
             knowledge_required=True,
             tool_required=False,

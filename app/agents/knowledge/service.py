@@ -10,6 +10,7 @@ from app.core.config import Settings, get_settings
 from app.domain.contracts import TaskPlan
 from app.domain.knowledge import AccessScope, KnowledgeSource, KnowledgeSourcePlan, KnowledgeStrategy
 from app.domain.workflow import RouterDecision, VerificationDecision
+from app.knowledge.queries import unique_queries
 from app.knowledge.width import MAX_SCALE, query_complexity, widen
 from app.orchestration.request import OrchestrationRequest
 
@@ -21,6 +22,25 @@ StrategyDecider = Callable[
 _ALL_SOURCES: frozenset[KnowledgeSource] = frozenset(
     {"vector", "bm25", "graph", "wiki", "memory", "multimodal", "web", "tool"}
 )
+
+# Sources a planner sub-query may be searched against: the corpora this system
+# owns. `web` is deliberately absent -- `_retrieve_web` runs `run_web_research`
+# once per query, and concurrent `DDGS()` construction has already wedged this
+# process at zero CPU once; multiplying third-party search per request is the
+# worst failure mode this change could introduce. `memory` is absent because it
+# is a small owner-scoped list rather than a corpus worth widening over.
+_SUB_QUERY_SOURCES: frozenset[KnowledgeSource] = frozenset({"vector", "bm25", "graph", "wiki", "multimodal"})
+
+# Ceiling on queries per source: the original question plus three sub-queries.
+#
+# Enforced in two places on purpose. `_bounded` only runs on the decider path,
+# and `app/orchestration/capabilities.py` constructs `KnowledgeAgentService()`
+# with no decider -- so a cap there alone would guard a path that does not exist
+# in production. `plan.timeout_ms` bounds the *source*, not the query, and the
+# fan-out is concurrent, so the cost of getting this wrong is store load rather
+# than wall clock: uncapped, a comparison of six targets across six sources is
+# 42 concurrent round trips.
+MAX_PLAN_QUERIES_PER_SOURCE = 4
 
 
 class KnowledgeAgentService:
@@ -80,7 +100,11 @@ class KnowledgeAgentService:
         *,
         fallback_reason: str | None = None,
     ) -> KnowledgeStrategy:
+        # On a retry the verifier's query takes index 0 for the same reason the
+        # original question does otherwise: it is what `primary_query` reranks
+        # against, and it is what the verifier asked to be searched.
         query = (retry_feedback.retry_query if retry_feedback else None) or request.question
+        sub_queries = _plan_sub_queries(plan, query)
         lowered = query.lower()
         hints = route.knowledge_hints
         selected: list[KnowledgeSource] = ["vector", "bm25"]
@@ -145,7 +169,7 @@ class KnowledgeAgentService:
         unique = _keep_within(unique, ceiling, hints)
         top_k, rerank_top_n = self._widths(query)
         return KnowledgeStrategy(
-            sources=tuple(self._source_plan(source, query, top_k) for source in unique),
+            sources=tuple(self._source_plan(source, query, top_k, sub_queries) for source in unique),
             rewrite=True,
             rerank=len(unique) > 1,
             rerank_top_n=rerank_top_n,
@@ -227,6 +251,10 @@ class KnowledgeAgentService:
                     update={
                         "top_k": min(source.top_k, top_k_ceiling),
                         "timeout_ms": min(source.timeout_ms, self._timeout_ms),
+                        # A decider's query list is untrusted input too, and
+                        # nothing else bounds it: `queries` has a min_length and
+                        # no max.
+                        "queries": unique_queries(source.queries)[:MAX_PLAN_QUERIES_PER_SOURCE],
                     }
                 )
             )
@@ -249,10 +277,41 @@ class KnowledgeAgentService:
             }
         )
 
-    def _source_plan(self, source: KnowledgeSource, query: str, top_k: int) -> KnowledgeSourcePlan:
+    def _source_plan(
+        self,
+        source: KnowledgeSource,
+        query: str,
+        top_k: int,
+        sub_queries: tuple[str, ...] = (),
+    ) -> KnowledgeSourcePlan:
+        """Search the question, and the planner's sub-queries alongside it.
+
+        The planner has always produced sub-queries -- `_plan_queries` for a
+        decomposed request, `_comparison_plan` for a comparison -- and they died
+        in `PlannedTask.prompt`, which no retrieval code path read. `queries` was
+        hardcoded to `(query,)` here, and `RAGAgentService.retrieve` did `del
+        plan`. So a decomposed question ran exactly one search, while the API
+        reported the sub-queries to the client as though they had been used.
+
+        **The original question stays at index 0.** That is load-bearing, not
+        tidiness: `KnowledgeOrchestrator` reads `sources[0].queries[0]` twice --
+        as `primary_query`, the single string reranking scores every candidate
+        against, and as the input to the rewriter. A sub-query in that slot would
+        rerank the whole result set against one facet of the question.
+
+        Only document-backed sources are fanned out. `web` is excluded on
+        purpose: `_retrieve_web` calls `run_web_research` per query, and
+        concurrent `DDGS()` construction is what wedged this process at zero CPU
+        once already -- an N-fold multiplier on third-party search per request is
+        the worst failure mode available here. `memory` is excluded because its
+        store is a small owner-scoped list, not a corpus to widen over.
+        """
+
+        fanned_out = source in _SUB_QUERY_SOURCES
+        queries = unique_queries((query, *sub_queries)) if fanned_out else (query,)
         return KnowledgeSourcePlan(
             source=source,
-            queries=(query,),
+            queries=queries[:MAX_PLAN_QUERIES_PER_SOURCE],
             top_k=top_k,
             timeout_ms=self._timeout_ms,
             required=source in {"vector", "bm25"},
@@ -313,3 +372,22 @@ def _matches(text: str, pattern: str) -> bool:
 
 
 __all__ = ["KnowledgeAgentService", "StrategyDecider"]
+
+
+def _plan_sub_queries(plan: TaskPlan | None, primary: str) -> tuple[str, ...]:
+    """The planner's retrieval prompts, minus the one that is the question itself.
+
+    Only tasks that declare `knowledge_required` -- a plan's synthesis task sets
+    it False and its prompt is an instruction to a model, not text to search for.
+
+    A direct plan holds one task whose prompt *is* the original question, so
+    without the de-duplication `_source_plan` performs, every simple request
+    would search the same string twice and `reciprocal_rank_fuse` would
+    double-weight everything it returned.
+    """
+
+    if plan is None:
+        return ()
+    prompts = [task.prompt for task in plan.tasks if task.knowledge_required]
+    primary_normalized = " ".join(primary.lower().split())
+    return tuple(query for query in unique_queries(prompts) if " ".join(query.lower().split()) != primary_normalized)
