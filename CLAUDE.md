@@ -1512,7 +1512,7 @@ verified (60 inputs and 336 pins respectively, zero differences).
 
 `tests/` was cleared ahead of the v0.7 rewrite and is being rebuilt incrementally: each bug
 fix lands with the regression test that would have caught it, rather than as a separate
-back-filling effort. As of 2026-09-04 there are 1387 tests covering the chat round trip,
+back-filling effort. As of 2026-09-04 there are 1395 tests covering the chat round trip,
 conversation context, graph routing, clarification, the async load guard, engine reuse,
 answer safety, reader-facing citation numbering, stage-timeout degradation, the governed
 tool stack with its multi-step loop and approve-then-resume cycle, retrieval
@@ -1953,7 +1953,30 @@ Two things learned doing this the first time:
 ## Common Issues
 
 **"ModuleNotFoundError"**: Verify conda environment is activated
-**"Neo4j connection failed"**: Neo4j is optional; system falls back to vector-only retrieval
+**"Neo4j connection failed"**: Neo4j is optional; system falls back to vector-only retrieval.
+To actually start it locally, `make up` (and `make down` to stop it). That command
+was broken until 2026-09-04 -- it ran `docker compose up -d neo4j` with no `-f`,
+and there is no compose file in the repository root, so it only ever printed "no
+configuration file provided". It now names deploy/compose/compose.yaml plus the
+dev overlay, supplies `.runtime/development.env` (compose.yaml declares
+NEO4J_PASSWORD with `:?`, so rendering fails without it), and deliberately passes
+no `--project-directory`: the relative paths in those files are written for
+deploy/compose/ as the base, and overriding it sends `env_file: ../../.runtime/...`
+and the `../../app` bind mounts two levels too high.
+
+**The graph ports are published in development only.** compose.yaml maps nothing
+-- containers reach each other over the `querymind` network and the backend uses
+`bolt://neo4j:7687` -- but a locally run `uvicorn` is not on that network, and
+`NEO4J_URI` defaults to `bolt://localhost:7687`. So compose.dev.yaml publishes
+7474 (Browser) and 7687 (Bolt) on `127.0.0.1`, like every other port in that
+file: this Neo4j holds a password from `.runtime/`, and `0.0.0.0` would offer it
+to the local network. `tests/core/test_dev_compose_is_usable.py` pins both halves
+-- the ports exist in development, and they still do not exist in production.
+
+Note what you will see once it is up: with `MODEL_BACKEND=local` the graph is
+**empty by design**, because rule-extracted triplets are now correctly filtered
+out (see "Knowledge graph extraction"). An empty Neo4j Browser there is the
+system working, not a broken ingest.
 **Frontend CORS errors**: Ensure backend is running on port 8000
 
 ## Documentation Management

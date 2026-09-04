@@ -1,11 +1,33 @@
-.PHONY: install up api test lint eval-retrieval lock fe-install fe-dev fe-build config-check config-render deploy deploy-dev deploy-monitoring
+.PHONY: install up down api test lint eval-retrieval lock fe-install fe-dev fe-build config-check config-render deploy deploy-dev deploy-monitoring
 
 install:
 	conda run -n rag-local pip install -e ".[dev]"
 	conda run -n rag-local pre-commit install
 
+# Start the optional graph database for local development.
+#
+# `docker compose up -d neo4j` on its own could never work: there is no compose
+# file in the repository root, so it exited with "no configuration file
+# provided". The stack lives under deploy/compose/, compose.yaml requires
+# NEO4J_PASSWORD (declared with :? so it is mandatory), and the dev overlay is
+# what publishes 7474/7687 to 127.0.0.1 -- a locally run uvicorn is not on the
+# compose network, so without it NEO4J_URI's bolt://localhost:7687 reaches
+# nothing. Mirrors how deploy/scripts/deploy.sh invokes compose.
+# No --project-directory: compose then resolves the files' relative paths
+# against deploy/compose/, which is what `env_file: ../../.runtime/...` and the
+# `../../app` bind mounts are written for. Passing the repo root instead sent
+# both two levels too high (verified: it looked for .runtime/ beside the repo).
+# RUNTIME_ENV_FILE overrides that env_file default, which points at
+# production.env -- absent on a development checkout.
+COMPOSE_DEV = RUNTIME_ENV_FILE=../../.runtime/development.env docker compose --project-name querymind --env-file .runtime/development.env -f deploy/compose/compose.yaml -f deploy/compose/compose.dev.yaml
+
 up:
-	docker compose up -d neo4j
+	@test -f .runtime/development.env || { echo "Missing .runtime/development.env -- run: make config-render ENV=development" >&2; exit 1; }
+	$(COMPOSE_DEV) up -d neo4j
+	@echo "Neo4j Browser: http://localhost:7474 (user neo4j, password in .runtime/development.env)"
+
+down:
+	$(COMPOSE_DEV) down
 
 api:
 	conda run --no-capture-output -n rag-local uvicorn app.api.main:app --host 0.0.0.0 --port 8000 --reload --reload-dir app --reload-include "*.py" --reload-exclude "data/*" --reload-exclude "artifacts/*" --reload-exclude "frontend/*"

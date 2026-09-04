@@ -1,4 +1,19 @@
 services:
+  # Development publishes the graph database; production deliberately does not.
+  # Nothing in compose.yaml maps a port -- containers reach each other over the
+  # `querymind` network, and `bolt://neo4j:7687` is what the backend container
+  # uses. But a locally run `uvicorn` is not on that network: NEO4J_URI defaults
+  # to bolt://localhost:7687, so without this the graph route is unreachable
+  # from the normal development loop, and the Neo4j Browser (7474) cannot be
+  # opened at all.
+  #
+  # Bound to 127.0.0.1, like every other port in this file. Neo4j here holds a
+  # password from .runtime/, and 0.0.0.0 would publish it to the local network.
+  neo4j:
+    ports:
+      - "127.0.0.1:7474:7474"  # Browser (HTTP)
+      - "127.0.0.1:7687:7687"  # Bolt
+
   backend:
     env_file:
       - ${RUNTIME_ENV_FILE:-../../.runtime/development.env}
