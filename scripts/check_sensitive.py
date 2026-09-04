@@ -100,6 +100,16 @@ SECRET_BASELINE = {
 # pattern matches its own source. Writing it in pieces to dodge that would make
 # the one regex here that has already been got wrong twice unreadable, which is a
 # bad trade for exempting a 250-line file nobody edits casually.
+# Files whose extension is forbidden but whose content is not. `.jsonl` is on the
+# list because in this repository it means a log -- `logs/web_activity/*.jsonl`
+# was committed once, with real rows in it. An evaluation corpus is a different
+# thing, and the honest way to say so is to name the one file, not to loosen the
+# rule for a directory and not to spell the extension differently to slip past
+# it. A second .jsonl still fails, and this entry fails once it stops matching.
+FORBIDDEN_TYPE_BASELINE = {
+    "config/eval/retrieval_corpus.jsonl",
+}
+
 LOCAL_PATH_BASELINE = {
     "scripts/check_sensitive.py",
     "docs/superpowers/plans/2026-08-23-session-handoff-prompt.md",
@@ -179,7 +189,11 @@ def scan(root: Path, rels: list[str], expect: int | None, whole: bool) -> tuple[
             joined = "/".join(sorted(bad))
             fails.append(f"[path] {rel} -- under {joined}")
         if path.suffix.lower() in FORBIDDEN_SUFFIXES:
-            fails.append(f"[type] {rel}")
+            if rel in FORBIDDEN_TYPE_BASELINE:
+                used.add(rel)
+                notes.append(f"[baseline type] {rel}")
+            else:
+                fails.append(f"[type] {rel}")
 
         if ".env" in path.name and ".example" not in path.name and path.is_file():
             for hit in env_values(path):
@@ -216,7 +230,7 @@ def scan(root: Path, rels: list[str], expect: int | None, whole: bool) -> tuple[
     # scan: pre-commit sees a handful of staged files, where almost every entry
     # is legitimately unused.
     if whole:
-        for rel in sorted((SECRET_BASELINE | LOCAL_PATH_BASELINE) - used):
+        for rel in sorted((SECRET_BASELINE | LOCAL_PATH_BASELINE | FORBIDDEN_TYPE_BASELINE) - used):
             fails.append(f"[stale baseline] {rel} -- no longer matches; remove the entry")
 
     if expect is not None and len(rels) != expect:

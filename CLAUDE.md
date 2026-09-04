@@ -1105,11 +1105,52 @@ backend is SQLite-only, and gating its startup on a database it never opens boug
 
 ### Quality Metrics
 
-Monitor these when modifying retrieval or synthesis:
-- **Router accuracy**: Target >95% on test queries
-- **Citation completeness**: Target >90% (answers with evidence should cite it)
-- **P@5 (Precision at 5)**: Target >0.85 for retrieval
-- **Latency P95**: Target <5 seconds for standard queries
+Monitor these when modifying retrieval or synthesis. **Each target now names what
+measures it, and says "nothing" where nothing does** — three of the four had no
+measurement behind them at all, which makes a number a wish rather than a claim (the same
+principle as the `advanced-rag/config` fix).
+
+| target | measured by |
+|---|---|
+| **Router accuracy** >95% | **nothing.** No labelled routing set exists. |
+| **Citation completeness** >90% | **nothing** as an aggregate. It is *enforced* per answer by the cascade's citation stage, but never scored across a query set. |
+| **P@5** >0.85 | **not comparable** — see below. `make eval-retrieval` reports P@5 and MRR over a tracked corpus, but that corpus has one relevant document per query. |
+| **Latency P95** <5s | `build_ops_alerts`, from the `request_rows` ring the middleware writes. Process-local, so a restart empties it. |
+
+**The retrieval numbers come from `make eval-retrieval`** (`scripts/eval_retrieval.py`,
+`app/evaluation/retrieval_eval.py`, added 2026-09-04), which runs a tracked bilingual
+micro-corpus through the **real `KnowledgeOrchestrator`** with a BM25-only strategy.
+Through the orchestrator rather than through `app/evaluation/baselines/`, because those
+baselines call `similarity_search` directly and never touch the orchestrator, the
+adapters or `reciprocal_rank_fuse` — they cannot observe a change to any of them. BM25
+only, because `read_corpus_records` reads a plain JSONL file, so it needs no embedding
+model, no Chroma, no Neo4j and no LLM, and therefore runs on a fresh checkout.
+
+**P@5 on the shipped set is capped at 0.2 and that is not a bad score**: every query names
+exactly one relevant document, so at most one of five retrieved items can be relevant.
+Reading it against a 0.85 target quoted for a multi-gold corpus is a category error, and
+`tests/evaluation/test_retrieval_metric.py` pins it precisely so nobody makes it from a
+metrics table. **MRR is the metric with headroom here, and it is pinned at exactly 1.0** —
+BM25 over a fixed JSONL is deterministic, so it is asserted rather than ratcheted, per
+query, so a failure names the query.
+
+**The vector and hybrid paths stay a manual command, not a CI gate**, and the argument is
+sharper than the one for `npm run screenshots`: `_load_cross_encoder` uses
+`local_files_only=True`, so a CI runner without the model silently degrades to
+`lexical_rerank` and would publish a number measuring the lexical fallback rather than the
+reranker. A green metric measuring the wrong thing is worse than no metric.
+
+Before trusting any of this, note the test that matters most:
+`test_a_mismatched_scope_returns_nothing`. `mask_evidence` runs inside `_retrieve_source`,
+so a corpus whose ownership metadata does not match the scope drops every item and scores
+0.00 for reasons unrelated to retrieval — indistinguishable from a broken retriever.
+Proving the metric can fail is the precondition for believing it when it passes.
+
+Two limits that remain: the corpus is ~12 synthetic rows, so it exercises tokenisation,
+fusion and scoping rather than real-world ranking; and `data/eval/retrieval_corpus.jsonl`
+plus `data/eval/retrieval_queries.json` override the tracked defaults (first existing path
+wins, the same shape as `_BENCHMARK_QUERY_PATHS`) for a deployment that wants to measure
+its own corpus.
 
 ### Code Organization
 

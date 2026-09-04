@@ -9,7 +9,12 @@ class TestQuery(BaseModel):
     id: str = Field(..., description="Unique query identifier")
     query: str = Field(..., description="Query text")
     category: str = Field(..., description="Query category (e.g., enterprise_hr, technical)")
-    expected_docs: list[str] = Field(default_factory=list, description="Expected document IDs")
+    # Source identifiers, not document ids. Every baseline puts
+    # `metadata["source"]` into `RetrievalResult.retrieved_docs`, and scoring is a
+    # set membership test against this list, so an entry written as a document id
+    # matches nothing -- and scores 0.0 forever, which looks exactly like a
+    # retrieval failure.
+    expected_docs: list[str] = Field(default_factory=list, description="Expected source identifiers")
     difficulty: str = Field(default="medium", description="Query difficulty: easy, medium, hard")
 
 

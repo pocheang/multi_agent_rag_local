@@ -1,0 +1,112 @@
+{
+  "queries": [
+    {
+      "id": "q-01",
+      "query": "how long are nightly backups retained",
+      "category": "en_ops",
+      "expected_docs": [
+        "eval://corpus/backup_policy.md"
+      ],
+      "difficulty": "easy"
+    },
+    {
+      "id": "q-02",
+      "query": "what do remote staff need to use the VPN",
+      "category": "en_ops",
+      "expected_docs": [
+        "eval://corpus/vpn_access.md"
+      ],
+      "difficulty": "easy"
+    },
+    {
+      "id": "q-03",
+      "query": "meal reimbursement limit per day",
+      "category": "en_policy",
+      "expected_docs": [
+        "eval://corpus/expense_meals.md"
+      ],
+      "difficulty": "easy"
+    },
+    {
+      "id": "q-04",
+      "query": "when do new joiners get a laptop",
+      "category": "en_policy",
+      "expected_docs": [
+        "eval://corpus/onboarding_laptop.md"
+      ],
+      "difficulty": "easy"
+    },
+    {
+      "id": "q-05",
+      "query": "how quickly is the on-call engineer paged",
+      "category": "en_ops",
+      "expected_docs": [
+        "eval://corpus/incident_severity.md"
+      ],
+      "difficulty": "easy"
+    },
+    {
+      "id": "q-06",
+      "query": "how often do service account passwords rotate",
+      "category": "en_ops",
+      "expected_docs": [
+        "eval://corpus/password_rotation.md"
+      ],
+      "difficulty": "easy"
+    },
+    {
+      "id": "q-07",
+      "query": "年假有多少天，可以结转吗",
+      "category": "zh_policy",
+      "expected_docs": [
+        "eval://corpus/nianjia.md"
+      ],
+      "difficulty": "easy"
+    },
+    {
+      "id": "q-08",
+      "query": "差旅发票要多久之内提交",
+      "category": "zh_policy",
+      "expected_docs": [
+        "eval://corpus/chailv_baoxiao.md"
+      ],
+      "difficulty": "easy"
+    },
+    {
+      "id": "q-09",
+      "query": "考勤记录什么时候生成",
+      "category": "zh_policy",
+      "expected_docs": [
+        "eval://corpus/kaoqin.md"
+      ],
+      "difficulty": "easy"
+    },
+    {
+      "id": "q-10",
+      "query": "社保基数每年什么时候调整",
+      "category": "zh_policy",
+      "expected_docs": [
+        "eval://corpus/shebao.md"
+      ],
+      "difficulty": "easy"
+    },
+    {
+      "id": "q-11",
+      "query": "新员工的安全培训要求",
+      "category": "zh_policy",
+      "expected_docs": [
+        "eval://corpus/anquan_peixun.md"
+      ],
+      "difficulty": "easy"
+    },
+    {
+      "id": "q-12",
+      "query": "离职需要提前多久申请",
+      "category": "zh_policy",
+      "expected_docs": [
+        "eval://corpus/lizhi_liucheng.md"
+      ],
+      "difficulty": "easy"
+    }
+  ]
+}

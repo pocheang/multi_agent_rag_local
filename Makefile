@@ -1,4 +1,4 @@
-.PHONY: install up api test lint lock fe-install fe-dev fe-build config-check config-render deploy deploy-dev deploy-monitoring
+.PHONY: install up api test lint eval-retrieval lock fe-install fe-dev fe-build config-check config-render deploy deploy-dev deploy-monitoring
 
 install:
 	conda run -n rag-local pip install -e ".[dev]"
@@ -9,6 +9,12 @@ up:
 
 api:
 	conda run --no-capture-output -n rag-local uvicorn app.api.main:app --host 0.0.0.0 --port 8000 --reload --reload-dir app --reload-include "*.py" --reload-exclude "data/*" --reload-exclude "artifacts/*" --reload-exclude "frontend/*"
+
+# Retrieval quality over the corpus that ships in config/eval/. BM25 only, so it
+# needs no embedding model, no Chroma and no LLM. Deliberately not a CI gate for
+# the vector path -- see the docstring in scripts/eval_retrieval.py.
+eval-retrieval:
+	conda run --no-capture-output -n rag-local python scripts/eval_retrieval.py
 
 fe-install:
 	cd frontend && npm ci

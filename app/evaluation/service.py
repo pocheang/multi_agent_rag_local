@@ -86,7 +86,11 @@ class EvaluationService:
 
         # Evaluate each query
         query_evaluations = []
-        for test_query, retrieval_result in zip(test_queries, retrieval_results, strict=False):
+        # strict=True: a short result list used to truncate the query set
+        # silently, and truncation makes the score *better* -- the queries that
+        # get dropped are the ones the retriever failed to answer. A retriever
+        # that returns the wrong number of results is broken, not lenient.
+        for test_query, retrieval_result in zip(test_queries, retrieval_results, strict=True):
             query_eval = self.evaluate_query(test_query, retrieval_result)
             query_evaluations.append(query_eval)
 

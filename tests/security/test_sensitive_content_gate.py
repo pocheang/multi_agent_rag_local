@@ -172,3 +172,20 @@ def test_this_repository_passes() -> None:
     rels = gate.tracked_files(REPO)
     fails, _ = gate.scan(REPO, rels, None, True)
     assert not fails, "sensitive content in tracked files:\n  " + "\n  ".join(fails)
+
+
+def test_a_jsonl_that_is_not_the_evaluation_corpus_still_fails(scratch: Path) -> None:
+    """The forbidden-type baseline names one file, not a directory or a glob.
+
+    `.jsonl` is on the forbidden list because in this repository it means a log --
+    `logs/web_activity/*.jsonl` was committed once with real rows in it. Exempting
+    the evaluation corpus must not exempt the next one.
+    """
+
+    rel = _write(scratch, "logs/web_activity/2026-09-04.jsonl", '{"user":"alice"}\n')
+    assert [f for f in _scan(scratch, [rel]) if f.startswith("[type]")]
+
+
+def test_the_evaluation_corpus_is_exempt_by_name(scratch: Path) -> None:
+    rel = _write(scratch, "config/eval/retrieval_corpus.jsonl", '{"id":"x","text":"y"}\n')
+    assert not [f for f in _scan(scratch, [rel]) if f.startswith("[type]")]

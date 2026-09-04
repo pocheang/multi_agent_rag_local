@@ -24,6 +24,29 @@ SystemName = Literal["vector_only", "hybrid"]
 SUPPORTED_SYSTEMS: tuple[SystemName, ...] = get_args(SystemName)
 
 
+def _result(query_id: str, query: str, retrieved_docs: list[str], start_time: float) -> RetrievalResult:
+    """Build the one result shape both the success and the failure path return.
+
+    There used to be two constructions, and both passed `query=` where the field
+    is `query_text` -- so `RetrievalResult` raised for a missing required field on
+    every query, for both baselines, and `POST /api/evaluation/run` could not
+    complete. It survived because the happy path's ValidationError was swallowed
+    by the bare `except Exception` below, which then re-made the identical mistake
+    *outside* the try, where nothing could catch it.
+
+    Two call sites that must agree is what let that happen, so there is one now.
+    Same reasoning as the `k`/`top_k` note below: the harness is off the request
+    path, so nothing exercises it until someone runs it.
+    """
+
+    return RetrievalResult(
+        query_id=query_id,
+        query_text=query,
+        retrieved_docs=retrieved_docs,
+        latency_ms=(time.time() - start_time) * 1000,
+    )
+
+
 class SimpleRetriever:
     """Simple retriever wrapper for evaluation baselines."""
 
@@ -66,17 +89,10 @@ class SimpleRetriever:
             else:
                 raise ValueError(f"Unknown system: {self.system_name}")
 
-            latency_ms = (time.time() - start_time) * 1000
-            return RetrievalResult(
-                query_id=query_id,
-                query=query,
-                retrieved_docs=retrieved_docs,
-                latency_ms=latency_ms,
-            )
+            return _result(query_id, query, retrieved_docs, start_time)
         except Exception:
             logger.exception(f"Retrieval failed for query '{query}'")
-            latency_ms = (time.time() - start_time) * 1000
-            return RetrievalResult(query_id=query_id, query=query, retrieved_docs=[], latency_ms=latency_ms)
+            return _result(query_id, query, [], start_time)
 
     def batch_retrieve(self, queries: list[tuple[str, str]]) -> list[RetrievalResult]:
         """Retrieve documents for multiple evaluation queries."""

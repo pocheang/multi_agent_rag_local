@@ -52,6 +52,11 @@ data/
 logs/
 *.log
 *.jsonl
+# ...except the evaluation corpus, which has to survive a fresh clone: the whole
+# point of shipping it is that `make eval-retrieval` and tests/evaluation/ run on
+# a checkout where nobody hand-placed a file. A blanket *.jsonl swallowed it
+# silently, which is the same defect the corpus was added to fix.
+!config/eval/*.jsonl
 
 # 所有报告
 reports/
