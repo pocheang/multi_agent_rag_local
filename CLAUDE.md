@@ -121,11 +121,11 @@ The system has **3 primary components** and **3 optional components**:
 **Primary (always active)**:
 1. **Router** ([app/agents/router/service.py](app/agents/router/service.py))
    - Query intent classification and route selection
-   
+
 2. **Retriever** ([app/agents/rag/service.py](app/agents/rag/service.py))
    - Hybrid search: vector (ChromaDB) + BM25 + reranking
    - Optional: Knowledge graph (Neo4j), web search
-   
+
 3. **Synthesizer** ([app/agents/synthesizer/service.py](app/agents/synthesizer/service.py))
    - Citation-first answer generation from evidence
 
@@ -1243,7 +1243,7 @@ verified (60 inputs and 336 pins respectively, zero differences).
 
 `tests/` was cleared ahead of the v0.7 rewrite and is being rebuilt incrementally: each bug
 fix lands with the regression test that would have caught it, rather than as a separate
-back-filling effort. As of 2026-09-03 there are 1236 tests covering the chat round trip,
+back-filling effort. As of 2026-09-04 there are 1252 tests covering the chat round trip,
 conversation context, graph routing, clarification, the async load guard, engine reuse,
 answer safety, reader-facing citation numbering, stage-timeout degradation, the governed
 tool stack with its multi-step loop and approve-then-resume cycle, retrieval
@@ -1258,8 +1258,10 @@ an ASCII API document, a grounding SLO that measures answers, and the five funct
 unpicked in the 2026-09-03 complexity pass -- document ingestion, the distributed query
 guard, candidate collection, route selection, the document visibility rules and upload
 storage, each characterized against its old implementation before being split, and the
-regular expressions that backtracked super-linearly over user-supplied text, and the
-multimodal source that had never had anything to retrieve.
+regular expressions that backtracked super-linearly over user-supplied text, the
+multimodal source that had never had anything to retrieve, and the sensitive-content gate,
+whose suite is mostly negative assertions because a scanner reports PASS just as readily
+when its checks match nothing.
 
 **That count is not 1236 independent assertions, and the number before it was stale.** Two
 guards are parametrized one case per module — the audit-action scan over `app/` (376) and
@@ -1271,7 +1273,7 @@ covered the day it is added, where one test looping inside a single assertion re
 first offender and stops — but it does mean this total is not comparable across the change
 that introduced them.
 
-`tests/security/` (666 of those, 378 being the per-module audit-action scan) pins the
+`tests/security/` (682 of those, 376 being the per-module audit-action scan) pins the
 user-data isolation invariants — see
 `docs/superpowers/plans/2026-08-29-user-data-isolation.md`. That plan is complete
 (phases 0-4) and all 8 of its `xfail(strict=True)` markers are cleared; keep using the same
@@ -1327,6 +1329,97 @@ or every later query in the file finds two of everything.
 Note: do not use `len(app.routes)` to count endpoints. FastAPI 0.138+ stores an
 `_IncludedRouter` wrapper in `app.routes` instead of flattening child routes, so that number
 varies by version. Count OpenAPI operations instead; the current baseline is 151 (CI asserts a >= 140 floor).
+
+### Sensitive content gate (added 2026-09-04)
+
+`scripts/check_sensitive.py` decides what may leave this machine. It runs in two places and
+in three modes:
+
+```bash
+python scripts/check_sensitive.py                          # every tracked file (CI)
+python scripts/check_sensitive.py FILE...                  # staged files (pre-commit)
+python scripts/check_sensitive.py --tree DIR --expect N    # a delivery copy on disk
+```
+
+**The file list comes from `git ls-files`, not from a filesystem walk, and that is the whole
+design.** A working tree legitimately contains `data/`, `logs/`, `internal_docs/`, `.venv/`
+and `node_modules/` — all gitignored — so walking the filesystem would fail on every run and
+be switched off within a week. Asking git instead turns the forbidden-path check into one
+that means something: it fires on a `git add -f data/app.db`, which is how a database
+actually reaches a repository.
+
+Both hooks run it, and neither is redundant. The pre-commit hook blocks a secret **before it
+enters history**, which is the only point at which removing one is cheap — once pushed, a
+credential is compromised and the answer is rotation, not a revert. CI is the copy that
+catches a `--no-verify` and a fresh clone where nobody ran `pre-commit install`.
+
+**Nothing is rewritten automatically, and that is deliberate.** An auto-redacting commit hook
+would mangle `tests/security/test_streaming_redaction.py` and `tests/services/test_answer_safety.py`,
+whose fixtures *are* an AWS example key id, an `sk-` prefixed dummy and an OpenSSH private-key
+header. A sweep that "desensitizes" the redaction feature's own test data breaks the security
+suite, and does it in the worst possible way: after the suite has gone green. The gate reports
+and blocks; a human removes the value.
+
+Note that this section describes those fixtures rather than quoting them, and says "a Windows
+user-profile path" rather than writing one. The first draft quoted all four verbatim and the
+gate refused the commit — correctly. Adding `CLAUDE.md` to the baseline was the wrong fix: it
+is long and edited constantly, so exempting it would mean a real key pasted here is never seen
+again.
+
+**The two baselines are ratchets, not allowlists.** `SECRET_BASELINE` (6 files) and
+`LOCAL_PATH_BASELINE` (3 files) name individual files, not directories — exempting all of
+`docs/` would have let a real key land in any document in the project. And on a whole-repository
+scan, a baseline entry that no longer matches anything is itself a failure, so the exemption
+list can only shrink. Same shape as `KNOWN_OFFENDERS` in `tests/security/` and
+`scripts/design-scale-baseline.json`.
+
+Three of those entries are the gate's own files, added after it refused the commit that
+introduced them: the local-path pattern spells out git-bash's spelling of the Windows user
+directory and therefore matches its own source, and the test cannot demonstrate that a
+private-key header is caught without containing one. This paragraph was itself rejected once
+for quoting that prefix — the gate is difficult to write about, which is a good sign.
+
+**What it cannot catch**, which matters more than what it can:
+
+- It matches *shapes*. A bare 32-character hex string, or a database password with no
+  recognisable prefix, passes.
+- It reads text files by extension allowlist. Anything inside a `.png`, `.pdf` or `.xlsx` is
+  invisible to it — the eight tracked screenshots were checked by eye (they use the
+  `walkthrough_alice` demo account and a public question).
+- **It never looks at `.git/`.** History has to be audited separately. It was, on 2026-09-04:
+  all 711 commits scanned for credential shapes and every hit was a placeholder
+  (`NEO4J_PASSWORD=changeme`, an `sk-proj-` stub, the AWS documentation key), plus the
+  once-committed `logs/web_activity/*.jsonl` (5 rows, all `test_user`/`Test query`, ip and UA
+  `None`) and the once-committed demo corpus (`XX科技有限公司`). `internal_docs/` has never
+  been committed.
+
+#### Handing the whole folder to someone
+
+Export with git; do not copy the folder and delete things afterwards.
+
+```bash
+git clone --no-hardlinks . ../querymind-delivery
+python scripts/check_sensitive.py --tree ../querymind-delivery --expect 958
+```
+
+A clone contains only committed content by construction, so `.gitignore` — a rule this project
+has already applied 700-odd times — does the filtering. "Copy, then `rm -rf` the sensitive
+directories" is a denylist, and it misses `.venv/pyvenv.cfg` and `querymind.egg-info/PKG-INFO`,
+both of which carry the developer's absolute path. Update `--expect` from
+`git ls-files | wc -l`.
+
+Two things learned doing this the first time:
+
+- **Verifying the copy contaminates the copy.** Running ruff inside it left `.ruff_cache/`;
+  running `pytest --collect-only` created `data/` — the exact directory name being excluded,
+  produced by module import. `git clean -xfd` inside the copy is the fix (it cannot touch
+  tracked files), and the final scan must come *after* every verification step.
+- **A scanner that has never been proven to fail proves nothing.** Before trusting a PASS,
+  point it at a directory holding a known secret, a `.db`, an env file with a value and a
+  Windows user-profile path, and confirm all four trip and the exit code is 1. Doing that
+  caught three defects in this script's own first draft, one of which — a regex where `\\+`
+  had been reduced to `\+`, matching a literal plus sign — made every such path undetectable
+  while the output looked entirely normal.
 
 ## Important Notes
 

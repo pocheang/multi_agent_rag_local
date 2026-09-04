@@ -6,6 +6,12 @@ repos:
       - id: check-json
       - id: end-of-file-fixer
       - id: trailing-whitespace
+        # Two trailing spaces are a hard line break in Markdown, and three
+        # documents here rely on it -- CLAUDE.md's header block among them.
+        # Nothing noticed until `pre-commit install` was actually run for the
+        # first time on 2026-09-04, at which point the hook reflowed lines
+        # nobody had touched. This flag is what it exists for.
+        args: [--markdown-linebreak-ext=md]
       - id: mixed-line-ending
   - repo: https://github.com/astral-sh/ruff-pre-commit
     rev: v0.12.0
@@ -13,3 +19,16 @@ repos:
       - id: ruff
         args: [--fix]
       - id: ruff-format
+
+  # Blocks a secret before it enters history, which is the only point at which
+  # removing one is cheap: once pushed, a credential is compromised and the
+  # answer is rotation, not a revert. CI runs the same script over every tracked
+  # file, because this hook is skippable (--no-verify) and is not installed in a
+  # fresh clone until someone runs `pre-commit install`.
+  - repo: local
+    hooks:
+      - id: check-sensitive
+        name: sensitive content gate
+        entry: python scripts/check_sensitive.py
+        language: system
+        pass_filenames: true

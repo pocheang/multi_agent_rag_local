@@ -30,6 +30,18 @@ jobs:
           python-version: "3.11"
           cache: pip
 
+      # Ahead of lint for the same reason lint is ahead of install, and more
+      # so: stdlib only, and a credential reaching this repository is the one
+      # failure that cannot be fixed by a follow-up commit. The pre-commit hook
+      # runs the same script over staged files; this is the copy that catches a
+      # --no-verify or a clone with no hooks installed.
+      #
+      # Scans every tracked file rather than the diff. That is what makes the
+      # two baselines in the script a ratchet: an exemption that no longer
+      # matches anything fails here, so the allowlist cannot silently widen.
+      - name: Sensitive content gate
+        run: python scripts/check_sensitive.py
+
       # Lint first: it needs no project dependencies, so a style failure reports
       # in seconds instead of after the full install.
       - name: Install ruff
