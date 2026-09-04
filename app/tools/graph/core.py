@@ -8,6 +8,14 @@ from app.services.runtime.resilience import call_with_circuit_breaker
 TOKEN_PATTERN = re.compile(r"[A-Za-z0-9_\-]+|[\u4e00-\u9fff]{2,}")
 _NOISY_RELATIONS = {
     "related",
+    # `infer_relation` in the rule triplet extractor returns RELATED_TO whenever
+    # no keyword matched, so it is the single most common relation in any graph
+    # built without an LLM -- and it was the one shape this set missed, scoring
+    # 0.6 instead of 0.0. Listing it drops those edges at *read* time, which is
+    # the only mitigation available for graphs already written: Neo4j stores no
+    # extraction method, and every existing edge carries the same 0.7 the old
+    # code stamped on everything.
+    "related_to",
     "\u5173\u8054",
     "\u76f8\u5173",
     "link",

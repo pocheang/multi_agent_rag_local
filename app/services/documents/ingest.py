@@ -5,7 +5,7 @@ from typing import Any
 
 from app.graph.knowledge.client import Neo4jClient
 from app.ingestion.chunking.splitter import split_documents
-from app.ingestion.graph_extractor import extract_graph_triplets
+from app.ingestion.graph_extractor import extract_graph_triplets_with_diagnostics
 from app.ingestion.loaders.dispatch import load_document_with_evidence
 from app.retrievers.bm25_retriever import reset_bm25_cache
 from app.retrievers.hybrid.retriever import clear_retrieval_cache
@@ -55,13 +55,22 @@ def ingest_paths(
     chunks, parent_records = split_documents(docs)
     records = _write_records(chunks, parent_records, reset_vector_store=reset_vector_store)
     _rebuild_vector_index(chunks, [record["id"] for record in records], reset_vector_store=reset_vector_store)
-    count_triplets = _write_graph_triplets(chunks, parser_profiles_by_source)
+    count_triplets, triplet_methods = _write_graph_triplets(chunks, parser_profiles_by_source)
 
     return {
         # Files, not Document objects: one PDF arrives as one Document per page.
         "loaded_documents": len(sources),
         "chunks_indexed": len(chunks),
         "triplets_written": count_triplets,
+        # Which extractor produced the candidates, and how many the confidence
+        # threshold dropped. A bare `triplets_written: 0` cannot distinguish "no
+        # Neo4j", "nothing extractable" and "everything the rule extractor
+        # produced was correctly rejected" -- and the last of those is the
+        # default on an installation with no LLM.
+        "triplets_discarded_low_confidence": int(triplet_methods.get("discarded_low_confidence", 0)),
+        "triplet_methods": {
+            name: count for name, count in triplet_methods.items() if name != "discarded_low_confidence"
+        },
         "images_indexed": images_indexed,
         "tables_indexed": tables_indexed,
         "pages_by_source": {source: len(pages) for source, pages in pages_by_source.items()},
@@ -330,12 +339,18 @@ def _rebuild_vector_index(chunks: list[Any], record_ids: list[str], *, reset_vec
     clear_retrieval_cache()
 
 
-def _write_graph_triplets(chunks: list[Any], parser_profiles_by_source: dict[str, dict[str, Any]] | None) -> int:
-    """Extract and insert graph triplets, or return 0 without disturbing the run.
+def _write_graph_triplets(
+    chunks: list[Any], parser_profiles_by_source: dict[str, dict[str, Any]] | None
+) -> tuple[int, dict[str, int]]:
+    """Extract and insert graph triplets, or write none without disturbing the run.
 
     Neo4j is optional throughout this system, so every failure here -- an absent
     server, an unparseable chunk, a rejected batch -- costs the triplets and
     nothing else.
+
+    Returns the count written and a per-extractor breakdown, because "wrote
+    nothing" now has several distinct causes and the caller cannot tell them
+    apart from a zero.
     """
 
     try:
@@ -346,21 +361,21 @@ def _write_graph_triplets(chunks: list[Any], parser_profiles_by_source: dict[str
             f"Error: {e}. Check NEO4J_URI and credentials in environment.",
             exc_info=True,
         )
-        return 0
+        return 0, {}
 
     try:
-        rows, extraction_errors = _triplet_rows(chunks, parser_profiles_by_source)
-        return _insert_triplets(client, rows, extraction_errors)
+        rows, extraction_errors, methods = _triplet_rows(chunks, parser_profiles_by_source)
+        return _insert_triplets(client, rows, extraction_errors, methods), methods
     except Exception as e:
         logger.exception(f"Unexpected error during graph ingestion: {e}")
-        return 0
+        return 0, {}
     finally:
         client.close()
 
 
 def _triplet_rows(
     chunks: list[Any], parser_profiles_by_source: dict[str, dict[str, Any]] | None
-) -> tuple[list[dict[str, Any]], int]:
+) -> tuple[list[dict[str, Any]], int, dict[str, int]]:
     """Every triplet the chunks yield, gathered for one batch insert.
 
     A chunk that will not parse costs that chunk and is counted rather than
@@ -368,6 +383,7 @@ def _triplet_rows(
     """
 
     rows: list[dict[str, Any]] = []
+    methods: dict[str, int] = {}
     extraction_errors = 0
     for chunk_idx, chunk in enumerate(chunks):
         source = str(chunk.metadata.get("source", "unknown"))
@@ -377,7 +393,12 @@ def _triplet_rows(
         provenance = _chunk_provenance(chunk, chunk_idx, source)
         min_confidence = float(profile.get("graph_min_confidence", 0.5) or 0.5)
         try:
-            for triplet in extract_graph_triplets(chunk.page_content, min_confidence=min_confidence):
+            kept, chunk_methods = extract_graph_triplets_with_diagnostics(
+                chunk.page_content, min_confidence=min_confidence
+            )
+            for name, count in chunk_methods.items():
+                methods[name] = methods.get(name, 0) + count
+            for triplet in kept:
                 rows.append(
                     {
                         "head": triplet.head,
@@ -390,7 +411,7 @@ def _triplet_rows(
         except Exception as e:
             extraction_errors += 1
             logger.warning(f"Failed to extract triplets from chunk {chunk_idx} (source: {source}): {e}")
-    return rows, extraction_errors
+    return rows, extraction_errors, methods
 
 
 def _chunk_provenance(chunk: Any, chunk_idx: int, source: str) -> dict[str, Any]:
@@ -422,8 +443,30 @@ def _optional_int(value: Any) -> int | None:
         return None
 
 
-def _insert_triplets(client: Neo4jClient, rows: list[dict[str, Any]], extraction_errors: int) -> int:
+def _insert_triplets(
+    client: Neo4jClient,
+    rows: list[dict[str, Any]],
+    extraction_errors: int,
+    methods: dict[str, int] | None = None,
+) -> int:
     if not rows:
+        discarded = int((methods or {}).get("discarded_low_confidence", 0))
+        if discarded > 0:
+            # The common shape on an installation with no working LLM: the rule
+            # extractor produced candidates and every one scored below the
+            # profile threshold. Say so, with the numbers -- a graph route that
+            # silently returns nothing is indistinguishable from a broken one.
+            produced = ", ".join(
+                f"{name}={count}"
+                for name, count in sorted((methods or {}).items())
+                if name != "discarded_low_confidence"
+            )
+            logger.info(
+                f"No triplets written: {discarded} candidate(s) scored below the profile's "
+                f"graph_min_confidence. Extractors that ran: {produced or 'none'}. "
+                f"Rule-extracted triplets are deliberately below every shipped threshold; "
+                f"configure a real MODEL_BACKEND for LLM extraction."
+            )
         if extraction_errors > 0:
             logger.warning(
                 f"No triplets extracted due to {extraction_errors} extraction errors. "

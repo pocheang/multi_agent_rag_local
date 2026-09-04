@@ -697,6 +697,65 @@ raw turns do not — and `_render_turns` skips it when building the rewrite prom
 rounds are not shown twice in two formats. One consequence of the old shape: the
 `max_turns=12` bound in `_render_conversation` was dead, because there was only ever one turn.
 
+### Knowledge graph extraction
+
+**A triplet's confidence now says how it was produced** (fixed 2026-09-04), and until it
+did, the graph route was serving invented relationships as evidence.
+
+`extract_graph_triplets` stamped `confidence=0.7, method="legacy"` on *every* triplet
+regardless of extractor, so `filter_triplets(min_confidence=...)` could not tell an
+LLM-extracted relation from a regex-chained one and its threshold was inert. What it was
+failing to filter matters: `extract_triplets_rules` does not find relations. It takes the
+ten most **frequent** `ENTITY_PATTERN` matches -- and that pattern matches any 2-12
+character CJK run, so in Chinese it matches nearly every word, including the "系统/模块/功能"
+the LLM prompt explicitly excludes -- then pairs them **by adjacent frequency rank**, which
+is an artefact of sort order, and labels every pair in a chunk with one relation keyed off
+the whole chunk's wording.
+
+And it was the default path, not an edge case: `MODEL_BACKEND=local` is what a fresh
+checkout runs, the offline stand-in cannot emit the required JSON array, and
+`extract_triplets` fell through to rules on every chunk.
+
+`LLM_TRIPLET_CONFIDENCE` is 0.7 (today's effective value) and `RULE_TRIPLET_CONFIDENCE` is
+0.25, below every shipped `graph_min_confidence` (`app/services/parser_profiles.py`:
+0.55 / 0.6 / 0.65 / 0.75 -- **not** `Settings` fields).
+`test_every_shipped_parser_profile_threshold_excludes_rule_confidence` pins that coupling,
+which is otherwise invisible across two files. Three method values, because "this
+deployment configured rules" and "this deployment's LLM is broken" were previously
+indistinguishable: `llm`, `rules`, `rules_llm_fallback`.
+
+**So an installation with no working LLM now writes zero triplets**, which is the truthful
+number and must not be silently zero: `_triplet_rows` counts per method,
+`ingest_paths` reports `triplets_discarded_low_confidence` and `triplet_methods`, and
+`_insert_triplets` logs at INFO when everything was discarded, naming the threshold. A
+graph route that quietly goes empty otherwise reads as a retrieval problem rather than a
+configuration one. Deliberately *not* added: a `GRAPH_RULE_TRIPLET_CONFIDENCE` setting --
+a knob whose only purpose is re-enabling a path judged to be fabrication is a knob for
+turning fabrication back on. Lowering the profile thresholds was considered and rejected
+for the same reason.
+
+**There is no safe automatic migration for graphs already written, and none should be
+attempted.** `batch_upsert_triplets` writes `confidence_max/count/avg` and **no `method`
+property at all**; `graph_lookup` never reads confidence (it is write-only); and every
+existing edge carries exactly 0.7, because both the old stamp and the client's own
+normaliser default to it. So 0.7 is not a marker of junk, it is what everything looks like,
+and `_write_graph_triplets` has no delete path so a reset reingest only adds edges beside
+the old ones. The operator step is explicit:
+
+```cypher
+MATCH ()-[r:RELATED]->() DELETE r
+```
+
+then reingest. Neo4j is optional and empty on most installs.
+
+**One read-side mitigation applies to existing graphs with no migration.**
+`infer_relation` returns `RELATED_TO` whenever no keyword matched, making it the most
+common relation in any graph built without an LLM -- and `_NOISY_RELATIONS`
+(`app/tools/graph/core.py`) contained `"related"` but not `"related_to"`, so those edges
+scored 0.6 and survived the filter that exists to drop exactly them. Adding it drops them
+at read time on the next query. Its limit is worth stating: `infer_relation` also emits
+`DEPENDS_ON`/`INCLUDES`/`USES`/`STORES_IN` on keyword hits, and those still survive.
+
 ### Multimodal retrieval
 
 `multimodal` is a retrieval source the Knowledge Agent selects on visual or

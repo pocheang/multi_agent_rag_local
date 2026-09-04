@@ -133,8 +133,8 @@ def wiring(monkeypatch: pytest.MonkeyPatch) -> _Calls:
     monkeypatch.setattr(ingest_module, "Neo4jClient", lambda: _FakeNeo4j(calls))
     monkeypatch.setattr(
         ingest_module,
-        "extract_graph_triplets",
-        lambda text, min_confidence: [_Triplet("A", "relates_to", "B")],
+        "extract_graph_triplets_with_diagnostics",
+        lambda text, min_confidence: ([_Triplet("A", "relates_to", "B")], {"llm": 1, "discarded_low_confidence": 0}),
     )
     return calls
 
@@ -243,9 +243,9 @@ def test_one_chunk_failing_extraction_does_not_lose_the_others(wiring: _Calls, m
     def extract(text: str, min_confidence: float):
         if "a.pdf" in text:
             raise ValueError("unparseable")
-        return [_Triplet("A", "relates_to", "B")]
+        return [_Triplet("A", "relates_to", "B")], {"llm": 1, "discarded_low_confidence": 0}
 
-    monkeypatch.setattr(ingest_module, "extract_graph_triplets", extract)
+    monkeypatch.setattr(ingest_module, "extract_graph_triplets_with_diagnostics", extract)
 
     result = ingest_module.ingest_paths([Path("a.pdf"), Path("b.pdf")])
 
@@ -323,3 +323,27 @@ def test_the_empty_result_reports_no_images_key(wiring: _Calls, monkeypatch) -> 
     monkeypatch.setattr(ingest_module, "load_document_with_evidence", parses_to_nothing)
 
     assert "images_indexed" not in ingest_module.ingest_paths([Path("a.pdf")])
+
+
+def test_a_run_that_fell_back_to_rules_writes_no_triplets_and_says_so(wiring: _Calls, monkeypatch) -> None:
+    """Zero triplets has several causes and the result must distinguish them.
+
+    On an installation with no working LLM the rule extractor produces
+    candidates and every one scores below the profile threshold -- correctly, but
+    a bare `triplets_written: 0` cannot be told apart from "no Neo4j" or "nothing
+    extractable", and a graph route that quietly returns nothing looks like a
+    retrieval problem rather than a configuration one.
+    """
+
+    monkeypatch.setattr(
+        ingest_module,
+        "extract_graph_triplets_with_diagnostics",
+        lambda text, min_confidence: ([], {"rules_llm_fallback": 3, "discarded_low_confidence": 3}),
+    )
+
+    result = ingest_module.ingest_paths([Path("a.pdf")])
+
+    assert result["triplets_written"] == 0
+    assert result["triplets_discarded_low_confidence"] == 3
+    assert result["triplet_methods"] == {"rules_llm_fallback": 3}
+    assert wiring.upserted == []
