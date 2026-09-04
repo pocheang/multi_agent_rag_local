@@ -24,6 +24,9 @@ See CLAUDE.md, "Sensitive content gate".
 from __future__ import annotations
 
 import importlib.util
+import shutil
+import tempfile
+from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
@@ -43,6 +46,30 @@ def _load():
 gate = _load()
 
 
+@pytest.fixture
+def scratch() -> Iterator[Path]:
+    """A throwaway directory, deliberately not pytest's `scratch`.
+
+    `scratch` builds its trees under a shared per-user basetemp root
+    (`.../Temp/pytest-of-<user>`), and creating that root needs directory
+    permissions that are not available on every Windows checkout -- every test
+    in this file errored with `PermissionError: [WinError 5]` before the whole
+    suite even started.
+
+    That mattered more here than it would elsewhere: this file's entire job is to
+    prove the sensitive-content gate is *able to fail*, and a suite that cannot
+    run proves that no better than a scanner whose checks match nothing. The
+    surrounding suites already avoid `scratch` for this reason -- see
+    tests/services/test_benchmark_query_set.py.
+    """
+
+    root = Path(tempfile.mkdtemp(prefix="querymind-gate-"))
+    try:
+        yield root
+    finally:
+        shutil.rmtree(root, ignore_errors=True)
+
+
 def _scan(root: Path, rels: list[str], whole: bool = False) -> list[str]:
     fails, _ = gate.scan(root, rels, None, whole)
     return fails
@@ -58,30 +85,30 @@ def _write(root: Path, rel: str, text: str) -> str:
 # --- each check class must trip -------------------------------------------
 
 
-def test_a_forced_database_is_caught(tmp_path: Path) -> None:
+def test_a_forced_database_is_caught(scratch: Path) -> None:
     """`git add -f data/app.db` is how a database reaches a repository."""
-    rel = _write(tmp_path, "data/app.db", "")
-    kinds = {f.split("]")[0] + "]" for f in _scan(tmp_path, [rel])}
+    rel = _write(scratch, "data/app.db", "")
+    kinds = {f.split("]")[0] + "]" for f in _scan(scratch, [rel])}
     assert "[path]" in kinds, "a tracked file under data/ must fail"
     assert "[type]" in kinds, "a .db suffix must fail on its own"
 
 
-def test_an_env_file_with_a_value_is_caught(tmp_path: Path) -> None:
+def test_an_env_file_with_a_value_is_caught(scratch: Path) -> None:
     rel = _write(
-        tmp_path,
+        scratch,
         ".runtime/generated-secrets.env",
         "# a comment\nEMPTY=\nJWT_SECRET_KEY=abcdef0123456789\n",
     )
-    fails = [f for f in _scan(tmp_path, [rel]) if f.startswith("[env]")]
+    fails = [f for f in _scan(scratch, [rel]) if f.startswith("[env]")]
     assert len(fails) == 1, "only the line carrying a value should fail"
     assert "JWT_SECRET_KEY" in fails[0]
     assert "abcdef0123456789" not in fails[0], "the report must never echo the value"
 
 
-def test_an_example_env_file_is_exempt(tmp_path: Path) -> None:
+def test_an_example_env_file_is_exempt(scratch: Path) -> None:
     """A committed .env.example is documentation, and its keys are empty."""
-    rel = _write(tmp_path, ".env.example", "OPENAI_API_KEY=\n")
-    assert not [f for f in _scan(tmp_path, [rel]) if f.startswith("[env]")]
+    rel = _write(scratch, ".env.example", "OPENAI_API_KEY=\n")
+    assert not [f for f in _scan(scratch, [rel]) if f.startswith("[env]")]
 
 
 @pytest.mark.parametrize(
@@ -93,44 +120,44 @@ def test_an_example_env_file_is_exempt(tmp_path: Path) -> None:
         "-----BEGIN RSA PRIVATE KEY-----",
     ],
 )
-def test_credential_shapes_are_caught(tmp_path: Path, secret: str) -> None:
-    rel = _write(tmp_path, "src/leak.py", f'KEY = "{secret}"\n')
-    assert [f for f in _scan(tmp_path, [rel]) if f.startswith("[secret]")]
+def test_credential_shapes_are_caught(scratch: Path, secret: str) -> None:
+    rel = _write(scratch, "src/leak.py", f'KEY = "{secret}"\n')
+    assert [f for f in _scan(scratch, [rel]) if f.startswith("[secret]")]
 
 
-def test_a_windows_user_profile_path_is_caught(tmp_path: Path) -> None:
+def test_a_windows_user_profile_path_is_caught(scratch: Path) -> None:
     """The regression that made this whole file worth having."""
-    rel = _write(tmp_path, "doc.md", "run it from C:" + chr(92) + "Users" + chr(92) + "dev\n")
-    assert [f for f in _scan(tmp_path, [rel]) if f.startswith("[local-path]")]
+    rel = _write(scratch, "doc.md", "run it from C:" + chr(92) + "Users" + chr(92) + "dev\n")
+    assert [f for f in _scan(scratch, [rel]) if f.startswith("[local-path]")]
 
 
-def test_an_api_route_is_not_a_local_path(tmp_path: Path) -> None:
+def test_an_api_route_is_not_a_local_path(scratch: Path) -> None:
     """`re.I` on the path pattern turned every admin route into a finding."""
-    rel = _write(tmp_path, "routes.py", 'PATHS = ["/admin/users/u-1/role", "/api/v1/users/me"]\n')
-    assert not [f for f in _scan(tmp_path, [rel]) if f.startswith("[local-path]")]
+    rel = _write(scratch, "routes.py", 'PATHS = ["/admin/users/u-1/role", "/api/v1/users/me"]\n')
+    assert not [f for f in _scan(scratch, [rel]) if f.startswith("[local-path]")]
 
 
-def test_a_container_volume_is_not_a_local_path(tmp_path: Path) -> None:
-    rel = _write(tmp_path, "compose.yaml", "    volumes:\n      - nacos_data:/home/nacos/data\n")
-    assert not [f for f in _scan(tmp_path, [rel]) if f.startswith("[local-path]")]
+def test_a_container_volume_is_not_a_local_path(scratch: Path) -> None:
+    rel = _write(scratch, "compose.yaml", "    volumes:\n      - nacos_data:/home/nacos/data\n")
+    assert not [f for f in _scan(scratch, [rel]) if f.startswith("[local-path]")]
 
 
 # --- the baselines are ratchets, not allowlists ---------------------------
 
 
-def test_a_baseline_entry_that_matches_nothing_fails(tmp_path: Path, monkeypatch) -> None:
+def test_a_baseline_entry_that_matches_nothing_fails(scratch: Path, monkeypatch) -> None:
     """An exemption list nobody prunes stops describing anything."""
-    rel = _write(tmp_path, "clean.py", "x = 1\n")
+    rel = _write(scratch, "clean.py", "x = 1\n")
     monkeypatch.setattr(gate, "SECRET_BASELINE", {"gone.py"})
     monkeypatch.setattr(gate, "LOCAL_PATH_BASELINE", set())
-    fails = _scan(tmp_path, [rel], whole=True)
+    fails = _scan(scratch, [rel], whole=True)
     assert any(f.startswith("[stale baseline]") for f in fails)
 
 
-def test_the_stale_check_is_off_for_a_partial_scan(tmp_path: Path) -> None:
+def test_the_stale_check_is_off_for_a_partial_scan(scratch: Path) -> None:
     """pre-commit sees a handful of staged files; almost every entry is unused."""
-    rel = _write(tmp_path, "clean.py", "x = 1\n")
-    assert not [f for f in _scan(tmp_path, [rel]) if f.startswith("[stale baseline]")]
+    rel = _write(scratch, "clean.py", "x = 1\n")
+    assert not [f for f in _scan(scratch, [rel]) if f.startswith("[stale baseline]")]
 
 
 def test_the_baselines_name_files_that_exist() -> None:
