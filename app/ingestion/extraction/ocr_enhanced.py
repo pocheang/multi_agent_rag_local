@@ -37,7 +37,7 @@ def _build_base_metadata(image, source: Path, page: int | None, image_index: int
 
 def _add_vision_metadata(metadata: dict, image, img_bytes: bytes, settings) -> tuple[str, str]:
     """添加人脸检测和图像描述信息."""
-    from app.ingestion.extraction.people import build_people_summary, detect_people_in_image
+    from app.ingestion.extraction.people import detect_people_in_image
     from app.ingestion.extraction.vision import build_vision_summary, describe_image_with_vision
 
     # 人脸检测
@@ -47,7 +47,6 @@ def _add_vision_metadata(metadata: dict, image, img_bytes: bytes, settings) -> t
     metadata["face_count"] = int(people_info.get("face_count", 0))
     metadata["human_present"] = bool(people_info.get("human_present", False))
     metadata["person_detector_mode"] = str(people_info.get("detector_mode", "face"))
-    people_summary = build_people_summary(people_info)
 
     # 图像描述
     vision_info = describe_image_with_vision(img_bytes, settings)
@@ -59,7 +58,7 @@ def _add_vision_metadata(metadata: dict, image, img_bytes: bytes, settings) -> t
         metadata["image_caption_error"] = str(vision_info.get("error", ""))
     vision_summary = build_vision_summary(vision_info)
 
-    return people_summary, vision_summary
+    return vision_summary
 
 
 def _add_block_statistics(metadata: dict, blocks) -> None:
@@ -199,21 +198,21 @@ def ocr_image_bytes_with_structure(
 
     # 构建基础信息
     metadata, summary = _build_base_metadata(image, source, page, image_index)
-    people_summary, vision_summary = _add_vision_metadata(metadata, image, img_bytes, settings)
+    vision_summary = _add_vision_metadata(metadata, image, img_bytes, settings)
 
     # 尝试 PaddleOCR（如果启用）
     if use_layout:
         structured_text, metadata = _try_paddleocr(img_bytes, image.width, image.height, metadata)
         if structured_text:
-            content = f"{summary}\n{people_summary}\n{vision_summary}\n[image_ocr_structured]\n{structured_text}"
+            content = f"{summary}\n{vision_summary}\n[image_ocr_structured]\n{structured_text}"
             return [Document(page_content=content, metadata=metadata)]
 
     # 降级到 Tesseract
     structured_text, metadata, error_reason = _try_tesseract(image, settings, metadata)
 
     if structured_text:
-        content = f"{summary}\n{people_summary}\n{vision_summary}\n[image_ocr_structured]\n{structured_text}"
+        content = f"{summary}\n{vision_summary}\n[image_ocr_structured]\n{structured_text}"
     else:
-        content = f"{summary}\n{people_summary}\n{vision_summary}\n[image_ocr_error]\n{error_reason}"
+        content = f"{summary}\n{vision_summary}\n[image_ocr_error]\n{error_reason}"
 
     return [Document(page_content=content, metadata=metadata)]

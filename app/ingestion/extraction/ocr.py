@@ -161,7 +161,7 @@ def ocr_image_bytes(
         logger.warning(f"Failed to open image: {e}")
         return []
 
-    from app.ingestion.extraction.people import build_people_summary, detect_people_in_image
+    from app.ingestion.extraction.people import detect_people_in_image
     from app.ingestion.extraction.vision import build_vision_summary, describe_image_with_vision
 
     width, height = image.size
@@ -189,7 +189,6 @@ def ocr_image_bytes(
     metadata["face_count"] = int(people_info.get("face_count", 0))
     metadata["human_present"] = bool(people_info.get("human_present", False))
     metadata["person_detector_mode"] = str(people_info.get("detector_mode", "face"))
-    people_summary = build_people_summary(people_info)
     vision_info = describe_image_with_vision(img_bytes, settings)
     metadata["image_caption_status"] = str(vision_info.get("status", "unknown"))
     metadata["image_caption_model"] = str(vision_info.get("model", "") or "")
@@ -204,7 +203,7 @@ def ocr_image_bytes(
     except ImportError:
         logger.warning("pytesseract not available for image OCR")
         metadata["ocr_status"] = "pytesseract_missing"
-        content = f"{summary}\n{people_summary}\n{vision_summary}\n[image_ocr_error]\npytesseract not installed"
+        content = f"{summary}\n{vision_summary}\n[image_ocr_error]\npytesseract not installed"
         return [Document(page_content=content, metadata=metadata)]
 
     if settings.tessdata_prefix:
@@ -236,12 +235,12 @@ def ocr_image_bytes(
             reason = "OCR ran but no text detected (image may be blank/low quality)"
         metadata["ocr_status"] = ocr_status
         metadata["ocr_error"] = ocr_error
-        content = f"{summary}\n{people_summary}\n{vision_summary}\n[image_ocr_error]\n{reason}"
+        content = f"{summary}\n{vision_summary}\n[image_ocr_error]\n{reason}"
         return [Document(page_content=content, metadata=metadata)]
 
     metadata["ocr_status"] = ocr_status
     metadata["ocr_variant"] = ocr_variant
     metadata["ocr_psm"] = ocr_psm
-    content = f"{summary}\n{people_summary}\n{vision_summary}\n[image_ocr]\n{ocr_text}"
+    content = f"{summary}\n{vision_summary}\n[image_ocr]\n{ocr_text}"
 
     return [Document(page_content=content, metadata=metadata)]

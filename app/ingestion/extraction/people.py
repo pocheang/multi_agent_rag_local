@@ -8,7 +8,7 @@ logger = logging.getLogger(__name__)
 
 def detect_people_in_image(image, settings) -> dict:
     """Detect people in image using face and/or HOG detection."""
-    if not getattr(settings, "people_detection_enabled", True):
+    if not getattr(settings, "people_detection_enabled", False):
         return {"status": "disabled", "person_count": 0, "face_count": 0, "human_present": False}
 
     try:

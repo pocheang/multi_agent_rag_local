@@ -339,6 +339,24 @@ PipelineResult → returned to caller
    shared redactor, and the second pass is kept because a search engine is outside every
    agreement this system has.
 
+   **People detection is opt-in and never indexed** (changed 2026-09-04).
+   `detect_people_in_image` runs OpenCV face/HOG detection over every ingested image, and
+   `build_people_summary` rendered `human_present`, `person_count` and `face_count` into
+   the same `page_content` as the OCR text -- for a standalone uploaded image, that string
+   *is* the chunk, indexed into the main corpus through both vector and BM25. It was on by
+   default, so nobody chose it; **nothing in `app/` or the frontend reads any of the five
+   fields it produces**, so the exposure bought nothing; and this section, which exists to
+   say what is and is not covered, did not mention it.
+
+   `PEOPLE_DETECTION_ENABLED` now defaults false -- including the `getattr` fallback in
+   `people.py`, which defaulted *true* and so switched detection on for any caller passing
+   an object without the attribute -- and neither OCR path composes the summary into
+   content. The metadata keys and `build_people_summary` remain: the helper is not the
+   defect, publishing its output into a search index was. **Whether the subsystem should
+   exist at all is open** -- by this repository's own rule a producer with no consumer gets
+   deleted rather than configured, and that is why it was not added to
+   `config_schema.py`: a switch over something nothing reads is not configurability.
+
    **Still not covered, deliberately or otherwise**: names, street addresses, licence
    plates; no content-moderation/toxicity filter and no bias detection. Uploaded documents
    are never inspected — `app/services/documents/` calls nothing from `app/privacy/` — so
@@ -1651,7 +1669,7 @@ verified (60 inputs and 336 pins respectively, zero differences).
 
 `tests/` was cleared ahead of the v0.7 rewrite and is being rebuilt incrementally: each bug
 fix lands with the regression test that would have caught it, rather than as a separate
-back-filling effort. As of 2026-09-04 there are 1435 tests covering the chat round trip,
+back-filling effort. As of 2026-09-04 there are 1440 tests covering the chat round trip,
 conversation context, graph routing, clarification, the async load guard, engine reuse,
 answer safety, reader-facing citation numbering, stage-timeout degradation, the governed
 tool stack with its multi-step loop and approve-then-resume cycle, retrieval
