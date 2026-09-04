@@ -12,7 +12,6 @@ from app.domain.contracts import ImmutableContract
 EventStage = Literal[
     "privacy_permission",
     "route",
-    "clarification",
     "plan",
     "knowledge_strategy",
     "knowledge",

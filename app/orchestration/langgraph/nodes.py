@@ -23,7 +23,6 @@ from app.domain.events import EventMetadata, EventStage, ExecutionEvent
 from app.domain.knowledge import AccessScope, EvidenceRef, KnowledgeSourcePlan, KnowledgeStrategy
 from app.domain.workflow import (
     CandidateAnswer,
-    ClarificationResult,
     ContextBundle,
     RouterDecision,
     VerificationDecision,
@@ -75,7 +74,6 @@ class WorkflowServices(Protocol):
         ]
         | None
     )
-    clarifier: Callable[[OrchestrationRequest, RouterDecision], Awaitable[ClarificationResult]] | None
     verifier: (
         Callable[
             [OrchestrationRequest, ContextBundle, CandidateAnswer, int],
@@ -144,7 +142,6 @@ class WorkflowNodeRuntime:
             "privacy": privacy,
             "permission_scope": scope,
             "request": sanitized,
-            "complete_query": sanitized.question,
             "trace": (event,),
         }
 
@@ -161,12 +158,11 @@ class WorkflowNodeRuntime:
             on_timeout=_timed_out_route,
         )
         self._policy.validate_route(route)
+        # Still reported as `completeness`, and `RouteDecision.clarification_fields`
+        # still carries what is missing -- but it no longer selects a stage. There
+        # was a `clarification` node here; it could not do anything (see below).
         clarification_required = bool(route.clarification_fields)
-        next_stage = (
-            "clarification"
-            if clarification_required
-            else ("planner" if self._policy.should_plan(route) else "knowledge")
-        )
+        next_stage = "planner" if self._policy.should_plan(route) else "knowledge"
         decision = RouterDecision(
             intent=route.intent,
             complexity="complex" if route.requires_plan else "simple",
@@ -178,46 +174,21 @@ class WorkflowNodeRuntime:
         )
         return {"route": route, "route_decision": decision, "trace": (event,)}
 
-    async def clarification(self, state: OrchestrationGraphState) -> dict[str, Any]:
-        request = _required(state, "request", OrchestrationRequest)
-        route_decision = _required(state, "route_decision", RouterDecision)
-        clarifier = self._services.clarifier
-        if clarifier is None:
-            raise StageExecutionError(
-                "clarification",
-                RuntimeError("clarification service is not configured"),
-            )
-        result, event = await self._run_stage(
-            state,
-            event_stage="clarification",
-            timeout_stage="clarification",
-            operation=lambda: clarifier(request, route_decision),
-            expected_type=ClarificationResult,
-            # Clarification cannot be answered inside the pipeline anyway (see
-            # below), so a timeout costs nothing but the question.
-            on_timeout=lambda: None,
-        )
-        if result is None:
-            logger.info("clarification timed out; continuing with original query")
-            complete_query = request.question
-        elif result.action == "ask":
-            # Interactive clarification belongs to the HTTP clarification API
-            # (POST /api/v1/clarification/check), which owns the multi-round
-            # state.  Inside the pipeline nobody can answer the question, and the
-            # clarifier is called without collected context so it always asks —
-            # raising here turned every rag_design/comparison query into a 500.
-            logger.info("clarification requested but not interactively resolvable; continuing with original query")
-            complete_query = request.question
-        else:
-            complete_query = result.complete_query or request.question
-        update: dict[str, Any] = {
-            "complete_query": complete_query,
-            "request": request.model_copy(update={"question": complete_query}),
-            "trace": (event,),
-        }
-        if result is not None:
-            update["clarification"] = result
-        return update
+    # There was a `clarification` node here, between `router` and `planner`. It
+    # spent a stage-timeout budget and one clarifier call per complex query to
+    # produce values nothing read.
+    #
+    # It could not have done otherwise: the multi-round clarification state lives
+    # in the session store behind `POST /api/v1/clarification/check`, so a graph
+    # node has no collected context to pass and the clarifier therefore *always*
+    # returned `action="ask"` -- which the node logged and then ignored,
+    # continuing with the original question. Reaching into that session store from
+    # here would have created a second, quieter definition of a clarification
+    # round, which is the failure this repository already documents for the round
+    # counter.
+    #
+    # `RouteDecision.clarification_fields` still carries what is missing, and the
+    # HTTP endpoint still owns the interaction.
 
     async def planner(self, state: OrchestrationGraphState) -> dict[str, Any]:
         request = _required(state, "request", OrchestrationRequest)
@@ -548,10 +519,6 @@ class WorkflowNodeRuntime:
 
     def after_router(self, state: OrchestrationGraphState) -> str:
         return _required(state, "route_decision", RouterDecision).next_stage
-
-    def after_clarification(self, state: OrchestrationGraphState) -> str:
-        decision = _required(state, "route_decision", RouterDecision)
-        return "planner" if decision.complexity == "complex" else "knowledge"
 
     def after_verifier(self, state: OrchestrationGraphState) -> str:
         decision = _required(state, "verification", VerificationDecision)

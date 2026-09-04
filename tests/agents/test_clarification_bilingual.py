@@ -8,10 +8,7 @@ the clarifier without any collected context.
 
 from __future__ import annotations
 
-import inspect
-
 from app.agents.clarification.rules import question_for
-from app.orchestration.langgraph import nodes
 
 
 def _has_cjk(text: str) -> bool:
@@ -58,9 +55,9 @@ def test_unknown_field_still_returns_none():
     assert question_for("nope", "scenario", language="en") is None
 
 
-def test_clarification_node_does_not_raise_on_ask():
-    """Interactive clarification is owned by the HTTP API; inside the pipeline
-    nobody can answer, so the node must continue with the original query."""
-    source = inspect.getsource(nodes.WorkflowNodeRuntime.clarification)
-    ask_branch = source.split('if result.action == "ask":', 1)[1].split("complete_query", 1)[0]
-    assert "raise" not in ask_branch, "the ask branch must degrade, not raise"
+# `test_clarification_node_does_not_raise_on_ask` stood here. It read the source
+# of the pipeline's clarification node to check its `ask` branch degraded rather
+# than raising. That node is gone -- it could never do anything, because a graph
+# node has no collected context to give the clarifier -- so the property is now
+# structural rather than asserted:
+# tests/orchestration/test_clarification_is_not_a_pipeline_stage.py.

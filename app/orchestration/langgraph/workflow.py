@@ -33,7 +33,6 @@ def build_workflow(
     graph = StateGraph(OrchestrationGraphState)
     graph.add_node("privacy_permission", runtime.privacy_permission)
     graph.add_node("router", runtime.router)
-    graph.add_node("clarification", runtime.clarification)
     graph.add_node("planner", runtime.planner)
     graph.add_node("knowledge", runtime.knowledge)
     graph.add_node("synthesizer", runtime.synthesizer)
@@ -45,15 +44,6 @@ def build_workflow(
     graph.add_conditional_edges(
         "router",
         runtime.after_router,
-        {
-            "clarification": "clarification",
-            "planner": "planner",
-            "knowledge": "knowledge",
-        },
-    )
-    graph.add_conditional_edges(
-        "clarification",
-        runtime.after_clarification,
         {"planner": "planner", "knowledge": "knowledge"},
     )
     graph.add_edge("planner", "knowledge")

@@ -131,11 +131,26 @@ async def test_the_rewritten_scope_carries_every_resolved_dimension():
 
 @pytest.mark.asyncio
 async def test_the_sanitized_question_still_survives_the_rewrite():
-    """Guards the rewrite against clobbering what the node already does."""
-    result = await _runtime().privacy_permission(_state(_alice(RequestScope())))
+    """Guards the scope rewrite against clobbering the redaction beside it.
 
-    assert result["request"].question
-    assert result["complete_query"] == result["request"].question
+    This used to assert `result["complete_query"] == result["request"].question`,
+    which was a tautology: both were assigned from `sanitized.question` on
+    adjacent lines, so no change to the node could have failed it. (That state
+    key is gone with the clarification node -- see
+    tests/orchestration/test_clarification_is_not_a_pipeline_stage.py.)
+
+    The property worth holding is that the question reaching the pipeline is the
+    *redacted* one, because the same `model_copy` also rewrites `source_scope`
+    and a careless edit there would drop the sanitized text.
+    """
+
+    request = _alice(RequestScope()).model_copy(update={"question": "call me on 13800138000 about the review"})
+
+    result = await _runtime().privacy_permission(_state(request))
+
+    assert "13800138000" not in result["request"].question
+    assert "<MOBILE_CN_1>" in result["request"].question
+    assert "about the review" in result["request"].question
 
 
 # --- the same property, proven through the real graph ----------------------

@@ -416,7 +416,6 @@
       "stages": {
         "privacy_permission": "Privacy check",
         "route": "Routing",
-        "clarification": "Clarification",
         "plan": "Planning",
         "knowledge_strategy": "Retrieval strategy",
         "knowledge": "Retrieval",

@@ -4,7 +4,6 @@
 export const EXECUTION_STAGES = [
   "privacy_permission",
   "route",
-  "clarification",
   "plan",
   "knowledge_strategy",
   "knowledge",

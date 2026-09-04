@@ -220,7 +220,6 @@ class ExecutionBudget:
         stage_timeouts = {
             "privacy_permission": self.config.finalization_timeout_ms,
             "route": self.config.route_timeout_ms,
-            "clarification": self.config.route_timeout_ms,
             "plan": self.config.plan_timeout_ms,
             "knowledge_strategy": self.config.plan_timeout_ms,
             "rag": self.config.retrieval_timeout_ms,

@@ -9,7 +9,6 @@ from app.domain.events import ExecutionEvent
 from app.domain.knowledge import AccessScope, KnowledgeStrategy
 from app.domain.workflow import (
     CandidateAnswer,
-    ClarificationResult,
     ContextBundle,
     RouterDecision,
     VerificationDecision,
@@ -26,7 +25,6 @@ from app.privacy.models import PrivacyResult
 _RUNTIME_TYPE_NAMES = (
     AccessScope,
     CandidateAnswer,
-    ClarificationResult,
     ContextBundle,
     KnowledgeStrategy,
     OrchestrationRequest,

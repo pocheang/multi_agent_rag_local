@@ -1832,7 +1832,22 @@ Two things learned doing this the first time:
   comparison-shaped question -- which mattered most where it was least visible,
   since interactive clarification cannot happen inside the pipeline and the run
   continued with the original question on a route nothing had chosen for it.
-- **Clarification System** (added 2026-08-17, revised 2026-08-29): Dynamic clarification based on intent complexity, capped by `max_rounds_for(intent)` — one round per field the question catalogue actually has a question for, so `rag_design`: 4, `document_comparison`: 1, and anything already complete or unrecognised: 0. (This bullet used to quote the hand-written table those numbers replaced on 2026-08-29 — 7 and 5 — which promised rounds that could not happen; see "Dormant by design" above.) Key services: `app/agents/clarification/service.py` and `rules.py`, wired as both the LangGraph `clarification` node and the resumable `/api/v1/clarification/check` HTTP endpoint (`app/api/routes/public/clarification.py`) — the two share one implementation. Questions exist in Chinese and English (`_QUESTIONS_ZH` / `_QUESTIONS_EN`), selected from `force_language` or the query's script. Inside the pipeline the clarifier has no collected context and therefore always asks; the node logs that and continues with the original query rather than failing the request — interactive clarification belongs to the HTTP endpoint.
+- **Clarification System** (added 2026-08-17, revised 2026-08-29): Dynamic clarification based on intent complexity, capped by `max_rounds_for(intent)` — one round per field the question catalogue actually has a question for, so `rag_design`: 4, `document_comparison`: 1, and anything already complete or unrecognised: 0. (This bullet used to quote the hand-written table those numbers replaced on 2026-08-29 — 7 and 5 — which promised rounds that could not happen; see "Dormant by design" above.) Key service: `app/agents/clarification/service.py` and `rules.py`, reached through the resumable `/api/v1/clarification/check` HTTP endpoint (`app/api/routes/public/clarification.py`). Questions exist in Chinese and English (`_QUESTIONS_ZH` / `_QUESTIONS_EN`), selected from `force_language` or the query's script.
+
+  **There was also a LangGraph `clarification` node, and it was removed on 2026-09-04.**
+  It spent a `route_timeout_ms` ceiling and one clarifier call per incomplete question to
+  produce two state values (`clarification`, `complete_query`) that nothing in `app/` read.
+  It could not have done otherwise: the multi-round state lives in the session store behind
+  the HTTP endpoint, so a graph node has no collected context to pass and the clarifier
+  therefore always returned `action="ask"` — which the node logged and ignored, continuing
+  with the original question. Feeding it that store from a graph node would have created a
+  second, quieter definition of a clarification round, which is the failure this file
+  already describes for the round counter. `RouteDecision.clarification_fields` still
+  carries what is missing and `RouterDecision.completeness` still reports it;
+  `tests/orchestration/test_clarification_is_not_a_pipeline_stage.py` guards that the
+  deletion removed the no-op and not the feature. `EventStage` and the frontend's
+  `EXECUTION_STAGES` lost the entry together, since an unknown stage makes the UI drop the
+  event silently.
 - **State management**: Frontend uses Zustand for global state, not Redux or Context API
 
 ## Common Issues

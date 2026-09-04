@@ -13,7 +13,6 @@ from app.domain.events import ExecutionEvent
 from app.domain.knowledge import AccessScope, KnowledgeStrategy
 from app.domain.workflow import (
     CandidateAnswer,
-    ClarificationResult,
     ContextBundle,
     RouterDecision,
     VerificationDecision,
@@ -55,7 +54,6 @@ CandidateSynthesizer = Callable[
     Awaitable[CandidateAnswer],
 ]
 Finalizer = Callable[[OrchestrationRequest, EvidenceBundle, FinalAnswer, ExecutionPolicy], Awaitable[FinalAnswer]]
-Clarifier = Callable[[OrchestrationRequest, RouterDecision], Awaitable[ClarificationResult]]
 Verifier = Callable[
     [OrchestrationRequest, ContextBundle, CandidateAnswer, int],
     Awaitable[VerificationDecision],
@@ -95,7 +93,6 @@ class OrchestrationServices:
         synthesizer: Synthesizer,
         candidate_synthesizer: CandidateSynthesizer | None = None,
         finalizer: Finalizer | None = None,
-        clarifier: Clarifier | None = None,
         verifier: Verifier | None = None,
         knowledge_agent: KnowledgeAgent | None = None,
         privacy: PrivacyService | None = None,
@@ -110,7 +107,6 @@ class OrchestrationServices:
         self.synthesizer = synthesizer
         self.candidate_synthesizer = candidate_synthesizer
         self.finalizer = finalizer
-        self.clarifier = clarifier
         self.verifier = verifier
         self.knowledge_agent = knowledge_agent or _default_knowledge_agent
         self.privacy = privacy or PrivacyService()

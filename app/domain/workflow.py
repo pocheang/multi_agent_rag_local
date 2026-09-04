@@ -35,7 +35,7 @@ class RouterDecision(ImmutableWorkflowContract):
     intent: str = Field(min_length=1)
     complexity: Literal["simple", "complex"]
     completeness: Literal["complete", "incomplete", "ambiguous"]
-    next_stage: Literal["clarification", "planner", "knowledge"]
+    next_stage: Literal["planner", "knowledge"]
     knowledge_hints: frozenset[KnowledgeSource] = Field(default_factory=frozenset)
     confidence: float = Field(ge=0, le=1)
     reason: str = Field(min_length=1)
@@ -108,8 +108,6 @@ class WorkflowState(TypedDict, total=False):
     privacy: PrivacyResult
     permission_scope: AccessScope
     route_decision: RouterDecision
-    clarification: ClarificationResult
-    complete_query: str
     task_plan: TaskPlan
     knowledge_strategy: KnowledgeStrategy
     context: ContextBundle
