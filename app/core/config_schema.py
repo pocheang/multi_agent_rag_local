@@ -103,6 +103,19 @@ EDITABLE: tuple[EditableField, ...] = (
         "Per-entity graph lookup instead of the batched one. Roughly 3 Neo4j round trips become up to 9.",
     ),
     # --- answer --------------------------------------------------------------
+    # --- images -------------------------------------------------------------
+    # Captioning is what makes an image searchable when OCR cannot read it -- a
+    # photo, a diagram, a chart with no extractable text. It stayed off and
+    # unreachable while its output was discarded on exactly those images; that
+    # was fixed first, so turning it on now does something.
+    EditableField("IMAGE_CAPTION_ENABLED", "images", "Describe images with a vision model during ingestion."),
+    EditableField(
+        "IMAGE_CAPTION_BACKEND",
+        "images",
+        "Which vision backend to try: auto, openai or ollama. auto follows MODEL_BACKEND and falls back.",
+    ),
+    EditableField("OPENAI_VISION_MODEL", "images", "Vision model for the OpenAI backend."),
+    EditableField("OLLAMA_VISION_MODEL", "images", "Vision model for the Ollama backend."),
     EditableField("ANSWER_SAFETY_SCAN_ENABLED", "answer", "Redact secrets from finalized answers."),
     # The validation cascade. These were held back while `_get_validation_cascade`
     # cached a module global the reload did not clear -- an edit would have

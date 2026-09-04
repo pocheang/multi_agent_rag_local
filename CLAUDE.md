@@ -1187,9 +1187,26 @@ indistinguishable from a healthy one. `MODEL_BACKEND=local` discards a saved pro
 config outright, and on the offline backend there is no language model at all.
 
 So each component reports a **status**, and `degraded` is the one worth having: configured,
-running, and not doing what its name implies. Probing loads the optional models, which is
+running, and not doing what its name implies. Six are reported, in the order a question
+moves through the system: `ocr`, `image_caption`, `embedding`, `reranker`, `chat`,
+`validation_nli`.
+
+The two image components read together on purpose. OCR is the half that fails on a fresh
+machine -- pytesseract missing, or the binary not on PATH -- and captioning is what keeps an
+image searchable when OCR reads nothing, so an operator seeing `ocr: unavailable` needs to
+know whether the other half is on. Captioning reports **configuration readiness, not
+liveness**: it makes no network call, because probing a vision endpoint is unbounded and an
+admin page that can hang on a misconfigured base URL is worse than one that reports what it
+can check. It does report the backend *order*, since `auto` follows `MODEL_BACKEND` and
+falls back, which no single setting shows. Probing loads the optional models, which is
 why this is an admin endpoint and not part of a health check -- the cost is the one the
 first real query would have paid, once per process.
+
+`IMAGE_CAPTION_ENABLED`, `IMAGE_CAPTION_BACKEND`, `OPENAI_VISION_MODEL` and
+`OLLAMA_VISION_MODEL` are editable too, under a new `images` group -- the page renders
+whatever groups it is sent. Captioning was worth exposing only after its output stopped
+being discarded on the images that need it (see Multimodal retrieval); a switch that
+turns on something inert is the defect this file keeps recording, not a feature.
 
 `ENABLE_RERANKER`, `RERANKER_MODEL_NAME`, the four `CASCADE_ENABLE_*` switches, both
 cascade timeouts, `NLI_MODEL_NAME` and `NLI_MAX_SENTENCES` became editable in the same
@@ -1634,7 +1651,7 @@ verified (60 inputs and 336 pins respectively, zero differences).
 
 `tests/` was cleared ahead of the v0.7 rewrite and is being rebuilt incrementally: each bug
 fix lands with the regression test that would have caught it, rather than as a separate
-back-filling effort. As of 2026-09-04 there are 1429 tests covering the chat round trip,
+back-filling effort. As of 2026-09-04 there are 1435 tests covering the chat round trip,
 conversation context, graph routing, clarification, the async load guard, engine reuse,
 answer safety, reader-facing citation numbering, stage-timeout degradation, the governed
 tool stack with its multi-step loop and approve-then-resume cycle, retrieval

@@ -200,6 +200,113 @@ def _nli() -> EffectiveComponent:
     )
 
 
+def _vision_backends(settings) -> list[str]:
+    """The order `describe_image_with_vision` will try, mirrored here.
+
+    Mirrored rather than imported because that function needs image bytes: the
+    order is a property of the configuration and is worth reporting before any
+    image exists.
+    """
+
+    backend = str(getattr(settings, "image_caption_backend", "auto") or "auto").lower()
+    if backend in {"openai", "ollama"}:
+        return [backend]
+    preferred = str(settings.model_backend or "local").lower()
+    if preferred in {"openai", "anthropic", "deepseek", "custom"}:
+        return ["openai", "ollama"]
+    return ["ollama", "openai"]
+
+
+def _vision() -> EffectiveComponent:
+    """Image captioning: configuration readiness, not liveness.
+
+    Deliberately makes no network call. The other components here probe a local
+    file, which is bounded; reaching a vision endpoint is not, and an admin page
+    that can hang on a misconfigured base URL is worse than one that reports what
+    it can check. So this answers "could this work" -- switched on, a backend
+    chosen, a credential present -- and leaves "does it work" to ingestion.
+    """
+
+    settings = get_settings()
+    if not getattr(settings, "image_caption_enabled", False):
+        return EffectiveComponent(
+            component="image_caption",
+            status="disabled",
+            configured="",
+            source="IMAGE_CAPTION_ENABLED",
+            detail=(
+                "Images are indexed from OCR text alone, so a photo or diagram with no "
+                "readable text is not indexed at all."
+            ),
+        )
+
+    order = _vision_backends(settings)
+    first = order[0]
+    model = settings.openai_vision_model if first == "openai" else settings.ollama_vision_model
+    if first == "openai" and not str(settings.openai_api_key or "").strip():
+        alternative = "; ollama is tried next" if "ollama" in order[1:] else ""
+        return EffectiveComponent(
+            component="image_caption",
+            status="degraded",
+            configured=str(model or ""),
+            source="IMAGE_CAPTION_BACKEND",
+            detail=f"Captioning is on and the OpenAI backend has no API key{alternative}.",
+            metadata={"order": ", ".join(order)},
+        )
+    return EffectiveComponent(
+        component="image_caption",
+        status="active",
+        configured=str(model or first),
+        source="IMAGE_CAPTION_BACKEND",
+        detail=(
+            "Images are described during ingestion. This is configuration readiness -- "
+            "whether the endpoint answers is only known once an image is ingested."
+        ),
+        metadata={"order": ", ".join(order)},
+    )
+
+
+def _ocr() -> EffectiveComponent:
+    """Tesseract: importable, and a binary the process can actually find.
+
+    The other half of image indexing, and the half that fails on a fresh machine.
+    Its absence is the reason captioning matters, so the two read together.
+    """
+
+    import shutil
+
+    settings = get_settings()
+    command = str(getattr(settings, "tesseract_cmd", "") or "") or "tesseract"
+    try:
+        import pytesseract  # noqa: F401
+    except ImportError:
+        return EffectiveComponent(
+            component="ocr",
+            status="unavailable",
+            configured=command,
+            source="pytesseract",
+            detail="pytesseract is not installed, so no text is read out of images.",
+        )
+    if shutil.which(command) is None:
+        return EffectiveComponent(
+            component="ocr",
+            status="unavailable",
+            configured=command,
+            source="TESSERACT_CMD",
+            detail=(
+                f"pytesseract is installed but '{command}' is not on PATH, so OCR reads nothing. "
+                "Images are still searchable if captioning is on."
+            ),
+        )
+    return EffectiveComponent(
+        component="ocr",
+        status="active",
+        configured=command,
+        source="TESSERACT_CMD",
+        detail="Text is read out of images during ingestion.",
+    )
+
+
 def effective_model_configuration() -> list[EffectiveComponent]:
     """Report every model in the stack, degraded ones included.
 
@@ -207,7 +314,7 @@ def effective_model_configuration() -> list[EffectiveComponent]:
     reading top to bottom follows a question through the system.
     """
 
-    return [_embedding(), _reranker(), _chat(), _nli()]
+    return [_ocr(), _vision(), _embedding(), _reranker(), _chat(), _nli()]
 
 
 __all__ = ["ComponentStatus", "EffectiveComponent", "effective_model_configuration"]
