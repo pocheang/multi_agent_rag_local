@@ -12,7 +12,7 @@ from app.domain.contracts import EvidenceItem
 from app.domain.events import EventMetadata, ExecutionEvent
 from app.domain.knowledge import AccessScope, KnowledgeSource, KnowledgeSourcePlan, KnowledgeStrategy
 from app.domain.workflow import ContextBundle
-from app.knowledge.adapters import KnowledgeAdapter, build_default_adapters
+from app.knowledge.adapters import KnowledgeAdapter, build_default_adapters, flatten_ranked_groups
 from app.knowledge.context import ContextBuilder
 from app.knowledge.deduplication import deduplicate_evidence
 from app.knowledge.fusion import reciprocal_rank_fuse, rerank_evidence
@@ -27,11 +27,15 @@ QueryRewriter = Callable[[str, Sequence[object]], Sequence[str]]
 @dataclass(frozen=True)
 class _SourceOutcome:
     source: KnowledgeSource
+    # `groups` is one ranked list per query in the plan; `items` is those lists
+    # flattened, which is what counts, diagnostics and prior evidence read. Only
+    # fusion needs them apart -- see the note at the reciprocal_rank_fuse call.
     items: tuple[EvidenceItem, ...]
     duration_ms: int
     status: str
     error_type: str | None = None
     scope_dropped: int = 0
+    groups: tuple[tuple[EvidenceItem, ...], ...] = ()
 
 
 class KnowledgeOrchestrator:
@@ -90,7 +94,16 @@ class KnowledgeOrchestrator:
             except Exception:
                 trace_failures += 1
 
-        ranked_lists = tuple(outcome.items for outcome in outcomes if outcome.status == "completed")
+        # One ranked list per (source, query), not per source. RRF scores by
+        # position, so folding a source's queries into one list charges the
+        # second query's best hit a rank it did not earn: it lands after the
+        # first query's whole list. Interleaving them (which `_flatten` still
+        # does for the flat view) softens that but does not remove it -- only
+        # keeping the lists apart gives every query's rank-1 the same 1/(k+1).
+        #
+        # It also makes agreement mean what it should: a document two queries
+        # both rank first now accumulates two full contributions.
+        ranked_lists = tuple(group for outcome in outcomes if outcome.status == "completed" for group in outcome.groups)
         fused = reciprocal_rank_fuse(ranked_lists, rrf_k=self._rrf_k)
         deduplicated = deduplicate_evidence(fused)
         primary_query = strategy.sources[0].queries[0]
@@ -296,15 +309,26 @@ class KnowledgeOrchestrator:
                 else adapter.retrieve(plan, scope)
             )
             result = await asyncio.wait_for(retrieve, timeout=plan.timeout_ms / 1000)
-            if not isinstance(result, tuple) or any(not isinstance(item, EvidenceItem) for item in result):
-                raise TypeError("knowledge adapter must return tuple[EvidenceItem, ...]")
-            authorized = tuple(masked for item in result if (masked := mask_evidence(item, scope)) is not None)
+            if not isinstance(result, tuple) or any(
+                not isinstance(group, tuple) or any(not isinstance(item, EvidenceItem) for item in group)
+                for group in result
+            ):
+                raise TypeError("knowledge adapter must return one ranked tuple[EvidenceItem, ...] per query")
+            # Masked per group so the ranks survive it: dropping an unauthorized
+            # item must close the gap within its own list, not merge the lists.
+            groups = tuple(
+                tuple(masked for item in group if (masked := mask_evidence(item, scope)) is not None)
+                for group in result
+            )
+            retrieved = sum(len(group) for group in result)
+            authorized = flatten_ranked_groups(groups)
             return _SourceOutcome(
                 source=plan.source,
                 items=authorized,
                 duration_ms=int((time.perf_counter() - started) * 1000),
                 status="completed",
-                scope_dropped=len(result) - len(authorized),
+                scope_dropped=retrieved - len(authorized),
+                groups=groups,
             )
         except asyncio.CancelledError:
             raise

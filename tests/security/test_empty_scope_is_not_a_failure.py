@@ -105,7 +105,8 @@ def _retrieve(service: RAGAgentService, scope: AccessScope, *sources: str):
 
 
 async def _ok(plan, scope):
-    return (_item(plan.source),)
+    # One ranked list per query -- the adapter contract, see RankedGroups.
+    return ((_item(plan.source),),)
 
 
 async def _broken(plan, scope):

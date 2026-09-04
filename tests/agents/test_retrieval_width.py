@@ -179,15 +179,19 @@ class TestOrchestratorHonoursTheWidth:
         from app.services.security.access_scope import DEFAULT_CONTEXT_FIELDS
 
         async def many(plan, scope):
-            return tuple(
-                EvidenceItem(
-                    content=f"chunk {index}",
-                    source="/uploads/alice/notes.pdf",
-                    document_id=f"doc-{index}",
-                    version=1,
-                    retriever="vector",
-                )
-                for index in range(9)
+            # A single query, so a single ranked list -- adapters return one per
+            # query now (RankedGroups).
+            return (
+                tuple(
+                    EvidenceItem(
+                        content=f"chunk {index}",
+                        source="/uploads/alice/notes.pdf",
+                        document_id=f"doc-{index}",
+                        version=1,
+                        retriever="vector",
+                    )
+                    for index in range(9)
+                ),
             )
 
         scope = AccessScope(

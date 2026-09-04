@@ -15,7 +15,13 @@ from app.agents.rag.evidence_builder import (
 from app.domain.contracts import EvidenceItem
 from app.domain.knowledge import AccessScope, KnowledgeSource, KnowledgeSourcePlan
 
-AdapterCallable = Callable[[KnowledgeSourcePlan, AccessScope], Awaitable[tuple[EvidenceItem, ...]]]
+# One ranked list per query in `plan.queries`, in that order -- not one flat
+# list. `reciprocal_rank_fuse` scores by position, so a source that concatenates
+# its per-query results hands the second query's best hit in at a rank it did not
+# earn. See `KnowledgeOrchestrator._retrieve_source`.
+RankedGroups = tuple[tuple[EvidenceItem, ...], ...]
+
+AdapterCallable = Callable[[KnowledgeSourcePlan, AccessScope], Awaitable[RankedGroups]]
 
 
 class KnowledgeAdapter(Protocol):
@@ -27,7 +33,7 @@ class KnowledgeAdapter(Protocol):
         self,
         plan: KnowledgeSourcePlan,
         scope: AccessScope,
-    ) -> tuple[EvidenceItem, ...]: ...
+    ) -> RankedGroups: ...
 
 
 class PriorEvidenceAdapter(Protocol):
@@ -56,7 +62,7 @@ class PriorEvidenceAdapter(Protocol):
         plan: KnowledgeSourcePlan,
         scope: AccessScope,
         prior: tuple[EvidenceItem, ...],
-    ) -> tuple[EvidenceItem, ...]: ...
+    ) -> RankedGroups: ...
 
 
 class CallableKnowledgeAdapter:
@@ -66,7 +72,7 @@ class CallableKnowledgeAdapter:
         self.source = source
         self._retrieve = retrieve
 
-    async def retrieve(self, plan: KnowledgeSourcePlan, scope: AccessScope) -> tuple[EvidenceItem, ...]:
+    async def retrieve(self, plan: KnowledgeSourcePlan, scope: AccessScope) -> RankedGroups:
         return await self._retrieve(plan, scope)
 
 
@@ -81,7 +87,7 @@ class UnavailableKnowledgeAdapter:
         self.source = source
         self._reason = reason
 
-    async def retrieve(self, plan: KnowledgeSourcePlan, scope: AccessScope) -> tuple[EvidenceItem, ...]:
+    async def retrieve(self, plan: KnowledgeSourcePlan, scope: AccessScope) -> RankedGroups:
         del plan, scope
         raise UnavailableKnowledgeSourceError(self._reason)
 
@@ -101,7 +107,7 @@ def build_default_adapters() -> dict[KnowledgeSource, KnowledgeAdapter]:
     }
 
 
-async def _retrieve_vector(plan: KnowledgeSourcePlan, scope: AccessScope) -> tuple[EvidenceItem, ...]:
+async def _retrieve_vector(plan: KnowledgeSourcePlan, scope: AccessScope) -> RankedGroups:
     from app.retrievers.stores.vector import OwnerScope, similarity_search
 
     allowed = sorted(scope.allowed_sources)
@@ -121,10 +127,10 @@ async def _retrieve_vector(plan: KnowledgeSourcePlan, scope: AccessScope) -> tup
         )
         return bundle_from_vector_matches(matches).items
 
-    return _flatten(await asyncio.gather(*(one(query) for query in plan.queries)))
+    return tuple(await asyncio.gather(*(one(query) for query in plan.queries)))
 
 
-async def _retrieve_bm25(plan: KnowledgeSourcePlan, scope: AccessScope) -> tuple[EvidenceItem, ...]:
+async def _retrieve_bm25(plan: KnowledgeSourcePlan, scope: AccessScope) -> RankedGroups:
     from app.retrievers.bm25_retriever import bm25_search
 
     allowed = sorted(scope.allowed_sources)
@@ -133,7 +139,7 @@ async def _retrieve_bm25(plan: KnowledgeSourcePlan, scope: AccessScope) -> tuple
         records = await asyncio.to_thread(bm25_search, query, plan.top_k, allowed)
         return bundle_from_bm25_records(records).items
 
-    return _flatten(await asyncio.gather(*(one(query) for query in plan.queries)))
+    return tuple(await asyncio.gather(*(one(query) for query in plan.queries)))
 
 
 class GraphKnowledgeAdapter:
@@ -169,7 +175,7 @@ class GraphKnowledgeAdapter:
 
         return bool(get_settings().graph_rag_enhanced)
 
-    async def retrieve(self, plan: KnowledgeSourcePlan, scope: AccessScope) -> tuple[EvidenceItem, ...]:
+    async def retrieve(self, plan: KnowledgeSourcePlan, scope: AccessScope) -> RankedGroups:
         return await self.retrieve_with_prior(plan, scope, ())
 
     async def retrieve_with_prior(
@@ -177,7 +183,7 @@ class GraphKnowledgeAdapter:
         plan: KnowledgeSourcePlan,
         scope: AccessScope,
         prior: tuple[EvidenceItem, ...],
-    ) -> tuple[EvidenceItem, ...]:
+    ) -> RankedGroups:
         from app.agents.rag.graph import run_graph_rag
         from app.retrievers.stores.vector import OwnerScope
 
@@ -198,7 +204,7 @@ class GraphKnowledgeAdapter:
             bundle = bundle_from_legacy_payload(result, "graph", fallback_document_id=f"graph:{query}")
             return tuple(item.model_copy(update={"modality": "graph"}) for item in bundle.items)
 
-        return _flatten(await asyncio.gather(*(one(query) for query in plan.queries)))
+        return tuple(await asyncio.gather(*(one(query) for query in plan.queries)))
 
 
 def _as_quality_documents(items: tuple[EvidenceItem, ...]) -> list[dict] | None:
@@ -219,7 +225,7 @@ def _as_quality_documents(items: tuple[EvidenceItem, ...]) -> list[dict] | None:
     return documents or None
 
 
-async def _retrieve_web(plan: KnowledgeSourcePlan, scope: AccessScope) -> tuple[EvidenceItem, ...]:
+async def _retrieve_web(plan: KnowledgeSourcePlan, scope: AccessScope) -> RankedGroups:
     from app.agents.rag.web import run_web_research
 
     async def one(query: str) -> tuple[EvidenceItem, ...]:
@@ -227,10 +233,10 @@ async def _retrieve_web(plan: KnowledgeSourcePlan, scope: AccessScope) -> tuple[
         bundle = bundle_from_legacy_payload(result, "web")
         return tuple(item.model_copy(update={"layer": "web"}) for item in bundle.items)
 
-    return _flatten(await asyncio.gather(*(one(query) for query in plan.queries)))
+    return tuple(await asyncio.gather(*(one(query) for query in plan.queries)))
 
 
-async def _retrieve_multimodal(plan: KnowledgeSourcePlan, scope: AccessScope) -> tuple[EvidenceItem, ...]:
+async def _retrieve_multimodal(plan: KnowledgeSourcePlan, scope: AccessScope) -> RankedGroups:
     from app.retrievers.multimodal_retriever import MultiModalRetriever
 
     retriever = MultiModalRetriever()
@@ -238,10 +244,10 @@ async def _retrieve_multimodal(plan: KnowledgeSourcePlan, scope: AccessScope) ->
     async def one(query: str) -> tuple[EvidenceItem, ...]:
         return await retriever.retrieve_evidence(query, scope, top_k=plan.top_k)
 
-    return _flatten(await asyncio.gather(*(one(query) for query in plan.queries)))
+    return tuple(await asyncio.gather(*(one(query) for query in plan.queries)))
 
 
-async def _retrieve_wiki(plan: KnowledgeSourcePlan, scope: AccessScope) -> tuple[EvidenceItem, ...]:
+async def _retrieve_wiki(plan: KnowledgeSourcePlan, scope: AccessScope) -> RankedGroups:
     from app.wiki.store import WikiStore
 
     store = await asyncio.to_thread(WikiStore)
@@ -271,10 +277,10 @@ async def _retrieve_wiki(plan: KnowledgeSourcePlan, scope: AccessScope) -> tuple
                 )
         return tuple(output[: plan.top_k])
 
-    return _flatten(await asyncio.gather(*(one(query) for query in plan.queries)))
+    return tuple(await asyncio.gather(*(one(query) for query in plan.queries)))
 
 
-async def _retrieve_memory(plan: KnowledgeSourcePlan, scope: AccessScope) -> tuple[EvidenceItem, ...]:
+async def _retrieve_memory(plan: KnowledgeSourcePlan, scope: AccessScope) -> RankedGroups:
     from app.memory.long_term import GBrainLongTermMemory
 
     provider = GBrainLongTermMemory()
@@ -295,10 +301,10 @@ async def _retrieve_memory(plan: KnowledgeSourcePlan, scope: AccessScope) -> tup
             for rank, memory in enumerate(memories, start=1)
         )
 
-    return _flatten(await asyncio.gather(*(one(query) for query in plan.queries)))
+    return tuple(await asyncio.gather(*(one(query) for query in plan.queries)))
 
 
-def _flatten(groups: Sequence[Sequence[EvidenceItem]]) -> tuple[EvidenceItem, ...]:
+def flatten_ranked_groups(groups: Sequence[Sequence[EvidenceItem]]) -> tuple[EvidenceItem, ...]:
     """Interleave the per-query result lists instead of concatenating them.
 
     Every adapter fans out over ``plan.queries`` and hands the combined list to
@@ -326,6 +332,8 @@ def _flatten(groups: Sequence[Sequence[EvidenceItem]]) -> tuple[EvidenceItem, ..
 
 __all__ = [
     "AdapterCallable",
+    "RankedGroups",
+    "flatten_ranked_groups",
     "CallableKnowledgeAdapter",
     "GraphKnowledgeAdapter",
     "KnowledgeAdapter",

@@ -66,17 +66,19 @@ class _Recorder:
         self.source = source
         self.ran = False
 
-    async def retrieve(self, plan, scope) -> tuple[EvidenceItem, ...]:
+    async def retrieve(self, plan, scope) -> tuple[tuple[EvidenceItem, ...], ...]:
         del plan, scope
         self.ran = True
         return (
-            EvidenceItem(
-                content=f"{self.name} result",
-                source=self.source,
-                document_id=f"doc-{self.name}",
-                version=1,
-                retriever=self.name,
-                layer="web" if self.name == "web" else "evidence",
+            (
+                EvidenceItem(
+                    content=f"{self.name} result",
+                    source=self.source,
+                    document_id=f"doc-{self.name}",
+                    version=1,
+                    retriever=self.name,
+                    layer="web" if self.name == "web" else "evidence",
+                ),
             ),
         )
 

@@ -214,9 +214,9 @@ async def test_the_vector_adapter_honours_a_resolved_scope(collection):
     """The ordinary path still retrieves, and only the caller's own documents."""
     from app.knowledge.adapters import _retrieve_vector
 
-    items = await _retrieve_vector(_plan(), _scope(ALICE_DOC))
+    groups = await _retrieve_vector(_plan(), _scope(ALICE_DOC))
 
-    assert {item.source for item in items} == {ALICE_DOC}
+    assert {item.source for group in groups for item in group} == {ALICE_DOC}
 
 
 @pytest.mark.asyncio
@@ -227,9 +227,9 @@ async def test_the_vector_adapter_returns_nothing_for_a_user_with_no_documents(c
     of two independent guards -- the adapter itself must not widen either."""
     from app.knowledge.adapters import _retrieve_vector
 
-    items = await _retrieve_vector(_plan(), _scope(user="carol"))
+    groups = await _retrieve_vector(_plan(), _scope(user="carol"))
 
-    assert items == ()
+    assert not any(group for group in groups)
     assert collection.calls == []
 
 

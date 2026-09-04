@@ -903,18 +903,33 @@ has always claimed.
 **Hybrid Retrieval** ([app/retrievers/hybrid/retriever.py](app/retrievers/hybrid/retriever.py)):
 - **Vector search**: Sentence-Transformers BGE-M3 embeddings → ChromaDB
 - **BM25 search**: Jieba tokenization → Rank-BM25
-- **Fusion**: Reciprocal Rank Fusion (RRF). **A source's per-query result lists are
-  interleaved, not concatenated** (fixed 2026-09-04). Every adapter fans out over
-  `plan.queries` and hands one combined list to a single source slot, and
-  `reciprocal_rank_fuse` scores by *position in that list* -- so concatenating put the
-  second query's rank-1 hit at position `top_k + 1` and scored it as mediocre, a
-  systematic penalty on every query after the first. This was never dormant, though it was
-  uneven: `QUERY_REWRITE_ENABLED` defaults true and the rule rewriter needs no LLM, and
-  measured, a Chinese question containing punctuation yields 2-3 queries and a multi-word
-  English one yields 3 -- but a short punctuation-free Chinese question yields 1, where the
-  concatenation cost nothing. Round-robin restores "position
-  reflects rank within a query" while keeping the agreement signal -- an item several
-  queries return still accumulates one RRF contribution per query.
+- **Fusion**: Reciprocal Rank Fusion (RRF), over one ranked list per **(source, query)**
+  pair -- not per source (2026-09-04). An adapter runs each of `plan.queries` and returns
+  `RankedGroups`, one ranked tuple per query in that order; `_retrieve_source` masks each
+  group separately, so dropping an unauthorized item closes the gap inside its own list
+  rather than merging lists.
+
+  This landed in two steps, and the first is worth remembering because it was not enough.
+  A source used to fold its queries into one list, and RRF scores by *position*, so the
+  second query's best hit arrived at rank `top_k + 1` and was charged a rank it had not
+  earned. That was never dormant, though it was uneven: `QUERY_REWRITE_ENABLED` defaults
+  true and the rule rewriter needs no LLM, and measured, a Chinese question containing
+  punctuation yields 2-3 queries and a multi-word English one yields 3 -- but a short
+  punctuation-free Chinese question yields 1, where the fold cost nothing. Interleaving
+  (step one) moved that hit to rank 2 rather than rank 1: smaller, still wrong, and still
+  growing with the number of queries. Keeping the lists apart (step two) removes it --
+  every query's rank-1 gets the same `1/(k+1)`, and a document two queries both rank first
+  accumulates two full contributions instead of one full and one discounted.
+
+  `flatten_ranked_groups` survives as the flat *view* -- result counts, diagnostics, and
+  the graph adapter's prior evidence -- and still interleaves, but nothing about ranking
+  depends on it any more.
+
+  **Not visible in `make eval-retrieval`**, which runs one query per source
+  (`rewrite=False`), so there is a single group and fusion is unchanged: MRR stays 0.9688
+  across step two. That is why the property is pinned by unit tests over
+  `reciprocal_rank_fuse` rather than by the corpus metric -- a number that cannot move is
+  not evidence.
 - **Planner sub-queries reach the retrievers** (wired 2026-09-04). `PlannedTask.prompt` had
   exactly one reader in all of `app/` (`rag_pipeline.py`, for a diagnostics dict), because
   `_source_plan` hardcoded `queries=(query,)` and `RAGAgentService.retrieve` opened with
@@ -1552,7 +1567,7 @@ verified (60 inputs and 336 pins respectively, zero differences).
 
 `tests/` was cleared ahead of the v0.7 rewrite and is being rebuilt incrementally: each bug
 fix lands with the regression test that would have caught it, rather than as a separate
-back-filling effort. As of 2026-09-04 there are 1406 tests covering the chat round trip,
+back-filling effort. As of 2026-09-04 there are 1407 tests covering the chat round trip,
 conversation context, graph routing, clarification, the async load guard, engine reuse,
 answer safety, reader-facing citation numbering, stage-timeout degradation, the governed
 tool stack with its multi-step loop and approve-then-resume cycle, retrieval

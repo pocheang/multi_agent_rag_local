@@ -80,17 +80,17 @@ class _RecordingGraphAdapter:
     async def retrieve_with_prior(self, plan, scope, prior):
         self.prior = prior
         self.timeout_ms = plan.timeout_ms
-        return (_item("graph triple", "graph://q3", "graph"),)
+        return ((_item("graph triple", "graph://q3", "graph"),),)
 
 
 def _adapters(graph: _RecordingGraphAdapter, *, vector_delay: float = 0.0):
     async def vector(plan, scope):
         if vector_delay:
             await asyncio.sleep(vector_delay)
-        return (_item("Q3 revenue rose.", "/uploads/alice/notes.pdf", "vector"),)
+        return ((_item("Q3 revenue rose.", "/uploads/alice/notes.pdf", "vector"),),)
 
     async def bm25(plan, scope):
-        return (_item("revenue table", "/uploads/alice/notes.pdf", "bm25"),)
+        return ((_item("revenue table", "/uploads/alice/notes.pdf", "bm25"),),)
 
     return {
         "vector": CallableKnowledgeAdapter("vector", vector),
