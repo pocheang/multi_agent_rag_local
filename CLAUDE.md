@@ -821,7 +821,18 @@ has always claimed.
 **Hybrid Retrieval** ([app/retrievers/hybrid/retriever.py](app/retrievers/hybrid/retriever.py)):
 - **Vector search**: Sentence-Transformers BGE-M3 embeddings → ChromaDB
 - **BM25 search**: Jieba tokenization → Rank-BM25
-- **Fusion**: Reciprocal Rank Fusion (RRF)
+- **Fusion**: Reciprocal Rank Fusion (RRF). **A source's per-query result lists are
+  interleaved, not concatenated** (fixed 2026-09-04). Every adapter fans out over
+  `plan.queries` and hands one combined list to a single source slot, and
+  `reciprocal_rank_fuse` scores by *position in that list* -- so concatenating put the
+  second query's rank-1 hit at position `top_k + 1` and scored it as mediocre, a
+  systematic penalty on every query after the first. This was never dormant, though it was
+  uneven: `QUERY_REWRITE_ENABLED` defaults true and the rule rewriter needs no LLM, and
+  measured, a Chinese question containing punctuation yields 2-3 queries and a multi-word
+  English one yields 3 -- but a short punctuation-free Chinese question yields 1, where the
+  concatenation cost nothing. Round-robin restores "position
+  reflects rank within a query" while keeping the agreement signal -- an item several
+  queries return still accumulates one RRF contribution per query.
 - **Graph retrieval**: runs for both the `graph` and `hybrid` routes (fixed 2026-08-29; `graph` previously degraded silently to vector+BM25)
 - **Two-phase retrieval** (added 2026-08-31): `KnowledgeOrchestrator` runs sources in one
   `asyncio.gather` because they are independent. An adapter that implements

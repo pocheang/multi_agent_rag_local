@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import Awaitable, Callable, Sequence
+from itertools import zip_longest
 from typing import Protocol
 
 from app.agents.rag.evidence_builder import (
@@ -298,7 +299,29 @@ async def _retrieve_memory(plan: KnowledgeSourcePlan, scope: AccessScope) -> tup
 
 
 def _flatten(groups: Sequence[Sequence[EvidenceItem]]) -> tuple[EvidenceItem, ...]:
-    return tuple(item for group in groups for item in group)
+    """Interleave the per-query result lists instead of concatenating them.
+
+    Every adapter fans out over ``plan.queries`` and hands the combined list to
+    one source slot, and ``reciprocal_rank_fuse`` scores by *position in that
+    list*. Concatenating meant the second query's rank-1 hit arrived at position
+    ``top_k + 1`` and was scored as a mediocre result -- a systematic penalty on
+    every query but the first, growing with the number of queries.
+
+    This is not a latent bug waiting on sub-queries. ``QUERY_REWRITE_ENABLED``
+    defaults true and the rule rewriter needs no LLM, so requests already arrive
+    here with more than one query -- measured: a Chinese question containing
+    punctuation yields 2-3, a multi-word English one yields 3, and a short
+    punctuation-free Chinese question yields 1, where this was a no-op.
+
+    Round-robin restores the intent: position in the fused list reflects rank
+    *within* a query. An item several queries return still accumulates one RRF
+    contribution per query, which is the agreement signal worth keeping.
+    """
+
+    ordered: list[EvidenceItem] = []
+    for row in zip_longest(*groups, fillvalue=None):
+        ordered.extend(item for item in row if item is not None)
+    return tuple(ordered)
 
 
 __all__ = [
