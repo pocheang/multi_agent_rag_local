@@ -60,6 +60,18 @@ EDITABLE: tuple[EditableField, ...] = (
     # --- retrieval width -----------------------------------------------------
     EditableField("TOP_K", "retrieval", "Results per source before reranking."),
     EditableField("RERANKER_TOP_N", "retrieval", "Results kept after reranking."),
+    # RERANKER_TOP_N was editable while the switch beside it and the model it
+    # names were not, so an operator could change how many results reranking
+    # returns but not whether it runs or what runs it. Both are safe to expose
+    # now that `apply_config_reload` clears the reranker's own lru_cache -- until
+    # 2026-09-04 it did not, and the page would have reported a model that was
+    # not loaded.
+    EditableField("ENABLE_RERANKER", "retrieval", "Rerank fused results with the cross-encoder."),
+    EditableField(
+        "RERANKER_MODEL_NAME",
+        "retrieval",
+        "Cross-encoder used for reranking. Must already be downloaded; retrieval falls back to lexical scoring if not.",
+    ),
     EditableField("VECTOR_TOP_K", "retrieval", "Vector candidates on the legacy hybrid path."),
     EditableField("BM25_TOP_K", "retrieval", "BM25 candidates on the legacy hybrid path."),
     EditableField("DYNAMIC_RETRIEVAL_ENABLED", "retrieval", "Widen the search for complex questions."),
@@ -92,6 +104,28 @@ EDITABLE: tuple[EditableField, ...] = (
     ),
     # --- answer --------------------------------------------------------------
     EditableField("ANSWER_SAFETY_SCAN_ENABLED", "answer", "Redact secrets from finalized answers."),
+    # The validation cascade. These were held back while `_get_validation_cascade`
+    # cached a module global the reload did not clear -- an edit would have
+    # reported success and changed nothing until restart. That is fixed, so
+    # whether to expose them is now an ordinary decision, and the answer is yes:
+    # each one changes how strictly an answer is judged, which is exactly the
+    # kind of thing an operator tunes against real traffic.
+    EditableField("CASCADE_ENABLE_RULES", "answer", "Rule checks: length, safety, obvious hallucination patterns."),
+    EditableField("CASCADE_ENABLE_CITATIONS", "answer", "Check every claim carries a citation that resolves."),
+    EditableField(
+        "CASCADE_ENABLE_NLI",
+        "answer",
+        "Entailment check per sentence. Uses the cross-encoder on Latin text and a deterministic scorer otherwise.",
+    ),
+    EditableField("CASCADE_ENABLE_DEEP", "answer", "Ask the model to review a low-confidence answer. Costs a call."),
+    EditableField("CASCADE_NLI_TIMEOUT_MS", "budgets", "Ceiling for the entailment check before it falls back."),
+    EditableField("CASCADE_DEEP_TIMEOUT_MS", "budgets", "Ceiling for the deep review call."),
+    EditableField("NLI_MAX_SENTENCES", "answer", "Sentences scored per answer. Bounds the entailment batch."),
+    EditableField(
+        "NLI_MODEL_NAME",
+        "answer",
+        "Cross-encoder for entailment. Must already be downloaded; the deterministic scorer runs if not.",
+    ),
     EditableField(
         "ANSWER_FACT_VERIFICATION_ENABLED",
         "answer",

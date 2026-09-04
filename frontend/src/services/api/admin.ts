@@ -1,6 +1,7 @@
 import type {
   AdminModelSettingsPayload,
   AdminModelSettingsView,
+  EffectiveModelConfigResponse,
   AdminRuntimeSnapshot,
   ConfigSaveResponse,
   ConfigSchemaResponse,
@@ -146,6 +147,10 @@ export const adminModelApi = {
   async adminModelSettings() {
     const res = await authFetch("/admin/model-settings", { method: "GET" });
     return parseOrThrow<{ ok: boolean; settings: AdminModelSettingsView }>(res);
+  },
+  async adminEffectiveModelConfig() {
+    const res = await authFetch("/admin/model-settings/effective", { method: "GET" });
+    return parseOrThrow<EffectiveModelConfigResponse>(res);
   },
   async adminSaveModelSettings(settings: AdminModelSettingsPayload) {
     const res = await authFetch("/admin/model-settings", {

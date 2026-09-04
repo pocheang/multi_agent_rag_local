@@ -383,6 +383,24 @@ export type AdminModelSettingsPayload = {
   max_tokens: number;
 };
 
+export type EffectiveModelComponent = {
+  component: string;
+  // "degraded" means configured, running, and not doing what its name implies --
+  // a reranker whose model was never downloaded still returns results, by
+  // falling back to lexical scoring.
+  status: "active" | "degraded" | "disabled" | "unavailable";
+  configured: string;
+  detail: string;
+  source?: string;
+  metadata?: Record<string, string>;
+};
+
+export type EffectiveModelConfigResponse = {
+  ok: boolean;
+  components: EffectiveModelComponent[];
+  degraded: number;
+};
+
 export type AdminModelSettingsView = {
   enabled: boolean;
   provider: string;

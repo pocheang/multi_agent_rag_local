@@ -3,8 +3,10 @@ import { useTranslation } from "react-i18next";
 import { AdminFormField, AdminFormSelect } from "@/components/AdminFormField";
 import { appApi } from "@/lib/api";
 import { normalizeModelTemperature } from "@/lib/model-temperature";
+import { effectiveRow, effectiveStatusPill } from "./effectiveComponentVariants";
 import type {
   AdminModelSettingsView,
+  EffectiveModelComponent,
   ModelCatalogItem,
   ModelCatalogResponse,
   ModelProvider,
@@ -64,6 +66,25 @@ export function AdminModelSettings({
 }: Props) {
   const { t } = useTranslation();
   const [catalog, setCatalog] = useState<ModelCatalogResponse | null>(null);
+  const [effective, setEffective] = useState<EffectiveModelComponent[] | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    // Probing loads the optional models, so this is fetched once on mount rather
+    // than on every patch. A failure leaves the panel out: it is a diagnostic,
+    // and it must not stop an admin from saving settings.
+    void appApi
+      .adminEffectiveModelConfig()
+      .then((data) => {
+        if (active) setEffective(data.components);
+      })
+      .catch(() => {
+        if (active) setEffective(null);
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
 
   useEffect(() => {
     let active = true;
@@ -144,6 +165,30 @@ export function AdminModelSettings({
             <div className="ops-kpi-card"><span>Chat</span><strong>{modelSettings.chat_model || "-"}</strong></div>
             <div className="ops-kpi-card"><span>Embedding</span><strong>{supportsEmbeddings ? modelSettings.embedding_model || "-" : "Existing pipeline"}</strong></div>
           </div>
+
+          {effective && effective.length > 0 && (
+            <div className="admin-effective-panel">
+              <div className="admin-effective-head">
+                <strong>{t("admin.ui.effectiveConfig", "Effective configuration")}</strong>
+                <span>
+                  {t(
+                    "admin.ui.effectiveConfigNote",
+                    "What the next question will actually use, not what is stored.",
+                  )}
+                </span>
+              </div>
+              <ul className="admin-effective-list">
+                {effective.map((item) => (
+                  <li key={item.component} className={effectiveRow({ status: item.status })}>
+                    <span className="admin-effective-name">{item.component}</span>
+                    <span className={effectiveStatusPill({ status: item.status })}>{item.status}</span>
+                    <span className="admin-effective-value">{item.configured}</span>
+                    <p className="admin-effective-detail">{item.detail}</p>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
 
           {modelSettings.environment_pinned && (
             <div className="admin-model-banner admin-model-banner-warning" role="status">

@@ -1161,6 +1161,29 @@ container, and is the thing to run after touching the adapter or bumping the pin
 client answers whatever shape it is asked for, so the unit tests cannot catch this
 repository's calls drifting from the SDK's.
 
+**`GET /admin/model-settings/effective` answers a different question from every other
+admin surface** (added 2026-09-04): not "what did I save" but "what will the next question
+use". They come apart quietly. The reranker and the NLI cross-encoder are both loaded with
+`local_files_only=True`, so a model that was never downloaded returns `None` rather than
+raising -- retrieval falls back to `lexical_rerank`, validation falls back to a
+deterministic scorer, both keep answering, and from outside a degraded stage is
+indistinguishable from a healthy one. `MODEL_BACKEND=local` discards a saved provider
+config outright, and on the offline backend there is no language model at all.
+
+So each component reports a **status**, and `degraded` is the one worth having: configured,
+running, and not doing what its name implies. Probing loads the optional models, which is
+why this is an admin endpoint and not part of a health check -- the cost is the one the
+first real query would have paid, once per process.
+
+`ENABLE_RERANKER`, `RERANKER_MODEL_NAME`, the four `CASCADE_ENABLE_*` switches, both
+cascade timeouts, `NLI_MODEL_NAME` and `NLI_MAX_SENTENCES` became editable in the same
+pass. Each needed its cache cleared by `apply_config_reload` first: `clear_model_caches`
+covers the chat and embedding models only, so the reranker's own `lru_cache` kept the old
+model while the page reported the new name. `test_the_reload_reaches_every_cache_that_holds_an_editable_setting`
+now enforces that -- it finds every `@lru_cache` function reading an editable field and
+requires the reload to clear it, following one level of indirection through the named
+clearers, and it was verified able to fail by removing the reranker's.
+
 **What an administrator may change is an allowlist**, `app/core/config_schema.py`, not an
 annotation per field. `Settings` has 244 of them; annotating individually would scatter a
 security-relevant decision across 236 lines and leave "what can console access reach?"
@@ -1595,7 +1618,7 @@ verified (60 inputs and 336 pins respectively, zero differences).
 
 `tests/` was cleared ahead of the v0.7 rewrite and is being rebuilt incrementally: each bug
 fix lands with the regression test that would have caught it, rather than as a separate
-back-filling effort. As of 2026-09-04 there are 1412 tests covering the chat round trip,
+back-filling effort. As of 2026-09-04 there are 1423 tests covering the chat round trip,
 conversation context, graph routing, clarification, the async load guard, engine reuse,
 answer safety, reader-facing citation numbering, stage-timeout degradation, the governed
 tool stack with its multi-step loop and approve-then-resume cycle, retrieval

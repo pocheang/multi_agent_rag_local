@@ -18,6 +18,8 @@ from app.api.dependencies import (
 from app.api.schemas import (
     AdminModelSettings,
     AdminModelSettingsResponse,
+    EffectiveModelComponent,
+    EffectiveModelConfigResponse,
     ModelCatalogResponse,
     UserApiSettings,
     UserApiSettingsResponse,
@@ -39,6 +41,7 @@ from app.services.models.config_store import (
 from app.services.models.config_store import (
     save_user_api_settings as save_user_api_settings_service,
 )
+from app.services.models.effective import effective_model_configuration
 from app.services.models.runtime import probe_chat_model_configuration
 from app.services.observability.alerting import emit_alert
 from app.services.security.audit_actions import AuditAction
@@ -57,6 +60,39 @@ def get_available_model_catalog(user: dict[str, Any] = Depends(_require_user)):
 def admin_get_model_settings(request: Request, user: dict[str, Any] = Depends(_require_user)):
     _require_permission(user, Permission.ADMIN_OPS_MANAGE, request, "admin")
     return _admin_model_settings_view(get_global_model_settings())
+
+
+@router.get("/admin/model-settings/effective", response_model=EffectiveModelConfigResponse)
+def admin_effective_model_config(request: Request, user: dict[str, Any] = Depends(_require_user)):
+    """Report what the model stack will actually do, degraded states included.
+
+    Every other view here answers "what did I save". This answers "what will the
+    next question use", and the two come apart quietly: a reranker or NLI model
+    that was never downloaded loads as None and the pipeline falls back, which
+    looks identical to healthy from outside.
+
+    Probing loads those optional models. They are cached for the life of the
+    process and opened with local_files_only=True, so the cost is the one the
+    first real query would have paid -- but it is why this is an admin endpoint
+    and not part of a health check.
+    """
+
+    _require_permission(user, Permission.ADMIN_OPS_MANAGE, request, "admin")
+    components = [
+        EffectiveModelComponent(
+            component=item.component,
+            status=item.status,
+            configured=item.configured,
+            detail=item.detail,
+            source=item.source,
+            metadata=item.metadata,
+        )
+        for item in effective_model_configuration()
+    ]
+    return EffectiveModelConfigResponse(
+        components=components,
+        degraded=sum(1 for item in components if item.status == "degraded"),
+    )
 
 
 @router.post("/admin/model-settings", response_model=AdminModelSettingsResponse)

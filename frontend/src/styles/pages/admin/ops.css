@@ -513,6 +513,105 @@
   opacity: 0.8;
 }
 
+/* "Effective configuration" -- what the next question will use, degraded states
+   included. Uses the shape and elevation tokens rather than literals so
+   `npm run lint:design` stays at its baseline. */
+.admin-effective-panel {
+  margin-top: var(--space-5);
+  padding: var(--space-4);
+  border: 1px solid var(--admin-border);
+  border-radius: var(--shape-card);
+  background: var(--admin-surface);
+}
+
+.admin-effective-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-2);
+  margin-bottom: var(--space-3);
+}
+
+.admin-effective-head span {
+  color: var(--admin-text-secondary);
+  font-size: var(--text-xs);
+}
+
+.admin-effective-list {
+  display: grid;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.admin-effective-row {
+  display: grid;
+  grid-template-columns: minmax(7rem, auto) auto 1fr;
+  gap: var(--space-2) var(--space-3);
+  align-items: center;
+  padding: var(--space-2) var(--space-3);
+  border-left: 3px solid var(--admin-border);
+  border-radius: var(--shape-control);
+  background: var(--admin-surface-muted, transparent);
+}
+
+.admin-effective-degraded {
+  border-left-color: var(--warning);
+}
+
+.admin-effective-active {
+  border-left-color: var(--admin-info);
+}
+
+.admin-effective-disabled,
+.admin-effective-unavailable {
+  border-left-color: var(--admin-text-secondary);
+}
+
+.admin-effective-name {
+  color: var(--admin-text-primary);
+  font: 600 var(--text-sm) inherit;
+}
+
+.admin-effective-status {
+  justify-self: start;
+  padding: 2px 8px;
+  border-radius: var(--shape-pill);
+  font: 700 var(--text-xs) ui-monospace, monospace;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.admin-effective-status-active {
+  background: color-mix(in srgb, var(--admin-info) 16%, transparent);
+  color: var(--admin-info);
+}
+
+.admin-effective-status-degraded {
+  background: color-mix(in srgb, var(--warning) 20%, transparent);
+  color: var(--warning);
+}
+
+.admin-effective-status-disabled,
+.admin-effective-status-unavailable {
+  background: color-mix(in srgb, var(--admin-text-secondary) 14%, transparent);
+  color: var(--admin-text-secondary);
+}
+
+.admin-effective-value {
+  color: var(--admin-text-secondary);
+  font-size: var(--text-sm);
+  overflow-wrap: anywhere;
+}
+
+.admin-effective-detail {
+  grid-column: 1 / -1;
+  margin: 0;
+  color: var(--admin-text-secondary);
+  font-size: var(--text-xs);
+}
+
 .admin-model-banner {
   display: flex;
   align-items: flex-start;

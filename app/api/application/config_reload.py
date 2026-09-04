@@ -22,6 +22,7 @@ from app.core.config_schema import describe, validate_values
 from app.core.remote_config import RemoteDocuments, parse_properties, remote_config_enabled
 from app.graph.knowledge.client import Neo4jClient
 from app.retrievers.hybrid.caching import clear_retrieval_cache
+from app.retrievers.reranker import clear_reranker_cache
 from app.retrievers.stores.vector import clear_vector_store_cache
 from app.services.models.runtime import clear_model_caches
 from app.services.runtime.bulkhead import reset_bulkheads
@@ -51,6 +52,9 @@ def apply_config_reload() -> Settings:
     # every CASCADE_* value in at construction and lives in a module global,
     # and the NLI model is lru_cache'd on NLI_MODEL_NAME.
     clear_validation_caches()
+    # clear_model_caches covers chat and embedding only; the reranker keeps
+    # its own lru_cache keyed on RERANKER_MODEL_NAME.
+    clear_reranker_cache()
     Neo4jClient.close_shared_driver()
     reset_bulkheads()
     return new_settings

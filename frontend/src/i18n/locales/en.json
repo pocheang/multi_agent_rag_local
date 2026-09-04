@@ -168,6 +168,8 @@
       "chatModel": "Chat model",
       "embeddingModel": "Embedding",
       "enableGlobalModelOverride": "Enable global model override (replaces every user's own API settings)",
+      "effectiveConfig": "Effective configuration",
+      "effectiveConfigNote": "What the next question will actually use, not what is stored.",
       "modelSettingsPinned": "These settings are saved but not in effect",
       "modelSettingsPinnedReason": "The process environment pins the model backend; this configuration takes effect once that is unset.",
       "backendType": "Backend type",

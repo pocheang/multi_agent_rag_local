@@ -1,4 +1,4 @@
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
@@ -360,6 +360,29 @@ class AdminModelSettingsView(BaseModel):
     # -- a page describing something other than what runs.
     environment_pinned: bool = False
     pinned_reason: str = ""
+
+
+class EffectiveModelComponent(BaseModel):
+    """One model in the stack and whether it is doing its job.
+
+    `status` is the point. "degraded" means configured, running, and not doing
+    what its name implies -- a reranker whose model was never downloaded still
+    returns results, by falling back to lexical scoring, and looks healthy from
+    outside.
+    """
+
+    component: str
+    status: Literal["active", "degraded", "disabled", "unavailable"]
+    configured: str
+    detail: str
+    source: str = ""
+    metadata: dict[str, str] = Field(default_factory=dict)
+
+
+class EffectiveModelConfigResponse(BaseModel):
+    ok: bool = True
+    components: list[EffectiveModelComponent] = Field(default_factory=list)
+    degraded: int = 0
 
 
 class AdminModelSettingsResponse(BaseModel):

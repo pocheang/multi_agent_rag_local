@@ -40,6 +40,19 @@ def _load_cross_encoder():
 _TOKEN_RE = re.compile(r"[A-Za-z0-9_\-]+|[\u4e00-\u9fff]")
 
 
+def clear_reranker_cache() -> None:
+    """Drop the loaded cross-encoder so a reload can pick up a new model name.
+
+    `clear_model_caches` covers the chat and embedding models and not this one,
+    which is why RERANKER_MODEL_NAME could not honestly be offered as an editable
+    setting before: the admin page would have reported the new name while the old
+    model kept answering. Cheap -- it reloads lazily from local files on the next
+    query that reranks.
+    """
+
+    _load_cross_encoder.cache_clear()
+
+
 def _tokenize(text: str) -> list[str]:
     return _TOKEN_RE.findall((text or "").lower())
 
@@ -151,4 +164,4 @@ def rerank(query: str, candidates: list[dict], top_n: int | None = None) -> list
     return results
 
 
-__all__ = ["lexical_rerank", "rerank", "rerank_with_diagnostics"]
+__all__ = ["clear_reranker_cache", "lexical_rerank", "rerank", "rerank_with_diagnostics"]

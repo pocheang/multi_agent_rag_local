@@ -149,3 +149,86 @@ def test_the_reload_sequence_clears_the_validation_caches():
     sequence = source.split("def apply_config_reload(", 1)[1].split("\ndef ", 1)[0]
 
     assert "clear_validation_caches()" in sequence
+
+
+# --- an editable field behind an lru_cache must be cleared by the reload ------
+
+
+def _lru_cached_functions() -> dict[str, tuple[Path, str]]:
+    """`@lru_cache` functions in app/, mapped to their file and source."""
+
+    found: dict[str, tuple[Path, str]] = {}
+    for path in sorted((REPO / "app").rglob("*.py")):
+        if "__pycache__" in path.parts:
+            continue
+        text = path.read_text(encoding="utf-8", errors="ignore")
+        try:
+            tree = ast.parse(text)
+        except SyntaxError:  # pragma: no cover
+            continue
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.FunctionDef):
+                continue
+            for decorator in node.decorator_list:
+                target = decorator.func if isinstance(decorator, ast.Call) else decorator
+                name = getattr(target, "id", None) or getattr(target, "attr", None)
+                if name == "lru_cache":
+                    found[node.name] = (path, ast.get_source_segment(text, node) or "")
+    return found
+
+
+def _names_cleared_by_the_reload() -> set[str]:
+    """Every `X.cache_clear()` the reload reaches, one level of indirection deep.
+
+    `apply_config_reload` mostly calls small named clearers -- clear_model_caches,
+    clear_reranker_cache, clear_validation_caches -- rather than clearing caches
+    itself, so following the calls it makes is the difference between this guard
+    working and it only recognising the one style.
+    """
+
+    reload_src = (REPO / "app" / "api" / "application" / "config_reload.py").read_text(encoding="utf-8")
+    sequence = reload_src.split("def apply_config_reload(", 1)[1].split("\ndef ", 1)[0]
+    called = set(re.findall(r"\b(\w+)\(", sequence))
+
+    cleared: set[str] = set(re.findall(r"(\w+)\.cache_clear\(\)", sequence))
+    for path in sorted((REPO / "app").rglob("*.py")):
+        if "__pycache__" in path.parts:
+            continue
+        text = path.read_text(encoding="utf-8", errors="ignore")
+        for name in called:
+            match = re.search(rf"^def {re.escape(name)}\(.*?(?=^\S|\Z)", text, re.MULTILINE | re.DOTALL)
+            if match:
+                cleared.update(re.findall(r"(\w+)\.cache_clear\(\)", match.group(0)))
+    return cleared
+
+
+def test_the_reload_reaches_every_cache_that_holds_an_editable_setting():
+    """The guard for the shape that nearly shipped.
+
+    RERANKER_MODEL_NAME is read inside `_load_cross_encoder`, an lru_cache'd
+    loader that `clear_model_caches` does not touch -- it covers the chat and
+    embedding models only. Offering the field without clearing that cache would
+    have let the page report a model the process had not loaded, which is the
+    same silent inertness the module-scope `settings` binding causes above,
+    reached through a different mechanism.
+    """
+
+    editable = set(_editable_fields())
+    cleared = _names_cleared_by_the_reload()
+    offenders: list[str] = []
+
+    for name, (path, source) in _lru_cached_functions().items():
+        held = sorted(
+            field
+            for field in editable
+            if re.search(rf"\bsettings\.{re.escape(field)}\b", source)
+            or re.search(rf'getattr\(\s*settings\s*,\s*"{re.escape(field)}"', source)
+        )
+        if held and name not in cleared:
+            offenders.append(f"{path.relative_to(REPO).as_posix()}::{name} holds {', '.join(held)}")
+
+    assert not offenders, (
+        "these lru_cache'd functions read an admin-editable setting and the reload never "
+        "clears them, so an edit would report success and change nothing until restart:\n  "
+        + "\n  ".join(sorted(offenders))
+    )
