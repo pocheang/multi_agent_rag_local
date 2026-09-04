@@ -35,15 +35,24 @@ ruff check .                        # Lint check
 ruff format .                       # Format code
 ```
 
-Note (2026-08-28): `tests/` and `scripts/` were cleared ahead of the v0.7 rewrite. `scripts/`
-holds exactly one file, `scripts/audit/frontend_audit.py`, and still no
-`scripts/init_db.py`; `tests/` is being rebuilt incrementally alongside bug fixes — see
+Note (2026-08-28, counts refreshed 2026-09-04): `tests/` and `scripts/` were cleared ahead
+of the v0.7 rewrite. `scripts/` was down to one file then and holds six now — `audit/frontend_audit.py`,
+`check_lock_wheels.py`, `check_sensitive.py`, `create_admin.py`, `eval_retrieval.py`,
+`verify_config_centre.py` — each added with the thing it verifies, and still no
+`scripts/init_db.py`. `tests/` is being rebuilt incrementally alongside bug fixes — see
 Testing Strategy below.
 
 **Tests and lint**
 ```bash
 make test                           # pytest -q
 make lint                           # ruff check . && ruff format --check .
+```
+
+**Optional services and offline evaluation**
+```bash
+make up                             # start Neo4j for local dev (Browser on :7474)
+make down                           # stop it
+make eval-retrieval                 # BM25 retrieval quality over config/eval/ (no model needed)
 ```
 
 Note (2026-08-29): A backend agent audit found several components documented above
@@ -60,7 +69,7 @@ endpoint never returned its execution_id, the `graph` route never queried the
 graph, and 184 modules (~13,000 lines) had zero importers. All were fixed or
 deleted; `app/` went from 583 to 371 Python files and Settings from 261 to 216
 fields. Those are what the audit left behind, not a ceiling — today it is 379 files and
-249 settings fields (2026-09-01). See `docs/superpowers/plans/2026-08-29-backend-full-audit-remediation.md`
+244 settings fields (2026-09-04). See `docs/superpowers/plans/2026-08-29-backend-full-audit-remediation.md`
 for the plan, what was deliberately left dormant, and what remains open.
 
 ### Frontend
@@ -1134,7 +1143,7 @@ client answers whatever shape it is asked for, so the unit tests cannot catch th
 repository's calls drifting from the SDK's.
 
 **What an administrator may change is an allowlist**, `app/core/config_schema.py`, not an
-annotation per field. `Settings` has 236 of them; annotating individually would scatter a
+annotation per field. `Settings` has 244 of them; annotating individually would scatter a
 security-relevant decision across 236 lines and leave "what can console access reach?"
 with no single answer. It is opt-in — a new field is not editable until it is named — and
 `tests/core/test_config_schema.py` asserts by *shape* that nothing matching KEY, SECRET,
@@ -1448,7 +1457,7 @@ into `@theme` so they exist as utilities:
 | resting / hover / overlay | `--elev-1..3` | `tw:shadow-elev-1..3` |
 
 `npm run lint:design` is a **ratchet**, not a ban: `scripts/design-scale-baseline.json`
-freezes each file's current count of off-scale literals (135 radii, 194 shadows at the
+freezes each file's current count of off-scale literals (135 radii, 193 shadows across 53 files at the
 time of writing). A file may improve, never regress, and a new file starts at zero. Same
 shape as `KNOWN_OFFENDERS` on the Python side. Re-freeze with `--write` only for values
 that genuinely are not on the scale — a chart bar, a scrollbar thumb — and say why.
@@ -1652,7 +1661,7 @@ confirming after a clarified query would have re-sent a stale question.
 any identity change: the stores outlive a logout, so a field added to a store but forgotten
 in its `INITIAL_STATE` would show the next person on a shared browser the previous user's
 data. The test discovers fields rather than listing them, so it catches that drift.
-That suite is 40 tests across 7 files — small, and deliberately aimed at the things a
+That suite is 56 tests across 9 files — small, and deliberately aimed at the things a
 screenshot cannot check. `AdminConfigEditor.test.tsx` is the newest: it pins that a value
 pinned in the process environment renders disabled, and that only edited fields are sent —
 posting the whole form would turn a page load into a write of every value, and a stale read
@@ -1662,7 +1671,7 @@ or every later query in the file finds two of everything.
 
 Note: do not use `len(app.routes)` to count endpoints. FastAPI 0.138+ stores an
 `_IncludedRouter` wrapper in `app.routes` instead of flattening child routes, so that number
-varies by version. Count OpenAPI operations instead; the current baseline is 151 (CI asserts a >= 140 floor).
+varies by version. Count OpenAPI operations instead; the current baseline is 153 (CI asserts a >= 140 floor).
 
 ### Sensitive content gate (added 2026-09-04)
 

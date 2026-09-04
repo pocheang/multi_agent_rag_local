@@ -1,9 +1,14 @@
 """Sentence-level entailment checking for the validation cascade.
 
-This stage never ran. `CASCADE_ENABLE_LEVEL2` gates it -- `CascadeLevel.NLI_BATCH`
-is level 2 -- and defaulted to False, while CLAUDE.md listed NLI among the checks
-answer validation performs. Turning it on would have been worse than leaving it
-off, for three independent reasons, all fixed here:
+Until 2026-09-04 this stage had never run. It was gated by `CASCADE_ENABLE_LEVEL2`
+-- `CascadeLevel.NLI_BATCH` being level 2 -- which defaulted to False, while
+CLAUDE.md listed NLI among the checks answer validation performs. The switch is
+`CASCADE_ENABLE_NLI` now, named for the stage it gates rather than a position,
+because the numbering was itself wrong: level 3 gated the citation check, so
+reading the configuration told you the opposite of what ran.
+
+Turning it on as it stood would have been worse than leaving it off, for three
+independent reasons, all fixed here:
 
 * **It blocked the event loop.** `model.predict(...)` -- a synchronous
   cross-encoder forward pass -- was called directly inside `async def`, with no
