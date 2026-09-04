@@ -213,13 +213,58 @@ PipelineResult → returned to caller
 **Validation layers** (applied based on profile):
 1. **Route confidence checks**: Threshold-based validation
 2. **Retrieval quality scoring**: none. A local-LLM (Ollama) batch relevance scorer existed in `app/agents/rag/relevance.py` with no callers anywhere in the request pipeline; it was deleted on 2026-08-29. Retrieval results are not quality-scored.
-3. **Answer validation**: Citation completeness, hallucination detection, NLI checks, and
+3. **Answer validation**: Citation completeness, hallucination detection, NLI checks
+   (**switched on 2026-09-04; before that this line was false**, see below), and
    **sentence grounding** — `apply_sentence_grounding`
    (`app/services/retrieval/citation_grounding.py`), reached from
    `app/orchestration/finalization.py`, scores each sentence's token overlap with the
    evidence and hedges the ones under 0.22. It skips sentences that make no claim, which is
    not a nicety: it once counted a bare `[1]` as a sentence, found it unsupported, and
    hedged the attribution instead of the claim.
+
+   **The NLI stage had never run, and three separate defects meant turning it on would
+   have been worse than leaving it off** (all fixed 2026-09-04). The switch was
+   `CASCADE_ENABLE_LEVEL2`, defaulting false — and the numbering was itself wrong:
+   `enable_level2` gated NLI while `enable_level3` gated the citation check, so reading
+   the configuration told you the opposite of what ran. The switches are named for their
+   stages now (`CASCADE_ENABLE_RULES` / `_CITATIONS` / `_NLI` / `_DEEP`), and two of the
+   four timeout settings were deleted because nothing consumed them — note that
+   `test_settings_have_readers` passed for both, since **assigning a field to an attribute
+   nobody reads counts as a reader**.
+
+   The three defects, in increasing order of how badly they would have hurt:
+
+   - **It blocked the event loop.** `model.predict` — a synchronous cross-encoder forward
+     pass — ran directly inside `async def`, with no `to_thread`, no timeout and no
+     breaker; the loader ran there too, without `local_files_only=True`, so a machine
+     without the model would have started an untimed download inside a request. It now
+     copies `rerank_evidence` exactly: sync core, `wait_for(to_thread(...))`, circuit
+     breaker, deterministic fallback.
+   - **The deterministic fallback could not score Chinese.** It tokenised with `\w+`, and
+     `\w` matches CJK, so a whole clause became one token. Measured: a verbatim clause
+     copy scored 1.00, but a paraphrase, a recombination of two sources, and an added
+     connective all scored **0.00** — and synthesis paraphrases by construction. A 0.00
+     becomes `factuality < 0.7`, then a retry, then a rejected answer.
+   - **The scoring was inverted.** The code read `scores[:, 2]` as the entailment column,
+     but the configured model's `id2label` is `{0: contradiction, 1: entailment,
+     2: neutral}` — column 2 is *neutral* — and those are raw logits that were clamped
+     into [0,1] rather than softmaxed. Measured against the real model: an entailed
+     sentence scored **0.000** and an unrelated one **0.894**. The column now comes from
+     the model's own `id2label` (so a different `NLI_MODEL_NAME` still works) and the row
+     is softmaxed: 0.993 / 0.001 / 0.000 for entailed / contradicting / unrelated.
+
+   **The model is English and the system is bilingual**, so the cross-encoder runs only on
+   predominantly-Latin text; everything else takes the repaired deterministic path.
+   `CascadeResult.backend` records which ran and `validation_method` reports
+   `standard_lexical` rather than `standard` when it was not the cross-encoder — a method
+   name that claims a check happened when it did not is the failure this file keeps
+   describing. Shipping a Chinese-capable NLI model is a separate evaluation project.
+
+   `CASCADE_*` is deliberately **not** in `config_schema.py`: `_get_validation_cascade`
+   caches a module-global `ValidationCascade` that `apply_config_reload` does not clear, so
+   an admin edit would report success and change nothing until restart. That is a genuine
+   exception to the audited `requires_restart=False` claim, and clearing the singleton is
+   the prerequisite for ever exposing these.
 4. **Safety checks**: one pattern set, `app/services/security/outbound_redaction.py`,
    enforced at three points. Matches become stable `<KIND_n>` tokens, so the same value
    twice in one text gets the same token and the model can still reason about "that
@@ -1467,7 +1512,7 @@ verified (60 inputs and 336 pins respectively, zero differences).
 
 `tests/` was cleared ahead of the v0.7 rewrite and is being rebuilt incrementally: each bug
 fix lands with the regression test that would have caught it, rather than as a separate
-back-filling effort. As of 2026-09-04 there are 1305 tests covering the chat round trip,
+back-filling effort. As of 2026-09-04 there are 1387 tests covering the chat round trip,
 conversation context, graph routing, clarification, the async load guard, engine reuse,
 answer safety, reader-facing citation numbering, stage-timeout degradation, the governed
 tool stack with its multi-step loop and approve-then-resume cycle, retrieval
@@ -1485,7 +1530,14 @@ storage, each characterized against its old implementation before being split, a
 regular expressions that backtracked super-linearly over user-supplied text, the
 multimodal source that had never had anything to retrieve, and the sensitive-content gate,
 whose suite is mostly negative assertions because a scanner reports PASS just as readily
-when its checks match nothing, and the China-specific PII patterns that had never existed --
+when its checks match nothing, an offline retrieval metric measured through the real
+orchestrator over a corpus that ships with the repository -- whose most important test
+proves the metric can *fail*, since a scope mismatch scores 0.00 for reasons unrelated to
+retrieval -- a graph triplet whose confidence records which extractor produced it, planner
+sub-queries that reach the retrievers, per-query result lists that are interleaved rather
+than concatenated before RRF, an NLI stage that runs off the event loop and scores Chinese
+and reports which scorer ran, a governed read tool whose summary cannot carry an
+instruction, and the China-specific PII patterns that had never existed --
 pinned by what each identifier is *called*, not only that it is caught, since three of them
 were already caught under the wrong name -- and by an adversarial false-positive pass, which is
 where all three defects in that change were found.
@@ -1500,7 +1552,7 @@ covered the day it is added, where one test looping inside a single assertion re
 first offender and stops — but it does mean this total is not comparable across the change
 that introduced them.
 
-`tests/security/` (735 of those, 376 being the per-module audit-action scan) pins the
+`tests/security/` (743 of those, 376 being the per-module audit-action scan) pins the
 user-data isolation invariants — see
 `docs/superpowers/plans/2026-08-29-user-data-isolation.md`. That plan is complete
 (phases 0-4) and all 8 of its `xfail(strict=True)` markers are cleared; keep using the same

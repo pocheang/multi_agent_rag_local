@@ -13,9 +13,13 @@ from pydantic import BaseModel, Field
 class CascadeLevel(StrEnum):
     """Ordered validation stages exposed by the compatibility API."""
 
+    # Declared in the order they run. `_weighted_confidence` applies its weights
+    # positionally, so this and that tuple have to agree -- today's numbers only
+    # survived the old (NLI before citation) order because the two middle weights
+    # are both 0.3. Do not "fix" that by changing one of them.
     RULE_BASED = "rule_based"
-    NLI_BATCH = "nli_batch"
     CITATION_CHECK = "citation_check"
+    NLI_BATCH = "nli_batch"
     DEEP_LLM = "deep_llm"
 
 
@@ -38,6 +42,13 @@ class CascadeResult(BaseModel):
     execution_time_ms: int
     nli_scores: list[float] | None = None
     should_continue: bool = True
+    # Which scorer actually ran, and why it was not the preferred one. Without
+    # these, `_validation_method` reports "standard" whenever the NLI stage was
+    # reached -- including when a lexical heuristic ran because the model was
+    # missing or the text was not English. A method name that claims a check
+    # happened when it did not is the failure this repository keeps finding.
+    backend: str = ""
+    fallback_reason: str | None = None
 
 
 class ValidationCascadeResult(BaseModel):

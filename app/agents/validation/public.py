@@ -22,15 +22,6 @@ from app.agents.validation.citations import citation_completeness as _validate_c
 from app.agents.validation.deep import deep_validation_score as _llm_deep_validation
 from app.agents.validation.fact_verification import AnswerVerificationResult
 from app.agents.validation.models import CascadeLevel, RuleBasisIssue, ValidationCascadeResult
-from app.agents.validation.nli import (
-    check_hallucination as _check_hallucination,
-)
-from app.agents.validation.nli import (
-    extract_factual_spans as _extract_factual_spans,
-)
-from app.agents.validation.nli import (
-    get_nli_model as _get_nli_model,
-)
 from app.agents.validation.rules import (
     assess_answer_quality as _assess_answer_quality,
 )
@@ -57,14 +48,12 @@ def _get_validation_cascade() -> ValidationCascade:
     settings = get_settings()
     _validation_cascade = ValidationCascade(
         config={
-            "level1_timeout_ms": settings.cascade_level1_timeout_ms,
-            "level2_timeout_ms": settings.cascade_level2_timeout_ms,
-            "level3_timeout_ms": settings.cascade_level3_timeout_ms,
-            "level4_timeout_ms": settings.cascade_level4_timeout_ms,
-            "enable_level1": settings.cascade_enable_level1,
-            "enable_level2": settings.cascade_enable_level2,
-            "enable_level3": settings.cascade_enable_level3,
-            "enable_level4": settings.cascade_enable_level4,
+            "nli_timeout_ms": settings.cascade_nli_timeout_ms,
+            "deep_timeout_ms": settings.cascade_deep_timeout_ms,
+            "enable_rules": settings.cascade_enable_rules,
+            "enable_nli": settings.cascade_enable_nli,
+            "enable_citations": settings.cascade_enable_citations,
+            "enable_deep": settings.cascade_enable_deep,
             "enforce_minimum_length": True,
         }
     )
@@ -177,19 +166,26 @@ def _to_answer_issue(issue: RuleBasisIssue) -> AnswerIssue:
 
 
 def _validation_method(cascade: ValidationCascadeResult) -> str:
-    levels = {result.level for result in cascade.level_results}
-    if CascadeLevel.DEEP_LLM in levels:
+    """Name the check that actually ran, not the one that was reached.
+
+    The NLI stage degrades to a lexical heuristic when its model is missing or
+    the answer is not predominantly Latin, and both of those are ordinary. A
+    method of "standard" in that case would claim entailment checking happened
+    when it did not, which is exactly the class of defect this codebase keeps
+    finding in its own switches.
+    """
+
+    by_level = {result.level: result for result in cascade.level_results}
+    if CascadeLevel.DEEP_LLM in by_level:
         return "deep"
-    if CascadeLevel.NLI_BATCH in levels:
-        return "standard"
+    nli = by_level.get(CascadeLevel.NLI_BATCH)
+    if nli is not None:
+        return "standard" if nli.backend == "cross_encoder" else "standard_lexical"
     return "fast_path"
 
 
 __all__ = [
     "_assess_answer_quality",
-    "_check_hallucination",
-    "_extract_factual_spans",
-    "_get_nli_model",
     "_get_validation_cascade",
     "_llm_deep_validation",
     "_quick_validation",

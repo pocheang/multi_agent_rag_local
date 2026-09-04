@@ -28,19 +28,24 @@ class ValidationCascade:
 
     def __init__(self, config: Mapping[str, Any] | None = None) -> None:
         self.config = dict(config or {})
-        self.level1_timeout_ms = int(self.config.get("level1_timeout_ms", 10))
-        self.level2_timeout_ms = int(self.config.get("level2_timeout_ms", 3_000))
-        self.level3_timeout_ms = int(self.config.get("level3_timeout_ms", 75))
-        self.level4_timeout_ms = int(self.config.get("level4_timeout_ms", 3_000))
-        self.enable_level1 = bool(self.config.get("enable_level1", True))
-        self.enable_level2 = bool(self.config.get("enable_level2", False))
-        self.enable_level3 = bool(self.config.get("enable_level3", True))
-        self.enable_level4 = bool(self.config.get("enable_level4", True))
+        # Named for the stage each one gates. They used to be numbered, and the
+        # numbers did not match `CascadeLevel`: `enable_level2` gated the NLI
+        # stage and `enable_level3` the citation check, so reading the config
+        # told you the opposite of what ran. Two more -- level1 and level3
+        # timeouts -- were stored on `self` and consumed by nothing; note that
+        # `test_settings_have_readers` passed for both, because assigning a field
+        # to an attribute nobody reads counts as a reader.
+        self.nli_timeout_ms = int(self.config.get("nli_timeout_ms", 1_200))
+        self.deep_timeout_ms = int(self.config.get("deep_timeout_ms", 3_000))
+        self.enable_rules = bool(self.config.get("enable_rules", True))
+        self.enable_nli = bool(self.config.get("enable_nli", True))
+        self.enable_citations = bool(self.config.get("enable_citations", True))
+        self.enable_deep = bool(self.config.get("enable_deep", True))
         self.enforce_minimum_length = bool(self.config.get("enforce_minimum_length", False))
         self.rule_validator = RuleValidator()
         self.citation_validator = CitationValidator()
         self.nli_validator = NLIValidator()
-        self.deep_validator = DeepValidator(timeout_ms=self.level4_timeout_ms)
+        self.deep_validator = DeepValidator(timeout_ms=self.deep_timeout_ms)
         self.fact_verification_stage = FactVerificationStage()
 
     async def validate(
@@ -92,7 +97,7 @@ class ValidationCascade:
             )
 
         results: list[CascadeResult] = []
-        if self.enable_level1:
+        if self.enable_rules:
             rules = await self.rule_validator.validate(request)
             results.append(rules)
             if not rules.should_continue:
@@ -104,19 +109,23 @@ class ValidationCascade:
                     safety=0.0,
                 )
 
+        # Cheap and deterministic first. This is also the enum's declared order
+        # now; reversing it to "NLI then citations" would gate the cheap
+        # deterministic check behind the expensive stochastic one via the
+        # confidence chain, which is strictly worse.
         last_confidence = results[-1].confidence_score if results else 1.0
-        if self.enable_level3 and last_confidence >= 0.5:
+        if self.enable_citations and last_confidence >= 0.5:
             results.append(await self.citation_validator.validate(request))
 
         last_confidence = results[-1].confidence_score if results else 1.0
-        if self.enable_level2 and last_confidence >= 0.5:
+        if self.enable_nli and last_confidence >= 0.5:
             results.append(await self.nli_validator.validate(request))
 
         all_issues = [issue for result in results for issue in result.issues]
         non_citation_risk = any(
             result.level != CascadeLevel.CITATION_CHECK and result.confidence_score < 0.7 for result in results
         )
-        should_run_deep = self.enable_level4 and bool(all_issues) and (quality < 0.6 or non_citation_risk)
+        should_run_deep = self.enable_deep and bool(all_issues) and (quality < 0.6 or non_citation_risk)
         if should_run_deep:
             results.append(await self.deep_validator.validate(request))
 
@@ -192,10 +201,6 @@ class ValidationCascade:
     ) -> CascadeResult:
         """Compatibility adapter for focused deep-stage tests."""
         return await self.deep_validator.validate(_request(query=query, answer=answer, source_docs=source_docs))
-
-    def _get_nli_model(self) -> Any | None:
-        """Compatibility adapter for the former cascade-local model loader."""
-        return self.nli_validator.get_model()
 
 
 def _request(

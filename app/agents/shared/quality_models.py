@@ -81,7 +81,12 @@ class AnswerValidationResult(BaseModel):
     issues: list[AnswerIssue] = Field(default_factory=list)
     action: Literal["approve", "flag", "regenerate"]
     execution_time_ms: int
-    validation_method: Literal["fast_path", "standard", "deep"]
+    # "standard_lexical" is the NLI stage having run its deterministic scorer
+    # rather than the cross-encoder -- the model was not downloaded, or the text
+    # was not in the language the configured model understands. Both are
+    # ordinary, and reporting them as "standard" would claim an entailment check
+    # that did not happen.
+    validation_method: Literal["fast_path", "standard", "standard_lexical", "deep"]
 
 
 # ============================================================================
