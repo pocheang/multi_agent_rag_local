@@ -55,15 +55,50 @@ def tokenize_chinese_aware(text: str) -> list[str]:
 
         if total_chars > 0 and chinese_char_count / total_chars > 0.2:
             # Use jieba for Chinese text
-            tokens = list(jieba.cut_for_search(text_lower))
-            # Filter out single-character tokens and whitespace
-            return [t.strip() for t in tokens if t.strip() and len(t.strip()) > 1]
+            tokens = [t.strip() for t in jieba.cut_for_search(text_lower) if t.strip() and len(t.strip()) > 1]
+            # Plus character bigrams over every CJK run. See _cjk_bigrams.
+            return list(dict.fromkeys(tokens + _cjk_bigrams(text_lower)))
 
     except ImportError:
         pass  # Fall back to basic tokenization
 
     # For English or when jieba is not available
     return TOKEN_PATTERN.findall(text_lower)
+
+
+CJK_RUN = re.compile(r"[一-鿿]{2,}")
+
+
+def _cjk_bigrams(text: str) -> list[str]:
+    """Character bigrams over each run of CJK text.
+
+    jieba's dictionary is the only vocabulary the tokenizer had, and dropping
+    single characters (they carry almost no signal on their own) meant a word the
+    dictionary does not know produced *nothing*. Two failures followed, and the
+    second is the worse one:
+
+    * A word jieba splits entirely into single characters disappears from the
+      query and from the document alike, so it can never match. Measured on
+      30 realistic domain terms only one behaved this way -- but it is a silent
+      total failure, and which words fall in that set is unpredictable.
+
+    * More common: jieba emits a *sub-word* and the sub-word is then used as if
+      it were the word. `陪产假` (paternity leave) tokenizes to exactly `产假`
+      (maternity leave) -- an identical token set, so BM25 could not tell the two
+      apart at all, and a query about one ranked the other first. That is a wrong
+      answer, not a missing one.
+
+    Bigrams fix both without a dictionary: `年假` is recovered from the two
+    characters jieba split it into, and `陪产` distinguishes `陪产假` from `产假`.
+    They are added alongside jieba's tokens rather than replacing them, so known
+    words keep their exact-match weight; BM25's IDF discounts the bigrams that
+    turn out to be common.
+    """
+
+    out: list[str] = []
+    for run in CJK_RUN.findall(text):
+        out.extend(run[index : index + 2] for index in range(len(run) - 1))
+    return out
 
 
 # How many distinct access scopes keep a prebuilt index. Each entry holds only

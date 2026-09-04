@@ -621,6 +621,32 @@ its own, which is what let an admin act on a file they could not even list. "No 
 document" and "not yours" both return 404 on purpose: distinguishing them discloses that
 someone else's document exists.
 
+**Chinese tokenization is jieba plus character bigrams** (fixed 2026-09-04).
+jieba's dictionary used to be the only vocabulary: single-character tokens were
+dropped -- they carry almost no signal alone -- so a word the dictionary does not
+know produced *nothing*. `年假` splits into two single characters, so it vanished
+from the query and from the document alike and could never match. Measured over 30
+realistic domain terms only one behaved that way, but it is a silent *total*
+failure and the affected set is unpredictable.
+
+The more common failure is worse than a miss: jieba emits a sub-word, and the
+sub-word gets used as if it were the word. `陪产假` (paternity leave) tokenized to
+exactly `产假` (maternity leave) -- an identical token set, so BM25 could not tell
+them apart, and a query about one ranked the other first. That is a wrong answer,
+not a missing one.
+
+Bigrams over each CJK run fix both without a dictionary, and are added *alongside*
+jieba's tokens so a known word keeps its whole-word match. Runs stop at
+punctuation. Measured on `config/eval/`: MRR 0.9062 -> 0.9688.
+
+**What it does not fix, and cannot**: asking about `产假` still ranks the `陪产假`
+document first, because `产假` is genuinely a substring and BM25 rewards matches
+without penalising a document for extra terms. That is the boundary of lexical
+retrieval -- the production pipeline fuses BM25 with vector search, which the
+BM25-only evaluation harness deliberately does not. It is pinned as
+`KNOWN_LEXICAL_LIMITS` in `tests/evaluation/test_retrieval_metric.py`, with the
+rank asserted exactly so an improvement fails the test as loudly as a regression.
+
 BM25 keeps one prebuilt index per access scope (`_load_scoped_bm25`, LRU), and separates
 matching from ranking: a document is a candidate if it shares a term with the query, and
 BM25 only orders the candidates. Do not reintroduce `score > 0` as the membership test —
@@ -1512,7 +1538,7 @@ verified (60 inputs and 336 pins respectively, zero differences).
 
 `tests/` was cleared ahead of the v0.7 rewrite and is being rebuilt incrementally: each bug
 fix lands with the regression test that would have caught it, rather than as a separate
-back-filling effort. As of 2026-09-04 there are 1395 tests covering the chat round trip,
+back-filling effort. As of 2026-09-04 there are 1401 tests covering the chat round trip,
 conversation context, graph routing, clarification, the async load guard, engine reuse,
 answer safety, reader-facing citation numbering, stage-timeout degradation, the governed
 tool stack with its multi-step loop and approve-then-resume cycle, retrieval

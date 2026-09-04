@@ -107,6 +107,42 @@
         "eval://corpus/lizhi_liucheng.md"
       ],
       "difficulty": "easy"
+    },
+    {
+      "id": "q-13",
+      "query": "年假有多少天",
+      "category": "zh_oov",
+      "expected_docs": [
+        "eval://corpus/nianjia.md"
+      ],
+      "difficulty": "hard"
+    },
+    {
+      "id": "q-14",
+      "query": "陪产假多少天",
+      "category": "zh_oov",
+      "expected_docs": [
+        "eval://corpus/peichanjia.md"
+      ],
+      "difficulty": "hard"
+    },
+    {
+      "id": "q-15",
+      "query": "产假多少天",
+      "category": "zh_oov",
+      "expected_docs": [
+        "eval://corpus/chanjia.md"
+      ],
+      "difficulty": "hard"
+    },
+    {
+      "id": "q-16",
+      "query": "病假要什么证明",
+      "category": "zh_policy",
+      "expected_docs": [
+        "eval://corpus/bingjia.md"
+      ],
+      "difficulty": "easy"
     }
   ]
 }
