@@ -193,9 +193,22 @@ def _readable_image_text(image: Any, ocr_image_bytes: Any, source: Path) -> str:
             logger.warning(f"image_ocr_failed image_id={image.image_id} error={e}")
             documents = []
         for document in documents:
+            metadata = getattr(document, "metadata", None) or {}
             content = str(getattr(document, "page_content", "") or "")
-            if content and _IMAGE_ERROR_MARKER not in content:
-                parts.append(content.strip())
+            # The rendered block carries the OCR result and the diagnostic in one
+            # string, so an error marker anywhere in it discards the whole thing.
+            readable = content.strip() if content and _IMAGE_ERROR_MARKER not in content else ""
+            # ...but the vision caption is carried on its own in metadata too,
+            # where no diagnostic ever goes. Reading it separately is what keeps a
+            # described image indexable when OCR could not read it -- which is the
+            # case a vision model exists for. Before this, a photo or a diagram
+            # with a perfect caption was dropped whenever Tesseract was missing or
+            # found no text, and dropped silently.
+            caption = str(metadata.get("image_caption", "") or "").strip()
+            if caption and caption not in readable:
+                parts.append(caption)
+            if readable:
+                parts.append(readable)
     return "\n\n".join(part for part in parts if part)[:4000]
 
 

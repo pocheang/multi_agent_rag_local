@@ -868,6 +868,22 @@ left it bare. An image nothing could read is skipped rather than indexed with th
 reason: "Tesseract executable not found" as retrievable evidence is worse than
 the image being absent.
 
+**The vision caption is read from metadata, not from the rendered block** (fixed
+2026-09-04), and that distinction is the whole of it. `ocr_image_bytes` renders the
+scene caption, the people summary and the OCR result into one `page_content` and marks
+a failed OCR with `[image_ocr_error]`; `_readable_image_text` discarded the entire
+string whenever that marker appeared. Correct for the diagnostic, and it took the
+caption with it -- *precisely* in the case a vision model exists for: a photo, a
+diagram, a chart with no extractable text. With `IMAGE_CAPTION_ENABLED` on and
+Tesseract missing, the model produced a perfect description and the image was indexed
+as nothing at all, silently. `metadata["image_caption"]` carries the raw caption and
+never holds a diagnostic, so reading it separately keeps both properties. It is
+de-duplicated against the rendered block, which also contains it on the success path.
+
+Note what this does *not* turn on: `IMAGE_CAPTION_ENABLED` still defaults false, and
+captioning still needs a vision model. The fix means that switching it on now does
+something on the images that need it most.
+
 **Tables are indexed whole, and that is the point of them.** The chunker splits
 by size and knows nothing about tables. Measured on a 40-row table: seven child
 chunks, and *only the first carries the header row*. Parent expansion does not
@@ -1618,7 +1634,7 @@ verified (60 inputs and 336 pins respectively, zero differences).
 
 `tests/` was cleared ahead of the v0.7 rewrite and is being rebuilt incrementally: each bug
 fix lands with the regression test that would have caught it, rather than as a separate
-back-filling effort. As of 2026-09-04 there are 1423 tests covering the chat round trip,
+back-filling effort. As of 2026-09-04 there are 1429 tests covering the chat round trip,
 conversation context, graph routing, clarification, the async load guard, engine reuse,
 answer safety, reader-facing citation numbering, stage-timeout degradation, the governed
 tool stack with its multi-step loop and approve-then-resume cycle, retrieval
