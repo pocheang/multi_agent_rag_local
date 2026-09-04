@@ -81,6 +81,13 @@ SECRET_SHAPES = [
 SECRET_BASELINE = {
     "app/privacy/streaming.py",
     "tests/security/test_streaming_redaction.py",
+    # Same reason as its neighbours: a suite proving the redactor catches an API
+    # key shape has to contain one. The value is a sequential-alphabet
+    # placeholder, and this entry was added because the pre-commit hook refused
+    # the commit that introduced the file -- correctly. Note the whole-repo scan
+    # could not have caught it: `git ls-files` does not see an untracked file,
+    # so a new file's secrets surface at commit time and only there.
+    "tests/security/test_chinese_pii_redaction.py",
     "tests/services/test_answer_safety.py",
     "tests/security/test_sensitive_content_gate.py",
     "docs/development/daily-logs/2026-08-17/streaming-and-long-text-config.md",

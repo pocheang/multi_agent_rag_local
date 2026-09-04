@@ -41,6 +41,51 @@ _WINDOWS_PATH_RE = re.compile(r"\b[A-Za-z]:\\(?:[^\\\s]+\\)*[^\\\s]*")
 _UNIX_PATH_RE = re.compile(r"/(?:[^/\s]+/)+[^/\s]+")
 _PHONE_RE = re.compile(r"(?<!\w)(?:\+?\d[\d()\-\s]{7,}\d)(?!\w)")
 
+# An IPv6 address contains no whitespace, so app/privacy/streaming.py's second
+# property covers it and BASE_SAFETY_MARGIN does not need to grow for its length.
+_IPV6_RE = re.compile(
+    r"(?<![:.\w])(?:"
+    r"(?:[0-9A-Fa-f]{1,4}:){7}[0-9A-Fa-f]{1,4}"
+    r"|(?:[0-9A-Fa-f]{1,4}:){1,7}:"
+    r"|(?:[0-9A-Fa-f]{1,4}:){1,6}:[0-9A-Fa-f]{1,4}"
+    r"|(?:[0-9A-Fa-f]{1,4}:){1,5}(?::[0-9A-Fa-f]{1,4}){1,2}"
+    r"|(?:[0-9A-Fa-f]{1,4}:){1,4}(?::[0-9A-Fa-f]{1,4}){1,3}"
+    r"|(?:[0-9A-Fa-f]{1,4}:){1,3}(?::[0-9A-Fa-f]{1,4}){1,4}"
+    r"|(?:[0-9A-Fa-f]{1,4}:){1,2}(?::[0-9A-Fa-f]{1,4}){1,5}"
+    r"|[0-9A-Fa-f]{1,4}:(?::[0-9A-Fa-f]{1,4}){1,6}"
+    r"|::(?:[0-9A-Fa-f]{1,4}:){0,6}[0-9A-Fa-f]{1,4}"
+    r")(?![:.\w])"
+)
+
+# China-specific identifiers. Until 2026-09-04 there were none, and the three
+# most common ones were caught only by accident: an ID card, a bank card and a
+# mainland mobile number are all long digit runs, so _PHONE_RE swallowed them
+# and reported every one as a PHONE. Coverage was real; the label was wrong,
+# which makes a privacy report describe something that did not happen. A
+# passport number fell through entirely -- eight digits, one short of _PHONE_RE.
+#
+# These must stay ahead of _PHONE_RE in _BASE_PATTERNS: patterns are applied in
+# order and the first to match owns the span, so the generic rule has to run
+# last or it takes the specific ones' matches and mislabels them again.
+_ID_CARD_CN_RE = re.compile(r"(?<!\d)[1-9]\d{5}(?:19|20)\d{2}(?:0[1-9]|1[0-2])(?:0[1-9]|[12]\d|3[01])\d{3}[\dXx](?!\d)")
+# The boundary is non-alphanumeric, not merely non-digit. `(?!\d)` is satisfied by
+# a letter, so this rule took the seventeen leading digits out of a credit code
+# ending in its checksum letter (91110108551385095Q) and reported a bank card.
+_BANK_CARD_RE = re.compile(r"(?<![A-Za-z0-9])\d{16,19}(?![A-Za-z0-9])")
+_MOBILE_CN_RE = re.compile(r"(?<!\d)1[3-9]\d{9}(?!\d)")
+# A letter plus eight digits is also the shape of an ordinary date-coded document
+# id -- E20260904, H20250101 -- and an adversarial pass found exactly that, so the
+# eight digits must not read as a date. The trade is deliberate and one-sided: a
+# passport number whose digits happen to spell a recent calendar date is rare, and
+# redacting every document reference of that shape corrupts text the model has to
+# reason about.
+_PASSPORT_CN_RE = re.compile(
+    r"(?<![A-Za-z0-9])[EGDSPH](?!(?:19|20)\d{2}(?:0[1-9]|1[0-2])(?:0[1-9]|[12]\d|3[01])(?![A-Za-z0-9]))\d{8}(?![A-Za-z0-9])"
+)
+# Unified social credit code: 18 characters from a checksum alphabet that omits
+# I, O, Z, S and V, with the six-digit administrative division in the middle.
+_USCC_RE = re.compile(r"(?<![A-Za-z0-9])[0-9A-HJ-NPQRTUWXY]{2}\d{6}[0-9A-HJ-NPQRTUWXY]{10}(?![A-Za-z0-9])")
+
 _BASE_PATTERNS: list[tuple[str, re.Pattern[str]]] = [
     ("SECRET", _SECRET_PATTERNS[2]),
     ("SECRET", _SECRET_PATTERNS[1]),
@@ -48,9 +93,19 @@ _BASE_PATTERNS: list[tuple[str, re.Pattern[str]]] = [
     ("URL", _URL_RE),
     ("EMAIL", _EMAIL_RE),
     ("IP", _IPV4_RE),
+    ("IP", _IPV6_RE),
     ("UUID", _UUID_RE),
     ("PATH", _WINDOWS_PATH_RE),
     ("PATH", _UNIX_PATH_RE),
+    ("ID_CARD_CN", _ID_CARD_CN_RE),
+    # BANK_CARD ahead of USCC_CN: the credit-code alphabet includes digits, so an
+    # 18-digit order number matched USCC first and was reported as a company
+    # registration. A real credit code carries letters in its organization part
+    # and so is not touched by the digits-only rule above it.
+    ("BANK_CARD", _BANK_CARD_RE),
+    ("USCC_CN", _USCC_RE),
+    ("MOBILE_CN", _MOBILE_CN_RE),
+    ("PASSPORT_CN", _PASSPORT_CN_RE),
     ("PHONE", _PHONE_RE),
 ]
 

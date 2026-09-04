@@ -1,11 +1,11 @@
 import logging
-import re
 import time
 from functools import lru_cache
 from hashlib import md5
 from urllib.parse import urlparse
 
 from app.core.config import get_settings
+from app.privacy.text import INPUT_KINDS, inspect_text
 from app.services.observability.log_safety import question_ref
 from app.tools.web.search import search_web
 
@@ -35,39 +35,27 @@ except ImportError:
 
 
 def _sanitize_query(question: str) -> str:
-    """
-    Remove sensitive information from query before web search.
+    """Redact the query before it leaves for a search engine.
 
-    Args:
-        question: User query that may contain sensitive information
+    This used to be a seventh pattern set of its own -- SSN, email, IPv4, three
+    `key=value` shapes and a 13-19 digit run -- which made it the weakest of the
+    four in the repository. It missed a mainland mobile number (eleven digits,
+    under its card threshold), an API key, a Bearer token, an internal URL and a
+    Windows path, all of which the shared redactor catches.
 
-    Returns:
-        Sanitized query with sensitive patterns replaced by [REDACTED]
+    It never leaked, because `privacy_permission` inspects the question first and
+    this only ever saw text that had already been through the same patterns. That
+    is the problem with keeping it: it read like the defence on this boundary
+    while the actual defence was somewhere else, so weakening the real one would
+    have shown up here as nothing at all.
+
+    Search engines are outside any agreement this system has, so the boundary is
+    worth a second pass -- just not a second definition of what is sensitive.
     """
+
     if not question:
         return question
-
-    sanitized = question
-
-    # Define sensitive patterns
-    patterns = [
-        (r"\b\d{3}-\d{2}-\d{4}\b", "[REDACTED_SSN]"),  # SSN
-        (r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b", "[REDACTED_EMAIL]"),  # Email
-        (r"\b\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\b", "[REDACTED_IP]"),  # IP address
-        (r"password\s*[=:]\s*\S+", "password=[REDACTED]"),  # Password
-        (r"token\s*[=:]\s*\S+", "token=[REDACTED]"),  # Token
-        (r"api[_-]?key\s*[=:]\s*\S+", "api_key=[REDACTED]"),  # API key
-        (r"\b\d{13,19}\b", "[REDACTED_CARD]"),  # Credit card numbers (13-19 digits)
-    ]
-
-    for pattern, replacement in patterns:
-        sanitized = re.sub(pattern, replacement, sanitized, flags=re.IGNORECASE)
-
-    # Log if sanitization occurred
-    if sanitized != question:
-        logger.warning("Query sanitized: removed sensitive information before web search")
-
-    return sanitized
+    return inspect_text(question, kinds=INPUT_KINDS).text
 
 
 # Simple in-memory cache for web search results

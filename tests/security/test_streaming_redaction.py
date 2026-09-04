@@ -26,6 +26,16 @@ _SECRETS = [
     "Bearer eyJhbGciOiJIUzI1NiJ9.payload.signature",
     "contact me at alice@example.com",
     "the server is 192.168.1.42",
+    # Added with the China-specific patterns on 2026-09-04. None of these
+    # contains whitespace, so the module docstring's second property is what
+    # covers them and BASE_SAFETY_MARGIN did not have to grow -- but that is an
+    # argument, and this is the check. An IPv6 address is the longest thing the
+    # redactor now matches, at 39 characters.
+    "the host is 2001:0db8:85a3:0000:0000:8a2e:0370:7334",
+    "身份证 110101199003072316",
+    "手机 13812345678",
+    "卡号 6222021234567890123",
+    "统一社会信用代码 91310000MA1FL0000X",
 ]
 
 

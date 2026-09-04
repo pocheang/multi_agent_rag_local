@@ -7,7 +7,22 @@ from collections.abc import Iterable
 from app.privacy.models import PrivacyFinding, TextPrivacyResult
 from app.services.security.outbound_redaction import redact_sensitive_text
 
-PII_KINDS = frozenset({"EMAIL", "PHONE", "IP", "UUID", "PATH"})
+# A kind absent from this set is filtered out of `allowed_kinds` and its pattern
+# never runs, so adding one to outbound_redaction.py is only half the change.
+PII_KINDS = frozenset(
+    {
+        "EMAIL",
+        "PHONE",
+        "IP",
+        "UUID",
+        "PATH",
+        "ID_CARD_CN",
+        "USCC_CN",
+        "BANK_CARD",
+        "MOBILE_CN",
+        "PASSPORT_CN",
+    }
+)
 SECRET_KINDS = frozenset({"SECRET"})
 INPUT_KINDS = PII_KINDS | SECRET_KINDS | frozenset({"URL", "CUSTOM"})
 OUTPUT_KINDS = PII_KINDS | SECRET_KINDS | frozenset({"CUSTOM"})

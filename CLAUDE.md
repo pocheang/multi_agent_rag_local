@@ -210,13 +210,79 @@ PipelineResult → returned to caller
    evidence and hedges the ones under 0.22. It skips sentences that make no claim, which is
    not a nicety: it once counted a bare `[1]` as a sentence, found it unsupported, and
    hedged the attribution instead of the claim.
-4. **Safety checks**: Two independent regex redaction paths, with different pattern sets.
-   `app/services/answer_safety.py` runs on every finalized answer and covers OpenAI-style
-   keys, AWS access key ids, private-key headers, and `password=`/`token=` assignments;
-   it is gated by `ANSWER_SAFETY_SCAN_ENABLED`. `app/agents/validation/rules.py`
-   additionally matches SSN, credit-card, email and phone patterns, and runs inside the
-   validation cascade reached through the verifier. There is no content-moderation/toxicity
-   filter and no bias-detection implementation.
+4. **Safety checks**: one pattern set, `app/services/security/outbound_redaction.py`,
+   enforced at three points. Matches become stable `<KIND_n>` tokens, so the same value
+   twice in one text gets the same token and the model can still reason about "that
+   number" — and the counts returned to the caller never carry the matched value.
+
+   | boundary | where | default |
+   |---|---|---|
+   | the question | `privacy_permission` node, `inspect_input` | mandatory, no `on_timeout` |
+   | LLM + embedding egress | the model wrapper, `redact_messages_for_provider`, external providers only | `OUTBOUND_LLM_REDACTION_ENABLED` / `..._EMBEDDING_...`, both true |
+   | the answer | `output_filter` node, `filter_output` | a `MANDATORY_STAGES` member |
+
+   `app/services/answer_safety.py` (OpenAI-style keys, AWS key ids, private-key headers,
+   `password=`/`token=`) is not a rival set: `filter_output` composes it with the shared
+   one. `app/agents/validation/rules.py` does keep its own SSN/credit-card/email/phone
+   patterns, and runs inside the validation cascade reached through the verifier.
+
+   **China-specific identifiers were added on 2026-09-04, and there were none before
+   that.** Resident ID cards, bank cards and mainland mobile numbers were caught anyway —
+   all three are long digit runs, so the generic `PHONE` rule swallowed them — but every
+   one was *reported* as a phone number, which makes a privacy finding describe something
+   that did not happen, and a passport number (eight digits, one under that rule's
+   minimum) was reported as nothing at all. `ID_CARD_CN`, `MOBILE_CN`, `BANK_CARD`,
+   `PASSPORT_CN` and `USCC_CN` now match ahead of `PHONE`, which is load-bearing: patterns
+   apply in order and the first to match owns the span, so a specific rule placed after
+   the generic one is indistinguishable from not having written it. IPv6 landed in the
+   same pass; only IPv4 had been covered.
+
+   Order matters *among* the specific rules too, and the first attempt got it wrong in
+   both directions. `USCC_CN` ahead of `BANK_CARD` claimed every 18-digit order number as
+   a company registration, because the credit-code alphabet includes digits; putting the
+   digits-only rule first fixes it, since a real credit code carries letters. Then
+   `BANK_CARD`'s right boundary of `(?!\d)` turned out to be satisfied by a *letter*, so
+   it took the seventeen leading digits out of a credit code ending in its checksum letter
+   — the boundary has to be non-alphanumeric. And `[EGDSPH]` plus eight digits is also how
+   a dated document id is written (`E20260904`), so the passport rule excludes eight
+   digits that read as a calendar date: a passport number that happens to spell a recent
+   date is rare, and redacting every document reference of that shape corrupts text the
+   model has to reason about.
+
+   All three came out of an adversarial false-positive pass, and none of them would have.
+   The first such pass reused inputs already known to be clean, so it reported zero
+   findings and could not have reported anything else — the same defect as a secret
+   scanner nobody has watched fail. `tests/security/test_chinese_pii_redaction.py` pins
+   each one.
+
+   **A kind must be added in two places.** `redact_sensitive_text` skips anything outside
+   `allowed_kinds`, and those sets are `PII_KINDS`/`INPUT_KINDS`/`OUTPUT_KINDS` in
+   `app/privacy/text.py`. A pattern added only to `outbound_redaction.py` compiles, reads
+   correctly and matches nothing; `test_every_pattern_kind_is_reachable` is the guard.
+   `URL` is the one kind deliberately in `INPUT_KINDS` and not `OUTPUT_KINDS` — an answer
+   keeps its links.
+
+   `app/agents/rag/web.py::_sanitize_query` used to be a fourth set, seven hand-written
+   patterns, and the weakest: it missed a mainland mobile number (eleven digits, under its
+   13-digit card threshold), an API key, a Bearer token, an internal URL and a Windows
+   path. It never leaked, because `privacy_permission` redacts the question before the web
+   retriever sees it — which is exactly why it was worth deleting rather than extending. A
+   boundary that only appears to be guarded is worse than an unguarded one: weakening the
+   layer that does the work would have shown up there as nothing at all. It now calls the
+   shared redactor, and the second pass is kept because a search engine is outside every
+   agreement this system has.
+
+   **Still not covered, deliberately or otherwise**: names, street addresses, licence
+   plates; no content-moderation/toxicity filter and no bias detection. Uploaded documents
+   are never inspected — `app/services/documents/` calls nothing from `app/privacy/` — so
+   chunks sit raw in ChromaDB, BM25 and on disk, and `mask_evidence` redacts at *read*
+   time. That is defensible (it is the user's own document, in their own tenant, and they
+   have to be able to read it back) but it means a scope-resolution bug exposes original
+   text rather than redacted text. And `privacy_permission` inspects `request.question`
+   only: the API persists the raw query into session history and feeds it back as
+   conversation on the next turn, so input redaction is per-turn. Egress is still covered
+   by the wrapper above; what makes this worth watching is `QUERY_REWRITE_WITH_LLM`, false
+   today, which is what would let that history reach a retrieval query.
 
 **Skills shape the answer** (wired 2026-08-31). The router picks one of nine skills per
 query and `RouteDecision.skill` has always carried the choice, but nothing read it:
@@ -1243,7 +1309,7 @@ verified (60 inputs and 336 pins respectively, zero differences).
 
 `tests/` was cleared ahead of the v0.7 rewrite and is being rebuilt incrementally: each bug
 fix lands with the regression test that would have caught it, rather than as a separate
-back-filling effort. As of 2026-09-04 there are 1252 tests covering the chat round trip,
+back-filling effort. As of 2026-09-04 there are 1305 tests covering the chat round trip,
 conversation context, graph routing, clarification, the async load guard, engine reuse,
 answer safety, reader-facing citation numbering, stage-timeout degradation, the governed
 tool stack with its multi-step loop and approve-then-resume cycle, retrieval
@@ -1261,7 +1327,10 @@ storage, each characterized against its old implementation before being split, a
 regular expressions that backtracked super-linearly over user-supplied text, the
 multimodal source that had never had anything to retrieve, and the sensitive-content gate,
 whose suite is mostly negative assertions because a scanner reports PASS just as readily
-when its checks match nothing.
+when its checks match nothing, and the China-specific PII patterns that had never existed --
+pinned by what each identifier is *called*, not only that it is caught, since three of them
+were already caught under the wrong name -- and by an adversarial false-positive pass, which is
+where all three defects in that change were found.
 
 **That count is not 1236 independent assertions, and the number before it was stale.** Two
 guards are parametrized one case per module — the audit-action scan over `app/` (376) and
@@ -1273,7 +1342,7 @@ covered the day it is added, where one test looping inside a single assertion re
 first offender and stops — but it does mean this total is not comparable across the change
 that introduced them.
 
-`tests/security/` (682 of those, 376 being the per-module audit-action scan) pins the
+`tests/security/` (735 of those, 376 being the per-module audit-action scan) pins the
 user-data isolation invariants — see
 `docs/superpowers/plans/2026-08-29-user-data-isolation.md`. That plan is complete
 (phases 0-4) and all 8 of its `xfail(strict=True)` markers are cleared; keep using the same
