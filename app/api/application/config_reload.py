@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import logging
 
+from app.agents.validation.public import clear_validation_caches
 from app.api import dependencies as api_dependencies
 from app.core.config import Settings, get_settings, reload_settings
 from app.core.config_schema import describe, validate_values
@@ -46,6 +47,10 @@ def apply_config_reload() -> Settings:
     # a module global, so a reload that left it alone would silently keep the old
     # TTL -- and the admin page would show the new one as though it had taken.
     clear_retrieval_cache()
+    # Same shape as the retrieval cache above: the validation cascade bakes
+    # every CASCADE_* value in at construction and lives in a module global,
+    # and the NLI model is lru_cache'd on NLI_MODEL_NAME.
+    clear_validation_caches()
     Neo4jClient.close_shared_driver()
     reset_bulkheads()
     return new_settings

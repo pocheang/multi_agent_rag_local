@@ -114,3 +114,38 @@ def test_no_editable_field_is_read_through_a_frozen_settings_object():
         "these admin-editable settings are read from a Settings frozen at import, "
         "so a console edit would report success and change nothing until restart:\n  " + "\n  ".join(sorted(offenders))
     )
+
+
+# --- the reload must reach the caches built from Settings --------------------
+
+
+def test_reloading_rebuilds_the_validation_cascade():
+    """`_get_validation_cascade` caches a module global that bakes in every
+    CASCADE_* value at construction, and the NLI model is lru_cache'd on
+    NLI_MODEL_NAME. Nothing else rebuilds either, so before this a reload changed
+    the numbers the admin page reports and nothing the cascade runs on.
+
+    That is why CASCADE_* was kept out of config_schema.py; clearing these is the
+    prerequisite for that decision being reconsidered on its own merits rather
+    than blocked by a stale cache.
+    """
+
+    from app.agents.validation import public
+
+    first = public._get_validation_cascade()
+    assert public._get_validation_cascade() is first, "the cascade is supposed to be cached"
+
+    public.clear_validation_caches()
+
+    assert public._get_validation_cascade() is not first
+
+
+def test_the_reload_sequence_clears_the_validation_caches():
+    """The admin endpoint and the configuration-centre watcher share one
+    definition of "reloaded"; a cache cleared by only one of them would be a
+    second, quieter definition."""
+
+    source = (REPO / "app" / "api" / "application" / "config_reload.py").read_text(encoding="utf-8")
+    sequence = source.split("def apply_config_reload(", 1)[1].split("\ndef ", 1)[0]
+
+    assert "clear_validation_caches()" in sequence

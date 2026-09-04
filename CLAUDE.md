@@ -260,11 +260,14 @@ PipelineResult → returned to caller
    name that claims a check happened when it did not is the failure this file keeps
    describing. Shipping a Chinese-capable NLI model is a separate evaluation project.
 
-   `CASCADE_*` is deliberately **not** in `config_schema.py`: `_get_validation_cascade`
-   caches a module-global `ValidationCascade` that `apply_config_reload` does not clear, so
-   an admin edit would report success and change nothing until restart. That is a genuine
-   exception to the audited `requires_restart=False` claim, and clearing the singleton is
-   the prerequisite for ever exposing these.
+   `CASCADE_*` is not in `config_schema.py`, but the reason changed on 2026-09-04. It
+   used to be that `_get_validation_cascade` caches a module-global `ValidationCascade`
+   that `apply_config_reload` did not clear, so an admin edit would have reported success
+   and changed nothing until restart. `clear_validation_caches()` now runs in the reload
+   sequence -- dropping the cascade *and* the `lru_cache`d NLI model, which is keyed on
+   `NLI_MODEL_NAME` -- so that blocker is gone and whether to expose these is now an
+   ordinary decision about what an operator should be able to change mid-flight, not a
+   workaround for a stale cache.
 4. **Safety checks**: one pattern set, `app/services/security/outbound_redaction.py`,
    enforced at three points. Matches become stable `<KIND_n>` tokens, so the same value
    twice in one text gets the same token and the model can still reason about "that
@@ -1549,7 +1552,7 @@ verified (60 inputs and 336 pins respectively, zero differences).
 
 `tests/` was cleared ahead of the v0.7 rewrite and is being rebuilt incrementally: each bug
 fix lands with the regression test that would have caught it, rather than as a separate
-back-filling effort. As of 2026-09-04 there are 1404 tests covering the chat round trip,
+back-filling effort. As of 2026-09-04 there are 1406 tests covering the chat round trip,
 conversation context, graph routing, clarification, the async load guard, engine reuse,
 answer safety, reader-facing citation numbering, stage-timeout degradation, the governed
 tool stack with its multi-step loop and approve-then-resume cycle, retrieval

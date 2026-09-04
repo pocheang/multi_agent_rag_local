@@ -22,6 +22,7 @@ from app.agents.validation.citations import citation_completeness as _validate_c
 from app.agents.validation.deep import deep_validation_score as _llm_deep_validation
 from app.agents.validation.fact_verification import AnswerVerificationResult
 from app.agents.validation.models import CascadeLevel, RuleBasisIssue, ValidationCascadeResult
+from app.agents.validation.nli import load_nli_cross_encoder
 from app.agents.validation.rules import (
     assess_answer_quality as _assess_answer_quality,
 )
@@ -58,6 +59,27 @@ def _get_validation_cascade() -> ValidationCascade:
         }
     )
     return _validation_cascade
+
+
+def clear_validation_caches() -> None:
+    """Drop what was built from the old Settings, so a reload reaches this module.
+
+    Two process-wide caches sit between `Settings` and answer validation, and
+    neither is rebuilt by anything else. `_validation_cascade` bakes in every
+    `CASCADE_*` value at construction, and `load_nli_cross_encoder` is
+    `lru_cache`d on `NLI_MODEL_NAME`. Without this, a reload changed the numbers
+    the admin page reports and nothing the cascade actually runs on -- which is
+    the failure `apply_config_reload` exists to prevent, and the reason
+    `CASCADE_*` was kept out of `config_schema.py`.
+
+    Cheap to clear: the cascade is a handful of validator objects, and the NLI
+    model reloads lazily from local files on the next answer that needs it.
+    """
+
+    global _cascade_load_attempted, _validation_cascade
+    _validation_cascade = None
+    _cascade_load_attempted = False
+    load_nli_cross_encoder.cache_clear()
 
 
 async def validate_answer(
@@ -186,6 +208,7 @@ def _validation_method(cascade: ValidationCascadeResult) -> str:
 
 __all__ = [
     "_assess_answer_quality",
+    "clear_validation_caches",
     "_get_validation_cascade",
     "_llm_deep_validation",
     "_quick_validation",
