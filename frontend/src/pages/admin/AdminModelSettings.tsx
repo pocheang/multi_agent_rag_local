@@ -145,6 +145,27 @@ export function AdminModelSettings({
             <div className="ops-kpi-card"><span>Embedding</span><strong>{supportsEmbeddings ? modelSettings.embedding_model || "-" : "Existing pipeline"}</strong></div>
           </div>
 
+          {modelSettings.environment_pinned && (
+            <div className="admin-model-banner admin-model-banner-warning" role="status">
+              <span className="admin-model-banner-mark">!</span>
+              <div>
+                <strong>
+                  {t(
+                    "admin.ui.modelSettingsPinned",
+                    "These settings are saved but not in effect",
+                  )}
+                </strong>
+                <p>
+                  {modelSettings.pinned_reason ||
+                    t(
+                      "admin.ui.modelSettingsPinnedReason",
+                      "The process environment pins the model backend; this configuration takes effect once that is unset.",
+                    )}
+                </p>
+              </div>
+            </div>
+          )}
+
           <div className="admin-model-banner">
             <span className="admin-model-banner-mark">API</span>
             <div>
@@ -156,7 +177,12 @@ export function AdminModelSettings({
           <div className="ops-two-col admin-section-head-offset">
             <label className="ops-auto-refresh">
               <input type="checkbox" checked={Boolean(modelSettings.enabled)} onChange={(event) => onPatch({ enabled: event.target.checked })} />
-              <span>{t("admin.ui.enableGlobalModelOverride", "Enable global model override")}</span>
+              <span>
+                {t(
+                  "admin.ui.enableGlobalModelOverride",
+                  "Enable global model override (replaces every user's own API settings)",
+                )}
+              </span>
             </label>
             <AdminFormSelect label={t("admin.ui.backendType", "Backend type")} value={provider} onChange={(value) => changeProvider(value as ModelProvider)} options={providerOptions} />
           </div>

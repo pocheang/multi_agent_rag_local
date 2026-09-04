@@ -525,6 +525,27 @@
   background: color-mix(in srgb, var(--admin-info) 7%, var(--admin-surface));
 }
 
+/* The warning variant of the banner above: settings that are stored but inert
+   because the process environment pins the model backend. It reuses the base
+   banner's box and only swaps the accent, so the two cannot drift apart in
+   spacing or radius -- and it exists at all because a `--warning` variant that
+   is emitted by the component but never declared in CSS renders as the ordinary
+   informational banner, which is the class-name drift this project has already
+   shipped once (see CLAUDE.md, Frontend styling). */
+.admin-model-banner-warning {
+  border-left-color: var(--warning);
+  background: color-mix(in srgb, var(--warning) 8%, var(--admin-surface));
+}
+
+.admin-model-banner-warning .admin-model-banner-mark {
+  border-color: var(--warning);
+  color: var(--warning);
+}
+
+.admin-model-banner-warning strong {
+  color: var(--admin-text-primary);
+}
+
 .admin-model-banner-mark {
   flex: 0 0 auto;
   padding: 4px 7px;

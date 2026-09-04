@@ -321,7 +321,13 @@ class ModelCatalogResponse(BaseModel):
 
 class AdminModelSettings(BaseModel):
     enabled: bool = Field(
-        default=False, description="Apply this global model config to users without personal overrides"
+        default=False,
+        # Says what it does, not what would be gentler. `get_chat_model` resolves
+        # `global_override or user_override`, so an enabled global config wins
+        # over a user's own -- their personal key stops being used and their
+        # queries bill the org's account. The old wording ("to users without
+        # personal overrides") described the opposite.
+        description="Apply this global model config to every user, overriding their personal API settings",
     )
     provider: str = Field(
         default="local", description="API provider: local, openai, anthropic, deepseek, ollama, custom"
@@ -347,6 +353,13 @@ class AdminModelSettingsView(BaseModel):
     max_tokens: int = Field(default=2048, ge=256, le=131072)
     embedding_reindexed: bool = False
     records_reindexed: int = 0
+    # Whether these settings are actually in effect. `MODEL_BACKEND=local` in the
+    # real process environment makes `get_chat_model` discard the global override
+    # entirely (`_local_backend_forced`), so without this the page could report a
+    # saved OpenAI configuration while every answer came from the offline stand-in
+    # -- a page describing something other than what runs.
+    environment_pinned: bool = False
+    pinned_reason: str = ""
 
 
 class AdminModelSettingsResponse(BaseModel):

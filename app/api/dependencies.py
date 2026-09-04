@@ -364,5 +364,27 @@ def _api_settings_view(settings_data: UserApiSettings) -> UserApiSettingsView:
 
 
 def _admin_model_settings_view(settings_data: dict[str, Any]) -> AdminModelSettingsResponse:
-    """Convert model settings to admin view model."""
-    return AdminModelSettingsResponse(ok=True, settings=public_global_model_settings(settings_data))
+    """Convert model settings to admin view model, saying whether they are in effect.
+
+    A deployment can pin the offline backend with `MODEL_BACKEND=local` as a real
+    environment variable, and `get_chat_model` then discards the global override
+    outright. Reporting only the stored values would let this page show a saved
+    OpenAI configuration, with a success toast and an audit row behind it, while
+    every answer still came from `LocalEvidenceChatModel`.
+
+    The configuration page next door already refuses a write to a value the
+    environment pins. This one accepts the write -- unlike a configuration-centre
+    write, it persists correctly and takes effect the moment the pin is removed --
+    and reports that it is currently inert instead.
+    """
+
+    from app.services.models.runtime import _local_backend_forced
+
+    view = public_global_model_settings(settings_data)
+    if _local_backend_forced():
+        view["environment_pinned"] = True
+        view["pinned_reason"] = (
+            "MODEL_BACKEND=local is set in the process environment, which overrides these "
+            "settings; they are stored and will take effect once it is unset."
+        )
+    return AdminModelSettingsResponse(ok=True, settings=view)

@@ -394,6 +394,11 @@ export type AdminModelSettingsView = {
   temperature: number;
   max_tokens: number;
   embedding_reindexed?: boolean;
+  // Whether these settings are actually in effect. MODEL_BACKEND=local in the
+  // process environment makes the backend discard the global override, so a
+  // saved configuration can be stored and inert at the same time.
+  environment_pinned?: boolean;
+  pinned_reason?: string;
   records_reindexed?: number;
 };
 

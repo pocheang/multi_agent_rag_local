@@ -1070,7 +1070,26 @@ out of the evidence sections of its own prompt. Every quality number in this fil
 accuracy, citation completeness, P@5 — describes the LLM path and means nothing on this one.
 `MODEL_BACKEND=local` in the real process environment additionally **overrides persisted
 admin model settings** (`_local_backend_forced`), so a deployment that sets it cannot be
-talked out of it from the admin UI.
+talked out of it from the admin UI -- and since 2026-09-04 the UI says so. `GET/POST
+/admin/model-settings` return `environment_pinned` and a reason, and the page leads with a
+warning banner. Without it an admin could save an OpenAI key and model, get a success
+response, see the values echoed back and an audit row behind them, while every answer still
+came from `LocalEvidenceChatModel` -- the same "reports something other than what runs"
+failure as the old `advanced-rag/config` endpoint.
+
+The write is **accepted**, not refused, which is the one place this differs from
+`POST /admin/config/values` next door. That endpoint refuses a write to an
+environment-pinned value because the write would go to a layer the process does not read;
+this one persists correctly and takes effect the moment the pin is removed, so refusing it
+would block legitimate preparation.
+
+The same pass fixed a description that promised the opposite of the code. The `enabled`
+flag was documented as applying the global config "to users without personal overrides",
+but `get_chat_model` resolves `global_override or user_override` -- an enabled global
+config wins over *every* user's own settings, so their personal key stops being used and
+their queries bill the org's account. An admin ticking that box on the old promise would
+have moved everyone's traffic silently. The wording now says what it does, in the schema
+and on the checkbox.
 
 Having no model to hide behind is why this is the path where prompt scaffolding leaks into
 prose. It has narrated itself, echoed `ContextBuilder`'s `[E1] document=…; layer=…` header
@@ -1576,7 +1595,7 @@ verified (60 inputs and 336 pins respectively, zero differences).
 
 `tests/` was cleared ahead of the v0.7 rewrite and is being rebuilt incrementally: each bug
 fix lands with the regression test that would have caught it, rather than as a separate
-back-filling effort. As of 2026-09-04 there are 1407 tests covering the chat round trip,
+back-filling effort. As of 2026-09-04 there are 1412 tests covering the chat round trip,
 conversation context, graph routing, clarification, the async load guard, engine reuse,
 answer safety, reader-facing citation numbering, stage-timeout degradation, the governed
 tool stack with its multi-step loop and approve-then-resume cycle, retrieval
