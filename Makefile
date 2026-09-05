@@ -60,6 +60,13 @@ lock:
 test:
 	conda run --no-capture-output -n rag-local pytest -q
 
+# The same suite with the optional packages CI does not install made
+# unimportable. A development machine accumulates pytesseract, pdfplumber and
+# sentence-transformers; CI installs none of them, so a test that touches one is
+# green here and red there, and only after a push. Run this before pushing.
+test-ci:
+	conda run --no-capture-output -n rag-local env PYTHONPATH=scripts pytest -q -p ci_import_environment
+
 lint:
 	conda run --no-capture-output -n rag-local ruff check .
 	conda run --no-capture-output -n rag-local ruff format --check .

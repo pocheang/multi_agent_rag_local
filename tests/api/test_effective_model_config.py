@@ -22,6 +22,9 @@ nothing.
 
 from __future__ import annotations
 
+import sys
+import types
+
 import pytest
 
 from app.core.config import get_settings
@@ -185,21 +188,102 @@ def test_the_backend_order_is_reported(monkeypatch):
     assert caption.metadata["order"] == "openai, ollama"
 
 
-def test_missing_tesseract_is_reported_as_unavailable(monkeypatch):
+def _pytesseract(monkeypatch, *, installed: bool):
+    """Control whether the package is importable, instead of inheriting it.
+
+    `_ocr` probes two independent things -- `import pytesseract`, then the binary
+    on PATH -- and a test that patches only the second inherits the first from
+    whatever machine it runs on. That is how `test_present_tesseract_is_active`
+    came to pass locally and fail in CI, which installs no pytesseract: the
+    import failed first and the status was `unavailable` before `shutil.which`
+    was ever consulted.
+    """
+
+    if installed:
+        monkeypatch.setitem(sys.modules, "pytesseract", types.ModuleType("pytesseract"))
+    else:
+        monkeypatch.delitem(sys.modules, "pytesseract", raising=False)
+        monkeypatch.setattr(sys, "meta_path", [_Uninstalled("pytesseract"), *sys.meta_path])
+
+
+class _Uninstalled:
+    """A finder that makes one package look absent, whatever is on disk."""
+
+    def __init__(self, name: str) -> None:
+        self._name = name
+
+    def find_spec(self, fullname, path=None, target=None):
+        if fullname == self._name:
+            raise ModuleNotFoundError(f"No module named {fullname!r}", name=fullname)
+        return None
+
+
+def test_a_missing_pytesseract_is_unavailable_and_says_which_half(monkeypatch):
+    """Two things can be missing and they need different remedies: install the
+    package, or put the binary on PATH. `source` is what tells them apart, and
+    asserting only `status` cannot -- both branches mention captioning."""
+
+    _pytesseract(monkeypatch, installed=False)
+
+    ocr = _by_component(monkeypatch)["ocr"]
+
+    assert ocr.status == "unavailable"
+    assert ocr.source == "pytesseract"
+
+
+def test_a_missing_binary_is_unavailable_and_says_so(monkeypatch):
     """The half that fails on a fresh machine, and the reason captioning matters."""
 
+    _pytesseract(monkeypatch, installed=True)
     monkeypatch.setattr("shutil.which", lambda _cmd: None)
 
     ocr = _by_component(monkeypatch)["ocr"]
 
     assert ocr.status == "unavailable"
+    assert ocr.source == "TESSERACT_CMD"
     assert "captioning" in ocr.detail
 
 
 def test_present_tesseract_is_active(monkeypatch):
-    """The positive direction, so the assertion above cannot pass by the probe
-    always failing."""
+    """The positive direction, so the assertions above cannot pass by the probe
+    always failing -- which is exactly what happened in CI."""
 
+    _pytesseract(monkeypatch, installed=True)
     monkeypatch.setattr("shutil.which", lambda _cmd: "/usr/bin/tesseract")
 
     assert _by_component(monkeypatch)["ocr"].status == "active"
+
+
+def test_an_external_caption_backend_needs_the_masking_detector(monkeypatch):
+    """Captioning through an external backend masks the image first, and the
+    detector is Tesseract -- so the two image components now share a dependency.
+    Reported rather than discovered when an image fails to be described."""
+
+    _pytesseract(monkeypatch, installed=False)
+
+    caption = _by_component(
+        monkeypatch,
+        image_caption_enabled=True,
+        image_caption_backend="openai",
+        openai_api_key="present",
+    )["image_caption"]
+
+    assert caption.status == "degraded"
+    assert caption.source == "TESSERACT_CMD"
+    assert "masked" in caption.detail
+
+
+def test_a_local_caption_backend_does_not_need_it(monkeypatch):
+    """The negative direction: masking is an egress control, and ollama is local,
+    so a missing detector must not degrade it."""
+
+    _pytesseract(monkeypatch, installed=False)
+
+    caption = _by_component(
+        monkeypatch,
+        image_caption_enabled=True,
+        image_caption_backend="ollama",
+        ollama_vision_model="llava:7b",
+    )["image_caption"]
+
+    assert caption.status == "active"

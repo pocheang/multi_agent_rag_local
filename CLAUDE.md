@@ -45,8 +45,23 @@ Testing Strategy below.
 **Tests and lint**
 ```bash
 make test                           # pytest -q
+make test-ci                        # the same suite, with CI's optional packages hidden
 make lint                           # ruff check . && ruff format --check .
 ```
+
+**`make test-ci` before pushing.** A development machine accumulates optional
+packages that `requirements/ci.txt` does not install -- pytesseract, pdfplumber,
+sentence-transformers -- and a test that touches one inherits it silently, so it
+is green here and red there, and only after a push.
+`scripts/ci_import_environment.py` makes that set unimportable for one run. It
+blocks at the `sys.meta_path` finder rather than by replacing `__import__`,
+because a genuinely absent package is still satisfied from `sys.modules` and a
+test that injects a fake there must keep working -- the first version got that
+wrong and reported a failure CI does not have, which is worse than no simulation:
+it sends you to fix code that is not broken.
+`tests/core/test_ci_import_environment.py` checks the blocked set against
+`requirements/ci.txt` in both directions, so it cannot claim CI lacks something
+CI installs, and cannot shrink to nothing and keep reporting success.
 
 **Optional services and offline evaluation**
 ```bash
