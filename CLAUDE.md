@@ -35,10 +35,10 @@ ruff check .                        # Lint check
 ruff format .                       # Format code
 ```
 
-Note (2026-08-28, counts refreshed 2026-09-04): `tests/` and `scripts/` were cleared ahead
-of the v0.7 rewrite. `scripts/` was down to one file then and holds six now — `audit/frontend_audit.py`,
-`check_lock_wheels.py`, `check_sensitive.py`, `create_admin.py`, `eval_retrieval.py`,
-`verify_config_centre.py` — each added with the thing it verifies, and still no
+Note (2026-08-28, counts refreshed 2026-09-05): `tests/` and `scripts/` were cleared ahead
+of the v0.7 rewrite. `scripts/` was down to one file then and holds seven now — `audit/frontend_audit.py`,
+`check_lock_wheels.py`, `check_sensitive.py`, `ci_import_environment.py`, `create_admin.py`,
+`eval_retrieval.py`, `verify_config_centre.py` — each added with the thing it verifies, and still no
 `scripts/init_db.py`. `tests/` is being rebuilt incrementally alongside bug fixes — see
 Testing Strategy below.
 
