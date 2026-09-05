@@ -66,22 +66,3 @@ class ImageProcessor:
         except Exception:
             logger.exception(f"Error indexing image {image.image_id}")
             raise
-
-
-def _image_media_type(extension: str) -> str:
-    return {
-        "jpg": "image/jpeg",
-        "jpeg": "image/jpeg",
-        "png": "image/png",
-        "webp": "image/webp",
-        "tif": "image/tiff",
-        "tiff": "image/tiff",
-    }.get(str(extension or "").lower(), "application/octet-stream")
-
-
-def _image_extension(media_type: str) -> str:
-    return {
-        "image/jpeg": "jpg",
-        "image/webp": "webp",
-        "image/tiff": "tiff",
-    }.get(str(media_type or "").lower(), "png")

@@ -39,6 +39,30 @@ _LOW_SUPPORT_PREFIX = "\u57fa\u4e8e\u5f53\u524d\u53ef\u7528\u8bc1\u636e\uff0c"
 _URL_RE = re.compile(r"(?:https?://|www\.)\S+")
 """A dot inside a URL is not a sentence boundary."""
 
+# Anchored on a non-alphanumeric boundary, and longest-first so "pp." wins over
+# "p.". Without the lookbehind these were plain substrings: `"p."` matched inside
+# "setup.", `"ed."` inside "used." / "based." / "updated." / "required.", `"no."`
+# inside "casino.". Those are ordinary English sentence endings, so the sentence
+# did not split there -- a whole paragraph was scored as one claim -- and the
+# offsets shifted, which is the other half of the bug below.
+_ABBREVIATION_RE = re.compile(
+    "(?<![A-Za-z0-9])(?:" + "|".join(re.escape(a) for a in sorted(_ABBREVIATIONS, key=len, reverse=True)) + ")",
+    re.IGNORECASE,
+)
+
+# One character, so protection is length-preserving and an offset in the
+# protected string is the same offset in the original. It used to be "<ABBR>",
+# six characters replacing one, while a comment beside the offsets asserted the
+# substitution was the same length -- and `apply_sentence_grounding` splices its
+# edits into the *raw* answer by those offsets. Measured on
+# "Access is based. The retention window is ninety days. Backups run nightly."
+# the hedge landed five characters into the last sentence:
+# "... days. Backu基于当前可用证据，Backups run nightly."
+#
+# U+E000 is the first Private Use Area code point: it has no meaning, no
+# renderer will produce it, and nothing upstream can legitimately contain it.
+_ABBR_DOT = chr(0xE000)
+
 
 def _tokenize(text: str) -> set[str]:
     return set(_TOKEN_RE.findall((text or "").lower()))
@@ -62,16 +86,16 @@ def _sentence_spans(text: str) -> list[tuple[int, int, str]]:
     if not raw_text.strip():
         return []
 
-    protected_text = raw_text
-    for abbr in _ABBREVIATIONS:
-        protected_text = protected_text.replace(abbr, abbr.replace(".", "<ABBR>"))
-        protected_text = protected_text.replace(abbr.upper(), abbr.upper().replace(".", "<ABBR>"))
+    # Case-insensitive and boundary-anchored, so "Dr." is protected (the old loop
+    # tried only the lower and upper forms, missing the ordinary capitalisation)
+    # and "based." is not (the old loop matched "ed." as a bare substring).
+    protected_text = _ABBREVIATION_RE.sub(lambda m: m.group(0).replace(".", _ABBR_DOT), raw_text)
     # A dot inside a URL is not a sentence boundary, and treating it as one does
     # not merely mis-split: the fragment after it scores as unsupported and gets
     # the hedge spliced into the middle of the link
     # (`https://x.基于当前可用证据，example/a`), which breaks the citation the
     # sentence was carrying. Same length substitution, so offsets are unaffected.
-    protected_text = _URL_RE.sub(lambda m: m.group(0).replace(".", "<ABBR>"), protected_text)
+    protected_text = _URL_RE.sub(lambda m: m.group(0).replace(".", _ABBR_DOT), protected_text)
 
     spans: list[tuple[int, int, str]] = []
     # A blank line always ends a sentence, whatever punctuation did or did not
@@ -89,10 +113,11 @@ def _sentence_spans(text: str) -> list[tuple[int, int, str]]:
         stripped = chunk.strip()
         if len(stripped) < 3:
             continue
-        # The offsets are valid because <ABBR> is the same length as the "." it
-        # replaced, so protection never shifts a position.
+        # The offsets are valid because `_ABBR_DOT` is one character, exactly
+        # like the "." it replaced, so protection never shifts a position. That
+        # sentence was here before and was false: the sentinel was "<ABBR>".
         start = match.start() + (len(chunk) - len(chunk.lstrip()))
-        spans.append((start, start + len(stripped), stripped.replace("<ABBR>", ".")))
+        spans.append((start, start + len(stripped), stripped.replace(_ABBR_DOT, ".")))
 
     return spans if spans else [(0, len(raw_text), raw_text.strip())]
 

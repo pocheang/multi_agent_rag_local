@@ -246,6 +246,32 @@ PipelineResult → returned to caller
    not a nicety: it once counted a bare `[1]` as a sentence, found it unsupported, and
    hedged the attribution instead of the claim.
 
+   **It spliced hedges into the middle of words until 2026-09-05.** The hedge is inserted
+   by *offset* into the raw answer, and the offsets are computed against a protected copy
+   in which dots that are not sentence boundaries are substituted out. Two things made
+   those offsets wrong. The sentinel was `"<ABBR>"` — six characters replacing one — beside
+   a comment asserting the substitution "never shifts a position"; it is `chr(0xE000)` now,
+   one character, and the comment is true. And abbreviations were matched as bare
+   substrings, so `"p."` matched inside "setup.", `"ed."` inside "used." / "based." /
+   "updated." / "required.", and `"no."` inside "casino." — ordinary English sentence
+   endings, which therefore did not split, and shifted every offset after them. Measured:
+
+   ```
+   in:  Access is based. The retention window is ninety days. Backups run nightly.
+   out: Access is based. The retention window is ninety days. Backu基于当前可用证据，Backups run nightly.
+   ```
+
+   The same loop tried only `abbr` and `abbr.upper()`, so "Dr." — how anyone actually
+   writes it — was the one form it did *not* protect. `_ABBREVIATION_RE` is anchored on a
+   non-alphanumeric boundary, longest-first so `"pp."` beats `"p."`, and case-insensitive.
+
+   This is the failure this file already described for URLs, reaching ordinary prose,
+   because the same substitution caused both. It was found by chasing a SonarCloud
+   `python:S1192` (`"<ABBR>"` duplicated four times) — the duplicated literal was not the
+   defect, but reading the four sites together is what exposed one that was.
+   `tests/services/test_sentence_grounding_offsets.py` pins it, and every assertion in it
+   was verified to fail against the previous commit.
+
    **The NLI stage had never run, and three separate defects meant turning it on would
    have been worse than leaving it off** (all fixed 2026-09-04). The switch was
    `CASCADE_ENABLE_LEVEL2`, defaulting false — and the numbering was itself wrong:
