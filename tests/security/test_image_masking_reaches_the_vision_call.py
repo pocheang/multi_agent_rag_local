@@ -30,6 +30,7 @@ from types import SimpleNamespace
 import pytest
 
 from app.ingestion.extraction import vision as vision_module
+from app.privacy import image_egress as egress_module
 from app.privacy.image_masking import ImageMaskingService, ImageMaskingUnavailable
 from app.privacy.models import SensitiveRegion
 
@@ -114,7 +115,15 @@ def _settings(**overrides):
 
 
 def _use_detector(monkeypatch, detector):
-    monkeypatch.setattr(vision_module, "ImageMaskingService", lambda: ImageMaskingService(detector=detector))
+    """Patch the shared helper, not each caller.
+
+    `app/privacy/image_egress.py` is the one place that decides what an external
+    provider may see, which is the property being tested -- a per-call-site fake
+    would pass while a second send path went uncovered, and that is exactly what
+    happened: `charts.py` was found this way.
+    """
+
+    monkeypatch.setattr(egress_module, "ImageMaskingService", lambda: ImageMaskingService(detector=detector))
 
 
 def _image_bytes_in(payload: dict) -> bytes:
@@ -214,3 +223,55 @@ def test_the_text_redactor_is_not_a_control_over_image_content():
     redacted = redact_messages_for_provider(json.loads(json.dumps(messages)), provider="openai")
 
     assert redacted[1]["content"][1]["image_url"]["url"].endswith(encoded)
+
+
+# --- the guard that would have found the second path ----------------------
+
+
+def test_every_module_that_sends_an_image_clears_it_first():
+    """The assertion that caught `charts.py`.
+
+    The first version of this fix covered `vision.py` and stopped there, and the
+    PDF loader's chart extractor -- `dispatch.py` -> `extract_charts_from_pdf` ->
+    `extract_chart_data_with_vision` -> OpenAI or Anthropic -- was still posting
+    raw image bytes. A boundary that only appears to be guarded is worse than an
+    unguarded one, so the property is checked over the whole tree rather than
+    asserted about the one module somebody remembered.
+
+    Both defaults are off (`IMAGE_CAPTION_ENABLED`, `PDF_ENABLE_CHART_EXTRACTION`),
+    which is why neither showed up as an incident, and is not a reason to leave
+    either uncovered.
+    """
+
+    from pathlib import Path
+
+    _PAYLOAD_MARKERS = ("image_url", '"type": "image"', '"images"')
+    offenders = []
+
+    for path in Path("app").rglob("*.py"):
+        source = path.read_text(encoding="utf-8")
+        if "b64encode" not in source:
+            continue
+        if not any(marker in source for marker in _PAYLOAD_MARKERS):
+            continue
+        if "bytes_for_external_provider" not in source:
+            offenders.append(str(path))
+
+    assert not offenders, f"these base64 an image into a provider payload without clearing it first: {offenders}"
+
+
+def test_the_guard_above_is_actually_looking_at_something():
+    """A scan that matches nothing reports PASS just as readily as one that
+    matches everything -- the lesson this repository records for its
+    sensitive-content gate. Two modules send images today."""
+
+    from pathlib import Path
+
+    senders = [
+        path
+        for path in Path("app").rglob("*.py")
+        if "b64encode" in path.read_text(encoding="utf-8")
+        and "bytes_for_external_provider" in path.read_text(encoding="utf-8")
+    ]
+
+    assert len(senders) >= 2, f"expected both send paths to be covered, found {senders}"

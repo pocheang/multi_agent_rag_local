@@ -1,57 +1,14 @@
 """Vision API utilities for image captioning."""
 
 import base64
-import hashlib
 import logging
 
 import httpx
 
-from app.privacy.image_masking import ImageMaskingService
-from app.privacy.models import ImageInput
-from app.services.security.outbound_redaction import is_external_provider, redact_messages_for_provider
+from app.privacy.image_egress import bytes_for_external_provider
+from app.services.security.outbound_redaction import redact_messages_for_provider
 
 logger = logging.getLogger(__name__)
-
-
-def _bytes_for_backend(img_bytes: bytes, backend: str) -> tuple[bytes, str]:
-    """The bytes this backend may see, and the reason when it may see none.
-
-    `redact_messages_for_provider` runs on the payload below and protects nothing
-    here: it is a *text* control, and the image travels as a base64 data URI it
-    correctly leaves byte-identical. So until 2026-09-05 a user's image went to
-    OpenAI exactly as uploaded, while `ImageMaskingService` -- a working
-    fail-closed control whose whole purpose is "OCR and every external VLM
-    consume only a safe derivative" -- sat unreachable behind
-    `ImageProcessor._masked_bytes`, a method on a class ingestion constructs but
-    never calls.
-
-    `is_external_provider` decides which backends are external, rather than a
-    second list here; it excludes ollama, which is a local endpoint. So a local
-    model still sees the original image, which is the same line
-    `redact_messages_for_provider` draws one layer up.
-
-    Fail-closed has a cost worth stating: the detector is Tesseract, so a machine
-    without it cannot inspect an image and therefore may not send one. On the
-    `auto` backend order that degrades to the local model. With
-    `IMAGE_CAPTION_BACKEND=openai` it means no caption -- which is the right
-    answer to "I cannot see what is in this image", and is reported by
-    `GET /admin/model-settings/effective`.
-    """
-
-    if not is_external_provider(backend):
-        return img_bytes, ""
-
-    result = ImageMaskingService().mask(
-        ImageInput(
-            image_id=hashlib.sha1(img_bytes).hexdigest()[:16],
-            content=img_bytes,
-            media_type="image/png",
-            processing_target="external",
-        )
-    )
-    if not result.safe_for_external or not result.content:
-        return b"", result.reason or result.status
-    return result.content, ""
 
 
 def vision_prompt() -> str:
@@ -151,7 +108,7 @@ def describe_image_with_vision(img_bytes: bytes, settings) -> dict:
     tried: list[dict] = []
 
     def _maybe_try(name: str) -> dict:
-        safe_bytes, blocked = _bytes_for_backend(img_bytes, name)
+        safe_bytes, blocked = bytes_for_external_provider(img_bytes, name)
         if blocked:
             return {"status": "image_masking_blocked", "caption": "", "model": name, "error": blocked}
         if name == "openai":

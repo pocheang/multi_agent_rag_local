@@ -8,7 +8,6 @@ from typing import Any, Literal
 from app.core.config import get_settings
 from app.domain.contracts import EvidenceItem
 from app.domain.knowledge import AccessScope
-from app.ingestion.embedding.visual import VisualEmbeddingProvider, build_visual_embedding_provider
 
 logger = logging.getLogger(__name__)
 
@@ -34,7 +33,7 @@ class RetrievalResult:
 class MultiModalRetriever:
     """Retrieve content across images and tables."""
 
-    def __init__(self, visual_embedding: VisualEmbeddingProvider | None = None):
+    def __init__(self):
         self.settings = get_settings()
         self.default_top_k = 10
 
@@ -45,7 +44,6 @@ class MultiModalRetriever:
         self.text_weight = getattr(self.settings, "text_weight", 0.4)
         self.image_weight = getattr(self.settings, "image_weight", 0.3)
         self.table_weight = getattr(self.settings, "table_weight", 0.3)
-        self.visual_embedding = visual_embedding or build_visual_embedding_provider(self.settings)
 
     async def retrieve(
         self,
@@ -183,57 +181,10 @@ class MultiModalRetriever:
                     )
                     retrieval_results.append(result)
 
-            visual_results = await self._retrieve_visual_images(query, top_k, **kwargs)
-            return _merge_image_results(retrieval_results, visual_results, top_k)
+            return retrieval_results[:top_k]
 
         except Exception:
             logger.exception("Image retrieval error")
-            return []
-
-    async def _retrieve_visual_images(
-        self,
-        query: str,
-        top_k: int,
-        **kwargs: Any,
-    ) -> list[RetrievalResult]:
-        """Search the governed visual-vector collection using the configured provider."""
-
-        try:
-            from app.retrievers.stores.vector import get_chroma_client
-
-            embedded = await self.visual_embedding.embed_query(query)
-            collection = get_chroma_client().get_collection(name="visual_embeddings")
-            results = collection.query(
-                query_embeddings=[list(embedded.vector)],
-                n_results=top_k,
-                where=kwargs.get("where"),
-                include=["documents", "metadatas", "distances"],
-            )
-            output: list[RetrievalResult] = []
-            if results["ids"] and results["ids"][0]:
-                for index, result_id in enumerate(results["ids"][0]):
-                    metadata = results["metadatas"][0][index] if results["metadatas"] else {}
-                    metadata = {
-                        **metadata,
-                        "visual_query_backend": embedded.backend,
-                        "visual_query_model": embedded.model,
-                        "visual_query_fallback_reason": embedded.fallback_reason or "",
-                    }
-                    distance = results["distances"][0][index] if results["distances"] else 1.0
-                    output.append(
-                        RetrievalResult(
-                            id=result_id,
-                            content=results["documents"][0][index],
-                            score=1.0 / (1.0 + distance),
-                            modality="image",
-                            doc_id=metadata.get("doc_id", ""),
-                            page_number=metadata.get("page_number", 0),
-                            metadata=metadata,
-                        )
-                    )
-            return output
-        except Exception as exc:
-            logger.info("Visual-vector retrieval unavailable: %s", type(exc).__name__)
             return []
 
     async def _retrieve_tables(self, query: str, top_k: int, **kwargs: Any) -> list[RetrievalResult]:
@@ -368,79 +319,6 @@ class MultiModalRetriever:
 
         return fused
 
-    async def retrieve_by_doc_id(
-        self, doc_id: str, scope: AccessScope, modalities: list[str] | None = None
-    ) -> dict[str, list[RetrievalResult]]:
-        """Retrieve all content for a specific document.
-
-        Args:
-            doc_id: Document identifier
-            modalities: Modalities to retrieve
-
-        Returns:
-            Dictionary mapping modality to results
-        """
-        # See the note in `retrieve`: `text` and `chart` are both gone, for
-        # opposite reasons.
-        modalities = modalities or ["image", "table"]
-        if doc_id not in scope.document_ids:
-            return {modality: [] for modality in modalities}
-
-        results_by_modality: dict[str, list[RetrievalResult]] = {}
-
-        try:
-            from app.retrievers.stores.vector import get_chroma_client
-
-            client = get_chroma_client()
-
-            collection_map = {
-                "image": "image_descriptions",
-                "table": "table_summaries",
-            }
-
-            for modality in modalities:
-                collection_name = collection_map.get(modality)
-                if not collection_name:
-                    continue
-
-                try:
-                    collection = client.get_collection(name=collection_name)
-
-                    # Query by metadata filter
-                    results = collection.get(
-                        where={"$and": [{"doc_id": doc_id}, {"tenant_id": scope.tenant_id}]},
-                        include=["documents", "metadatas"],
-                    )
-
-                    retrieval_results: list[RetrievalResult] = []
-
-                    if results["ids"]:
-                        for i, result_id in enumerate(results["ids"]):
-                            metadata = results["metadatas"][i] if results["metadatas"] else {}
-
-                            result = RetrievalResult(
-                                id=result_id,
-                                content=results["documents"][i],
-                                score=1.0,  # No scoring for direct retrieval
-                                modality=modality,  # type: ignore
-                                doc_id=doc_id,
-                                page_number=metadata.get("page_number", 0),
-                                metadata=metadata,
-                            )
-                            retrieval_results.append(result)
-
-                    results_by_modality[modality] = retrieval_results
-
-                except Exception:
-                    logger.exception(f"Error retrieving {modality} for doc {doc_id}")
-                    results_by_modality[modality] = []
-
-            return results_by_modality
-
-        except Exception:
-            logger.exception("Error in retrieve_by_doc_id")
-            raise
-
 
 def _scope_filter(scope: AccessScope) -> dict[str, Any] | None:
     """Build a Chroma filter that never searches outside the authorized tenant.
@@ -512,26 +390,6 @@ def _matches_scope(item: EvidenceItem, metadata: dict[str, Any], scope: AccessSc
     if scope.allowed_sources and item.source not in scope.allowed_sources:
         return False
     return not item.acl_tags or bool(item.acl_tags.intersection(scope.acl_tags))
-
-
-def _merge_image_results(
-    description_results: list[RetrievalResult],
-    visual_results: list[RetrievalResult],
-    top_k: int,
-) -> list[RetrievalResult]:
-    """Deduplicate image channels while retaining the strongest score and diagnostics."""
-
-    merged: dict[str, RetrievalResult] = {}
-    channels: dict[str, set[str]] = {}
-    for channel, rows in (("description", description_results), ("visual", visual_results)):
-        for row in rows:
-            channels.setdefault(row.id, set()).add(channel)
-            existing = merged.get(row.id)
-            if existing is None or row.score > existing.score:
-                merged[row.id] = row
-    for result_id, row in merged.items():
-        row.metadata["retrieval_channels"] = ",".join(sorted(channels[result_id]))
-    return sorted(merged.values(), key=lambda row: row.score, reverse=True)[:top_k]
 
 
 def _optional_text(value: object) -> str | None:

@@ -26,10 +26,6 @@ class ImageContent:
     visibility: str = "private"
     version: int = 1
     artifact_uri: str | None = None
-    masked_artifact_uri: str | None = None
-    masked_image_data: bytes | None = field(default=None, repr=False)
-    embedding_model: str | None = None
-    visual_embedding: tuple[float, ...] = field(default_factory=tuple, repr=False)
 
     @property
     def document_id(self) -> str:

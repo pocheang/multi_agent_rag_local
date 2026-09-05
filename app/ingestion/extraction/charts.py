@@ -2,6 +2,7 @@
 
 import logging
 
+from app.privacy.image_egress import bytes_for_external_provider
 from app.services.security.outbound_redaction import redact_messages_for_provider
 
 logger = logging.getLogger(__name__)
@@ -131,12 +132,27 @@ def extract_chart_data_with_vision(
         image_bytes = _resize_image_if_needed(image_bytes)
 
         if model.startswith("gpt-4") or model.startswith("gpt"):
-            return _extract_with_openai(image_bytes, api_key, model)
+            provider = "openai"
         elif model.startswith("claude"):
-            return _extract_with_anthropic(image_bytes, api_key, model)
+            provider = "anthropic"
         else:
             logger.error(f"Unsupported model: {model}")
             return {"error": f"Unsupported model: {model}"}
+
+        # Both branches below are external providers, and this is the second live
+        # path that base64s a user's image into a request body. It reached
+        # OpenAI and Anthropic uninspected until 2026-09-05 -- the outbound
+        # redactor applied further down is a *text* control and leaves the data
+        # URI byte-identical. Masking is decided in one place for both send
+        # paths; see app/privacy/image_egress.py.
+        safe_bytes, blocked = bytes_for_external_provider(image_bytes, provider)
+        if blocked:
+            logger.info(f"chart_vision_blocked provider={provider} reason={blocked}")
+            return {"error": f"image masking did not clear this chart for {provider}: {blocked}"}
+
+        if provider == "openai":
+            return _extract_with_openai(safe_bytes, api_key, model)
+        return _extract_with_anthropic(safe_bytes, api_key, model)
 
     except Exception as e:
         logger.exception(f"Chart extraction failed: {e}")

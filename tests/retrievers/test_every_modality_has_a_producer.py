@@ -48,10 +48,10 @@ def _collections_read_by_the_retriever() -> set[str]:
     return names
 
 
-def _writer_classes() -> dict[str, str]:
-    """collection name -> the class whose `index_*` method writes it."""
+def _writer_methods() -> dict[str, tuple[str, str]]:
+    """collection name -> (class, `index_*` method) that writes it."""
 
-    found: dict[str, str] = {}
+    found: dict[str, tuple[str, str]] = {}
     for path in PRODUCER_DIR.glob("*.py"):
         tree = ast.parse(path.read_text(encoding="utf-8"))
         for klass in (n for n in ast.walk(tree) if isinstance(n, ast.ClassDef)):
@@ -60,14 +60,31 @@ def _writer_classes() -> dict[str, str]:
                     continue
                 for node in ast.walk(method):
                     if isinstance(node, ast.Constant) and isinstance(node.value, str) and node.value.endswith("s"):
-                        found.setdefault(node.value, klass.name)
+                        found.setdefault(node.value, (klass.name, method.name))
     return found
 
 
-def _constructed_in_app(class_name: str) -> bool:
-    """A call `ClassName(...)` anywhere in `app/` outside the class's own module."""
+def _called_in_app(method_name: str) -> bool:
+    """A call `.method(...)` anywhere in `app/` outside the producer package.
 
-    pattern = re.compile(rf"\b{class_name}\(")
+    Checking the *method* rather than its class, because the class is one level
+    too shallow: `ingest_paths` constructs `ImageProcessor` and calls exactly one
+    of its methods, so class construction says nothing about any other.
+
+    **This still would not have caught `visual_embeddings`, and it is worth
+    saying so rather than implying otherwise.** That collection was written by a
+    *branch* of `index_image` -- `if image.visual_embedding:` -- guarded by a
+    field only `process_images_batch` ever set, and that method had no caller. So
+    the collection was read on every image search, never written, and the read
+    raised once per query into an INFO log. Method, class and collection name all
+    resolve; the dead link is a branch condition, which no static check here can
+    see. It was found by reading the code, and both sides are deleted.
+
+    The chain this does check is still worth checking -- it is what named
+    `chart_descriptions` and `text_chunks`. It is a floor, not a proof.
+    """
+
+    pattern = re.compile(rf"\.{method_name}\(")
     for path in APP.rglob("*.py"):
         if path.parent == PRODUCER_DIR:
             continue
@@ -89,12 +106,13 @@ def test_every_collection_the_retriever_reads_has_a_writer_something_constructs(
     `ChartAnalyzer`, which nothing constructs, and this fails.
     """
 
-    writers = _writer_classes()
+    writers = _writer_methods()
 
     for collection in sorted(_collections_read_by_the_retriever()):
-        klass = writers.get(collection)
-        assert klass, f"{collection} is queried but nothing in {PRODUCER_DIR} writes it"
-        assert _constructed_in_app(klass), f"{collection} is written by {klass}, which nothing in app/ constructs"
+        writer = writers.get(collection)
+        assert writer, f"{collection} is queried but nothing in {PRODUCER_DIR} writes it"
+        klass, method = writer
+        assert _called_in_app(method), f"{collection} is written by {klass}.{method}, which nothing in app/ calls"
 
 
 def test_chart_is_gone_from_every_place_it_was_declared():

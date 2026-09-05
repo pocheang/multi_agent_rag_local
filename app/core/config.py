@@ -173,15 +173,8 @@ class Settings(BaseSettings):
     memory_stable_fact_ttl_days: int = Field(default=365, ge=1, le=3650, alias="MEMORY_STABLE_FACT_TTL_DAYS")
 
     # Multi-modal Processing
-    enable_table_extraction: bool = Field(default=True, alias="ENABLE_TABLE_EXTRACTION")
-    enable_ocr: bool = Field(default=True, alias="ENABLE_OCR")
-    vision_model: str = Field(default="gpt-4-vision-preview", alias="VISION_MODEL")
-    max_image_tokens: int = Field(default=1000, alias="MAX_IMAGE_TOKENS")
     ocr_engine: str = Field(default="tesseract", alias="OCR_ENGINE")  # tesseract|paddleocr
-    ocr_languages: str = Field(default="eng+chi_sim", alias="OCR_LANGUAGES")
     multimodal_fusion_method: str = Field(default="rrf", alias="MULTIMODAL_FUSION_METHOD")  # rrf|weighted
-    visual_embedding_enabled: bool = Field(default=False, alias="VISUAL_EMBEDDING_ENABLED")
-    visual_embedding_backend: str = Field(default="colpali", alias="VISUAL_EMBEDDING_BACKEND")
     image_weight: float = Field(default=0.3, alias="IMAGE_WEIGHT")
     table_weight: float = Field(default=0.3, alias="TABLE_WEIGHT")
     text_weight: float = Field(default=0.4, alias="TEXT_WEIGHT")

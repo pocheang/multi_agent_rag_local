@@ -68,8 +68,8 @@ persisting messages, conversation context was filled but never read, the query
 endpoint never returned its execution_id, the `graph` route never queried the
 graph, and 184 modules (~13,000 lines) had zero importers. All were fixed or
 deleted; `app/` went from 583 to 371 Python files and Settings from 261 to 216
-fields. Those are what the audit left behind, not a ceiling — today it is 379 files and
-244 settings fields (2026-09-04). See `docs/superpowers/plans/2026-08-29-backend-full-audit-remediation.md`
+fields. Those are what the audit left behind, not a ceiling — today it is 372 files and
+235 settings fields (2026-09-05). See `docs/superpowers/plans/2026-08-29-backend-full-audit-remediation.md`
 for the plan, what was deliberately left dormant, and what remains open.
 
 ### Frontend
@@ -287,7 +287,7 @@ PipelineResult → returned to caller
    | the question | `privacy_permission` node, `inspect_input` | mandatory, no `on_timeout` |
    | LLM + embedding egress | the model wrapper, `redact_messages_for_provider`, external providers only | `OUTBOUND_LLM_REDACTION_ENABLED` / `..._EMBEDDING_...`, both true |
    | the answer | `output_filter` node, `filter_output` | a `MANDATORY_STAGES` member |
-   | image egress | `_bytes_for_backend`, `ImageMaskingService`, external backends only | fail-closed, no switch |
+   | image egress | `app/privacy/image_egress.py`, `ImageMaskingService`, external providers only | fail-closed, no switch |
 
    **An image is a payload the text redactor cannot read** (wired 2026-09-05).
    `describe_image_with_vision` base64s the image into an `image_url` data URI and posts
@@ -1014,8 +1014,27 @@ obvious checks both pass on the broken code: `chart_descriptions` *was* named in
 the previous commit it fails twice, which is how `text_chunks` turned up: the
 text modality was deleted in `2f94cce6` but `retrieve` kept
 `self._retrieve_text(...)` behind an `if "text" in modalities`, a call to a method
-that no longer exists, and `retrieve_by_document` kept the collection in its map.
-Both are gone. Note that `retrieve_by_document` has no callers at all.
+that no longer exists, and `retrieve_by_doc_id` kept the collection in its map.
+Both are gone, and `retrieve_by_doc_id` itself was deleted the next day -- it had no
+callers at all.
+
+**Visual embeddings are gone** (2026-09-05), and they are the sharpest version of
+the defect above because every static check passed. `_retrieve_images` queried a
+`visual_embeddings` collection on **every** image search; the collection is written
+by a branch of `index_image`, `if image.visual_embedding:`; and `visual_embedding`
+was set only by `ImageProcessor.process_images_batch`, which had no caller. So the
+class was constructed, the writing *method* was called, the collection name
+resolved to a real writer -- and the branch never once fired, so the read raised
+per query into an INFO log. `test_every_modality_has_a_producer` walks that chain
+and still passes on the broken code; the dead link is a branch condition, and it
+says so rather than implying it caught this. It was found by reading.
+
+Deleted with it: `app/ingestion/embedding/` (the `VisualEmbeddingProvider`
+boundary and its ColPali seam), `VISUAL_EMBEDDING_ENABLED`,
+`VISUAL_EMBEDDING_BACKEND`, and four `ImageContent` fields whose only writer was
+`process_images_batch`. ColPali-style visual retrieval is a real idea and this was
+not an implementation of it -- nothing ever produced a vector. Rebuilding it on the
+model configuration added in `062ca7d2` is a project, not a reconnection.
 
 **These collections sit outside the corpus `similarity_search` guards**, so both
 of that function's checks are reproduced here deliberately. `_scope_filter`
@@ -1334,7 +1353,7 @@ requires the reload to clear it, following one level of indirection through the 
 clearers, and it was verified able to fail by removing the reranker's.
 
 **What an administrator may change is an allowlist**, `app/core/config_schema.py`, not an
-annotation per field. `Settings` has 244 of them; annotating individually would scatter a
+annotation per field. `Settings` has 235 of them; annotating individually would scatter a
 security-relevant decision across 236 lines and leave "what can console access reach?"
 with no single answer. It is opt-in — a new field is not editable until it is named — and
 `tests/core/test_config_schema.py` asserts by *shape* that nothing matching KEY, SECRET,
@@ -2065,10 +2084,17 @@ Two things learned doing this the first time:
   whether those classes stay. It is being answered one at a time.
   **`SmartChunker` and `ChartAnalyzer` are deleted** (2026-09-05).
   `ImageProcessor` and `TableExtractor` are constructed by `ingest_paths` and
-  stay -- though `ingest_paths` calls exactly one method on each (`index_image`,
-  `index_table`), so most of both classes, including `ImageProcessor`'s own
-  direct-to-OpenAI `_call_gpt4v`, is still unreached. That is a separate
-  question from this one and is open. The finding count
+  stay, and are now only what their one reachable method needs.
+  `ingest_paths` calls `index_image` and `index_table`; the other 23 methods
+  between them had no caller, and included a second OCR implementation, a second
+  PDF image extractor, two table extractors, and `_call_gpt4v` /
+  `_call_claude_vision` -- a direct-to-OpenAI vision path that would have been
+  the unmasked one had anybody wired it. All deleted 2026-09-05, along with
+  `ImageProcessor.__init__`, whose nine attributes `index_image` reads none of;
+  that took `VISION_MODEL`, `ENABLE_OCR`, `OCR_LANGUAGES`, `MAX_IMAGE_TOKENS` and
+  `ENABLE_TABLE_EXTRACTION` with it. Note what `ENABLE_OCR` was: a switch named
+  for a feature it did not gate -- `app/ingestion/extraction/ocr.py` never read
+  it. The finding count
   above is from the last scan and is stale until Sonar runs again -- S7503 flags
   an `async def` containing no `await`, which is a subset of each class's
   coroutines, so it cannot be re-derived by counting here. The same goes for
