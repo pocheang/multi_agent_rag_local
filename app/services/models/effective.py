@@ -200,6 +200,25 @@ def _nli() -> EffectiveComponent:
     )
 
 
+def _tesseract_available(settings) -> bool:
+    """Importable, and a binary the process can find.
+
+    Read by both image components since 2026-09-05, because they now share a
+    dependency they did not: `ImageMaskingService` uses Tesseract to find
+    sensitive regions, and captioning through an *external* backend is
+    fail-closed on it.
+    """
+
+    import shutil
+
+    try:
+        import pytesseract  # noqa: F401
+    except ImportError:
+        return False
+    command = str(getattr(settings, "tesseract_cmd", "") or "") or "tesseract"
+    return shutil.which(command) is not None
+
+
 def _vision_backends(settings) -> list[str]:
     """The order `describe_image_with_vision` will try, mirrored here.
 
@@ -253,6 +272,20 @@ def _vision() -> EffectiveComponent:
             detail=f"Captioning is on and the OpenAI backend has no API key{alternative}.",
             metadata={"order": ", ".join(order)},
         )
+    if first == "openai" and not _tesseract_available(settings):
+        alternative = "; ollama is local and still runs" if "ollama" in order[1:] else ""
+        return EffectiveComponent(
+            component="image_caption",
+            status="degraded",
+            configured=str(model or ""),
+            source="TESSERACT_CMD",
+            detail=(
+                "An image sent to an external backend is masked first, and the masking "
+                f"detector is Tesseract, which is unavailable -- so OpenAI captioning is "
+                f"blocked rather than sending the image unexamined{alternative}."
+            ),
+            metadata={"order": ", ".join(order)},
+        )
     return EffectiveComponent(
         component="image_caption",
         status="active",
@@ -285,7 +318,10 @@ def _ocr() -> EffectiveComponent:
             status="unavailable",
             configured=command,
             source="pytesseract",
-            detail="pytesseract is not installed, so no text is read out of images.",
+            detail=(
+                "pytesseract is not installed, so no text is read out of images -- and an "
+                "external captioning backend is blocked too, since it masks with the same OCR."
+            ),
         )
     if shutil.which(command) is None:
         return EffectiveComponent(
@@ -295,7 +331,8 @@ def _ocr() -> EffectiveComponent:
             source="TESSERACT_CMD",
             detail=(
                 f"pytesseract is installed but '{command}' is not on PATH, so OCR reads nothing. "
-                "Images are still searchable if captioning is on."
+                "Images stay searchable through a *local* captioning backend; an external one "
+                "is blocked, because the same Tesseract masks the image before it is sent."
             ),
         )
     return EffectiveComponent(

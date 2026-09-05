@@ -287,6 +287,49 @@ PipelineResult → returned to caller
    | the question | `privacy_permission` node, `inspect_input` | mandatory, no `on_timeout` |
    | LLM + embedding egress | the model wrapper, `redact_messages_for_provider`, external providers only | `OUTBOUND_LLM_REDACTION_ENABLED` / `..._EMBEDDING_...`, both true |
    | the answer | `output_filter` node, `filter_output` | a `MANDATORY_STAGES` member |
+   | image egress | `_bytes_for_backend`, `ImageMaskingService`, external backends only | fail-closed, no switch |
+
+   **An image is a payload the text redactor cannot read** (wired 2026-09-05).
+   `describe_image_with_vision` base64s the image into an `image_url` data URI and posts
+   it to the configured vision backend. It calls `redact_messages_for_provider` on that
+   payload, which is exactly why the gap was invisible: an outbound control *does* run
+   there, it is simply the wrong kind. It redacts text and leaves the data URI
+   byte-identical -- correctly, since mangling it would corrupt the image -- so a user's
+   image reached OpenAI as uploaded. Verified against the previous commit: byte-identical.
+
+   `ImageMaskingService` (`app/privacy/image_masking.py`) already existed and already
+   worked: local OCR locates text matching `INPUT_KINDS`, the regions are painted out, and
+   asked for an `external` derivative it cannot produce it returns `safe_for_external=False`
+   with no content. **Nothing called it.** Its two entry points were
+   `ImageProcessor._masked_bytes`, whose own docstring reads "Fail closed so OCR and every
+   external VLM consume only a safe derivative", on a class ingestion constructs but calls
+   exactly one *other* method on -- and `PrivacyService.mask_images`, which has no callers
+   either. A control that is written, tested and unreachable is the failure this file keeps
+   recording, in its most expensive form.
+
+   `_bytes_for_backend` now masks before an external backend and returns the original to a
+   local one, splitting them with `is_external_provider` rather than a second list --
+   ollama is not in it, and a local endpoint sits inside the same boundary as the OCR that
+   would do the masking. Three consequences worth knowing:
+
+   - **The detector is Tesseract, so fail-closed couples captioning to OCR.** A machine
+     that cannot inspect an image may not send one. On the `auto` order that degrades to
+     the local model; with `IMAGE_CAPTION_BACKEND=openai` it means no caption, which is the
+     right answer to "I cannot see what is in this image". `GET /admin/model-settings/effective`
+     reports it -- and `_ocr`'s "images are still searchable if captioning is on" was
+     corrected in the same pass, because it is now true only of a local backend.
+   - **A refusal is not an outage.** `describe_image_with_vision` returns
+     `image_masking_blocked` when every attempted backend was blocked, rather than folding
+     it into `vision_failed`.
+   - **Masking is not a blanket re-encode.** With no sensitive region found the original
+     bytes go out unchanged, which is what keeps the assertion above meaningful rather than
+     passing because everything is altered.
+
+   `IMAGE_CAPTION_ENABLED` defaults false, so this was latent rather than shipping -- and
+   it stopped being latent when that switch became editable from the admin page.
+   `tests/security/test_image_masking_reaches_the_vision_call.py` pins all of it, including
+   the redactor's byte-identical pass-through, so nobody reasons from its presence to the
+   image being covered.
 
    `app/services/answer_safety.py` (OpenAI-style keys, AWS key ids, private-key headers,
    `password=`/`token=`) is not a rival set: `filter_output` composes it with the shared
