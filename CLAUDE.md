@@ -1880,6 +1880,29 @@ sizes would test the wrong thing.
 CI runs it on every push and pull request (`.github/workflows/ci.yml`), together with ruff
 and an OpenAPI endpoint census that fails if a refactor silently drops routers.
 
+**The SonarCloud scanner in that workflow has never run** (checked 2026-09-05), and the
+green "SonarCloud Code Analysis" check on every commit is **Automatic Analysis**, not it.
+The step is `if: env.SONAR_TOKEN != ''` and no such secret exists, which is deliberate --
+it was written to land dormant -- but three things follow that are easy to misread:
+
+- **Coverage is not in SonarCloud and cannot be.** `api/measures/component` returns an
+  empty array for `coverage`. Automatic Analysis cannot read a report, so
+  `sonar.python.coverage.reportPaths` in `sonar-project.properties` is inert, as is
+  everything else in that file. The `--cov-report=xml` step and the "Coverage total" line
+  are real and go nowhere.
+- **The New Code period is the whole repository**: `new_lines` is 89,411 against an
+  `ncloc` of 82,875. Every gate condition is a new-code condition, so they are all
+  effectively whole-project conditions. That is why one MAJOR bug in a fifteen-line script
+  took `new_reliability_rating` to C and failed the gate on 2026-09-05 -- correct, and far
+  more sensitive than "new code" suggests.
+- Ratings are otherwise A across the board: **0 bugs, 0 vulnerabilities, 0 security
+  hotspots**, against 570 code smells (118 critical) and ~65 hours of debt.
+
+Turning the scanner on means adding `SONAR_TOKEN` **and** switching Automatic Analysis off
+in SonarCloud -- the scanner refuses to run while it is enabled -- and deciding what New
+Code should mean, since inheriting the whole repository as "new" is what makes the gate
+behave the way it does. Those are three decisions, not one switch.
+
 The frontend has vitest tests too: `src/**/*.test.ts` **and** `src/**/*.test.tsx`, run by
 the `frontend` CI job, which also runs eslint (`--max-warnings 25`, itself a ratchet), `tsc`,
 `npm run lint:design`, and the build. The `.tsx` half of that glob was missing until
@@ -2101,13 +2124,18 @@ Two things learned doing this the first time:
   content key and a provenance key out of each other's way in the same
   dictionary; a variable-length tuple with a discriminant at position zero only
   implied that.
-- **`python:S7503` is 39 open findings and 32 of them are correct.** "async
-  without await" cannot see a contract: 22 of those functions are awaited, 4 are
-  closures handed to `run_with_timeout`, 3 are default callbacks awaited through
-  a variable, and 3 are gathered as coroutines. The remaining 7 had no caller
-  because their *classes* had none, and removing their `async` would have
-  satisfied the rule while leaving the dead code -- so the actual question was
-  whether those classes stay. It is being answered one at a time.
+- **`python:S7503` is 26 open findings** (re-measured 2026-09-05; it was 39, and
+  the 13 that went were deleted code, not silenced rules). "async without await"
+  cannot see a contract, and the ones that remain are the correct-but-unfixable
+  kind the earlier count described: awaited normally, handed to
+  `run_with_timeout` as a closure, awaited through a variable as a default
+  callback, or gathered as coroutines. Do **not** re-derive that breakdown by
+  counting `async def`s -- S7503 flags only those containing no `await`, which is
+  a subset of each module's coroutines. Ask SonarCloud.
+
+  What the earlier count called "the remaining 7" was the useful part: findings
+  whose *classes* had no caller, where removing `async` would satisfy the rule
+  and leave the dead code standing. That question is now answered.
   **`SmartChunker` and `ChartAnalyzer` are deleted** (2026-09-05).
   `ImageProcessor` and `TableExtractor` are constructed by `ingest_paths` and
   stay, and are now only what their one reachable method needs.
@@ -2120,11 +2148,7 @@ Two things learned doing this the first time:
   that took `VISION_MODEL`, `ENABLE_OCR`, `OCR_LANGUAGES`, `MAX_IMAGE_TOKENS` and
   `ENABLE_TABLE_EXTRACTION` with it. Note what `ENABLE_OCR` was: a switch named
   for a feature it did not gate -- `app/ingestion/extraction/ocr.py` never read
-  it. The finding count
-  above is from the last scan and is stale until Sonar runs again -- S7503 flags
-  an `async def` containing no `await`, which is a subset of each class's
-  coroutines, so it cannot be re-derived by counting here. The same goes for
-  `python:S7484` on
+  it. The same goes for `python:S7484` on
   `agent_tracking.py`'s SSE poll: no client calls that endpoint, and
   `AgentExecutionTracker` is `threading.Lock`-based, so an `asyncio.Event` there
   would need `call_soon_threadsafe` -- the defect class fixed twice already.
