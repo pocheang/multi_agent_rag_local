@@ -5,7 +5,6 @@ from pathlib import Path
 from langchain_core.documents import Document
 
 from app.ingestion.extraction.ocr import normalize_ocr_text, parse_psm_modes
-from app.ingestion.extraction.people import build_people_summary, detect_people_in_image
 from app.ingestion.extraction.vision import build_vision_summary, describe_image_with_vision
 from app.ingestion.loaders import dispatch as loaders_module
 from app.ingestion.loaders.image_loader import load_image_file
@@ -25,8 +24,6 @@ _load_pdf_image_ocr = load_pdf_image_ocr
 _load_image_file = load_image_file
 _parse_psm_modes = parse_psm_modes
 _normalize_ocr_text = normalize_ocr_text
-_detect_people_in_image = detect_people_in_image
-_build_people_summary = build_people_summary
 _describe_image_with_vision = describe_image_with_vision
 _build_vision_summary = build_vision_summary
 
@@ -68,8 +65,6 @@ __all__ = [
     "_load_image_file",
     "_parse_psm_modes",
     "_normalize_ocr_text",
-    "_detect_people_in_image",
-    "_build_people_summary",
     "_describe_image_with_vision",
     "_build_vision_summary",
     "IMAGE_EXTENSIONS",

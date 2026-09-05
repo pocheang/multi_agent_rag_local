@@ -35,18 +35,9 @@ def _build_base_metadata(image, source: Path, page: int | None, image_index: int
     return metadata, summary
 
 
-def _add_vision_metadata(metadata: dict, image, img_bytes: bytes, settings) -> tuple[str, str]:
-    """添加人脸检测和图像描述信息."""
-    from app.ingestion.extraction.people import detect_people_in_image
+def _add_vision_metadata(metadata: dict, img_bytes: bytes, settings) -> str:
+    """添加图像描述信息."""
     from app.ingestion.extraction.vision import build_vision_summary, describe_image_with_vision
-
-    # 人脸检测
-    people_info = detect_people_in_image(image, settings)
-    metadata["person_detection_status"] = str(people_info.get("status", "unknown"))
-    metadata["person_count"] = int(people_info.get("person_count", 0))
-    metadata["face_count"] = int(people_info.get("face_count", 0))
-    metadata["human_present"] = bool(people_info.get("human_present", False))
-    metadata["person_detector_mode"] = str(people_info.get("detector_mode", "face"))
 
     # 图像描述
     vision_info = describe_image_with_vision(img_bytes, settings)
@@ -198,7 +189,7 @@ def ocr_image_bytes_with_structure(
 
     # 构建基础信息
     metadata, summary = _build_base_metadata(image, source, page, image_index)
-    vision_summary = _add_vision_metadata(metadata, image, img_bytes, settings)
+    vision_summary = _add_vision_metadata(metadata, img_bytes, settings)
 
     # 尝试 PaddleOCR（如果启用）
     if use_layout:

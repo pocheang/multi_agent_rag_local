@@ -339,23 +339,34 @@ PipelineResult → returned to caller
    shared redactor, and the second pass is kept because a search engine is outside every
    agreement this system has.
 
-   **People detection is opt-in and never indexed** (changed 2026-09-04).
-   `detect_people_in_image` runs OpenCV face/HOG detection over every ingested image, and
-   `build_people_summary` rendered `human_present`, `person_count` and `face_count` into
-   the same `page_content` as the OCR text -- for a standalone uploaded image, that string
-   *is* the chunk, indexed into the main corpus through both vector and BM25. It was on by
-   default, so nobody chose it; **nothing in `app/` or the frontend reads any of the five
-   fields it produces**, so the exposure bought nothing; and this section, which exists to
-   say what is and is not covered, did not mention it.
+   **This system does not look for faces in a user's image** (deleted 2026-09-05).
+   `app/ingestion/extraction/people.py` ran OpenCV face/HOG detection over every ingested
+   image, and `build_people_summary` rendered `human_present`, `person_count` and
+   `face_count` into the same `page_content` as the OCR text -- for a standalone uploaded
+   image, that string *is* the chunk, indexed into the main corpus through both vector and
+   BM25. It was on by default, so nobody chose it; **nothing in `app/` or the frontend read
+   any of the five fields it produced**, so the exposure bought nothing; and this section,
+   which exists to say what is and is not covered, did not mention it.
 
-   `PEOPLE_DETECTION_ENABLED` now defaults false -- including the `getattr` fallback in
-   `people.py`, which defaulted *true* and so switched detection on for any caller passing
-   an object without the attribute -- and neither OCR path composes the summary into
-   content. The metadata keys and `build_people_summary` remain: the helper is not the
-   defect, publishing its output into a search index was. **Whether the subsystem should
-   exist at all is open** -- by this repository's own rule a producer with no consumer gets
-   deleted rather than configured, and that is why it was not added to
-   `config_schema.py`: a switch over something nothing reads is not configurability.
+   `5e87234e` made it opt-in and stopped the summary reaching content, which left one
+   question: should it exist? By this repository's own rule a producer with no consumer is
+   **deleted rather than configured** -- a switch over something nothing reads is not
+   configurability, which is also why it never entered `config_schema.py`. The only
+   consumer anyone could name for a face count is itself a privacy inference, so
+   reconnecting it is a proposal with its own threat model, not a restoration. The module,
+   both call sites, the five metadata keys and both settings are gone.
+
+   One detail from the removal is worth keeping: **OpenCV was never a declared dependency**.
+   `detect_people_in_image` caught `ImportError` and reported `"unavailable"`, so detection
+   ran only where something else had pulled `cv2` in -- a privacy-affecting default whose
+   behaviour depended on an undeclared transitive package.
+
+   `tests/security/test_faces_are_not_detected_at_ingest.py` matches the **library calls**
+   (`CascadeClassifier`, `HOGDescriptor`, `detectMultiScale`, `haarcascade`,
+   `face_recognition`, `mediapipe`) and the five field names, not the old module path, so a
+   reimplementation under another name is caught. Both scanners were verified able to fail
+   by dropping the deleted file back into `app/` **under a different filename** -- the rule
+   this file records for the sensitive-content gate, applied to its own suite.
 
    **Still not covered, deliberately or otherwise**: names, street addresses, licence
    plates; no content-moderation/toxicity filter and no bias detection. Uploaded documents

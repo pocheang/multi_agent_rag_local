@@ -410,10 +410,6 @@ class Settings(BaseSettings):
     ocr_preprocess_enabled: bool = Field(default=True, alias="OCR_PREPROCESS_ENABLED")
     ocr_upscale_min_side: int = Field(default=1200, alias="OCR_UPSCALE_MIN_SIDE")
     ocr_psm_modes: str = Field(default="6,11,3", alias="OCR_PSM_MODES")
-    # Opt-in since 2026-09-04. It runs face/HOG detection over every ingested
-    # image and nothing reads the result -- see app/ingestion/extraction/people.py.
-    people_detection_enabled: bool = Field(default=False, alias="PEOPLE_DETECTION_ENABLED")
-    people_detection_mode: str = Field(default="face", alias="PEOPLE_DETECTION_MODE")
     image_caption_enabled: bool = Field(default=False, alias="IMAGE_CAPTION_ENABLED")
     image_caption_backend: str = Field(default="auto", alias="IMAGE_CAPTION_BACKEND")
     openai_vision_model: str = Field(default="gpt-4o", alias="OPENAI_VISION_MODEL")

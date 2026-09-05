@@ -161,7 +161,6 @@ def ocr_image_bytes(
         logger.warning(f"Failed to open image: {e}")
         return []
 
-    from app.ingestion.extraction.people import detect_people_in_image
     from app.ingestion.extraction.vision import build_vision_summary, describe_image_with_vision
 
     width, height = image.size
@@ -183,12 +182,6 @@ def ocr_image_bytes(
         metadata["image_index"] = image_index
 
     settings = get_settings()
-    people_info = detect_people_in_image(image, settings)
-    metadata["person_detection_status"] = str(people_info.get("status", "unknown"))
-    metadata["person_count"] = int(people_info.get("person_count", 0))
-    metadata["face_count"] = int(people_info.get("face_count", 0))
-    metadata["human_present"] = bool(people_info.get("human_present", False))
-    metadata["person_detector_mode"] = str(people_info.get("detector_mode", "face"))
     vision_info = describe_image_with_vision(img_bytes, settings)
     metadata["image_caption_status"] = str(vision_info.get("status", "unknown"))
     metadata["image_caption_model"] = str(vision_info.get("model", "") or "")
