@@ -53,6 +53,33 @@ QUERY_PATHS = (
 EVAL_TENANT = "eval-tenant"
 EVAL_USER = "eval-user"
 
+# Every query on the shipped set ranks its gold document first except these.
+# Defined here rather than in the test because `scripts/eval_retrieval.py` needs
+# the same answer: a command whose exit code disagrees with the suite about what
+# "correct" means teaches people to ignore one of them, and until 2026-09-05 it
+# did -- `make eval-retrieval` returned 1 on a state the suite asserts.
+#
+# An entry is a *limit that has been reasoned about*, not a tolerance. Ranks are
+# compared to this map exactly, so an improvement fails as loudly as a
+# regression: reaching rank 1 here means something got better and this entry
+# should go.
+KNOWN_LEXICAL_LIMITS: dict[str, int] = {
+    # "产假" is a substring of "陪产假", so both documents contain the query's
+    # only content token. BM25 rewards matches and does not penalise a document
+    # for carrying extra terms, so the shorter (陪产假) document wins on length
+    # normalisation. The reverse direction -- asking about 陪产假 -- *is* fixed by
+    # the CJK bigrams, because "陪产" then discriminates. This is the boundary of
+    # lexical retrieval; the production pipeline fuses BM25 with vector search,
+    # which this BM25-only harness deliberately does not.
+    "q-15": 2,
+}
+
+
+def expected_ranks(query_ids: tuple[str, ...] | list[str]) -> dict[str, int]:
+    """Rank 1 for every query, except the limits recorded above."""
+
+    return {query_id: KNOWN_LEXICAL_LIMITS.get(query_id, 1) for query_id in query_ids}
+
 
 def resolve(paths: tuple[Path, ...]) -> Path:
     """First existing path wins; a genuinely missing set is an error, not a zero."""
@@ -172,9 +199,11 @@ __all__ = [
     "CORPUS_PATHS",
     "EVAL_TENANT",
     "EVAL_USER",
+    "KNOWN_LEXICAL_LIMITS",
     "QUERY_PATHS",
     "RetrievalScore",
     "eval_scope",
+    "expected_ranks",
     "load_corpus_sources",
     "load_queries",
     "measure",

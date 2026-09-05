@@ -1581,9 +1581,20 @@ model, no Chroma, no Neo4j and no LLM, and therefore runs on a fresh checkout.
 exactly one relevant document, so at most one of five retrieved items can be relevant.
 Reading it against a 0.85 target quoted for a multi-gold corpus is a category error, and
 `tests/evaluation/test_retrieval_metric.py` pins it precisely so nobody makes it from a
-metrics table. **MRR is the metric with headroom here, and it is pinned at exactly 1.0** —
-BM25 over a fixed JSONL is deterministic, so it is asserted rather than ratcheted, per
-query, so a failure names the query.
+metrics table. **MRR is the metric with headroom here, and what is pinned is the per-query
+rank map, not the aggregate** — BM25 over a fixed JSONL is deterministic, so it is asserted
+rather than ratcheted, per query, so a failure names the query. Every query ranks its gold
+document first except `q-15`, which ranks second by the lexical limit described above, so
+MRR is **0.9688**. This paragraph claimed 1.0 until 2026-09-05: it was written before the
+CJK tokenizer commit added that limit and was not corrected with it.
+
+`KNOWN_LEXICAL_LIMITS` and `expected_ranks` live in `app/evaluation/retrieval_eval.py`
+because `scripts/eval_retrieval.py` needs the same answer. It did not have it: its exit
+code was `score.mrr == 1.0`, so `make eval-retrieval` returned **1** on the state the suite
+asserts is correct, from the tokenizer commit until this one. A command that reports failure
+on a correct state teaches people to ignore it, which is the same defect as a metric that
+cannot fail, reached from the other side. The comparison is exact in both consumers, so an
+*improvement* is reported too — reaching rank 1 there means the entry should go.
 
 **The vector and hybrid paths stay a manual command, not a CI gate**, and the argument is
 sharper than the one for `npm run screenshots`: `_load_cross_encoder` uses

@@ -45,6 +45,7 @@ async def _run(use_vector: bool) -> int:
         CORPUS_PATHS,
         QUERY_PATHS,
         eval_scope,
+        expected_ranks,
         load_corpus_sources,
         load_queries,
         measure,
@@ -80,7 +81,29 @@ async def _run(use_vector: bool) -> int:
         print("directory and a downloaded BGE-M3, neither of which this script builds.")
         print("Ingest a corpus first, then use POST /api/evaluation/run.")
 
-    return 0 if score.mrr == 1.0 else 1
+    # Two defects in one line, and the second was the worse one.
+    #
+    # `score.mrr == 1.0` is a float equality (`python:S1244`). It happened to be
+    # exact -- a mean of n ones is exact in IEEE 754 -- but it expressed the
+    # intent badly and stops being safe the moment a query has two gold
+    # documents. What is required is that each query ranks its gold document
+    # where it is expected to, which is a comparison between integers.
+    #
+    # And it had been returning 1 since the CJK tokenizer landed, because MRR is
+    # 0.9688, not 1.0: `q-15` ranks second by a documented limit of lexical
+    # retrieval. A command that reports failure on a state the suite asserts is
+    # correct teaches people to ignore it. `expected_ranks` is the one definition
+    # of what this corpus should do, shared with
+    # `tests/evaluation/test_retrieval_metric.py` -- so an improvement is
+    # reported here too, rather than passing silently.
+    expected = expected_ranks([query.id for query in queries])
+    unexpected = {qid: score.ranks.get(qid, 0) for qid, want in expected.items() if score.ranks.get(qid, 0) != want}
+    if unexpected:
+        print()
+        for qid, got in sorted(unexpected.items()):
+            print(f"{qid}: expected rank {expected[qid]}, got {got or 'not retrieved'}")
+        print("An improvement counts too -- update KNOWN_LEXICAL_LIMITS if a limit is gone.")
+    return 1 if unexpected else 0
 
 
 def main() -> int:

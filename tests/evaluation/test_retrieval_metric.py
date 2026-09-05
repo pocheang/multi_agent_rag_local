@@ -32,6 +32,7 @@ from app.evaluation.retrieval_eval import (
     CORPUS_PATHS,
     QUERY_PATHS,
     eval_scope,
+    expected_ranks,
     load_corpus_sources,
     load_queries,
     measure,
@@ -165,14 +166,6 @@ def test_the_corpus_declares_the_ownership_the_scope_asks_for():
 # These are not defects in the retriever. They are the boundary of lexical
 # matching, which is why the production pipeline fuses BM25 with vector search --
 # something this BM25-only harness deliberately does not do.
-KNOWN_LEXICAL_LIMITS = {
-    # "产假" is a substring of "陪产假", so both documents contain the query's
-    # only content token. BM25 rewards matches and does not penalise a document
-    # for carrying extra terms, so the shorter (陪产假) document wins on length
-    # normalisation. The reverse direction -- asking about 陪产假 -- *is* fixed by
-    # the CJK bigrams, because "陪产" then discriminates.
-    "q-15": 2,
-}
 
 
 @pytest.mark.asyncio
@@ -186,7 +179,7 @@ async def test_every_query_puts_its_gold_document_first(eval_corpus: None):
     queries = load_queries(TRACKED_QUERIES)
     score = await measure(queries, eval_scope(load_corpus_sources(TRACKED_CORPUS)))
 
-    expected = {query.id: KNOWN_LEXICAL_LIMITS.get(query.id, 1) for query in queries}
+    expected = expected_ranks([query.id for query in queries])
 
     assert score.ranks == expected, f"MRR={score.mrr:.4f} P@5={score.precision_at_5:.4f} ranks={score.ranks}"
 
