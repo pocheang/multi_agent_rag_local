@@ -20,7 +20,7 @@ class RetrievalResult:
     id: str
     content: str
     score: float
-    modality: Literal["text", "image", "table", "chart"]
+    modality: Literal["text", "image", "table"]
     doc_id: str
     page_number: int
     metadata: dict[str, Any]
@@ -28,11 +28,11 @@ class RetrievalResult:
     @property
     def is_multimodal(self) -> bool:
         """Check if result is non-text modality."""
-        return self.modality in ["image", "table", "chart"]
+        return self.modality in ["image", "table"]
 
 
 class MultiModalRetriever:
-    """Retrieve content across text, images, tables, and charts."""
+    """Retrieve content across images and tables."""
 
     def __init__(self, visual_embedding: VisualEmbeddingProvider | None = None):
         self.settings = get_settings()
@@ -59,7 +59,7 @@ class MultiModalRetriever:
 
         Args:
             query: Search query
-            modalities: List of modalities to search (text, image, table, chart)
+            modalities: List of modalities to search (image, table)
                        If None, searches all modalities
             top_k: Number of results to return
             **kwargs: Additional retrieval parameters
@@ -67,10 +67,13 @@ class MultiModalRetriever:
         Returns:
             List of RetrievalResult objects
         """
-        # No text modality: it queried a `text_chunks` collection nothing has ever
-        # created, logging a traceback per query, and text is what the `vector`
-        # source is for. This source contributes what that one cannot.
-        modalities = modalities or ["image", "table", "chart"]
+        # Two modalities, and the two that are gone were removed for opposite
+        # reasons. `text` queried a `text_chunks` collection nothing has ever
+        # created, and text is what the `vector` source is for. `chart` had a
+        # producer that nothing constructed, so `chart_descriptions` could not
+        # exist -- and a chart reaches the index as an image now, captioned by
+        # the configured vision backend.
+        modalities = modalities or ["image", "table"]
         top_k = top_k or self.default_top_k
         where = _scope_filter(scope)
         if where is None:
@@ -81,17 +84,11 @@ class MultiModalRetriever:
             # Retrieve from each modality in parallel
             retrieval_tasks = []
 
-            if "text" in modalities:
-                retrieval_tasks.append(self._retrieve_text(query, top_k, **kwargs))
-
             if "image" in modalities:
                 retrieval_tasks.append(self._retrieve_images(query, top_k, **kwargs))
 
             if "table" in modalities:
                 retrieval_tasks.append(self._retrieve_tables(query, top_k, **kwargs))
-
-            if "chart" in modalities:
-                retrieval_tasks.append(self._retrieve_charts(query, top_k, **kwargs))
 
             # Execute all retrievals concurrently
             all_results = await asyncio.gather(*retrieval_tasks, return_exceptions=True)
@@ -286,53 +283,6 @@ class MultiModalRetriever:
             logger.exception("Table retrieval error")
             return []
 
-    async def _retrieve_charts(self, query: str, top_k: int, **kwargs: Any) -> list[RetrievalResult]:
-        """Retrieve chart descriptions."""
-        try:
-            from app.retrievers.stores.vector import get_chroma_client
-
-            client = get_chroma_client()
-
-            try:
-                collection = client.get_collection(name="chart_descriptions")
-            except Exception:
-                logger.info("Chart collection not found, skipping chart retrieval")
-                return []
-
-            # Query collection
-            results = collection.query(
-                query_texts=[query],
-                n_results=top_k,
-                where=kwargs.get("where"),
-                include=["documents", "metadatas", "distances"],
-            )
-
-            # Convert to RetrievalResult
-            retrieval_results: list[RetrievalResult] = []
-
-            if results["ids"] and results["ids"][0]:
-                for i, doc_id in enumerate(results["ids"][0]):
-                    metadata = results["metadatas"][0][i] if results["metadatas"] else {}
-                    distance = results["distances"][0][i] if results["distances"] else 1.0
-                    score = 1.0 / (1.0 + distance)
-
-                    result = RetrievalResult(
-                        id=doc_id,
-                        content=results["documents"][0][i],
-                        score=score,
-                        modality="chart",
-                        doc_id=metadata.get("doc_id", ""),
-                        page_number=metadata.get("page_number", 0),
-                        metadata=metadata,
-                    )
-                    retrieval_results.append(result)
-
-            return retrieval_results
-
-        except Exception:
-            logger.exception("Chart retrieval error")
-            return []
-
     def _reciprocal_rank_fusion(
         self, results_by_modality: list[list[RetrievalResult]], top_k: int
     ) -> list[RetrievalResult]:
@@ -393,7 +343,6 @@ class MultiModalRetriever:
             "text": self.text_weight,
             "image": self.image_weight,
             "table": self.table_weight,
-            "chart": self.image_weight,  # Use image weight for charts
         }
 
         for results in results_by_modality:
@@ -431,10 +380,9 @@ class MultiModalRetriever:
         Returns:
             Dictionary mapping modality to results
         """
-        # No text modality: it queried a `text_chunks` collection nothing has ever
-        # created, logging a traceback per query, and text is what the `vector`
-        # source is for. This source contributes what that one cannot.
-        modalities = modalities or ["image", "table", "chart"]
+        # See the note in `retrieve`: `text` and `chart` are both gone, for
+        # opposite reasons.
+        modalities = modalities or ["image", "table"]
         if doc_id not in scope.document_ids:
             return {modality: [] for modality in modalities}
 
@@ -446,10 +394,8 @@ class MultiModalRetriever:
             client = get_chroma_client()
 
             collection_map = {
-                "text": "text_chunks",
                 "image": "image_descriptions",
                 "table": "table_summaries",
-                "chart": "chart_descriptions",
             }
 
             for modality in modalities:
@@ -536,7 +482,7 @@ def _to_evidence_item(row: RetrievalResult) -> EvidenceItem | None:
     if isinstance(raw_acl, str):
         raw_acl = tuple(value.strip() for value in raw_acl.split(",") if value.strip())
     raw_modality = str(row.modality or "text")
-    modality = "image" if raw_modality in {"image", "chart"} else "table" if raw_modality == "table" else "text"
+    modality = "image" if raw_modality == "image" else "table" if raw_modality == "table" else "text"
     image_id = str(metadata.get("image_id") or row.id or "").strip() if modality == "image" else None
     try:
         return EvidenceItem(

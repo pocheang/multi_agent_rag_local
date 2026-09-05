@@ -51,19 +51,3 @@ class TableContent:
     bbox: tuple[float, float, float, float] | None = None
     created_at: datetime = field(default_factory=datetime.utcnow)
     metadata: dict[str, Any] = field(default_factory=dict)
-
-
-@dataclass
-class ChartContent:
-    """Chart/graph content with extracted data."""
-
-    chart_id: str
-    doc_id: str
-    page_number: int
-    chart_type: str  # bar|line|pie|scatter|area|etc
-    title: str | None = None
-    description: str = ""
-    data: dict[str, Any] = field(default_factory=dict)  # Extracted chart data
-    bbox: tuple[float, float, float, float] | None = None
-    created_at: datetime = field(default_factory=datetime.utcnow)
-    metadata: dict[str, Any] = field(default_factory=dict)

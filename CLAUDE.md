@@ -931,12 +931,37 @@ implementation: `tests/ingestion/test_chunk_section_headings.py` holds it as an
 `xfail(strict=True)`, so the day headings survive chunking the suite fails until
 the marker comes off.
 
-**Charts are inert on purpose.** `ChartContent` is only ever produced by
-`ChartAnalyzer` looking at an image with a vision model, so there is nothing to
-index without one. The retriever's chart path skips a missing collection quietly
-rather than erroring, so it costs nothing while it waits. That is the difference
-between it and the text modality, which was deleted: text is what the `vector`
-source is for, and this source contributes what that one cannot.
+**There is no chart modality, and a chart is still retrievable** (changed
+2026-09-05). `chart` was a selectable modality that queried `chart_descriptions`
+and returned nothing every time: the only writer was `ChartAnalyzer.index_chart`,
+and nothing in `app/` ever constructed a `ChartAnalyzer`. "Inert on purpose" was
+the previous reading of that, and it was too kind -- the path cost a retrieval
+slot and an INFO line per query and could not have paid for itself.
+
+**It was deleted rather than connected, and the capability did not go with it.**
+A chart is an image, and `_index_images` already captions images through
+`app/ingestion/extraction/vision.py`, which follows `IMAGE_CAPTION_BACKEND` and
+`MODEL_BACKEND` and falls back between them -- the path `ba55bf70` fixed so a
+caption survives an unreadable OCR, which is exactly the chart case. What
+`ChartAnalyzer` added over that was a `chart_type` label and a best-effort `data`
+dict; what it cost was a second vision path that built its own `AsyncOpenAI`
+against a `VISION_MODEL` setting the admin page cannot reach, outside the egress
+redaction the model wrapper applies, gated by an English keyword scan
+(`"bar chart"`, `"axis"`) over a caption this system writes in Chinese as often as
+not. Connecting it meant rewriting all three of those, after which the additions
+are some thirty lines on the path that already runs. If structured chart data is
+ever wanted, that is where it goes.
+
+`tests/retrievers/test_every_modality_has_a_producer.py` walks the chain the
+defect actually broke -- collection name → the `index_*` method that writes it →
+that method's class → a construction of that class in `app/` -- because the two
+obvious checks both pass on the broken code: `chart_descriptions` *was* named in
+`app/`, by its producer, and `index_chart` *did* write it correctly. Run against
+the previous commit it fails twice, which is how `text_chunks` turned up: the
+text modality was deleted in `2f94cce6` but `retrieve` kept
+`self._retrieve_text(...)` behind an `if "text" in modalities`, a call to a method
+that no longer exists, and `retrieve_by_document` kept the collection in its map.
+Both are gone. Note that `retrieve_by_document` has no callers at all.
 
 **These collections sit outside the corpus `similarity_search` guards**, so both
 of that function's checks are reproduced here deliberately. `_scope_filter`
@@ -1984,8 +2009,12 @@ Two things learned doing this the first time:
   because their *classes* had none, and removing their `async` would have
   satisfied the rule while leaving the dead code -- so the actual question was
   whether those classes stay. It is being answered one at a time.
-  **`SmartChunker` is deleted** (2026-09-05); `ImageProcessor` and
-  `TableExtractor` are constructed by `ingest_paths` and stay. The finding count
+  **`SmartChunker` and `ChartAnalyzer` are deleted** (2026-09-05).
+  `ImageProcessor` and `TableExtractor` are constructed by `ingest_paths` and
+  stay -- though `ingest_paths` calls exactly one method on each (`index_image`,
+  `index_table`), so most of both classes, including `ImageProcessor`'s own
+  direct-to-OpenAI `_call_gpt4v`, is still unreached. That is a separate
+  question from this one and is open. The finding count
   above is from the last scan and is stale until Sonar runs again -- S7503 flags
   an `async def` containing no `await`, which is a subset of each class's
   coroutines, so it cannot be re-derived by counting here. The same goes for

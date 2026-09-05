@@ -8,10 +8,6 @@ from typing import Any
 
 
 def __getattr__(name: str) -> Any:
-    if name == "ChartAnalyzer":
-        from app.services.multimodal.chart_analyzer import ChartAnalyzer
-
-        return ChartAnalyzer
     if name == "ImageProcessor":
         from app.services.multimodal.image_processor import ImageProcessor
 
@@ -26,5 +22,4 @@ def __getattr__(name: str) -> Any:
 __all__ = [
     "ImageProcessor",
     "TableExtractor",
-    "ChartAnalyzer",
 ]
