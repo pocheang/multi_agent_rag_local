@@ -912,6 +912,25 @@ It does not fail; it is confidently wrong. `_table_from_markdown` reads the
 header and body back out of the pipe table the loader rendered, so `headers` is a
 header again.
 
+**A chunk does not know which section it came from, and that gap is now
+executable** (2026-09-05). The same size-only splitting costs headings as well as
+table headers, and worse: the separator list splits *at* a heading, so measured on
+one heading over forty sentences, chunk 0 is the 26-character heading alone with no
+body to support, and the six chunks holding the answer carry no word saying what
+they are about. `SmartChunker` (483 lines, `app/services/multimodal/`) was aimed
+exactly here -- it split by heading into `Section`s and stamped the heading onto
+every chunk -- and was never constructed anywhere, so none of it ran.
+
+It was **deleted rather than connected**, because connecting it meant rewriting
+the parts that do the work: it read PDFs only through `fitz` where the loader
+handles many formats, it had no notion of the parent/child pair retrieval expands
+through, its `DocumentChunk` is not the type the index takes, and `_split_section`
+ended with `# For simplicity, add all to first chunk` -- reproducing the table
+defect described just above, with a comment admitting it. The idea outlived the
+implementation: `tests/ingestion/test_chunk_section_headings.py` holds it as an
+`xfail(strict=True)`, so the day headings survive chunking the suite fails until
+the marker comes off.
+
 **Charts are inert on purpose.** `ChartContent` is only ever produced by
 `ChartAnalyzer` looking at an image with a vision model, so there is nothing to
 index without one. The retriever's chart path skips a missing collection quietly
@@ -1961,12 +1980,16 @@ Two things learned doing this the first time:
 - **`python:S7503` is 39 open findings and 32 of them are correct.** "async
   without await" cannot see a contract: 22 of those functions are awaited, 4 are
   closures handed to `run_with_timeout`, 3 are default callbacks awaited through
-  a variable, and 3 are gathered as coroutines. The remaining 7 have no caller
-  because their *classes* have none -- `ImageProcessor`, `ChartAnalyzer`,
-  `TableExtractor` and `SmartChunker` are never constructed anywhere in `app/`,
-  and nothing outside `app/services/multimodal/` imports the package. Removing
-  their `async` would satisfy the rule and leave the dead code; whether that
-  subsystem stays is the actual question. The same goes for `python:S7484` on
+  a variable, and 3 are gathered as coroutines. The remaining 7 had no caller
+  because their *classes* had none, and removing their `async` would have
+  satisfied the rule while leaving the dead code -- so the actual question was
+  whether those classes stay. It is being answered one at a time.
+  **`SmartChunker` is deleted** (2026-09-05); `ImageProcessor` and
+  `TableExtractor` are constructed by `ingest_paths` and stay. The finding count
+  above is from the last scan and is stale until Sonar runs again -- S7503 flags
+  an `async def` containing no `await`, which is a subset of each class's
+  coroutines, so it cannot be re-derived by counting here. The same goes for
+  `python:S7484` on
   `agent_tracking.py`'s SSE poll: no client calls that endpoint, and
   `AgentExecutionTracker` is `threading.Lock`-based, so an `asyncio.Event` there
   would need `call_soon_threadsafe` -- the defect class fixed twice already.

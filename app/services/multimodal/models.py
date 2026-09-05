@@ -67,38 +67,3 @@ class ChartContent:
     bbox: tuple[float, float, float, float] | None = None
     created_at: datetime = field(default_factory=datetime.utcnow)
     metadata: dict[str, Any] = field(default_factory=dict)
-
-
-@dataclass
-class DocumentChunk:
-    """Smart document chunk with multi-modal content."""
-
-    chunk_id: str
-    doc_id: str
-    heading: str | None = None
-    text_content: str = ""
-    page_numbers: list[int] = field(default_factory=list)
-    images: list[ImageContent] = field(default_factory=list)
-    tables: list[TableContent] = field(default_factory=list)
-    charts: list[ChartContent] = field(default_factory=list)
-    metadata: dict[str, Any] = field(default_factory=dict)
-    created_at: datetime = field(default_factory=datetime.utcnow)
-
-    @property
-    def has_multimodal_content(self) -> bool:
-        """Check if chunk contains multi-modal content."""
-        return bool(self.images or self.tables or self.charts)
-
-    @property
-    def modality_types(self) -> list[str]:
-        """Get list of modalities present in this chunk."""
-        types = []
-        if self.text_content:
-            types.append("text")
-        if self.images:
-            types.append("image")
-        if self.tables:
-            types.append("table")
-        if self.charts:
-            types.append("chart")
-        return types

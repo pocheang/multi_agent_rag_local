@@ -16,10 +16,6 @@ def __getattr__(name: str) -> Any:
         from app.services.multimodal.image_processor import ImageProcessor
 
         return ImageProcessor
-    if name == "SmartChunker":
-        from app.services.multimodal.smart_chunker import SmartChunker
-
-        return SmartChunker
     if name == "TableExtractor":
         from app.services.multimodal.table_extractor import TableExtractor
 
@@ -31,5 +27,4 @@ __all__ = [
     "ImageProcessor",
     "TableExtractor",
     "ChartAnalyzer",
-    "SmartChunker",
 ]
