@@ -2,6 +2,10 @@
 
 import re
 
+_SEPARATOR_ROW_RE = re.compile(r"^\|[\s\-:]+\|")
+"""The row under a markdown table header. Three call sites decide whether a
+table has a header by asking this, and they have to agree."""
+
 
 def is_table_start(text: str) -> bool:
     """Check if text looks like the start of a table.
@@ -19,7 +23,7 @@ def is_table_start(text: str) -> bool:
     # Check for Markdown table header
     if "|" in lines[0] and "|" in lines[1]:
         # Check if second line is separator (|---|---|)
-        if re.match(r"^\|[\s\-:]+\|", lines[1]):
+        if _SEPARATOR_ROW_RE.match(lines[1]):
             return True
 
     # Check for consistent column structure
@@ -52,7 +56,7 @@ def is_table_continuation(text: str) -> bool:
     pipe_counts = [line.count("|") for line in pipe_lines]
     if len(set(pipe_counts)) == 1 and pipe_counts[0] >= 2:
         # Make sure it's NOT a header (no separator line)
-        if len(lines) > 1 and not re.match(r"^\|[\s\-:]+\|", lines[1]):
+        if len(lines) > 1 and not _SEPARATOR_ROW_RE.match(lines[1]):
             return True
 
     return False
@@ -74,7 +78,7 @@ def extract_table_header(text: str) -> tuple[str, str]:
         if "|" in line:
             header_lines.append(line)
             # Check if next line is separator
-            if i + 1 < len(lines) and re.match(r"^\|[\s\-:]+\|", lines[i + 1].strip()):
+            if i + 1 < len(lines) and _SEPARATOR_ROW_RE.match(lines[i + 1].strip()):
                 header_lines.append(lines[i + 1])
                 remaining = "\n".join(lines[i + 2 :])
                 return "\n".join(header_lines), remaining

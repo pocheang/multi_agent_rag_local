@@ -2,6 +2,12 @@
 
 import re
 
+_SINGLE_LETTER_VARIABLE_RE = re.compile(r"\b[a-zA-Z]\b")
+"""A one-letter variable. Two of its three uses produce the sets that the left
+and right of an equation are compared by, so they have to be produced the same
+way -- a divergence here would compare two different notions of "variable" and
+report a relationship that is not there."""
+
 
 def detect_formula(text: str) -> list[dict[str, str]]:
     """
@@ -141,7 +147,7 @@ def extract_formula_semantics(formula: str) -> dict[str, any]:
     semantics = {"variables": [], "operators": [], "constants": [], "functions": []}
 
     # Extract variables (single letters)
-    variables = re.findall(r"\b[a-zA-Z]\b", formula)
+    variables = _SINGLE_LETTER_VARIABLE_RE.findall(formula)
     semantics["variables"] = list(set(variables))
 
     # Extract operators
@@ -217,8 +223,8 @@ def extract_formula_relationships(text: str) -> list[dict[str, str]]:
                 right = parts[1].strip()
 
                 # Extract variables
-                left_vars = re.findall(r"\b[a-zA-Z]\b", left)
-                right_vars = re.findall(r"\b[a-zA-Z]\b", right)
+                left_vars = _SINGLE_LETTER_VARIABLE_RE.findall(left)
+                right_vars = _SINGLE_LETTER_VARIABLE_RE.findall(right)
 
                 # Create relationships
                 for lv in left_vars:

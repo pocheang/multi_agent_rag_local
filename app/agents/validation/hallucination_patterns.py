@@ -24,6 +24,12 @@ class HallucinationPattern(BaseModel):
     suggestion: str
 
 
+_CJK_ENTITY_RE = re.compile(r"[一-鿿]{2,4}")
+"""Chinese entity candidates. One definition because two of its three uses
+compare an answer against its source: differently-tokenised sets would not
+be comparable, and nothing would say so."""
+
+
 def _extract_dates(text: str) -> set[str]:
     """
     Extract dates from text (English and Chinese).
@@ -129,7 +135,7 @@ def _extract_entities(text: str) -> set[str]:
 
     # Chinese: 2-4 character sequences (typical name/entity length)
     # Limit to avoid extracting full phrases
-    entities.update(re.findall(r"[一-鿿]{2,4}", text))
+    entities.update(_CJK_ENTITY_RE.findall(text))
 
     return entities
 
@@ -437,8 +443,8 @@ def detect_negation_hallucinations(answer: str, source_text: str) -> list[Halluc
         source_words = set(re.findall(r"\b\w{3,}\b", source_text.lower()))
 
         # Chinese words: 2-4 character sequences (covers more content)
-        answer_chinese = set(re.findall(r"[一-鿿]{2,4}", answer))
-        source_chinese = set(re.findall(r"[一-鿿]{2,4}", source_text))
+        answer_chinese = set(_CJK_ENTITY_RE.findall(answer))
+        source_chinese = set(_CJK_ENTITY_RE.findall(source_text))
 
         answer_words.update(answer_chinese)
         source_words.update(source_chinese)
