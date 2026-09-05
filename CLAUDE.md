@@ -1520,7 +1520,7 @@ so a corpus whose ownership metadata does not match the scope drops every item a
 0.00 for reasons unrelated to retrieval — indistinguishable from a broken retriever.
 Proving the metric can fail is the precondition for believing it when it passes.
 
-Two limits that remain: the corpus is ~12 synthetic rows, so it exercises tokenisation,
+Two limits that remain: the corpus is 15 synthetic rows over 16 queries, so it exercises tokenisation,
 fusion and scoping rather than real-world ranking; and `data/eval/retrieval_corpus.jsonl`
 plus `data/eval/retrieval_queries.json` override the tracked defaults (first existing path
 wins, the same shape as `_BENCHMARK_QUERY_PATHS`) for a deployment that wants to measure
