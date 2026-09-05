@@ -2193,6 +2193,17 @@ file: this Neo4j holds a password from `.runtime/`, and `0.0.0.0` would offer it
 to the local network. `tests/core/test_dev_compose_is_usable.py` pins both halves
 -- the ports exist in development, and they still do not exist in production.
 
+That suite carried a defect of exactly the kind this file keeps recording, found
+2026-09-05 by running the suite in a fresh worktree. It read the `-f` arguments
+with `re.findall(r"-f (\S+)", recipe)` over the **whole** recipe, and the recipe's
+first line is a shell guard, `@test -f .runtime/development.env || ...`, whose
+`-f` is test(1)'s file predicate. So the test asserted that a **gitignored**
+runtime file exists: green on a machine that has run `make config-render`, red on
+every fresh clone and in CI, which renders nothing before `pytest`. The match is
+scoped to the `docker compose` line now, and
+`test_make_up_only_names_files_that_ship` asserts each one is tracked by git --
+which is what the broken assertion was accidentally reaching for.
+
 Note what you will see once it is up: with `MODEL_BACKEND=local` the graph is
 **empty by design**, because rule-extracted triplets are now correctly filtered
 out (see "Knowledge graph extraction"). An empty Neo4j Browser there is the

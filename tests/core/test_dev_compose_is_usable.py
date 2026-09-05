@@ -23,6 +23,7 @@ ports exist in development, and they still do not exist in production.
 from __future__ import annotations
 
 import re
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -47,15 +48,46 @@ def _up_recipe() -> str:
     return body.replace("$(COMPOSE_DEV)", compose_dev.group(1))
 
 
+def _compose_file_arguments() -> list[str]:
+    r"""The `-f` arguments `docker compose` itself receives.
+
+    Scoped to the compose command line, because the recipe's first line is a
+    shell guard -- `@test -f .runtime/development.env || ...` -- whose `-f` is
+    test(1)'s file predicate. Matching `-f (\S+)` over the whole recipe swept
+    that up, so the assertion below also demanded a **gitignored** runtime file:
+    it passed on a machine that had run `make config-render` and failed on every
+    fresh clone, CI included.
+    """
+
+    lines = [line for line in _up_recipe().splitlines() if "docker compose" in line]
+    assert len(lines) == 1, f"expected one compose invocation in `up:`, found {len(lines)}"
+    return re.findall(r"-f (\S+)", lines[0])
+
+
 def test_make_up_names_compose_files_that_exist():
     """The assertion that would have caught it: no -f meant no compose file."""
 
-    recipe = _up_recipe()
-    referenced = re.findall(r"-f (\S+)", recipe)
+    referenced = _compose_file_arguments()
 
     assert referenced, "`make up` passes no -f, so it falls back to a root compose file that does not exist"
     for rel in referenced:
         assert (REPO / rel).is_file(), f"{rel} does not exist"
+
+
+def test_make_up_only_names_files_that_ship():
+    """What the assertion above was accidentally testing, made deliberate and
+    correct. A compose file `make up` needs must be tracked -- a path that
+    resolves only because the developer generated it is not a working command
+    for anybody else."""
+
+    for rel in _compose_file_arguments():
+        tracked = subprocess.run(
+            ["git", "ls-files", "--error-unmatch", rel],
+            cwd=REPO,
+            capture_output=True,
+            text=True,
+        )
+        assert tracked.returncode == 0, f"{rel} is not tracked by git, so a fresh clone cannot `make up`"
 
 
 def test_make_up_uses_the_development_overlay():
