@@ -6,7 +6,6 @@ import os
 import sys
 import time
 from datetime import UTC, datetime
-from pathlib import Path
 from typing import Any
 
 import httpx
@@ -65,18 +64,6 @@ def _parse_request_ts(value: str | None) -> datetime:
     if dt.tzinfo is None:
         return dt.replace(tzinfo=UTC)
     return dt.astimezone(UTC)
-
-
-def _load_benchmark_queries(path: Path, limit: int = 100) -> list[str]:
-    """Load benchmark queries from a file."""
-    if not path.exists():
-        return []
-    rows: list[str] = []
-    for line in path.read_text(encoding="utf-8").splitlines():
-        q = line.strip()
-        if q:
-            rows.append(q)
-    return rows[: max(1, limit)]
 
 
 def _check_ollama_ready() -> dict[str, Any]:

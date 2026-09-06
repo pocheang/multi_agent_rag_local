@@ -93,27 +93,12 @@ def list_document_records(path: Path | None = None) -> list[dict[str, Any]]:
         return _read_document_records(target)
 
 
-def write_document_records(records: list[dict[str, Any]], path: Path | None = None) -> None:
-    target = path or _default_path()
-    with _LOCK:
-        _write_document_records(target, records)
-
-
 def get_document_by_source(source: str, path: Path | None = None) -> dict[str, Any] | None:
     source_value = str(source)
     target = path or _default_path()
     with _LOCK:
         for row in _read_document_records(target):
             if str(row.get("source", "")) == source_value:
-                return row
-        return None
-
-
-def get_document_record(document_id: str, path: Path | None = None) -> dict[str, Any] | None:
-    target = path or _default_path()
-    with _LOCK:
-        for row in _read_document_records(target):
-            if str(row.get("document_id", "")) == str(document_id):
                 return row
         return None
 

@@ -97,28 +97,3 @@ def extract_charts_from_pdf(path: Path, use_vision: bool = True, vision_model: s
         return docs
 
     return docs
-
-
-def load_pdf_with_charts(path: Path, extract_charts: bool = True, vision_model: str = "gpt-4-vision") -> list[Document]:
-    """
-    Load PDF with chart extraction.
-
-    Args:
-        path: Path to PDF file
-        extract_charts: Enable chart extraction
-        vision_model: Vision model for chart extraction
-
-    Returns:
-        List of Document objects (text + charts)
-    """
-    from app.ingestion.loaders.pdf_loader import load_pdf_text
-
-    # Load text content
-    text_docs = load_pdf_text(path)
-
-    # Extract charts if enabled
-    if extract_charts:
-        chart_docs = extract_charts_from_pdf(path, use_vision=True, vision_model=vision_model)
-        return text_docs + chart_docs
-
-    return text_docs

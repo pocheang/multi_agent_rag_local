@@ -1863,7 +1863,7 @@ verified (60 inputs and 336 pins respectively, zero differences).
 
 `tests/` was cleared ahead of the v0.7 rewrite and is being rebuilt incrementally: each bug
 fix lands with the regression test that would have caught it, rather than as a separate
-back-filling effort. As of 2026-09-06 there are 1490 tests covering the chat round trip,
+back-filling effort. As of 2026-09-06 there are 1483 tests covering the chat round trip,
 conversation context, graph routing, clarification, the async load guard, engine reuse,
 answer safety, reader-facing citation numbering, stage-timeout degradation, the governed
 tool stack with its multi-step loop and approve-then-resume cycle, retrieval
@@ -1898,10 +1898,11 @@ were already caught under the wrong name -- and by an adversarial false-positive
 where all three defects in that change were found.
 
 **That count is not 1236 independent assertions, and the number before it was stale.** Two
-guards are parametrized one case per module — the audit-action scan over `app/` (374) and
+guards are parametrized one case per module — the audit-action scan over `app/` (367) and
 the ASCII scan over `app/api` (59) — so they grow with the codebase rather than with
-coverage, and **shrink with it**: the total fell from 1492 to 1490 on 2026-09-06 with no
-test removed, because deleting `app/api/utils/request_helpers.py` took one case from each.
+coverage, and **shrink with it**: the total fell from 1492 to 1483 across 2026-09-06 with no
+test removed — deleting `app/api/utils/request_helpers.py` took one case from each scan, and
+the eight further modules deleted that day took one each from the `app/` scan alone.
 A drop in this number is not evidence that coverage was lost; check which suite moved. The real baseline on 2026-09-03 was 651, not the 538 this paragraph claimed:
 the count had not been updated since 2026-09-02 while tests kept landing with fixes.
 Parametrizing per module is deliberate — a failure names the file, and a new module is
@@ -2116,6 +2117,27 @@ Two things learned doing this the first time:
   survive — and internal `[E{k}]` markers are stripped rather than rendered. The frontend
   shows the draft in a `local-assistant-stream` bubble and replaces it with the answer from
   the query response.
+
+  **There is a second streaming design in the tree, and nothing calls it — open technical
+  debt, deliberately left in place on 2026-09-06.** `RAGPipeline.execute_stream` is declared
+  on the `PipelineExecutionEngine` Protocol and forwards to
+  `OrchestrationEngine.execute_stream`, which pumps an `asyncio.Queue` and yields
+  `{"type": "status"|"done"}` dicts built by `_terminal_payload`. That is a different shape
+  from everything described above: no `execution_id` subscription, no replay, and no
+  fragment events — it emits stage status and then one finished payload. Nothing in `app/`,
+  `tests/` or the frontend calls it, and `execute_stream` takes a `result_postprocessor` it
+  immediately `del`s, which is the mark of an adaptation for a caller that has since gone.
+
+  **It is not a DLP hole, and it is worth saying why rather than assuming either way.** It
+  awaits `_execute` to completion and yields the resulting `FinalAnswer`, so `output_filter`
+  — a `MANDATORY_STAGES` member — has already run; the `StreamingRedactor` is absent because
+  nothing here streams unfinished text, not because anything skips redaction.
+
+  It survived the 2026-09-06 dead-code sweep on purpose. Removing it touches the pipeline's
+  public surface and a declared Protocol, so it is a design decision — pick one streaming
+  design and delete the other — not the helper cleanup the rest of that sweep was. The cost
+  of leaving it is a second answer to "how does this system stream", which is the shape of
+  every duplicate that sweep did remove.
 
   **Nothing unredacted may enter that store.** `StreamingRedactor`
   (`app/privacy/streaming.py`) releases only text whose redaction cannot still change: it
@@ -2340,20 +2362,46 @@ Two things learned doing this the first time:
   (`validate_level2` called the NLI validator, `validate_level3` the citation one).
   Deleted with `run_cascade`, one more consumerless alias in the same class.
 
-  **One thing was deliberately not deleted.** `orchestration/engine.py::_terminal_payload`
-  is unreachable, but only because `OrchestrationEngine.execute_stream` is, and that
-  in turn because nothing calls `RAGPipeline.execute_stream` -- a whole second
-  streaming design, declared in the `PipelineExecutionEngine` Protocol, yielding
-  event dicts directly rather than through the `ExecutionEventStore` /
-  `AnswerStreamStore` replay the SSE endpoint actually uses. Removing it is a
-  decision about the pipeline's public surface, not a dead-helper cleanup, so it
-  wants its own call. Note the tell: `execute_stream` takes a
-  `result_postprocessor` it immediately `del`s.
+  **One thing was deliberately not deleted**, and it is the only entry left:
+  `orchestration/engine.py::_terminal_payload`, unreachable because
+  `OrchestrationEngine.execute_stream` is, and that because nothing calls
+  `RAGPipeline.execute_stream`. That is a second streaming design on a declared
+  Protocol, so removing it is a design decision rather than a cleanup -- written up
+  as open technical debt under **SSE streaming** in Important Notes, which is where
+  someone looking at streaming will actually land.
 
-  **30 non-reachable definitions remain in `app/`** -- 25 unreachable, 5 in modules
-  nothing imports (`evaluation/baselines/chroma/*`, `graph/streaming*`), none reached
-  only from tests. Clearing those comes before refactoring the 85: there is no
-  point spending judgement on the complexity of code that should not exist.
+  **The fourth batch (2026-09-06) took the remaining 25 and three whole packages**,
+  about 420 lines. The 25 were one-line-each confirmations -- every one had exactly
+  one `git grep -w` hit, its own `def` -- and deleting them exposed one cascade,
+  `registry.py::get_document_record`, whose only caller had been among them.
+
+  The three packages are the more interesting half. `app/baselines/` was a
+  re-export shim nothing imported, and it was the *only* importer of
+  `app/evaluation/baselines/chroma/{vector,rerank,hybrid}.py` -- so those three
+  died with it. **They are worth noticing on the way out**: each calls
+  `self.vectorstore.similarity_search_with_relevance_scores(query, k=...)` on a raw
+  Chroma handle, with no tenant, no owner and no source filter. That escapes
+  `test_no_unrestricted_retrieval.py` entirely, because the guard looks for this
+  repository's own `similarity_search` and these call LangChain's differently-named
+  method on an injected store. Nothing constructed them, and the classes offer no
+  way to scope a search, so wiring one up would have been an unscoped read across
+  every tenant. The allowlisted harness is a different file --
+  `baselines/api_retriever.py`, still live, still allowlisted, and
+  `test_the_ownerless_allowlist_is_not_stale` still passes.
+
+  `app/graph/streaming/` was the third, and it was already broken:
+  `run_query_stream` imports `app.graph.streaming.stream_processor`, which does not
+  exist, behind a function-local import -- the same defect shape as the
+  `compatibility_post_execution` adapters in batch two, hidden the same way. Its own
+  comment read "Retained import alias only; public API/SSE uses typed Engine
+  streaming." The admin console's log-filter placeholder named
+  `app.graph.streaming` as its example logger, in both locales; it names
+  `app.orchestration.engine` now.
+
+  **1 non-reachable definition remains in `app/`**, the deliberate one above: 0 in
+  unimported modules, 0 reached only from tests. That is the clean ground for the
+  85 `python:S3776` findings that are live code -- refactoring judgement now goes
+  only to code that runs.
 - **Answer provenance**: what a message may claim about where it came from is computed in
   one place — `retrieval_summary` (`app/api/routes/internal/pipeline_contract.py`), from the
   knowledge diagnostics both entry points already carry. **`used` means a source contributed

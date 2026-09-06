@@ -55,29 +55,3 @@ def detect_language(text: str) -> str:
     )
 
     return detected
-
-
-def get_language_name(lang_code: str) -> str:
-    """
-    Convert language code to full name.
-
-    Args:
-        lang_code: 'zh' or 'en'
-
-    Returns:
-        'Chinese' or 'English'
-    """
-    return "Chinese" if lang_code == "zh" else "English"
-
-
-def is_chinese_dominant(text: str) -> bool:
-    """
-    Quick check if text is primarily Chinese.
-
-    Args:
-        text: Input text
-
-    Returns:
-        True if Chinese characters dominate
-    """
-    return detect_language(text) == "zh"

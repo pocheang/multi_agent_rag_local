@@ -86,8 +86,3 @@ def service_unavailable(detail: str = "Service temporarily overloaded, retry lat
 def not_implemented(detail: str = "Not implemented") -> HTTPException:
     """Return a 501 Not Implemented error."""
     return HTTPException(status_code=501, detail=detail)
-
-
-def payload_too_large(detail: str = "Payload too large") -> HTTPException:
-    """Return a 413 Payload Too Large error."""
-    return HTTPException(status_code=413, detail=detail)

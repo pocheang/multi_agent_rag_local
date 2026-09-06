@@ -500,11 +500,6 @@ def _insert_triplets(
     return count
 
 
-def ingest_docs_dir(data_dir: Path, reset_vector_store: bool = True) -> dict:
-    paths = [p for p in data_dir.rglob("*") if p.is_file()]
-    return ingest_paths(paths, reset_vector_store=reset_vector_store)
-
-
 def _canonical_metadata(parsed: ParsedDocument) -> dict[str, Any]:
     document = parsed.document
     return {

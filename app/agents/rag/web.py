@@ -1,7 +1,5 @@
 import logging
 import time
-from functools import lru_cache
-from hashlib import md5
 from urllib.parse import urlparse
 
 from app.core.config import get_settings
@@ -59,25 +57,6 @@ def _sanitize_query(question: str) -> str:
 
 
 # Simple in-memory cache for web search results
-@lru_cache(maxsize=128)
-def _cached_search(question_hash: str, max_results: int) -> tuple:
-    """
-    Cache wrapper for search results.
-    Note: This is a placeholder - actual search is done in run_web_research.
-    The cache key is used to check if we've searched this before.
-    """
-    # This function exists only to provide cache key checking
-    # Actual caching is handled in run_web_research
-    return (question_hash, max_results)
-
-
-def _get_cache_key(question: str) -> str:
-    """Generate cache key from question."""
-    # A cache key, not a security primitive -- said out loud so neither a reader
-    # nor a scanner has to guess which one it is.
-    return md5(question.encode("utf-8"), usedforsecurity=False).hexdigest()
-
-
 def _parse_allowlist(raw: str) -> list[str]:
     out = []
     for x in str(raw or "").split(","):

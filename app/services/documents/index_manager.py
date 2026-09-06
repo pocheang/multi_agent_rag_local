@@ -12,9 +12,7 @@ from app.services.documents.dedup import compute_sha256
 from app.services.documents.registry import (
     delete_document_by_source,
     get_document_by_source,
-    get_document_record,
     update_document_by_source,
-    update_document_record,
 )
 from app.services.runtime.runtime_ops import append_index_freshness
 
@@ -482,61 +480,3 @@ def rebuild_all_vector_index() -> dict[str, Any]:
     _reset_bm25()
     _reset_retrieval_cache()
     return {"ok": True, "records_reindexed": len(records)}
-
-
-def rollback_document_version(document_id: str, version: int, *, tenant_id: str) -> dict[str, Any]:
-    """Activate one immutable Evidence version without touching another tenant's document."""
-
-    from app.services.documents.ingest import ingest_paths
-    from app.services.evidence import ArtifactStore, ManifestStore
-
-    record = get_document_record(document_id)
-    if record is None:
-        raise ValueError(f"document not found: {document_id}")
-    record_tenant = str(record.get("tenant_id", "") or "")
-    if record_tenant != tenant_id:
-        raise PermissionError("document does not belong to the requested tenant")
-    artifacts = ArtifactStore()
-    manifest = ManifestStore(artifacts).load(tenant_id, document_id, version)
-    original = next((item for item in manifest.artifacts if item.kind == "original"), None)
-    if original is None:
-        raise RuntimeError("evidence manifest has no original artifact")
-    archived_path = artifacts.resolve(original.uri)
-    source = str(record.get("source", "") or manifest.source)
-    delete_file_index(
-        Path(source).name,
-        remove_physical_file=False,
-        source=source,
-        document_id=document_id,
-        version=int(record.get("version", 1) or 1),
-        tenant_id=tenant_id,
-    )
-    metadata = {
-        "document_id": document_id,
-        "version": version,
-        "tenant_id": tenant_id,
-        "source": source,
-        "owner_user_id": str(record.get("owner_user_id", "") or ""),
-        "visibility": str(record.get("visibility", "private") or "private"),
-        "acl_tags": tuple(str(value) for value in record.get("acl_tags", ()) or ()),
-        "agent_class": str(record.get("agent_class", "general") or "general"),
-        "parser_profile": str(record.get("parser_profile", "") or ""),
-    }
-    result = ingest_paths(
-        [archived_path],
-        metadata_overrides_by_source={str(archived_path): metadata},
-        persist_evidence=False,
-    )
-    updated = update_document_record(
-        document_id,
-        {
-            "version": version,
-            "sha256": manifest.sha256,
-            "status": "ready",
-            "stage": "rollback_complete",
-            "error": "",
-            "chunks_indexed": int(result.get("chunks_indexed", 0) or 0),
-            "triplets_written": int(result.get("triplets_written", 0) or 0),
-        },
-    )
-    return {"ok": True, "document": updated, "result": result}

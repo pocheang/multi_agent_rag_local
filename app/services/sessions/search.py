@@ -322,16 +322,3 @@ class SessionSearchService:
 # ============================================================================
 
 _search_service_instance: SessionSearchService | None = None
-
-
-def get_search_service() -> SessionSearchService:
-    """
-    Get singleton instance of SessionSearchService.
-
-    Returns:
-        Singleton service instance
-    """
-    global _search_service_instance
-    if _search_service_instance is None:
-        _search_service_instance = SessionSearchService()
-    return _search_service_instance

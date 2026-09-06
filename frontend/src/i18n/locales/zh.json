@@ -208,7 +208,7 @@
       "resetToken": "重置令牌",
       "systemLogs": "系统日志",
       "systemLogHint": "展示应用运行日志（含错误堆栈），用于管理层查看系统健康与异常。",
-      "loggerExample": "例如 app.graph.streaming",
+      "loggerExample": "例如 app.orchestration.engine",
       "keyword": "关键词",
       "keywordPlaceholder": "关键字（message/exception）",
       "systemLogEmpty": "未命中系统日志。",

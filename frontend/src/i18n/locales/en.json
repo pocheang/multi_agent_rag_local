@@ -208,7 +208,7 @@
       "resetToken": "Reset token",
       "systemLogs": "System Logs",
       "systemLogHint": "Shows application runtime logs, including error stack traces, for system health and exception review.",
-      "loggerExample": "e.g. app.graph.streaming",
+      "loggerExample": "e.g. app.orchestration.engine",
       "keyword": "Keyword",
       "keywordPlaceholder": "Keyword (message/exception)",
       "systemLogEmpty": "No system logs matched.",

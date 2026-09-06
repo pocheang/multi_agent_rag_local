@@ -290,32 +290,3 @@ def blocks_to_markdown(blocks: list[TextBlock]) -> str:
             lines.append(f"{block.content}\n")
 
     return "\n".join(lines)
-
-
-def blocks_to_plain_text(blocks: list[TextBlock]) -> str:
-    """将结构化块转换为纯文本（保留结构）."""
-    lines = []
-
-    for block in blocks:
-        if block.type in ("title", "heading"):
-            lines.append(f"\n{'=' * 50}")
-            lines.append(block.content)
-            lines.append(f"{'=' * 50}\n")
-
-        elif block.type == "paragraph":
-            lines.append(f"{block.content}\n")
-
-        elif block.type == "list_item":
-            indent = "  " * block.level
-            lines.append(f"{indent}• {block.content}")
-
-        elif block.type == "table_row":
-            lines.append(block.content)
-
-        elif block.type == "code":
-            lines.append(f"\n{block.content}\n")
-
-        else:
-            lines.append(block.content)
-
-    return "\n".join(lines)

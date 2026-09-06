@@ -64,19 +64,6 @@ def install_app_services(app: FastAPI) -> AppServices:
     return services
 
 
-def get_app_services(app: FastAPI) -> AppServices:
-    """Read the installed container for trusted in-process integrations."""
-    services = getattr(app.state, "querymind_services", None)
-    if services is None:
-        # Lifespan installs the container in production.  Initializing here
-        # keeps embedded ASGI hosts on the same typed capability graph instead
-        # of falling back to an ungoverned tool path.
-        services = install_app_services(app)
-    if not isinstance(services, AppServices):
-        raise RuntimeError("application services are not installed")
-    return services
-
-
 def require_app_services(request: Request) -> AppServices:
     """Fail closed when a router is mounted outside the production application."""
     services = getattr(request.app.state, "querymind_services", None)

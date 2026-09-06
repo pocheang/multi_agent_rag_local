@@ -185,10 +185,6 @@ def save_global_model_settings(raw: dict[str, Any]) -> dict[str, Any]:
     return normalized
 
 
-def normalize_global_model_settings(raw: dict[str, Any]) -> dict[str, Any]:
-    return _normalize_global_model_settings(raw)
-
-
 def global_model_settings_probe_payload(raw: dict[str, Any]) -> dict[str, Any]:
     payload = _reuse_existing_api_key(raw, get_global_model_settings())
     payload["enabled"] = bool(payload.get("enabled", False))

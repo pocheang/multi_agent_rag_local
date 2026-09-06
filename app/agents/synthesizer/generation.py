@@ -66,24 +66,6 @@ _TOKEN_RE = re.compile(r"[A-Za-z0-9_]+|[\u4e00-\u9fff]")
 # caller already had.
 
 
-def _build_prompt(
-    question: str,
-    skill_name: str,
-    memory_context: str = "",
-    vector_context: str = "",
-    graph_context: str = "",
-    web_context: str = "",
-) -> str:
-    return (
-        f"技能: {skill_name}\n\n"
-        f"用户问题:\n{question}\n\n"
-        f"记忆上下文:\n{memory_context or '无'}\n\n"
-        f"向量检索上下文:\n{vector_context or '无'}\n\n"
-        f"图谱上下文:\n{graph_context or '无'}\n\n"
-        f"联网补充上下文:\n{web_context or '无'}\n"
-    )
-
-
 def _build_prompt_with_language(
     question: str,
     detected_language: str,

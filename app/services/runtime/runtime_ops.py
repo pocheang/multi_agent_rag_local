@@ -299,21 +299,6 @@ def get_runtime_state() -> dict[str, Any]:
     }
 
 
-def set_feature_flags(flags: dict[str, str]) -> dict[str, Any]:
-    normalized: dict[str, str] = {}
-    for k, v in (flags or {}).items():
-        name = normalize_string(k, lowercase=True)
-        rule = normalize_string(v, lowercase=True)
-        if not name:
-            continue
-        if rule in {"on", "off"} or rule.startswith("pct:"):
-            normalized[name] = rule
-    with _LOCK:
-        _STATE["feature_flags"] = normalized
-        _STATE["updated_at"] = _now_iso()
-    return get_runtime_state()
-
-
 def _feature_flags_from_settings() -> dict[str, str]:
     raw = str(get_settings().feature_flags or "").strip()
     if not raw:
@@ -491,15 +476,6 @@ def _collect_replay_questions(*, history_store: _HistoryStore, max_questions: in
     return questions
 
 
-def build_replay_summary(*, history_store: _HistoryStore, max_questions: int) -> dict[str, Any]:
-    """Return replay candidate metadata for callers that only need a preview."""
-    questions = _collect_replay_questions(history_store=history_store, max_questions=max_questions)
-    return {
-        "created_at": _now_iso(),
-        "num_questions": len(questions),
-    }
-
-
 def run_replay(
     *,
     history_store: _HistoryStore,
@@ -629,7 +605,3 @@ def _read_jsonl(path: Path, limit: int = 30) -> list[dict[str, Any]]:
 
 def read_replay_trends(limit: int = 30) -> list[dict[str, Any]]:
     return _read_jsonl(replay_trend_path(), limit=limit)
-
-
-def read_index_freshness(limit: int = 200) -> list[dict[str, Any]]:
-    return _read_jsonl(index_freshness_path(), limit=limit)

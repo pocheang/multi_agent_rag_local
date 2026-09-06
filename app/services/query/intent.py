@@ -116,16 +116,3 @@ def should_force_web_research(text: str) -> bool:
     if any(re.search(p, t, flags=re.IGNORECASE) for p in _CASUAL_CHAT_PATTERNS):
         return False
     return _looks_like_information_request(t)
-
-
-def quick_smalltalk_reply(text: str) -> str | None:
-    t = _strip_internal_guidance(text)
-    if not t:
-        return None
-    if not _is_casual_chat_by_rules(t):
-        return None
-    normalized = t.strip().lower()
-    for pattern, reply in _SMALLTALK_REPLY_PATTERNS:
-        if re.search(pattern, normalized, flags=re.IGNORECASE):
-            return reply
-    return "收到，我们可以先随便聊聊；如果你要我查文档或做分析，直接说需求就行。"
