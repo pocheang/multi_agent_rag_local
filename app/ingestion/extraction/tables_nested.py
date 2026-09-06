@@ -1,7 +1,5 @@
 """Nested table detection and flattening."""
 
-import re
-
 
 def detect_nested_table(text: str) -> bool:
     """Detect if text contains nested tables (table within table cells).
@@ -77,44 +75,6 @@ def flatten_nested_table(text: str) -> str:
     return "\n".join(flattened_lines)
 
 
-def extract_nested_tables(text: str) -> list[str]:
-    """Extract nested tables as separate tables.
-
-    Args:
-        text: Markdown text
-
-    Returns:
-        List of table texts (parent + nested)
-    """
-    tables = []
-
-    # Find main table
-    lines = text.split("\n")
-    table_lines = []
-    nested_content = []
-
-    for line in lines:
-        if "|" in line:
-            table_lines.append(line)
-
-            # Check for nested content
-            cells = [c.strip() for c in line.split("|") if c.strip()]
-            for cell in cells:
-                if "|" in cell:
-                    # Extract nested table
-                    nested_content.append(cell)
-
-    if table_lines:
-        tables.append("\n".join(table_lines))
-
-    # Process nested content
-    for nested in nested_content:
-        if "|" in nested:
-            tables.append(nested)
-
-    return tables
-
-
 def simplify_complex_table(text: str) -> str:
     """Simplify complex tables for better LLM understanding.
 
@@ -141,65 +101,3 @@ def simplify_complex_table(text: str) -> str:
             cleaned_lines.append(line)
 
     return "\n".join(cleaned_lines)
-
-
-def split_wide_table(text: str, max_columns: int = 6) -> list[str]:
-    """Split very wide tables into multiple narrower tables.
-
-    Args:
-        text: Markdown table text
-        max_columns: Maximum columns per table
-
-    Returns:
-        List of table texts
-    """
-    lines = text.split("\n")
-    if not lines:
-        return [text]
-
-    # Find header line
-    header_line = None
-
-    for i, line in enumerate(lines):
-        if "|" in line:
-            header_line = line
-            if i + 1 < len(lines) and re.match(r"^\|[\s\-:]+\|", lines[i + 1].strip()):
-                # The separator row is only being *detected* here; the match
-                # above is the whole test. A bare `lines[i + 1]` stood here and
-                # evaluated to nothing.
-                break
-
-    if not header_line:
-        return [text]
-
-    # Count columns
-    header_cells = [c.strip() for c in header_line.split("|") if c.strip()]
-    num_columns = len(header_cells)
-
-    if num_columns <= max_columns:
-        return [text]
-
-    # Split into multiple tables
-    tables = []
-    for start_col in range(0, num_columns, max_columns):
-        end_col = min(start_col + max_columns, num_columns)
-
-        # Extract columns
-        sub_table_lines = []
-        for line in lines:
-            if "|" not in line:
-                sub_table_lines.append(line)
-                continue
-
-            cells = [c.strip() for c in line.split("|")]
-            cells = [c for c in cells if c or cells.index(c) > 0]  # Keep structure
-
-            # Extract subset of columns
-            if len(cells) > start_col:
-                sub_cells = cells[start_col:end_col]
-                sub_line = "| " + " | ".join(sub_cells) + " |"
-                sub_table_lines.append(sub_line)
-
-        tables.append("\n".join(sub_table_lines))
-
-    return tables

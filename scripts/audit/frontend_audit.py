@@ -1,7 +1,7 @@
 """Frontend audit: endpoints vs OpenAPI, orphan modules, i18n keys.
 
 Run from the repo root with the rag-local interpreter:
-    PYTHONIOENCODING=utf-8 python fe_audit.py
+    PYTHONIOENCODING=utf-8 python scripts/audit/frontend_audit.py
 """
 
 import json

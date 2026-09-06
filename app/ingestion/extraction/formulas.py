@@ -2,12 +2,6 @@
 
 import re
 
-_SINGLE_LETTER_VARIABLE_RE = re.compile(r"\b[a-zA-Z]\b")
-"""A one-letter variable. Two of its three uses produce the sets that the left
-and right of an equation are compared by, so they have to be produced the same
-way -- a divergence here would compare two different notions of "variable" and
-report a relationship that is not there."""
-
 
 def detect_formula(text: str) -> list[dict[str, str]]:
     """
@@ -134,37 +128,6 @@ def equation_to_text(equation: str) -> str:
     return f"{left} equals {right}"
 
 
-def extract_formula_semantics(formula: str) -> dict[str, any]:
-    """
-    Extract semantic information from formula.
-
-    Args:
-        formula: Formula string
-
-    Returns:
-        Dict with semantic information
-    """
-    semantics = {"variables": [], "operators": [], "constants": [], "functions": []}
-
-    # Extract variables (single letters)
-    variables = _SINGLE_LETTER_VARIABLE_RE.findall(formula)
-    semantics["variables"] = list(set(variables))
-
-    # Extract operators
-    operators = re.findall(r"[+\-*/^=]", formula)
-    semantics["operators"] = list(set(operators))
-
-    # Extract numbers (constants)
-    constants = re.findall(r"\b\d+\.?\d*\b", formula)
-    semantics["constants"] = list(set(constants))
-
-    # Extract functions (e.g., sin, cos, log)
-    functions = re.findall(r"\b(sin|cos|tan|log|ln|exp|sqrt)\b", formula, re.IGNORECASE)
-    semantics["functions"] = list(set(functions))
-
-    return semantics
-
-
 def enrich_text_with_formulas(text: str) -> str:
     """
     Enrich text by adding natural language descriptions of formulas.
@@ -197,43 +160,3 @@ def enrich_text_with_formulas(text: str) -> str:
         enriched = enriched.replace(raw, f"{raw} [{description}]", 1)
 
     return enriched
-
-
-def extract_formula_relationships(text: str) -> list[dict[str, str]]:
-    """
-    Extract relationships expressed in formulas.
-
-    Args:
-        text: Text with formulas
-
-    Returns:
-        List of relationship dicts
-    """
-    formulas = detect_formula(text)
-    relationships = []
-
-    for formula_info in formulas:
-        formula = formula_info["formula"]
-
-        # Parse equation relationships
-        if "=" in formula:
-            parts = formula.split("=")
-            if len(parts) == 2:
-                left = parts[0].strip()
-                right = parts[1].strip()
-
-                # Extract variables
-                left_vars = _SINGLE_LETTER_VARIABLE_RE.findall(left)
-                right_vars = _SINGLE_LETTER_VARIABLE_RE.findall(right)
-
-                # Create relationships
-                for lv in left_vars:
-                    for rv in right_vars:
-                        relationships.append({"head": lv, "relation": "EQUALS", "tail": rv, "formula": formula})
-
-                # Check for proportionality
-                if "*" in right or "/" in right:
-                    for rv in right_vars:
-                        relationships.append({"head": left, "relation": "DEPENDS_ON", "tail": rv, "formula": formula})
-
-    return relationships

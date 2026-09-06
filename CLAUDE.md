@@ -36,10 +36,10 @@ ruff format .                       # Format code
 ```
 
 Note (2026-08-28, counts refreshed 2026-09-05): `tests/` and `scripts/` were cleared ahead
-of the v0.7 rewrite. `scripts/` was down to one file then and holds seven now — `audit/frontend_audit.py`,
-`check_lock_wheels.py`, `check_sensitive.py`, `ci_import_environment.py`, `create_admin.py`,
-`eval_retrieval.py`, `verify_config_centre.py` — each added with the thing it verifies, and still no
-`scripts/init_db.py`. `tests/` is being rebuilt incrementally alongside bug fixes — see
+of the v0.7 rewrite. `scripts/` was down to one file then and holds eight now — `audit/frontend_audit.py`,
+`audit/reachability.py`, `check_lock_wheels.py`, `check_sensitive.py`, `ci_import_environment.py`,
+`create_admin.py`, `eval_retrieval.py`, `verify_config_centre.py` — each added with the thing it verifies,
+and still no `scripts/init_db.py`. `tests/` is being rebuilt incrementally alongside bug fixes — see
 Testing Strategy below.
 
 **Tests and lint**
@@ -1960,7 +1960,9 @@ or every later query in the file finds two of everything.
 
 Note: do not use `len(app.routes)` to count endpoints. FastAPI 0.138+ stores an
 `_IncludedRouter` wrapper in `app.routes` instead of flattening child routes, so that number
-varies by version. Count OpenAPI operations instead; the current baseline is 153 (CI asserts a >= 140 floor).
+varies by version. Count OpenAPI operations instead; the current baseline is 154 (CI asserts a >= 140 floor).
+It read 153 until 2026-09-06 and had been 154 for some time before that — a number in this file that
+nothing recomputes goes stale the way the test count did.
 
 ### Sensitive content gate (added 2026-09-04)
 
@@ -2182,6 +2184,53 @@ Two things learned doing this the first time:
   `agent_tracking.py`'s SSE poll: no client calls that endpoint, and
   `AgentExecutionTracker` is `threading.Lock`-based, so an `asyncio.Event` there
   would need `call_soon_threadsafe` -- the defect class fixed twice already.
+- **`python:S3776` is 89 open findings, and 85 of them are live code** (swept
+  2026-09-06). The question was worth asking because the finding in
+  `user_manager.py` was answered by `git grep`, not by refactoring:
+  `UserManager.create_user` carried a complexity of 18 and had no caller
+  anywhere -- `AuthDBService._create_user_record` is the live copy, left behind
+  when it moved so it could share a connection with the OAuth identity insert,
+  and the two had already drifted (only the live one has `raise ... from exc`).
+  Refactoring it would have satisfied the rule and left the dead code standing.
+
+  `scripts/audit/reachability.py` asks that question for every finding at once;
+  `--sonar issues.json` cross-references a SonarCloud query. **Read its docstring
+  before believing it**: it is a name-based call graph, so it over-approximates,
+  and its first version reported two live HTTP endpoints as dead by resolving
+  `from .export import router` in a package `__init__.py` against the package's
+  parent. UNREACHABLE is a candidate to confirm with `git grep -w`, never a
+  verdict, which is also why the script always exits 0 and must not become a CI
+  gate.
+
+  Four findings were unreachable, and deleting them cascaded to two more whose
+  only caller was one of the four: `extract_formula_relationships` and
+  `extract_formula_semantics` (`extraction/formulas.py`), `split_wide_table` and
+  `extract_nested_tables` (`extraction/tables_nested.py`), `merge_table_pages`
+  with `is_table_start` and `extract_table_header` (`extraction/tables.py`), and
+  `_require_existing_session_for_query` with `_latest_answer_for_same_question`
+  (`api/deps/sessions.py`) -- 338 lines, four findings closed, no behaviour
+  changed.
+
+  **The cost of not knowing what is dead is already being paid.** `9120f987`, the
+  commit before this one, named `_SINGLE_LETTER_VARIABLE_RE` in `formulas.py`
+  because "two of its three uses produce the sets that the left and right of an
+  equation are compared by" -- careful reasoning about a divergence that would
+  "report a relationship that is not there", in two functions nothing called. All
+  three uses are gone with them. The same commit's other half,
+  `_SEPARATOR_ROW_RE` in `tables.py`, was written for three call sites and has
+  one left; its docstring says so rather than continuing to claim three.
+
+  **62 non-reachable definitions remain in `app/`** -- 55 unreachable, 5 in
+  modules nothing imports (`evaluation/baselines/chroma/*`, `graph/streaming*`),
+  2 reached only from tests. Three read exactly like `create_user`, a copy left
+  behind when the live one moved: `retrievers/hybrid/fusion.py::reciprocal_rank_fusion`
+  beside the live `knowledge/fusion.py::reciprocal_rank_fuse`,
+  `outbound_redaction.py::redact_text_for_provider` beside the live plural and
+  `..._messages_...` forms, and `citation_grounding.py::_split_sentences`, which
+  `_makes_a_claim`'s docstring still names as the function in the path when the
+  caller is `_sentence_spans`. Clearing those comes before refactoring the 85:
+  there is no point spending judgement on the complexity of code that should not
+  exist.
 - **Answer provenance**: what a message may claim about where it came from is computed in
   one place — `retrieval_summary` (`app/api/routes/internal/pipeline_contract.py`), from the
   knowledge diagnostics both entry points already carry. **`used` means a source contributed
