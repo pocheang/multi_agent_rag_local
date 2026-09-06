@@ -107,10 +107,15 @@ def test_the_totals_handed_to_the_enhancer_count_blanks_too(scripted, monkeypatc
 
 def test_a_document_with_an_identity_gets_the_same_parent_id_every_time():
     # Re-ingesting an unchanged document must not create a second parent, so the
-    # id is a hash of identity + position + text rather than a uuid.
+    # id is a hash of identity + position + text rather than a uuid. The two calls
+    # are bound to names rather than compared inline: `f(x) == f(x)` is what
+    # `python:S5863` exists to catch, and a rule cannot tell "I meant to compare a
+    # thing to itself" from the mistake it usually is.
     args = ("doc-1|v3", 0, 0, "the parent text")
-    assert _parent_id(*args) == _parent_id(*args)
-    assert _parent_id(*args).startswith("parent-")
+    first_call = _parent_id(*args)
+    second_call = _parent_id(*args)
+    assert first_call == second_call
+    assert first_call.startswith("parent-")
 
     # Change any input and the id changes.
     assert _parent_id("doc-1|v4", 0, 0, "the parent text") != _parent_id(*args)

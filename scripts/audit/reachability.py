@@ -406,8 +406,26 @@ def report_dead(graph: Graph, include_methods: bool) -> None:
     print(f"\n{total} non-reachable definitions; confirm each with `git grep -w <name>` before deleting.")
 
 
+def readable_file(path: Path) -> Path:
+    """Resolve a path that came from the command line, before opening it.
+
+    argv is untrusted as far as taint analysis is concerned
+    (`pythonsecurity:S8707`), and this is a developer tool an agent may well run
+    with arguments it constructed itself. Resolving symlinks and requiring an
+    existing regular file is what makes the read a deliberate one rather than
+    whatever the string happened to name.
+    """
+    try:
+        resolved = path.expanduser().resolve(strict=True)
+    except OSError as exc:
+        raise SystemExit(f"cannot read {path}: {exc}") from exc
+    if not resolved.is_file():
+        raise SystemExit(f"not a regular file: {resolved}")
+    return resolved
+
+
 def report_sonar(graph: Graph, sonar_path: Path) -> None:
-    issues = json.loads(sonar_path.read_text(encoding="utf-8")).get("issues", [])
+    issues = json.loads(readable_file(sonar_path).read_text(encoding="utf-8")).get("issues", [])
     rows = []
     for issue in issues:
         rel = issue["component"].split(":", 1)[-1]
