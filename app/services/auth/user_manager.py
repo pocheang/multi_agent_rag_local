@@ -1,3 +1,4 @@
+import logging
 import sqlite3
 import uuid
 from datetime import timedelta
@@ -13,8 +14,46 @@ from app.services.auth.validation import (
     validate_username,
 )
 
+logger = logging.getLogger(__name__)
+
 DEFAULT_CHAT_CREDITS = 10
 MAX_CREDIT_TOP_UP = 1_000_000
+
+# The administrative view of a user: the shape every method feeding
+# AdminUserSummary returns. Three of its columns are derived rather than stored --
+# whether an approval token is set, the hash itself never being selected here, and
+# whether the user holds a live session now or was seen in the last ten minutes.
+# (update_user_display_name is the one deliberate exception; see its own note.)
+#
+# It was written out six times before 2026-09-06, five of them character for
+# character identical, so a column added to the view had to be added in six
+# places and a column added to five of them would have left one endpoint quietly
+# reporting a different shape from its neighbours.
+#
+# It ends without a WHERE or ORDER BY so its two callers can supply one; the
+# three "?" are the timestamps _online_window() produces, in that order.
+_ADMIN_VIEW_SQL = """
+    SELECT u.user_id, u.username, u.role, u.status, u.created_by_user_id, u.created_by_username, u.admin_ticket_id,
+           CASE WHEN u.admin_approval_token_hash IS NOT NULL AND u.admin_approval_token_hash <> '' THEN 1 ELSE 0 END AS has_admin_approval_token,
+           u.business_unit, u.department, u.user_type, u.data_scope, u.credit_balance,
+           CASE WHEN s.user_id IS NULL THEN 0 ELSE 1 END AS is_online,
+           CASE WHEN s10.user_id IS NULL THEN 0 ELSE 1 END AS is_online_10m,
+           u.created_at
+    FROM users u
+    LEFT JOIN (
+      SELECT DISTINCT user_id
+      FROM auth_sessions
+      WHERE expires_at > ?
+    ) s ON s.user_id = u.user_id
+    LEFT JOIN (
+      SELECT DISTINCT user_id
+      FROM auth_sessions
+      WHERE expires_at > ? AND COALESCE(last_seen_at, issued_at) >= ?
+    ) s10 ON s10.user_id = u.user_id
+"""
+
+_ADMIN_VIEW_ALL_SQL = _ADMIN_VIEW_SQL + "    ORDER BY u.created_at DESC\n"
+_ADMIN_VIEW_ONE_SQL = _ADMIN_VIEW_SQL + "    WHERE u.user_id=?\n"
 
 
 class InsufficientCreditsError(RuntimeError):
@@ -80,80 +119,22 @@ class UserManager:
     def __init__(self, conn_factory):
         self.conn_factory = conn_factory
 
-    def create_user(
-        self,
-        username: str,
-        password: str,
-        role: str = "viewer",
-        created_by_user_id: str | None = None,
-        created_by_username: str | None = None,
-        admin_ticket_id: str | None = None,
-        admin_approval_token_hash: str | None = None,
-        business_unit: str | None = None,
-        department: str | None = None,
-        user_type: str | None = None,
-        data_scope: str | None = None,
-        display_name: str | None = None,
-    ) -> dict[str, Any]:
-        username = validate_username(username)
-        password = _validate_service_password(password)
-        role = validate_role(role)
-        user_id = uuid.uuid4().hex
-        salt_hex = generate_salt()
-        password_hash = hash_password(password, salt_hex)
-        now_ts = iso(now())
-        business_unit = normalize_classification_value(business_unit)
-        department = normalize_classification_value(department)
-        user_type = normalize_classification_value(user_type)
-        data_scope = normalize_classification_value(data_scope)
-        display_name = (display_name or "").strip() or None
-        try:
-            with self.conn_factory() as conn:
-                conn.execute(
-                    """
-                    INSERT INTO users(
-                      user_id, username, salt, password_hash, role, status,
-                      created_by_user_id, created_by_username, admin_ticket_id, admin_approval_token_hash,
-                      business_unit, department, user_type, data_scope, display_name, created_at
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                    """,
-                    (
-                        user_id,
-                        username,
-                        salt_hex,
-                        password_hash,
-                        role,
-                        "active",
-                        (created_by_user_id or "").strip() or None,
-                        (created_by_username or "").strip() or None,
-                        (admin_ticket_id or "").strip() or None,
-                        (admin_approval_token_hash or "").strip() or None,
-                        business_unit,
-                        department,
-                        user_type,
-                        data_scope,
-                        display_name,
-                        now_ts,
-                    ),
-                )
-        except sqlite3.IntegrityError:
-            raise ValueError("username already exists")
-        return {
-            "user_id": user_id,
-            "username": username,
-            "role": role,
-            "status": "active",
-            "credit_balance": DEFAULT_CHAT_CREDITS,
-            "created_by_user_id": (created_by_user_id or "").strip() or None,
-            "created_by_username": (created_by_username or "").strip() or None,
-            "admin_ticket_id": (admin_ticket_id or "").strip() or None,
-            "has_admin_approval_token": bool((admin_approval_token_hash or "").strip()),
-            "business_unit": business_unit,
-            "department": department,
-            "user_type": user_type,
-            "data_scope": data_scope,
-            "display_name": display_name,
-        }
+    @staticmethod
+    def _online_window() -> tuple[str, str, str]:
+        """
+        The three timestamps _ADMIN_VIEW_SQL's joins take, from one clock read.
+
+        Two reads microseconds apart cannot disagree in any way a caller could
+        observe, but the pair describes one window and is now produced as one.
+        """
+        current = now()
+        now_ts = iso(current)
+        return now_ts, now_ts, iso(current - timedelta(minutes=10))
+
+    def _admin_view(self, conn: sqlite3.Connection, user_id: str) -> dict[str, Any] | None:
+        """Read one user back in the administrative shape, on an already-open connection."""
+        row = conn.execute(_ADMIN_VIEW_ONE_SQL, (*self._online_window(), user_id)).fetchone()
+        return dict(row) if row else None
 
     def authenticate(self, username: str, password: str) -> dict[str, Any] | None:
         username = validate_username(username)
@@ -177,32 +158,8 @@ class UserManager:
             }
 
     def list_users(self) -> list[dict[str, Any]]:
-        now_ts = iso(now())
-        recent_10m = iso(now() - timedelta(minutes=10))
         with self.conn_factory() as conn:
-            rows = conn.execute(
-                """
-                SELECT u.user_id, u.username, u.role, u.status, u.created_by_user_id, u.created_by_username, u.admin_ticket_id,
-                       CASE WHEN u.admin_approval_token_hash IS NOT NULL AND u.admin_approval_token_hash <> '' THEN 1 ELSE 0 END AS has_admin_approval_token,
-                       u.business_unit, u.department, u.user_type, u.data_scope, u.credit_balance,
-                       CASE WHEN s.user_id IS NULL THEN 0 ELSE 1 END AS is_online,
-                       CASE WHEN s10.user_id IS NULL THEN 0 ELSE 1 END AS is_online_10m,
-                       u.created_at
-                FROM users u
-                LEFT JOIN (
-                  SELECT DISTINCT user_id
-                  FROM auth_sessions
-                  WHERE expires_at > ?
-                ) s ON s.user_id = u.user_id
-                LEFT JOIN (
-                  SELECT DISTINCT user_id
-                  FROM auth_sessions
-                  WHERE expires_at > ? AND COALESCE(last_seen_at, issued_at) >= ?
-                ) s10 ON s10.user_id = u.user_id
-                ORDER BY created_at DESC
-                """,
-                (now_ts, now_ts, recent_10m),
-            ).fetchall()
+            rows = conn.execute(_ADMIN_VIEW_ALL_SQL, self._online_window()).fetchall()
             return [dict(r) for r in rows]
 
     def get_user_profile(self, user_id: str) -> dict[str, Any] | None:
@@ -221,9 +178,7 @@ class UserManager:
         try:
             user_id = _validate_user_id(user_id)
         except ValueError as e:
-            import logging
-
-            logging.getLogger(__name__).warning(f"Invalid user_id rejected: {e}")
+            logger.warning("Invalid user_id rejected: %s", e)
             return None
 
         with self.conn_factory() as conn:
@@ -252,36 +207,11 @@ class UserManager:
             return None
 
         role = validate_role(role)
-        now_ts = iso(now())
-        recent_10m = iso(now() - timedelta(minutes=10))
         with self.conn_factory() as conn:
             result = conn.execute("UPDATE users SET role=? WHERE user_id=?", (role, user_id))
             if result.rowcount <= 0:
                 return None
-            row = conn.execute(
-                """
-                SELECT u.user_id, u.username, u.role, u.status, u.created_by_user_id, u.created_by_username, u.admin_ticket_id,
-                       CASE WHEN u.admin_approval_token_hash IS NOT NULL AND u.admin_approval_token_hash <> '' THEN 1 ELSE 0 END AS has_admin_approval_token,
-                       u.business_unit, u.department, u.user_type, u.data_scope, u.credit_balance,
-                       CASE WHEN s.user_id IS NULL THEN 0 ELSE 1 END AS is_online,
-                       CASE WHEN s10.user_id IS NULL THEN 0 ELSE 1 END AS is_online_10m,
-                       u.created_at
-                FROM users u
-                LEFT JOIN (
-                  SELECT DISTINCT user_id
-                  FROM auth_sessions
-                  WHERE expires_at > ?
-                ) s ON s.user_id = u.user_id
-                LEFT JOIN (
-                  SELECT DISTINCT user_id
-                  FROM auth_sessions
-                  WHERE expires_at > ? AND COALESCE(last_seen_at, issued_at) >= ?
-                ) s10 ON s10.user_id = u.user_id
-                WHERE u.user_id=?
-                """,
-                (now_ts, now_ts, recent_10m, user_id),
-            ).fetchone()
-            return dict(row) if row else None
+            return self._admin_view(conn, user_id)
 
     def update_user_status(self, user_id: str, status: str) -> dict[str, Any] | None:
         """
@@ -296,43 +226,20 @@ class UserManager:
             return None
 
         status = validate_status(status)
-        now_ts = iso(now())
-        recent_10m = iso(now() - timedelta(minutes=10))
         with self.conn_factory() as conn:
             result = conn.execute("UPDATE users SET status=? WHERE user_id=?", (status, user_id))
             if result.rowcount <= 0:
                 return None
-            # SECURITY FIX: Don't delete sessions when disabling user
-            # Let the auth layer (_require_user) handle status check and return 403
-            # This provides better security feedback (403 vs 401)
-            # if status == "disabled":
-            #     conn.execute("DELETE FROM auth_sessions WHERE user_id=?", (user_id,))
-            row = conn.execute(
-                """
-                SELECT u.user_id, u.username, u.role, u.status, u.created_by_user_id, u.created_by_username, u.admin_ticket_id,
-                       CASE WHEN u.admin_approval_token_hash IS NOT NULL AND u.admin_approval_token_hash <> '' THEN 1 ELSE 0 END AS has_admin_approval_token,
-                       u.business_unit, u.department, u.user_type, u.data_scope, u.credit_balance,
-                       CASE WHEN s.user_id IS NULL THEN 0 ELSE 1 END AS is_online,
-                       CASE WHEN s10.user_id IS NULL THEN 0 ELSE 1 END AS is_online_10m,
-                       u.created_at
-                FROM users u
-                LEFT JOIN (
-                  SELECT DISTINCT user_id
-                  FROM auth_sessions
-                  WHERE expires_at > ?
-                ) s ON s.user_id = u.user_id
-                LEFT JOIN (
-                  SELECT DISTINCT user_id
-                  FROM auth_sessions
-                  WHERE expires_at > ? AND COALESCE(last_seen_at, issued_at) >= ?
-                ) s10 ON s10.user_id = u.user_id
-                WHERE u.user_id=?
-                """,
-                (now_ts, now_ts, recent_10m, user_id),
-            ).fetchone()
-            return dict(row) if row else None
+            # SECURITY: disabling a user deliberately leaves their sessions in place.
+            # The auth layer (_require_user) rechecks status on every request and answers
+            # 403, which tells the caller their account was disabled; deleting the
+            # sessions here would answer 401, which reads as "log in again".
+            return self._admin_view(conn, user_id)
 
     def update_user_display_name(self, user_id: str, display_name: str | None) -> dict[str, Any] | None:
+        # Deliberately not the administrative view: this one feeds AuthUser on the
+        # user's own /auth/profile, which has no business reporting session presence
+        # or approval-token state. Do not unify it with _admin_view.
         with self.conn_factory() as conn:
             result = conn.execute(
                 "UPDATE users SET display_name=? WHERE user_id=?",
@@ -349,8 +256,6 @@ class UserManager:
     def update_user_admin_approval_token(
         self, user_id: str, admin_approval_token_hash: str | None, admin_ticket_id: str | None = None
     ) -> dict[str, Any] | None:
-        now_ts = iso(now())
-        recent_10m = iso(now() - timedelta(minutes=10))
         with self.conn_factory() as conn:
             result = conn.execute(
                 "UPDATE users SET admin_approval_token_hash=?, admin_ticket_id=COALESCE(?, admin_ticket_id) WHERE user_id=?",
@@ -362,37 +267,12 @@ class UserManager:
             )
             if result.rowcount <= 0:
                 return None
-            row = conn.execute(
-                """
-                SELECT u.user_id, u.username, u.role, u.status, u.created_by_user_id, u.created_by_username, u.admin_ticket_id,
-                       CASE WHEN u.admin_approval_token_hash IS NOT NULL AND u.admin_approval_token_hash <> '' THEN 1 ELSE 0 END AS has_admin_approval_token,
-                       u.business_unit, u.department, u.user_type, u.data_scope, u.credit_balance,
-                       CASE WHEN s.user_id IS NULL THEN 0 ELSE 1 END AS is_online,
-                       CASE WHEN s10.user_id IS NULL THEN 0 ELSE 1 END AS is_online_10m,
-                       u.created_at
-                FROM users u
-                LEFT JOIN (
-                  SELECT DISTINCT user_id
-                  FROM auth_sessions
-                  WHERE expires_at > ?
-                ) s ON s.user_id = u.user_id
-                LEFT JOIN (
-                  SELECT DISTINCT user_id
-                  FROM auth_sessions
-                  WHERE expires_at > ? AND COALESCE(last_seen_at, issued_at) >= ?
-                ) s10 ON s10.user_id = u.user_id
-                WHERE u.user_id=?
-                """,
-                (now_ts, now_ts, recent_10m, user_id),
-            ).fetchone()
-            return dict(row) if row else None
+            return self._admin_view(conn, user_id)
 
     def update_user_password(self, user_id: str, password: str) -> dict[str, Any] | None:
         password = _validate_service_password(password)
         salt_hex = generate_salt()
         password_hash = hash_password(password, salt_hex)
-        now_ts = iso(now())
-        recent_10m = iso(now() - timedelta(minutes=10))
         with self.conn_factory() as conn:
             result = conn.execute(
                 "UPDATE users SET salt=?, password_hash=? WHERE user_id=?", (salt_hex, password_hash, user_id)
@@ -400,30 +280,7 @@ class UserManager:
             if result.rowcount <= 0:
                 return None
             conn.execute("DELETE FROM auth_sessions WHERE user_id=?", (user_id,))
-            row = conn.execute(
-                """
-                SELECT u.user_id, u.username, u.role, u.status, u.created_by_user_id, u.created_by_username, u.admin_ticket_id,
-                       CASE WHEN u.admin_approval_token_hash IS NOT NULL AND u.admin_approval_token_hash <> '' THEN 1 ELSE 0 END AS has_admin_approval_token,
-                       u.business_unit, u.department, u.user_type, u.data_scope, u.credit_balance,
-                       CASE WHEN s.user_id IS NULL THEN 0 ELSE 1 END AS is_online,
-                       CASE WHEN s10.user_id IS NULL THEN 0 ELSE 1 END AS is_online_10m,
-                       u.created_at
-                FROM users u
-                LEFT JOIN (
-                  SELECT DISTINCT user_id
-                  FROM auth_sessions
-                  WHERE expires_at > ?
-                ) s ON s.user_id = u.user_id
-                LEFT JOIN (
-                  SELECT DISTINCT user_id
-                  FROM auth_sessions
-                  WHERE expires_at > ? AND COALESCE(last_seen_at, issued_at) >= ?
-                ) s10 ON s10.user_id = u.user_id
-                WHERE u.user_id=?
-                """,
-                (now_ts, now_ts, recent_10m, user_id),
-            ).fetchone()
-            return dict(row) if row else None
+            return self._admin_view(conn, user_id)
 
     def update_user_classification(
         self,
@@ -437,8 +294,6 @@ class UserManager:
         department = normalize_classification_value(department)
         user_type = normalize_classification_value(user_type)
         data_scope = normalize_classification_value(data_scope)
-        now_ts = iso(now())
-        recent_10m = iso(now() - timedelta(minutes=10))
         with self.conn_factory() as conn:
             result = conn.execute(
                 """
@@ -450,30 +305,7 @@ class UserManager:
             )
             if result.rowcount <= 0:
                 return None
-            row = conn.execute(
-                """
-                SELECT u.user_id, u.username, u.role, u.status, u.created_by_user_id, u.created_by_username, u.admin_ticket_id,
-                       CASE WHEN u.admin_approval_token_hash IS NOT NULL AND u.admin_approval_token_hash <> '' THEN 1 ELSE 0 END AS has_admin_approval_token,
-                       u.business_unit, u.department, u.user_type, u.data_scope, u.credit_balance,
-                       CASE WHEN s.user_id IS NULL THEN 0 ELSE 1 END AS is_online,
-                       CASE WHEN s10.user_id IS NULL THEN 0 ELSE 1 END AS is_online_10m,
-                       u.created_at
-                FROM users u
-                LEFT JOIN (
-                  SELECT DISTINCT user_id
-                  FROM auth_sessions
-                  WHERE expires_at > ?
-                ) s ON s.user_id = u.user_id
-                LEFT JOIN (
-                  SELECT DISTINCT user_id
-                  FROM auth_sessions
-                  WHERE expires_at > ? AND COALESCE(last_seen_at, issued_at) >= ?
-                ) s10 ON s10.user_id = u.user_id
-                WHERE u.user_id=?
-                """,
-                (now_ts, now_ts, recent_10m, user_id),
-            ).fetchone()
-            return dict(row) if row else None
+            return self._admin_view(conn, user_id)
 
     def reserve_chat_credit(self, user_id: str) -> dict[str, Any]:
         """Atomically reserve one credit for a non-admin chat request."""
@@ -551,5 +383,6 @@ class UserManager:
                 if target is None:
                     return None
                 raise ValueError("cannot add credits to an administrator")
-
-        return next((row for row in self.list_users() if row["user_id"] == user_id), None)
+            # Was a full list_users() scan filtered in Python, on a second connection,
+            # after this one had already closed: O(users) plus two joins to read one row.
+            return self._admin_view(conn, user_id)

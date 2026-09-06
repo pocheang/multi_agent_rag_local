@@ -1838,7 +1838,7 @@ verified (60 inputs and 336 pins respectively, zero differences).
 
 `tests/` was cleared ahead of the v0.7 rewrite and is being rebuilt incrementally: each bug
 fix lands with the regression test that would have caught it, rather than as a separate
-back-filling effort. As of 2026-09-04 there are 1440 tests covering the chat round trip,
+back-filling effort. As of 2026-09-06 there are 1490 tests covering the chat round trip,
 conversation context, graph routing, clarification, the async load guard, engine reuse,
 answer safety, reader-facing citation numbering, stage-timeout degradation, the governed
 tool stack with its multi-step loop and approve-then-resume cycle, retrieval
@@ -1863,7 +1863,11 @@ retrieval -- a graph triplet whose confidence records which extractor produced i
 sub-queries that reach the retrievers, per-query result lists that are interleaved rather
 than concatenated before RRF, an NLI stage that runs off the event loop and scores Chinese
 and reports which scorer ran, a governed read tool whose summary cannot carry an
-instruction, and the China-specific PII patterns that had never existed --
+instruction, one administrative view of a user rather than six copies of its SELECT --
+whose derived columns are asserted to be derived, since `AdminUserSummary` defaults every
+one of them to `False` and so cannot tell a dropped column from a false value -- a new
+user's reported credit balance being the balance stored, and the China-specific PII
+patterns that had never existed --
 pinned by what each identifier is *called*, not only that it is caught, since three of them
 were already caught under the wrong name -- and by an adversarial false-positive pass, which is
 where all three defects in that change were found.

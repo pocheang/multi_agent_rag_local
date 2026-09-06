@@ -16,6 +16,7 @@ from app.services.auth.session_manager import SessionManager
 from app.services.auth.user_manager import DEFAULT_CHAT_CREDITS, UserManager
 from app.services.auth.utils import iso, now
 from app.services.auth.validation import (
+    blank_to_none,
     normalize_classification_value,
     validate_password,
     validate_role,
@@ -128,8 +129,12 @@ class AuthDBService:
 
     def _init_schema(self) -> None:
         with self._connect() as conn:
+            # credit_balance's default is interpolated, not parameterized -- a DEFAULT
+            # clause takes no placeholder -- from the same int constant the ALTER below
+            # uses, so a fresh database and an upgraded one cannot start users on
+            # different balances. It was a literal 10 here against the constant there.
             conn.execute(
-                """
+                f"""
                 CREATE TABLE IF NOT EXISTS users (
                   user_id TEXT PRIMARY KEY,
                   username TEXT NOT NULL UNIQUE COLLATE NOCASE,
@@ -145,7 +150,7 @@ class AuthDBService:
                   department TEXT,
                   user_type TEXT,
                   data_scope TEXT,
-                  credit_balance INTEGER NOT NULL DEFAULT 10 CHECK(credit_balance >= 0),
+                  credit_balance INTEGER NOT NULL DEFAULT {DEFAULT_CHAT_CREDITS} CHECK(credit_balance >= 0),
                   created_at TEXT NOT NULL
                 )
                 """
@@ -380,7 +385,14 @@ class AuthDBService:
         department = normalize_classification_value(department)
         user_type = normalize_classification_value(user_type)
         data_scope = normalize_classification_value(data_scope)
-        display_name = (display_name or "").strip() or None
+        display_name = blank_to_none(display_name)
+        # Normalized once and used by both the INSERT and the returned dict. Each of
+        # these was written out twice, so an edit to one copy would have made the row
+        # this function reports differ from the row it stored.
+        created_by_user_id = blank_to_none(created_by_user_id)
+        created_by_username = blank_to_none(created_by_username)
+        admin_ticket_id = blank_to_none(admin_ticket_id)
+        admin_approval_token_hash = blank_to_none(admin_approval_token_hash)
         user_id = uuid.uuid4().hex
         salt_hex = generate_salt()
         password_hash = hash_password(password, salt_hex)
@@ -391,8 +403,8 @@ class AuthDBService:
                 INSERT INTO users(
                   user_id, username, salt, password_hash, role, status,
                   created_by_user_id, created_by_username, admin_ticket_id, admin_approval_token_hash,
-                  business_unit, department, user_type, data_scope, display_name, created_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                  business_unit, department, user_type, data_scope, display_name, credit_balance, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     user_id,
@@ -401,15 +413,21 @@ class AuthDBService:
                     password_hash,
                     role,
                     "active",
-                    (created_by_user_id or "").strip() or None,
-                    (created_by_username or "").strip() or None,
-                    (admin_ticket_id or "").strip() or None,
-                    (admin_approval_token_hash or "").strip() or None,
+                    created_by_user_id,
+                    created_by_username,
+                    admin_ticket_id,
+                    admin_approval_token_hash,
                     business_unit,
                     department,
                     user_type,
                     data_scope,
                     display_name,
+                    # Written explicitly rather than left to the column default. The
+                    # returned dict below reports this constant without reading the row
+                    # back, and a database created before _init_schema stopped hardcoding
+                    # its own 10 still carries that default -- so the only way the number
+                    # reported is certainly the number stored is to store this one.
+                    DEFAULT_CHAT_CREDITS,
                     created_at,
                 ),
             )
@@ -421,10 +439,10 @@ class AuthDBService:
             "role": role,
             "status": "active",
             "credit_balance": DEFAULT_CHAT_CREDITS,
-            "created_by_user_id": (created_by_user_id or "").strip() or None,
-            "created_by_username": (created_by_username or "").strip() or None,
-            "admin_ticket_id": (admin_ticket_id or "").strip() or None,
-            "has_admin_approval_token": bool((admin_approval_token_hash or "").strip()),
+            "created_by_user_id": created_by_user_id,
+            "created_by_username": created_by_username,
+            "admin_ticket_id": admin_ticket_id,
+            "has_admin_approval_token": bool(admin_approval_token_hash),
             "business_unit": business_unit,
             "department": department,
             "user_type": user_type,

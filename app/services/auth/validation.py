@@ -40,10 +40,13 @@ def validate_status(status: str) -> str:
     return value
 
 
+def blank_to_none(value: str | None) -> str | None:
+    """Normalize an optional free-text field: absent, blank or whitespace becomes None."""
+    return (value or "").strip() or None
+
+
 def normalize_classification_value(value: str | None, max_len: int = 64) -> str | None:
-    text = (value or "").strip()
-    if not text:
-        return None
-    if len(text) > max_len:
+    text = blank_to_none(value)
+    if text is not None and len(text) > max_len:
         raise ValueError(f"classification field too long (max {max_len})")
     return text
