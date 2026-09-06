@@ -216,6 +216,40 @@ def _split_parent(
     return children
 
 
+def _splitters(base_metadata: dict[str, Any], settings: Any) -> tuple[Any, Any]:
+    """The parent and child splitters for one document, sharing its separators."""
+    # 智能选择分隔符
+    separators = get_smart_separators(
+        base_metadata.get("doc_type") or base_metadata.get("file_type"),
+        base_metadata.get("language", "mixed"),
+    )
+    return (
+        _build_splitter(
+            chunk_size=settings.parent_chunk_size,
+            chunk_overlap=settings.parent_chunk_overlap,
+            separators=separators,
+        ),
+        _build_splitter(
+            chunk_size=settings.child_chunk_size,
+            chunk_overlap=settings.child_chunk_overlap,
+            separators=separators,
+        ),
+    )
+
+
+def _document_identity(base_metadata: dict[str, Any]) -> str:
+    """What a parent id is made stable against, or "" if there is nothing.
+
+    `document_id` plus `version` where both are present, because that pair
+    survives a file being moved; the source path otherwise.
+    """
+    document_id = str(base_metadata.get("document_id", "") or "")
+    version = str(base_metadata.get("version", "") or "")
+    if document_id and version:
+        return f"{document_id}|v{version}"
+    return str(base_metadata.get("source", "") or "")
+
+
 def _split_document(
     doc: Any,
     doc_idx: int,
@@ -235,25 +269,8 @@ def _split_document(
     if not raw_text:
         return [], []
 
-    # 智能选择分隔符
-    separators = get_smart_separators(
-        base_metadata.get("doc_type") or base_metadata.get("file_type"),
-        base_metadata.get("language", "mixed"),
-    )
-    parent_splitter = _build_splitter(
-        chunk_size=settings.parent_chunk_size,
-        chunk_overlap=settings.parent_chunk_overlap,
-        separators=separators,
-    )
-    child_splitter = _build_splitter(
-        chunk_size=settings.child_chunk_size,
-        chunk_overlap=settings.child_chunk_overlap,
-        separators=separators,
-    )
-
-    document_id = str(base_metadata.get("document_id", "") or "")
-    version = str(base_metadata.get("version", "") or "")
-    identity = f"{document_id}|v{version}" if document_id and version else str(base_metadata.get("source", "") or "")
+    parent_splitter, child_splitter = _splitters(base_metadata, settings)
+    identity = _document_identity(base_metadata)
 
     parent_texts = parent_splitter.split_text(raw_text) or [raw_text]
     total_parents = len(parent_texts)

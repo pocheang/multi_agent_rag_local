@@ -138,30 +138,54 @@ def referenced_names(node: ast.AST) -> set[str]:
     return out
 
 
-def imports_of(tree: ast.AST, module: str, is_package: bool) -> set[str]:
-    """Module paths this file imports, plus `module.name` for each imported name.
+def package_of(module: str, is_package: bool) -> str:
+    """The package a relative import inside `module` resolves against.
 
-    `is_package` is load-bearing: inside a package's __init__.py, `from .x import
-    y` resolves against the package itself, not its parent. See the docstring.
+    Inside a package's __init__.py that is the package itself, not its parent.
+    Getting this wrong is what made app/api/routes/sessions/ look unmounted; see
+    the module docstring.
     """
+    if is_package or "." not in module:
+        return module
+    return module.rsplit(".", 1)[0]
+
+
+def resolve_relative(pkg: str, level: int, module: str | None) -> str:
+    """Where `from ..x import y` points, given the package it appears in.
+
+    `level` is the number of leading dots: 1 is the package itself, so only the
+    dots beyond the first walk upwards.
+    """
+    base = pkg
+    for _ in range(level - 1):
+        base = base.rsplit(".", 1)[0] if "." in base else ""
+    return f"{base}.{module}" if module else base
+
+
+def import_targets(node: ast.AST, pkg: str) -> set[str]:
+    """The module paths one import statement names, plus `module.name` per alias.
+
+    Both forms are emitted because a caller may name either: `from pkg.mod import
+    Thing` makes the module live, and `Thing` is also the name a reader of the
+    importing module will use.
+    """
+    if isinstance(node, ast.Import):
+        return {alias.name for alias in node.names}
+    if not isinstance(node, ast.ImportFrom):
+        return set()
+
+    target = resolve_relative(pkg, node.level, node.module) if node.level else (node.module or "")
+    if not target:
+        return set()
+    return {target} | {f"{target}.{alias.name}" for alias in node.names}
+
+
+def imports_of(tree: ast.AST, module: str, is_package: bool) -> set[str]:
+    """Every module path this file imports, plus `module.name` for each name."""
+    pkg = package_of(module, is_package)
     out: set[str] = set()
-    pkg = module if is_package else (module.rsplit(".", 1)[0] if "." in module else module)
     for node in ast.walk(tree):
-        if isinstance(node, ast.Import):
-            for alias in node.names:
-                out.add(alias.name)
-        elif isinstance(node, ast.ImportFrom):
-            if node.level:
-                base = pkg
-                for _ in range(node.level - 1):
-                    base = base.rsplit(".", 1)[0] if "." in base else ""
-                target = f"{base}.{node.module}" if node.module else base
-            else:
-                target = node.module or ""
-            if target:
-                out.add(target)
-                for alias in node.names:
-                    out.add(f"{target}.{alias.name}")
+        out |= import_targets(node, pkg)
     return out
 
 
@@ -256,37 +280,55 @@ class Graph:
                     if candidate in self.path_of and candidate not in self.live_modules:
                         queue.append(candidate)
 
-    def _resolve_reachable(self):
-        work: deque[Def] = deque()
+    def _seed(self, d: Def, work: deque[Def]) -> None:
+        """Mark one definition reached, and queue what it in turn mentions."""
+        if d.key not in self.reachable:
+            self.reachable.add(d.key)
+            work.append(d)
 
-        def seed(d: Def):
-            if d.key not in self.reachable:
-                self.reachable.add(d.key)
-                work.append(d)
+    def _is_import_time_root(self, d: Def) -> bool:
+        """Something outside the call graph reaches this the moment its module loads.
 
-        for d in self.defs:
-            if d.module not in self.live_modules:
-                continue
-            if d.is_entry or (d.name.startswith("__") and d.name.endswith("__")):
-                seed(d)
-            elif d.name in self.module_level.get(d.module, ()):
-                seed(d)
+        A framework-decorated handler, a dunder the interpreter calls, or a name
+        the module's own top level mentions -- an assignment, an `__all__`, a
+        decorator argument.
+        """
+        if d.is_entry:
+            return True
+        if d.name.startswith("__") and d.name.endswith("__"):
+            return True
+        return d.name in self.module_level.get(d.module, ())
 
-        # Whatever a live module names at import time, or imports by name.
+    def _names_live_modules_mention(self) -> set[str]:
+        """Every name a live module names at import time, or imports by name."""
         named: set[str] = set()
         for module in self.live_modules:
             named |= self.module_level.get(module, set())
-            named |= {t.rsplit(".", 1)[-1] for t in self.imports.get(module, ())}
-        for name in named:
+            named |= {target.rsplit(".", 1)[-1] for target in self.imports.get(module, ())}
+        return named
+
+    def _seed_roots(self, work: deque[Def]) -> None:
+        for d in self.defs:
+            if d.module in self.live_modules and self._is_import_time_root(d):
+                self._seed(d, work)
+
+        for name in self._names_live_modules_mention():
             for d in self.by_name.get(name, ()):
                 if d.module in self.live_modules:
-                    seed(d)
+                    self._seed(d, work)
 
+    def _propagate(self, work: deque[Def]) -> None:
+        """Follow every name a reached definition mentions, until nothing is new."""
         while work:
             for name in work.popleft().refs:
                 for target in self.by_name.get(name, ()):
-                    if target.module in self.live_modules and target.key not in self.reachable:
-                        seed(target)
+                    if target.module in self.live_modules:
+                        self._seed(target, work)
+
+    def _resolve_reachable(self) -> None:
+        work: deque[Def] = deque()
+        self._seed_roots(work)
+        self._propagate(work)
 
     def _collect_test_names(self):
         tests = ROOT / "tests"
@@ -311,33 +353,54 @@ class Graph:
         return "UNREACHABLE"
 
 
-def report_dead(graph: Graph, include_methods: bool) -> None:
+def is_reportable(d: Def, include_methods: bool) -> bool:
+    """Whether this definition belongs in the report at all.
+
+    Methods are excluded by default: one is reached through an instance whose
+    type this analysis does not track, so the false-positive rate on "unreachable
+    method" is far higher than on a module-level function.
+    """
+    if not d.module.startswith("app"):
+        return False
+    if d.name.startswith("__"):
+        return False
+    return include_methods or not (d.cls or "." in d.qualname)
+
+
+def dead_buckets(graph: Graph, include_methods: bool) -> dict[str, list[Def]]:
+    """Reportable definitions grouped by the state that keeps them out of the call graph."""
     buckets: dict[str, list[Def]] = defaultdict(list)
     for d in graph.defs:
-        if not d.module.startswith("app"):
-            continue
-        if d.name.startswith("__"):
-            continue
-        if not include_methods and (d.cls or "." in d.qualname):
+        if not is_reportable(d, include_methods):
             continue
         state = graph.state(d)
         if state != "reachable":
             buckets[state].append(d)
+    return buckets
 
+
+def print_bucket(state: str, found: list[Def]) -> None:
+    """One state's definitions, heaviest module first, in line order within it."""
+    print(f"\n=== {state}: {len(found)} in app/ ===")
+    if not found:
+        return
+
+    by_module: dict[str, list[Def]] = defaultdict(list)
+    for d in found:
+        by_module[d.module].append(d)
+
+    for module in sorted(by_module, key=lambda m: (-len(by_module[m]), m)):
+        entries = sorted(by_module[module], key=lambda d: d.lineno)
+        lines = sum(d.lines for d in entries)
+        print(f"  {len(entries):>2} fn  {lines:>4} lines  {module}")
+        for d in entries:
+            print(f"          {d.qualname}  (line {d.lineno}, {d.lines} lines)")
+
+
+def report_dead(graph: Graph, include_methods: bool) -> None:
+    buckets = dead_buckets(graph, include_methods)
     for state in ("UNREACHABLE", "MODULE-NOT-IMPORTED", "TEST-ONLY"):
-        found = buckets.get(state, [])
-        print(f"\n=== {state}: {len(found)} in app/ ===")
-        if not found:
-            continue
-        by_module = defaultdict(list)
-        for d in found:
-            by_module[d.module].append(d)
-        for module in sorted(by_module, key=lambda m: (-len(by_module[m]), m)):
-            entries = sorted(by_module[module], key=lambda d: d.lineno)
-            lines = sum(d.lines for d in entries)
-            print(f"  {len(entries):>2} fn  {lines:>4} lines  {module}")
-            for d in entries:
-                print(f"          {d.qualname}  (line {d.lineno}, {d.lines} lines)")
+        print_bucket(state, buckets.get(state, []))
 
     total = sum(len(v) for v in buckets.values())
     print(f"\n{total} non-reachable definitions; confirm each with `git grep -w <name>` before deleting.")

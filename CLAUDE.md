@@ -1038,8 +1038,17 @@ seed and asserting an expected order proves determinism only by construction.
 (58 against a threshold of 15, `python:S3776`) until 2026-09-06, and almost all of
 it was nesting: three loops deep, so every `if`, `or` and ternary inside paid the
 depth as well as itself. Split into `_split_document`, `_split_parent`,
-`_parent_id` and `_neighbours`, verified byte-for-byte over a ten-document corpus
-rather than by argument. Two properties the nesting hid are now pinned in
+`_parent_id`, `_neighbours`, `_splitters` and `_document_identity`, verified
+byte-for-byte over a ten-document corpus rather than by argument.
+
+**Estimating cognitive complexity by hand does not work, and the first attempt at
+this refactor proves it**: `_split_document` was judged "about 10" by reading and
+measured 16, so a refactor of the project's worst finding would have shipped
+leaving a new one. Sonar's number is only available after a push and an analysis,
+which is far too slow a loop — the way to check locally is to implement the
+scoring rules and validate the implementation against findings whose Sonar values
+are already known (58, 35, 28 and 21 were available from the 2026-09-06 analysis,
+and a calculator reproducing all four is worth believing about a fifth). Two properties the nesting hid are now pinned in
 `tests/ingestion/test_splitter_chunk_indices.py`, because both look like tidying:
 a blank chunk is **skipped but still occupies its index**, so `parent_index`,
 `child_index` and the totals given to `enhance_chunk_metadata` are positions in the
@@ -2283,6 +2292,17 @@ Two things learned doing this the first time:
   parent. UNREACHABLE is a candidate to confirm with `git grep -w`, never a
   verdict, which is also why the script always exits 0 and must not become a CI
   gate.
+
+  **The tool was itself three `python:S3776` findings** (35, 28, 21) for a day,
+  because SonarCloud analyses `scripts/` too — a detail that also made the
+  projected count after the dead-code sweep wrong: 89 − 6 cleared **+ 3 added by
+  the audit script** = 86, not the 83 predicted. Fixed 2026-09-06 by extracting
+  `package_of` / `resolve_relative` / `import_targets` out of `imports_of`,
+  `_seed_roots` / `_propagate` / `_is_import_time_root` out of
+  `_resolve_reachable`, and `dead_buckets` / `print_bucket` / `is_reportable` out
+  of `report_dead`; the tool's own output over `app/` is unchanged in both modes,
+  header line aside. A tool that adds to the backlog it exists to shrink is worth
+  noticing early.
 
   Four findings were unreachable, and deleting them cascaded to two more whose
   only caller was one of the four: `extract_formula_relationships` and
