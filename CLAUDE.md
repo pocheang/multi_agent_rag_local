@@ -1905,7 +1905,7 @@ verified (60 inputs and 336 pins respectively, zero differences).
 
 `tests/` was cleared ahead of the v0.7 rewrite and is being rebuilt incrementally: each bug
 fix lands with the regression test that would have caught it, rather than as a separate
-back-filling effort. As of 2026-09-06 there are 1492 tests covering the chat round trip,
+back-filling effort. As of 2026-09-06 there are 1498 tests covering the chat round trip,
 conversation context, graph routing, clarification, the async load guard, engine reuse,
 answer safety, reader-facing citation numbering, stage-timeout degradation, the governed
 tool stack with its multi-step loop and approve-then-resume cycle, retrieval
@@ -2303,6 +2303,25 @@ Two things learned doing this the first time:
   of `report_dead`; the tool's own output over `app/` is unchanged in both modes,
   header line aside. A tool that adds to the backlog it exists to shrink is worth
   noticing early.
+
+  **Progress on the live findings**, each verified by diffing the full output of
+  the old and new implementations rather than by reading: 89 → 86 (dead code) →
+  82 (`splitter.py` 58, and the audit tool's own three) → **79**
+  (`agent_execution_tracker.py`: `get_quality_stats` 51, `get_execution_stats` 36,
+  `track_agent_execution` 27 — the last of those because cognitive complexity
+  counts a closure into its enclosing function, and its `async` and `sync`
+  wrappers were 46 duplicated lines apart from two `await`s).
+
+  **The tracker refactor exposed a divergence worth knowing about and did not
+  fix it.** `/admin/agent-quality` and the agent-health endpoint label the same
+  failed step differently: `get_quality_stats` clamps an error type to fifty
+  characters and answers `"Unknown"` for an empty message, `get_execution_stats`
+  does neither, and the two have always been able to group the same data under
+  different labels. Unifying them changes what the quality dashboard shows, which
+  is a decision with a visible consequence rather than a side effect of a
+  complexity refactor — so `_execution_error_type` and `_quality_error_type` are
+  two named functions whose docstrings say they differ on purpose, and
+  `tests/services/test_execution_tracker_stats.py` pins both.
 
   Four findings were unreachable, and deleting them cascaded to two more whose
   only caller was one of the four: `extract_formula_relationships` and
