@@ -157,16 +157,6 @@ ANSWER_WEIGHT_SAFETY: Final[float] = 0.10
 # ============================================================================
 
 
-class RouterConfig(BaseModel):
-    """Router agent configuration."""
-
-    confidence_threshold: float = Field(default=0.5, ge=0.0, le=1.0)
-    use_calibration: bool = Field(default=True)
-    use_llm_intent: bool = Field(default=True)
-    enable_decomposition: bool = Field(default=False)
-    low_confidence_threshold: float = Field(default=0.6, ge=0.0, le=1.0)
-
-
 class VectorRAGConfig(BaseModel):
     """Vector RAG agent configuration."""
 
@@ -185,61 +175,21 @@ class VectorRAGConfig(BaseModel):
         return value
 
 
-class GraphRAGConfig(BaseModel):
-    """Graph RAG agent configuration."""
-
-    enabled: bool = Field(default=True)
-    min_quality: float = Field(default=0.3, ge=0.0, le=1.0)
-    enable_pdf_optimization: bool = Field(default=True)
-    enable_enhancements: bool = Field(default=True)
-    fallback_to_vector: bool = Field(default=True)
-
-
-class ReActConfig(BaseModel):
-    """ReAct agent configuration."""
-
-    max_iterations: int = Field(default=5, ge=1, le=10)
-    use_reasoning: bool = Field(default=False)
-    enable_tool_cache: bool = Field(default=True)
-
-
-class SynthesisConfig(BaseModel):
-    """Synthesis agent configuration."""
-
-    use_reasoning: bool = Field(default=False)
-    enable_fact_verification: bool = Field(default=True)
-    enable_cot: bool = Field(default=True)
-    force_language: str | None = Field(default=None)
-
-    @field_validator("force_language")
-    @classmethod
-    def validate_language(cls, value):
-        if value is not None and value not in {"zh", "en", ""}:
-            raise ValueError("Language must be 'zh', 'en', or empty")
-        return value
-
-
-class QualityConfig(BaseModel):
-    """Quality assurance configuration."""
-
-    enable_route_validation: bool = Field(default=True)
-    enable_retrieval_quality: bool = Field(default=True)
-    enable_answer_validation: bool = Field(default=True)
-    max_route_retries: int = Field(default=1, ge=0, le=3)
-    max_answer_retries: int = Field(default=1, ge=0, le=3)
-    high_quality_threshold: float = Field(default=0.85, ge=0.0, le=1.0)
-    medium_quality_threshold: float = Field(default=0.7, ge=0.0, le=1.0)
-
-
 class UnifiedAgentConfig(BaseModel):
-    """Unified configuration for all agents."""
+    """Unified configuration for all agents.
 
-    router: RouterConfig = Field(default_factory=RouterConfig)
+    Five sibling sections -- router, graph_rag, react, synthesis, quality -- were
+    deleted on 2026-09-06 with the accessors that were their only readers. They
+    were worse than unused: their defaults contradicted the running system
+    (`SynthesisConfig.enable_fact_verification` read True beside a synthesizer
+    that passes False, and `RouterConfig.use_calibration` True beside an
+    `ENABLE_CALIBRATION` that defaults False), so anyone reading this file for
+    the configuration found the opposite of what runs.
+
+    `vector_rag` is the one section with a live reader, `app/agents/rag/vector.py`.
+    """
+
     vector_rag: VectorRAGConfig = Field(default_factory=VectorRAGConfig)
-    graph_rag: GraphRAGConfig = Field(default_factory=GraphRAGConfig)
-    react: ReActConfig = Field(default_factory=ReActConfig)
-    synthesis: SynthesisConfig = Field(default_factory=SynthesisConfig)
-    quality: QualityConfig = Field(default_factory=QualityConfig)
     timeout_seconds: int = Field(default=30, ge=1, le=300)
     enable_caching: bool = Field(default=True)
     cache_ttl_seconds: int = Field(default=3600, ge=0)
@@ -276,46 +226,9 @@ def get_agent_config() -> UnifiedAgentConfig:
     return _config_instance
 
 
-def set_agent_config(config: UnifiedAgentConfig):
-    """Set the global agent configuration."""
-    global _config_instance
-    _config_instance = config
-
-
-def reset_agent_config():
-    """Reset configuration to defaults."""
-    global _config_instance
-    _config_instance = UnifiedAgentConfig()
-
-
-def get_router_config() -> RouterConfig:
-    """Get router configuration."""
-    return get_agent_config().router
-
-
 def get_vector_rag_config() -> VectorRAGConfig:
     """Get vector RAG configuration."""
     return get_agent_config().vector_rag
-
-
-def get_graph_rag_config() -> GraphRAGConfig:
-    """Get graph RAG configuration."""
-    return get_agent_config().graph_rag
-
-
-def get_react_config() -> ReActConfig:
-    """Get ReAct configuration."""
-    return get_agent_config().react
-
-
-def get_synthesis_config() -> SynthesisConfig:
-    """Get synthesis configuration."""
-    return get_agent_config().synthesis
-
-
-def get_quality_config() -> QualityConfig:
-    """Get quality configuration."""
-    return get_agent_config().quality
 
 
 # ============================================================================

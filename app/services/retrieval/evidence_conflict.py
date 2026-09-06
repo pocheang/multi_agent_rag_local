@@ -69,18 +69,6 @@ def detect_evidence_conflict(citations: list[dict[str, Any]]) -> dict[str, Any]:
     }
 
 
-def _is_conflicting_pair(a: str, b: str) -> bool:
-    """Legacy function kept for compatibility (not used in optimized path)."""
-    a_l = a.lower()
-    b_l = b.lower()
-    shared = _shared_keywords(a_l, b_l)
-    if not shared:
-        return False
-    a_neg = _has_neg(a_l)
-    b_neg = _has_neg(b_l)
-    return a_neg != b_neg
-
-
 def _has_neg(text: str) -> bool:
     for token in _NEGATIVE:
         if token in text:
@@ -93,13 +81,6 @@ def _tokenize(text: str) -> set[str]:
     tokens = {x for x in re.findall(r"[a-zA-Z_]{4,}", text)}
     # Filter stop words
     return {x for x in tokens if x not in {"this", "that", "with", "from", "have", "will", "should"}}
-
-
-def _shared_keywords(a: str, b: str) -> set[str]:
-    """Legacy function kept for compatibility (prefer _tokenize for caching)."""
-    a_tokens = _tokenize(a)
-    b_tokens = _tokenize(b)
-    return a_tokens & b_tokens
 
 
 def _trim(text: str, limit: int = 64) -> str:

@@ -1,17 +1,16 @@
-"""
-Web Research Agent Utilities
+"""URL validation and search metrics for the web research agent.
 
-Additional helper functions for web research agent:
-- Result validation
-- Parallel search
-- Cache management
-- Metrics tracking
+`app/agents/rag/web.py` imports `validate_url` and `get_metrics`; those are the
+only two things here with a reader. Parallel search and a keyword freshness test
+were listed here until 2026-09-06 and neither had ever run --
+`run_parallel_web_research` built a `ThreadPoolExecutor` over `run_web_research`,
+which is exactly the shape that wedged this process at zero CPU through
+concurrent `DDGS()` construction (see Common Issues in CLAUDE.md), and
+`is_time_sensitive_query` was an English-only duplicate of the bilingual pattern
+`KnowledgeAgentService` actually consults.
 """
 
 import logging
-from concurrent.futures import ThreadPoolExecutor, as_completed
-
-from app.services.observability.log_safety import question_ref
 
 logger = logging.getLogger(__name__)
 
@@ -50,96 +49,6 @@ def validate_url(url: str) -> bool:
             return False
 
     return True
-
-
-def run_parallel_web_research(questions: list[str], max_workers: int = 3, timeout_per_query: int = 30) -> list[dict]:
-    """
-    Execute multiple web searches in parallel.
-
-    Args:
-        questions: List of search queries
-        max_workers: Maximum number of parallel workers (default: 3)
-        timeout_per_query: Timeout per query in seconds (default: 30)
-
-    Returns:
-        List of search results, one dict per query
-
-    Example:
-        >>> queries = ["What is RAG?", "What is LangChain?"]
-        >>> results = run_parallel_web_research(queries)
-        >>> for i, result in enumerate(results):
-        ...     print(f"Query {i+1}: {len(result['citations'])} results")
-    """
-    from app.agents.rag.web import run_web_research
-
-    results = []
-
-    with ThreadPoolExecutor(max_workers=max_workers) as executor:
-        future_to_question = {executor.submit(run_web_research, q): q for q in questions}
-
-        for future in as_completed(future_to_question, timeout=timeout_per_query * len(questions)):
-            question = future_to_question[future]
-            try:
-                result = future.result(timeout=timeout_per_query)
-                results.append(result)
-                logger.info("Parallel search completed for %s", question_ref(question))
-            except Exception as e:
-                logger.exception("Parallel search failed for %s: %s", question_ref(question), e)
-                results.append(
-                    {
-                        "context": "",
-                        "citations": [],
-                        "used": False,
-                        "error": f"parallel_search_error:{type(e).__name__}",
-                    }
-                )
-
-    return results
-
-
-def is_time_sensitive_query(question: str) -> bool:
-    """
-    Detect if a query is time-sensitive.
-
-    Args:
-        question: User query
-
-    Returns:
-        True if query likely requires latest information
-
-    Example:
-        >>> is_time_sensitive_query("What is the latest AI news?")
-        True
-        >>> is_time_sensitive_query("What is Python?")
-        False
-    """
-    time_keywords = [
-        "latest",
-        "recent",
-        "current",
-        "today",
-        "now",
-        "this week",
-        "this month",
-        "this year",
-        "2026",
-        "new",
-        "breaking",
-        "update",
-        "recently",
-        "just released",
-        "announcement",
-        "最新",
-        "今天",
-        "当前",
-        "最近",
-        "本月",
-        "本周",
-        "今年",
-    ]
-
-    question_lower = question.lower()
-    return any(keyword in question_lower for keyword in time_keywords)
 
 
 class WebSearchMetrics:
@@ -226,9 +135,3 @@ _global_metrics = WebSearchMetrics()
 def get_metrics() -> WebSearchMetrics:
     """Get global metrics instance."""
     return _global_metrics
-
-
-def reset_metrics():
-    """Reset global metrics."""
-    global _global_metrics
-    _global_metrics = WebSearchMetrics()

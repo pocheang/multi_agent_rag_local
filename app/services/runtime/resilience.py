@@ -22,53 +22,6 @@ _BREAKERS: dict[str, _BreakerState] = {}
 _BREAKERS_LOCK = threading.Lock()
 
 
-def record_circuit_failure(name: str) -> dict[str, Any]:
-    """Record a failure in the sole process-wide breaker registry."""
-    settings = get_settings()
-    now = time.time()
-    with _BREAKERS_LOCK:
-        state = _BREAKERS.setdefault(name, _BreakerState())
-        state.fails += 1
-        threshold = int(getattr(settings, "circuit_breaker_fail_threshold", 5) or 5)
-        cooldown = int(getattr(settings, "circuit_breaker_cooldown_seconds", 60) or 60)
-        if state.fails >= threshold:
-            state.opened_until = now + max(1, cooldown)
-            state.fails = 0
-        return circuit_breaker_snapshot(name, now=now)
-
-
-def record_circuit_success(name: str) -> dict[str, Any]:
-    """Reset a successful component in the sole process-wide registry."""
-    with _BREAKERS_LOCK:
-        state = _BREAKERS.setdefault(name, _BreakerState())
-        state.fails = 0
-        state.opened_until = 0.0
-        return circuit_breaker_snapshot(name)
-
-
-def circuit_breaker_snapshot(name: str, *, now: float | None = None) -> dict[str, Any]:
-    """Return safe monitoring data for the single runtime breaker registry."""
-    current = time.time() if now is None else now
-    state = _BREAKERS.setdefault(name, _BreakerState())
-    is_open = state.opened_until > current
-    return {
-        "name": name,
-        "state": "OPEN" if is_open else "CLOSED",
-        "failure_count": state.fails,
-        "opened_until": state.opened_until,
-        "success_count": 0,
-        "success_rate": 0.0,
-        "last_failure_time": None,
-        "time_in_current_state": max(0.0, state.opened_until - current) if is_open else 0.0,
-    }
-
-
-def reset_circuit_breakers() -> None:
-    """Clear every runtime breaker during application-controlled cleanup."""
-    with _BREAKERS_LOCK:
-        _BREAKERS.clear()
-
-
 def call_with_circuit_breaker(name: str, fn: Callable[[], Any]) -> Any:
     settings = get_settings()
     if not bool(getattr(settings, "circuit_breaker_enabled", True)):

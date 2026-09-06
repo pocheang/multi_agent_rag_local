@@ -210,7 +210,7 @@ def __getattr__(name: str):
         return getattr(_query_runtime, runtime_attributes[name])
 
     from app.api.deps import admin, auth, documents, sessions
-    from app.api.utils import auth_helpers, memory_helpers, request_helpers
+    from app.api.utils import auth_helpers, memory_helpers
 
     modules = (
         admin,
@@ -219,7 +219,6 @@ def __getattr__(name: str):
         sessions,
         auth_helpers,
         memory_helpers,
-        request_helpers,
     )
     for module in modules:
         if hasattr(module, name):

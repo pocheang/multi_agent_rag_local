@@ -1553,7 +1553,13 @@ enforces (now the named `DEFAULT_MAX_SUB_QUERIES`). A configuration page that re
 something other than the running configuration is worse than no page — it is the reason
 this section exists.
 
-**Additional config**: [app/agents/shared/config.py](app/agents/shared/config.py) contains component-specific settings (currently undergoing simplification - many constants are legacy tuning parameters that will be consolidated or removed)
+**Additional config**: [app/agents/shared/config.py](app/agents/shared/config.py) holds the
+`VectorRAGConfig` that `app/agents/rag/vector.py` reads, plus the four `ANSWER_WEIGHT_*`
+literals described above. Five sibling sections — router, graph_rag, react, synthesis,
+quality — and the seven accessors that were their only readers were deleted on 2026-09-06;
+their defaults had drifted into stating the opposite of what runs, so the file was actively
+misleading as a description of the configuration. Do not read a default here as evidence
+that a feature is on: check the `Settings` field.
 
 ### Technology Stack
 
@@ -1857,7 +1863,7 @@ verified (60 inputs and 336 pins respectively, zero differences).
 
 `tests/` was cleared ahead of the v0.7 rewrite and is being rebuilt incrementally: each bug
 fix lands with the regression test that would have caught it, rather than as a separate
-back-filling effort. As of 2026-09-06 there are 1492 tests covering the chat round trip,
+back-filling effort. As of 2026-09-06 there are 1490 tests covering the chat round trip,
 conversation context, graph routing, clarification, the async load guard, engine reuse,
 answer safety, reader-facing citation numbering, stage-timeout degradation, the governed
 tool stack with its multi-step loop and approve-then-resume cycle, retrieval
@@ -1892,9 +1898,11 @@ were already caught under the wrong name -- and by an adversarial false-positive
 where all three defects in that change were found.
 
 **That count is not 1236 independent assertions, and the number before it was stale.** Two
-guards are parametrized one case per module — the audit-action scan over `app/` (376) and
-the ASCII scan over `app/api` (60) — so they grow with the codebase rather than with
-coverage. The real baseline on 2026-09-03 was 651, not the 538 this paragraph claimed:
+guards are parametrized one case per module — the audit-action scan over `app/` (374) and
+the ASCII scan over `app/api` (59) — so they grow with the codebase rather than with
+coverage, and **shrink with it**: the total fell from 1492 to 1490 on 2026-09-06 with no
+test removed, because deleting `app/api/utils/request_helpers.py` took one case from each.
+A drop in this number is not evidence that coverage was lost; check which suite moved. The real baseline on 2026-09-03 was 651, not the 538 this paragraph claimed:
 the count had not been updated since 2026-09-02 while tests kept landing with fixes.
 Parametrizing per module is deliberate — a failure names the file, and a new module is
 covered the day it is added, where one test looping inside a single assertion reports the
@@ -2291,8 +2299,59 @@ Two things learned doing this the first time:
   under- or over-reported in ways only reading caught, which is the argument for
   the docstring's "candidate, never a verdict" and for it never becoming a gate.
 
-  **54 non-reachable definitions remain in `app/`** -- 48 unreachable, 5 in modules
-  nothing imports (`evaluation/baselines/chroma/*`, `graph/streaming*`), 1 reached
+  **The third batch (2026-09-06) took 24 functions, five config classes and four
+  "compatibility adapter" methods**, about 500 net lines. `api/utils/request_helpers.py`
+  went entirely -- all four of its parameter helpers, and the module's only
+  importer was `dependencies.py`'s `__getattr__` fallback list. The rest:
+  `resilience.py` (four), `ingestion/processing/structure.py` (three),
+  `evidence_conflict.py` (two, both labelled "legacy function kept for
+  compatibility" with no compatibility to keep), `rag/web_utils.py` (three) and
+  `agents/shared/config.py` (seven accessors).
+
+  Three of those are worth knowing about beyond the line count:
+
+  - **The circuit breaker is fine, and now has one implementation.**
+    `call_with_circuit_breaker` is live in the reranker, the NLI stage and the
+    graph client, and it inlines its own threshold-and-cooldown logic.
+    `record_circuit_failure` / `record_circuit_success` were a second, unused
+    implementation of the same thing over the same `_BREAKERS` registry -- two
+    definitions of "record a failure", which is the divergence this file keeps
+    recording, waiting to happen.
+  - **`agents/shared/config.py`'s dead sections contradicted the running system.**
+    `SynthesisConfig.enable_fact_verification` read `True` beside a synthesizer
+    that passes `False`, and `RouterConfig.use_calibration` read `True` beside an
+    `ENABLE_CALIBRATION` that defaults `False`. Anyone reading that file for the
+    configuration found the opposite of what runs. `vector_rag` is the one section
+    with a live reader (`app/agents/rag/vector.py`) and is what remains.
+  - **`run_parallel_web_research` was a loaded gun.** It built a
+    `ThreadPoolExecutor` over `run_web_research` -- precisely the shape that wedged
+    this process at zero CPU through concurrent `DDGS()` construction (see Common
+    Issues). It had never run. Its sibling `is_time_sensitive_query` was an
+    English-only duplicate of the bilingual freshness pattern
+    `KnowledgeAgentService` actually consults.
+
+  **`cascade.py::_request` was a third kind of false positive**, and the reason the
+  script says "confirm with `git grep -w`". It was reported TEST-ONLY because two
+  test modules define their own local `_request` helper and the graph matches on
+  name alone. In fact it had no test at all: its only consumers were
+  `ValidationCascade.validate_level1` through `validate_level4`, four methods whose
+  docstrings say they exist "for focused <stage>-stage tests" that do not exist --
+  and which preserved the level numbering this file records as wrong
+  (`validate_level2` called the NLI validator, `validate_level3` the citation one).
+  Deleted with `run_cascade`, one more consumerless alias in the same class.
+
+  **One thing was deliberately not deleted.** `orchestration/engine.py::_terminal_payload`
+  is unreachable, but only because `OrchestrationEngine.execute_stream` is, and that
+  in turn because nothing calls `RAGPipeline.execute_stream` -- a whole second
+  streaming design, declared in the `PipelineExecutionEngine` Protocol, yielding
+  event dicts directly rather than through the `ExecutionEventStore` /
+  `AnswerStreamStore` replay the SSE endpoint actually uses. Removing it is a
+  decision about the pipeline's public surface, not a dead-helper cleanup, so it
+  wants its own call. Note the tell: `execute_stream` takes a
+  `result_postprocessor` it immediately `del`s.
+
+  **30 non-reachable definitions remain in `app/`** -- 25 unreachable, 5 in modules
+  nothing imports (`evaluation/baselines/chroma/*`, `graph/streaming*`), none reached
   only from tests. Clearing those comes before refactoring the 85: there is no
   point spending judgement on the complexity of code that should not exist.
 - **Answer provenance**: what a message may claim about where it came from is computed in

@@ -107,72 +107,6 @@ def extract_document_structure(text: str, page: int | None = None) -> list[Docum
     return sections
 
 
-def build_hierarchy(sections: list[DocumentSection]) -> list[DocumentSection]:
-    """
-    Build parent-child relationships between sections.
-
-    Args:
-        sections: Flat list of sections
-
-    Returns:
-        List of top-level sections with children
-    """
-    if not sections:
-        return []
-
-    root_sections = []
-    stack = []  # Stack of (level, section)
-
-    for section in sections:
-        # Pop sections with higher or equal level
-        while stack and stack[-1][0] >= section.level:
-            stack.pop()
-
-        # Set parent
-        if stack:
-            parent = stack[-1][1]
-            section.parent = parent
-            parent.children.append(section)
-        else:
-            root_sections.append(section)
-
-        stack.append((section.level, section))
-
-    return root_sections
-
-
-def structure_to_markdown(sections: list[DocumentSection], level: int = 0) -> str:
-    """
-    Convert document structure to Markdown with hierarchy.
-
-    Args:
-        sections: List of sections
-        level: Current indentation level
-
-    Returns:
-        Markdown text
-    """
-    lines = []
-
-    for section in sections:
-        # Add heading
-        heading = "#" * section.level + " " + section.title
-        lines.append(heading)
-        lines.append("")
-
-        # Add content
-        if section.content:
-            lines.append(section.content)
-            lines.append("")
-
-        # Add children recursively
-        if section.children:
-            child_md = structure_to_markdown(section.children, level + 1)
-            lines.append(child_md)
-
-    return "\n".join(lines)
-
-
 def add_section_metadata(text: str, sections: list[DocumentSection]) -> str:
     """
     Add section metadata to text for better context.
@@ -200,34 +134,3 @@ def add_section_metadata(text: str, sections: list[DocumentSection]) -> str:
     lines.append(text)
 
     return "\n".join(lines)
-
-
-def extract_references(text: str) -> list[dict[str, str]]:
-    """
-    Extract references and citations from text.
-
-    Args:
-        text: Document text
-
-    Returns:
-        List of reference dicts with 'id', 'text', 'type'
-    """
-    references = []
-
-    # Pattern: [1], [Smith 2020], etc.
-    citation_pattern = r"\[([^\]]+)\]"
-    citations = re.findall(citation_pattern, text)
-
-    for citation in citations:
-        # Check if it's a reference (number or author-year)
-        if citation.isdigit() or re.match(r"[A-Z][a-z]+\s+\d{4}", citation):
-            references.append({"id": citation, "text": f"[{citation}]", "type": "citation"})
-
-    # Pattern: "See Chapter 3", "as shown in Section 2.1"
-    cross_ref_pattern = r"(Chapter|Section|Figure|Table)\s+(\d+\.?\d*)"
-    cross_refs = re.findall(cross_ref_pattern, text, re.IGNORECASE)
-
-    for ref_type, ref_id in cross_refs:
-        references.append({"id": ref_id, "text": f"{ref_type} {ref_id}", "type": "cross_reference"})
-
-    return references

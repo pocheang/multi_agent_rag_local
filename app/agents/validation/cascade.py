@@ -156,67 +156,6 @@ class ValidationCascade:
             list(citations) if citations is not None else None,
         )
 
-    async def run_cascade(
-        self,
-        query: str,
-        answer: str,
-        source_docs: Sequence[Mapping[str, Any]],
-        citations: Sequence[Mapping[str, Any]],
-    ) -> ValidationCascadeResult:
-        """Compatibility alias; all execution enters :meth:`validate`."""
-        return await self.validate(query, answer, source_docs, citations)
-
-    async def validate_level1(
-        self,
-        answer: str,
-        source_docs: Sequence[Mapping[str, Any]],
-    ) -> CascadeResult:
-        """Compatibility adapter for focused rule-stage tests."""
-        return await self.rule_validator.validate(_request(answer=answer, source_docs=source_docs))
-
-    async def validate_level2(
-        self,
-        answer: str,
-        source_docs: Sequence[Mapping[str, Any]],
-    ) -> CascadeResult:
-        """Compatibility adapter for focused NLI-stage tests."""
-        return await self.nli_validator.validate(_request(answer=answer, source_docs=source_docs))
-
-    async def validate_level3(
-        self,
-        answer: str,
-        citations: Sequence[Mapping[str, Any]],
-        source_docs: Sequence[Mapping[str, Any]],
-    ) -> CascadeResult:
-        """Compatibility adapter for focused citation-stage tests."""
-        return await self.citation_validator.validate(
-            _request(answer=answer, source_docs=source_docs, citations=citations)
-        )
-
-    async def validate_level4(
-        self,
-        query: str,
-        answer: str,
-        source_docs: Sequence[Mapping[str, Any]],
-    ) -> CascadeResult:
-        """Compatibility adapter for focused deep-stage tests."""
-        return await self.deep_validator.validate(_request(query=query, answer=answer, source_docs=source_docs))
-
-
-def _request(
-    *,
-    answer: str,
-    source_docs: Sequence[Mapping[str, Any]],
-    query: str = "",
-    citations: Sequence[Mapping[str, Any]] = (),
-) -> ValidationRequest:
-    return ValidationRequest.from_compatibility(
-        query=query,
-        answer=answer,
-        source_docs=source_docs,
-        citations=citations,
-    )
-
 
 def _finish(
     started: float,
