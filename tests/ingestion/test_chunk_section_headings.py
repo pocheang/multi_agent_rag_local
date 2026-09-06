@@ -18,16 +18,20 @@ which is the *same* defect CLAUDE.md already records against the live splitter
 under Multimodal retrieval -- a 40-row table cut into seven chunks, only the
 first of which carries the header row.
 
-The idea is worth keeping and the implementation was not, so the gap is recorded
-here as an executable claim rather than as a sentence in a plan. When headings do
-survive chunking, this test passes, `strict=True` fails the suite, and whoever
-did the work removes the marker -- the pattern
+The idea was worth keeping and the implementation was not, so the gap was
+recorded here as an executable claim rather than as a sentence in a plan. That
+worked as designed: on 2026-09-06 the behaviour landed, the strict xfail turned
+into an XPASS and failed the suite, and the marker came off -- the pattern
 `docs/superpowers/plans/2026-08-29-user-data-isolation.md` used for its eight.
+
+What landed is deliberately smaller than SmartChunker was. Chunk boundaries are
+unchanged; the splitter still cuts by size, and a heading is *carried* onto the
+chunks that follow it rather than used to decide where to cut. Splitting by
+section instead is a larger change with its own trade-offs, and this test does not
+ask for it.
 """
 
 from __future__ import annotations
-
-import pytest
 
 from app.ingestion.chunking.splitter import split_documents
 from app.services import multimodal
@@ -60,20 +64,25 @@ def test_the_section_is_long_enough_to_be_split():
     assert len(_chunks()) > 1
 
 
-@pytest.mark.xfail(strict=True, reason="headings do not survive chunking; SmartChunker aimed at this and never ran")
 def test_every_chunk_of_a_section_carries_its_heading():
     """What a reader needs and what retrieval scores against.
 
-    Measured on the document below -- one heading and forty sentences under it,
-    which the shipped 600-character child splitter cuts into seven:
+    Measured before this held -- one heading and forty sentences under it, which
+    the shipped 600-character child splitter cuts into seven:
 
         chunk 0   26 chars   "## Backup retention policy"   <- the heading, alone
         chunks 1-6           the policy text                <- no heading anywhere
 
-    So it is worse than the heading merely not propagating. The separator list
+    So it was worse than the heading merely not propagating. The separator list
     splits *at* the heading, which strands it in a chunk of its own with no body
     to support -- a retrievable item that answers nothing -- while the six chunks
-    holding the answer carry no word saying what they are about.
+    holding the answer carried no word saying what they are about.
+
+    Carried in `metadata["heading"]` since 2026-09-06, by walking the chunks in
+    order and inheriting the last heading seen (`splitter._heading_scope`). The
+    chunk text is untouched: putting the heading back into `page_content` would
+    change every chunk's embedding and every stored offset, where a metadata key
+    is additive.
     """
 
     for chunk in _chunks():

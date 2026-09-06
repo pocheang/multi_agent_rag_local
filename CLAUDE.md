@@ -1057,24 +1057,54 @@ enhancer the **raw** neighbouring chunks while the chunk being described is
 stripped, which are different strings whenever a chunk begins or ends on
 whitespace.
 
-**A chunk does not know which section it came from, and that gap is now
-executable** (2026-09-05). The same size-only splitting costs headings as well as
-table headers, and worse: the separator list splits *at* a heading, so measured on
-one heading over forty sentences, chunk 0 is the 26-character heading alone with no
-body to support, and the six chunks holding the answer carry no word saying what
+**A chunk knows which section it came from** (closed 2026-09-06; it was an open
+gap from 2026-09-05). The same size-only splitting costs headings as well as table
+headers, and worse: the separator list splits *at* a heading, so measured on one
+heading over forty sentences, chunk 0 was the 26-character heading alone with no
+body to support, and the six chunks holding the answer carried no word saying what
 they are about. `SmartChunker` (483 lines, `app/services/multimodal/`) was aimed
-exactly here -- it split by heading into `Section`s and stamped the heading onto
-every chunk -- and was never constructed anywhere, so none of it ran.
+exactly here and was never constructed anywhere, so none of it ran. It was
+**deleted rather than connected**: it read PDFs only through `fitz` where the
+loader handles many formats, it had no notion of the parent/child pair retrieval
+expands through, its `DocumentChunk` is not the type the index takes, and
+`_split_section` ended with `# For simplicity, add all to first chunk` --
+reproducing the table defect described just above, with a comment admitting it.
 
-It was **deleted rather than connected**, because connecting it meant rewriting
-the parts that do the work: it read PDFs only through `fitz` where the loader
-handles many formats, it had no notion of the parent/child pair retrieval expands
-through, its `DocumentChunk` is not the type the index takes, and `_split_section`
-ended with `# For simplicity, add all to first chunk` -- reproducing the table
-defect described just above, with a comment admitting it. The idea outlived the
-implementation: `tests/ingestion/test_chunk_section_headings.py` holds it as an
-`xfail(strict=True)`, so the day headings survive chunking the suite fails until
-the marker comes off.
+The idea outlived the implementation, recorded as `xfail(strict=True)` in
+`tests/ingestion/test_chunk_section_headings.py` so that the day headings survived
+chunking the suite would fail until someone removed the marker. **That is exactly
+what happened**: the behaviour landed, the marker turned into an `XPASS(strict)`
+and failed the suite, and it came off. Worth noting as a technique — a strict
+xfail is a claim that fails loudly when it stops being true, where a sentence in a
+plan just goes stale.
+
+What landed is deliberately smaller than `SmartChunker` was. **Chunk boundaries are
+unchanged**: the splitter still cuts by size and `_heading_scope` *carries* the
+last heading seen onto the chunks that follow, in `metadata["heading"]`. Putting
+the heading back into `page_content` would change every chunk's embedding and every
+stored offset; a metadata key is additive, and verified so — over a ten-document
+corpus the only difference is the new key, with chunk text and every other field
+byte-identical. Splitting *by* section is a larger change with its own trade-offs
+and was not made.
+
+**`detect_heading_level` raised on a blank line**, found while wiring this up. Its
+title-case rule reads `line[0]` after stripping, and `extract_document_structure`
+calls it on every line *before* checking whether the line is blank — so the
+structure pass blew up on any document containing one, which is nearly all of them.
+Latent rather than shipping only because `PDF_ENABLE_STRUCTURE_ANALYSIS` defaults
+false; and it would not have looked like a crash if switched on, because
+`load_pdf_advanced` catches per page and keeps the *original* document, so formula
+enrichment and coreference resolution would have been discarded along with the
+structure and all three switches would have looked like features that did nothing.
+
+One definition of "what is a heading" serves both callers, `section_headings`, and
+it is **liberal on purpose**: measured over 415 lines of corpus and README text it
+flagged 50, of which 45 were genuine markdown headings and the five it was wrong
+about were ordered-list items and one all-caps diagram line. A chunk's `heading` is
+"probably the section this came from", not a key. It is also **Latin-script only** —
+a bare Chinese section title matches none of the four rules, so a Chinese document
+without `#` markers gets no headings on its chunks. `tests/ingestion/test_heading_detection.py`
+pins that limit rather than leaving it to be discovered.
 
 **There is no chart modality, and a chart is still retrievable** (changed
 2026-09-05). `chart` was a selectable modality that queried `chart_descriptions`
@@ -1905,7 +1935,7 @@ verified (60 inputs and 336 pins respectively, zero differences).
 
 `tests/` was cleared ahead of the v0.7 rewrite and is being rebuilt incrementally: each bug
 fix lands with the regression test that would have caught it, rather than as a separate
-back-filling effort. As of 2026-09-06 there are 1498 tests covering the chat round trip,
+back-filling effort. As of 2026-09-06 there are 1522 tests covering the chat round trip,
 conversation context, graph routing, clarification, the async load guard, engine reuse,
 answer safety, reader-facing citation numbering, stage-timeout degradation, the governed
 tool stack with its multi-step loop and approve-then-resume cycle, retrieval
@@ -1952,7 +1982,7 @@ covered the day it is added, where one test looping inside a single assertion re
 first offender and stops — but it does mean this total is not comparable across the change
 that introduced them.
 
-`tests/security/` (743 of those, 376 being the per-module audit-action scan) pins the
+`tests/security/` (746 of those, 367 being the per-module audit-action scan) pins the
 user-data isolation invariants — see
 `docs/superpowers/plans/2026-08-29-user-data-isolation.md`. That plan is complete
 (phases 0-4) and all 8 of its `xfail(strict=True)` markers are cleared; keep using the same

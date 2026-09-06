@@ -12,6 +12,7 @@ except ImportError:
     RecursiveCharacterTextSplitter = None  # type: ignore[assignment]
 
 from app.core.config import get_settings
+from app.ingestion.processing.structure import section_headings
 
 from .metadata import enhance_chunk_metadata
 
@@ -181,6 +182,27 @@ def _parent_id(identity: str, doc_idx: int, parent_idx: int, parent_text: str) -
     return f"parent-{hashlib.sha1(parent_seed.encode('utf-8')).hexdigest()[:16]}"
 
 
+def _heading_scope(text: str, carried: str | None) -> tuple[str | None, str | None]:
+    """Which section this chunk sits under, and what the next chunk inherits.
+
+    The splitter cuts by size, so a chunk from the middle of a section contains no
+    heading at all -- and the separator list cuts *at* a heading, which strands it
+    in a chunk of its own. Walking the chunks in order and carrying the last
+    heading forward is what lets the six chunks holding an answer say which
+    section they came from.
+
+    A chunk with no heading inherits. A chunk containing one is labelled with what
+    was already in scope, because its text begins before that heading; only the
+    first chunk of a document, with nothing to inherit, takes its own first
+    heading. Either way the *last* heading in the chunk is what the next one
+    inherits.
+    """
+    headings = section_headings(text)
+    if not headings:
+        return carried, carried
+    return (carried or headings[0]), headings[-1]
+
+
 def _split_parent(
     doc: Any,
     parent_text: str,
@@ -190,21 +212,26 @@ def _split_parent(
     parent_id: str,
     parent_idx: int,
     enhance: bool,
+    heading: str | None,
 ) -> list[Any]:
     """The child chunks of one parent, each carrying its parent linkage."""
     child_texts = splitter.split_text(parent_text) or [parent_text]
     total_children = len(child_texts)
     children: list[Any] = []
+    carried = heading
 
     for child_idx, raw_child in enumerate(child_texts):
         child_text = (raw_child or "").strip()
         if not child_text:
             continue
 
+        scope, carried = _heading_scope(child_text, carried)
         metadata = dict(base_metadata)
         metadata["parent_id"] = parent_id
         metadata["parent_index"] = parent_idx
         metadata["child_index"] = child_idx
+        if scope:
+            metadata["heading"] = scope
 
         if enhance:
             metadata = enhance_chunk_metadata(
@@ -276,15 +303,19 @@ def _split_document(
     total_parents = len(parent_texts)
     children: list[Any] = []
     records: list[dict[str, Any]] = []
+    carried_heading: str | None = None
 
     for parent_idx, raw_parent in enumerate(parent_texts):
         parent_text = (raw_parent or "").strip()
         if not parent_text:
             continue
 
+        scope, carried_heading = _heading_scope(parent_text, carried_heading)
         parent_id = _parent_id(identity, doc_idx, parent_idx, parent_text)
         parent_meta = dict(base_metadata)
         parent_meta.update({"parent_id": parent_id, "parent_index": parent_idx})
+        if scope:
+            parent_meta["heading"] = scope
 
         if enhance:
             parent_meta = enhance_chunk_metadata(
@@ -301,6 +332,7 @@ def _split_document(
                 parent_id=parent_id,
                 parent_idx=parent_idx,
                 enhance=enhance,
+                heading=scope,
             )
         )
 
