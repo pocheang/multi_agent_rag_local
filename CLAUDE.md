@@ -1015,6 +1015,39 @@ It does not fail; it is confidently wrong. `_table_from_markdown` reads the
 header and body back out of the pipe table the loader rendered, so `headers` is a
 header again.
 
+**A chunk's entity metadata was different every time it was ingested** (fixed
+2026-09-06). `extract_entities` (`app/ingestion/chunking/metadata.py`) built each
+list as `list(set(matches))`, and set iteration order over strings depends on
+`PYTHONHASHSEED`, which Python randomises per process. Three of the five lists are
+then truncated — acronyms and numbers to five, URLs to three — so it was not the
+order that moved but the *content*: measured on one paragraph, seed 0 stored
+`['API', 'SSL', 'SSH', 'HTTP', 'DNS']` and seed 1 stored
+`['SSH', 'HTTP', 'TLS', 'CDN', 'DNS']` for the same text. `_first_distinct` keeps
+order of appearance, which is deterministic and also makes the truncation mean
+"the first five in this chunk" rather than "an arbitrary five".
+
+It surfaced while characterising `split_documents_enhanced` for the refactor
+below: two runs of the *unmodified* splitter produced different output. Worth
+knowing as a technique — a refactor's own before/after diff is the cheapest
+non-determinism detector this repository has, and it found something no test was
+looking for. `tests/ingestion/test_entity_extraction_is_deterministic.py` spends
+two subprocesses to pin it, because an in-process assertion cannot vary the hash
+seed and asserting an expected order proves determinism only by construction.
+
+**`split_documents_enhanced` was the highest cognitive complexity in the project**
+(58 against a threshold of 15, `python:S3776`) until 2026-09-06, and almost all of
+it was nesting: three loops deep, so every `if`, `or` and ternary inside paid the
+depth as well as itself. Split into `_split_document`, `_split_parent`,
+`_parent_id` and `_neighbours`, verified byte-for-byte over a ten-document corpus
+rather than by argument. Two properties the nesting hid are now pinned in
+`tests/ingestion/test_splitter_chunk_indices.py`, because both look like tidying:
+a blank chunk is **skipped but still occupies its index**, so `parent_index`,
+`child_index` and the totals given to `enhance_chunk_metadata` are positions in the
+splitter's output rather than in the kept subset; and `_neighbours` hands the
+enhancer the **raw** neighbouring chunks while the chunk being described is
+stripped, which are different strings whenever a chunk begins or ends on
+whitespace.
+
 **A chunk does not know which section it came from, and that gap is now
 executable** (2026-09-05). The same size-only splitting costs headings as well as
 table headers, and worse: the separator list splits *at* a heading, so measured on
@@ -1863,7 +1896,7 @@ verified (60 inputs and 336 pins respectively, zero differences).
 
 `tests/` was cleared ahead of the v0.7 rewrite and is being rebuilt incrementally: each bug
 fix lands with the regression test that would have caught it, rather than as a separate
-back-filling effort. As of 2026-09-06 there are 1483 tests covering the chat round trip,
+back-filling effort. As of 2026-09-06 there are 1492 tests covering the chat round trip,
 conversation context, graph routing, clarification, the async load guard, engine reuse,
 answer safety, reader-facing citation numbering, stage-timeout degradation, the governed
 tool stack with its multi-step loop and approve-then-resume cycle, retrieval

@@ -155,6 +155,24 @@ def extract_keywords(text: str, top_n: int = 10) -> list[str]:
     return [word for word, freq in sorted_keywords[:top_n]]
 
 
+def _first_distinct(values: list[str], limit: int | None = None) -> list[str]:
+    """Distinct values in order of first appearance.
+
+    Every one of these was `list(set(values))`, and set iteration order over
+    strings depends on `PYTHONHASHSEED`, which Python randomises per process. For
+    `acronyms`, `numbers` and `urls` that is not cosmetic: all three are truncated,
+    so *which* five acronyms reached a chunk's metadata changed between ingests of
+    the same unchanged document. Order of appearance also makes the truncation
+    mean something -- "the first five in this chunk" rather than "an arbitrary
+    five".
+
+    Found on 2026-09-06 while characterising `split_documents_enhanced` for a
+    refactor: two runs of the unmodified splitter produced different metadata.
+    """
+    distinct = list(dict.fromkeys(values))
+    return distinct if limit is None else distinct[:limit]
+
+
 def extract_entities(text: str) -> dict[str, list[str]]:
     """
     Simplified entity recognition (rule-based)
@@ -170,27 +188,27 @@ def extract_entities(text: str) -> dict[str, list[str]]:
     # 技术术语（大写缩写）
     acronyms = re.findall(r"\b[A-Z]{2,10}\b", text)
     if acronyms:
-        entities["acronyms"] = list(set(acronyms))[:5]
+        entities["acronyms"] = _first_distinct(acronyms, 5)
 
     # 数字（版本号、ID等）
     numbers = re.findall(r"\b\d+(?:\.\d+)*\b", text)
     if numbers:
-        entities["numbers"] = list(set(numbers))[:5]
+        entities["numbers"] = _first_distinct(numbers, 5)
 
     # IP地址
     ips = re.findall(r"\b\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\b", text)
     if ips:
-        entities["ip_addresses"] = list(set(ips))
+        entities["ip_addresses"] = _first_distinct(ips)
 
     # 邮箱
     emails = re.findall(r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b", text)
     if emails:
-        entities["emails"] = list(set(emails))
+        entities["emails"] = _first_distinct(emails)
 
     # URL
     urls = _URL.findall(text)
     if urls:
-        entities["urls"] = list(set(urls))[:3]
+        entities["urls"] = _first_distinct(urls, 3)
 
     return entities
 
