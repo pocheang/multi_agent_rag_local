@@ -154,6 +154,142 @@ def _build_splitter(chunk_size: int, chunk_overlap: int, separators: list[str]):
     )
 
 
+def _neighbours(texts: list[str], index: int) -> tuple[str | None, str | None]:
+    """The raw chunks either side of `index`, for `enhance_chunk_metadata`.
+
+    Raw, not stripped: the caller strips the chunk it is describing, and the
+    neighbours are read from the splitter's own output. The two are different
+    strings whenever a chunk begins or ends on whitespace, so this is a property
+    of the original and not an oversight to tidy up.
+    """
+    previous = texts[index - 1] if index > 0 else None
+    following = texts[index + 1] if index < len(texts) - 1 else None
+    return previous, following
+
+
+def _parent_id(identity: str, doc_idx: int, parent_idx: int, parent_text: str) -> str:
+    """Stable across re-ingests when the document has an identity, random when not.
+
+    `identity` is `{document_id}|v{version}` where both are present and the source
+    path otherwise; with neither, there is nothing to be stable against and a
+    uuid4 is the honest answer.
+    """
+    if not identity:
+        return f"parent-{doc_idx}-{parent_idx}-{uuid.uuid4().hex[:8]}"
+    text_hash = hashlib.sha1(parent_text.encode("utf-8")).hexdigest()[:12]
+    parent_seed = f"{identity}|{doc_idx}|{parent_idx}|{text_hash}"
+    return f"parent-{hashlib.sha1(parent_seed.encode('utf-8')).hexdigest()[:16]}"
+
+
+def _split_parent(
+    doc: Any,
+    parent_text: str,
+    splitter: Any,
+    *,
+    base_metadata: dict[str, Any],
+    parent_id: str,
+    parent_idx: int,
+    enhance: bool,
+) -> list[Any]:
+    """The child chunks of one parent, each carrying its parent linkage."""
+    child_texts = splitter.split_text(parent_text) or [parent_text]
+    total_children = len(child_texts)
+    children: list[Any] = []
+
+    for child_idx, raw_child in enumerate(child_texts):
+        child_text = (raw_child or "").strip()
+        if not child_text:
+            continue
+
+        metadata = dict(base_metadata)
+        metadata["parent_id"] = parent_id
+        metadata["parent_index"] = parent_idx
+        metadata["child_index"] = child_idx
+
+        if enhance:
+            metadata = enhance_chunk_metadata(
+                child_text, metadata, child_idx, total_children, *_neighbours(child_texts, child_idx)
+            )
+
+        children.append(_clone_document(doc, text=child_text, metadata=metadata))
+
+    return children
+
+
+def _split_document(
+    doc: Any,
+    doc_idx: int,
+    *,
+    settings: Any,
+    enhance: bool,
+) -> tuple[list[Any], list[dict[str, Any]]]:
+    """One document's child chunks and parent records, in order.
+
+    Note that a blank chunk is skipped but still *counts*: `child_idx`,
+    `parent_idx` and the totals handed to `enhance_chunk_metadata` are positions
+    in the splitter's output, not in the kept subset. Renumbering them would
+    change what "chunk 3 of 7" means to every consumer of that metadata.
+    """
+    base_metadata = dict(getattr(doc, "metadata", {}) or {})
+    raw_text = str(getattr(doc, "page_content", "") or "").strip()
+    if not raw_text:
+        return [], []
+
+    # 智能选择分隔符
+    separators = get_smart_separators(
+        base_metadata.get("doc_type") or base_metadata.get("file_type"),
+        base_metadata.get("language", "mixed"),
+    )
+    parent_splitter = _build_splitter(
+        chunk_size=settings.parent_chunk_size,
+        chunk_overlap=settings.parent_chunk_overlap,
+        separators=separators,
+    )
+    child_splitter = _build_splitter(
+        chunk_size=settings.child_chunk_size,
+        chunk_overlap=settings.child_chunk_overlap,
+        separators=separators,
+    )
+
+    document_id = str(base_metadata.get("document_id", "") or "")
+    version = str(base_metadata.get("version", "") or "")
+    identity = f"{document_id}|v{version}" if document_id and version else str(base_metadata.get("source", "") or "")
+
+    parent_texts = parent_splitter.split_text(raw_text) or [raw_text]
+    total_parents = len(parent_texts)
+    children: list[Any] = []
+    records: list[dict[str, Any]] = []
+
+    for parent_idx, raw_parent in enumerate(parent_texts):
+        parent_text = (raw_parent or "").strip()
+        if not parent_text:
+            continue
+
+        parent_id = _parent_id(identity, doc_idx, parent_idx, parent_text)
+        parent_meta = dict(base_metadata)
+        parent_meta.update({"parent_id": parent_id, "parent_index": parent_idx})
+
+        if enhance:
+            parent_meta = enhance_chunk_metadata(
+                parent_text, parent_meta, parent_idx, total_parents, *_neighbours(parent_texts, parent_idx)
+            )
+
+        records.append({"id": parent_id, "text": parent_text, "metadata": parent_meta})
+        children.extend(
+            _split_parent(
+                doc,
+                parent_text,
+                child_splitter,
+                base_metadata=base_metadata,
+                parent_id=parent_id,
+                parent_idx=parent_idx,
+                enhance=enhance,
+            )
+        )
+
+    return children, records
+
+
 def split_documents_enhanced(
     documents: list[Any],
     enable_metadata_enhancement: bool = True,
@@ -174,89 +310,13 @@ def split_documents_enhanced(
         (child_chunks, parent_records)
     """
     settings = get_settings()
-
-    child_chunks = []
+    child_chunks: list[Any] = []
     parent_records: list[dict[str, Any]] = []
 
     for doc_idx, doc in enumerate(documents):
-        base_metadata = dict(getattr(doc, "metadata", {}) or {})
-        raw_text = str(getattr(doc, "page_content", "") or "").strip()
-        if not raw_text:
-            continue
-
-        source = str(base_metadata.get("source", "") or "")
-        document_id = str(base_metadata.get("document_id", "") or "")
-        version = str(base_metadata.get("version", "") or "")
-        doc_type = base_metadata.get("doc_type") or base_metadata.get("file_type")
-        language = base_metadata.get("language", "mixed")
-
-        # 智能选择分隔符
-        separators = get_smart_separators(doc_type, language)
-
-        parent_splitter = _build_splitter(
-            chunk_size=settings.parent_chunk_size,
-            chunk_overlap=settings.parent_chunk_overlap,
-            separators=separators,
-        )
-        child_splitter = _build_splitter(
-            chunk_size=settings.child_chunk_size,
-            chunk_overlap=settings.child_chunk_overlap,
-            separators=separators,
-        )
-
-        parent_texts = parent_splitter.split_text(raw_text) or [raw_text]
-        total_parents = len(parent_texts)
-
-        for parent_idx, parent_text in enumerate(parent_texts):
-            parent_text = (parent_text or "").strip()
-            if not parent_text:
-                continue
-
-            # 生成parent ID
-            identity = f"{document_id}|v{version}" if document_id and version else source
-            if identity:
-                text_hash = hashlib.sha1(parent_text.encode("utf-8")).hexdigest()[:12]
-                parent_seed = f"{identity}|{doc_idx}|{parent_idx}|{text_hash}"
-                parent_id = f"parent-{hashlib.sha1(parent_seed.encode('utf-8')).hexdigest()[:16]}"
-            else:
-                parent_id = f"parent-{doc_idx}-{parent_idx}-{uuid.uuid4().hex[:8]}"
-
-            parent_meta = dict(base_metadata)
-            parent_meta.update({"parent_id": parent_id, "parent_index": parent_idx})
-
-            # Parent元数据增强
-            if enable_metadata_enhancement:
-                prev_parent = parent_texts[parent_idx - 1] if parent_idx > 0 else None
-                next_parent = parent_texts[parent_idx + 1] if parent_idx < total_parents - 1 else None
-                parent_meta = enhance_chunk_metadata(
-                    parent_text, parent_meta, parent_idx, total_parents, prev_parent, next_parent
-                )
-
-            parent_records.append({"id": parent_id, "text": parent_text, "metadata": parent_meta})
-
-            # 切分子chunks
-            child_texts = child_splitter.split_text(parent_text) or [parent_text]
-            total_children = len(child_texts)
-
-            for child_idx, child_text in enumerate(child_texts):
-                child_text = (child_text or "").strip()
-                if not child_text:
-                    continue
-
-                metadata = dict(base_metadata)
-                metadata["parent_id"] = parent_id
-                metadata["parent_index"] = parent_idx
-                metadata["child_index"] = child_idx
-
-                # Child元数据增强
-                if enable_metadata_enhancement:
-                    prev_child = child_texts[child_idx - 1] if child_idx > 0 else None
-                    next_child = child_texts[child_idx + 1] if child_idx < total_children - 1 else None
-                    metadata = enhance_chunk_metadata(
-                        child_text, metadata, child_idx, total_children, prev_child, next_child
-                    )
-
-                child_chunks.append(_clone_document(doc, text=child_text, metadata=metadata))
+        children, records = _split_document(doc, doc_idx, settings=settings, enhance=enable_metadata_enhancement)
+        child_chunks.extend(children)
+        parent_records.extend(records)
 
     return child_chunks, parent_records
 
