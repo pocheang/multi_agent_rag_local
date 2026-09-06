@@ -90,9 +90,15 @@ def test_a_traversal_path_does_not_escape_the_owners_directory(uploads):
 def test_an_ambiguous_filename_resolves_to_nothing(uploads, monkeypatch):
     """Two owners, one filename: resolution must refuse rather than guess.
 
-    `_resolve_manageable_source_for_filename` returns None unless exactly one
-    candidate matches, which is what makes the *filename-only* form of the
-    endpoint safe. It is the `source` query parameter that bypasses this.
+    `_resolve_manageable_document` returns None unless exactly one candidate
+    matches, which is what makes the *filename-only* form of the endpoint safe.
+    It is the `source` query parameter that narrows this.
+
+    Asserted against `_resolve_manageable_document` since 2026-09-06. It used to
+    go through `_resolve_manageable_source_for_filename`, a back-compatible
+    wrapper returning just the path -- which no endpoint called, so this test was
+    the only thing keeping it alive and the refusal it proved was the wrapper's
+    rather than the resolver's.
     """
     from app.api.routes.public import documents as documents_route
 
@@ -101,7 +107,13 @@ def test_an_ambiguous_filename_resolves_to_nothing(uploads, monkeypatch):
 
     # CROSS_TENANT_ADMIN so both rows are genuinely manageable and the ambiguity
     # itself is what refuses, rather than the narrower reach doing it first.
-    assert documents_route._resolve_manageable_source_for_filename("report.pdf", CROSS_TENANT_ADMIN) is None
+    assert documents_route._resolve_manageable_document("report.pdf", CROSS_TENANT_ADMIN) is None
+
+    # And the narrowing form still resolves: one owner's copy, named exactly.
+    only_alice = str(uploads / "alice" / "report.pdf")
+    resolved = documents_route._resolve_manageable_document("report.pdf", CROSS_TENANT_ADMIN, source=only_alice)
+    assert resolved is not None
+    assert str(resolved.get("source", "")) == only_alice
 
 
 # --- P0-3: the admin escape hatch -----------------------------------------

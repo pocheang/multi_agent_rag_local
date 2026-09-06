@@ -68,10 +68,6 @@ def _tokenize(text: str) -> set[str]:
     return set(_TOKEN_RE.findall((text or "").lower()))
 
 
-def _split_sentences(text: str) -> list[str]:
-    return [sentence for _, _, sentence in _sentence_spans(text)]
-
-
 def _sentence_spans(text: str) -> list[tuple[int, int, str]]:
     """Sentences with their offsets in the original string.
 
@@ -147,7 +143,7 @@ _CLAIMLESS_RE = re.compile(rf"^(?:\[[^\]]*\]|[\s{_CJK_PUNCTUATION_CLASS}.,!?;:()
 def _makes_a_claim(sentence: str) -> bool:
     """Whether this fragment asserts anything that could lack support.
 
-    A citation marker on its own does not. `_split_sentences` hands back `[E2]`
+    A citation marker on its own does not. `_sentence_spans` hands back `[E2]`
     as a sentence whenever a paragraph ends on one, and a bare marker shares no
     tokens with the evidence, so it scored as unsupported and came back as
     "基于当前可用证据，[E2]" -- hedging the attribution rather than the claim, and

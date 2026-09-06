@@ -102,12 +102,6 @@ def _resolve_manageable_document_by_id(document_id: str, user: dict[str, Any]) -
     return candidates[0] if len(candidates) == 1 else None
 
 
-def _resolve_manageable_source_for_filename(filename: str, user: dict[str, Any]) -> str | None:
-    """Back-compatible wrapper returning just the source path."""
-    row = _resolve_manageable_document(filename, user)
-    return str(row.get("source", "") or "").strip() if row else None
-
-
 def _document_audit_detail(row: dict[str, Any]) -> str:
     """Identify the document and its owner, so a cross-user action is legible."""
     return (

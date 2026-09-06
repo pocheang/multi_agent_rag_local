@@ -53,7 +53,11 @@ class AuditAction(StrEnum):
     # Query admission -- written only when a query is refused
     QUERY_LOAD_GUARD = "query.load_guard"
     QUERY_CREDIT_RESERVE = "query.credit_reserve"
-    QUERY_SOURCE_SCOPE = "query.source_scope"
+    # QUERY_SOURCE_SCOPE ("query.source_scope") was removed on 2026-09-06 with its
+    # only writer, an adapter in api/deps/documents.py that imported a module
+    # 4994d7f3 had deleted. Retrieval scoping is enforced in privacy_permission and
+    # in similarity_search, neither of which audits per query, so there is nothing
+    # to write this. Bring the name back with a writer, not before it.
 
     # Prompt library
     PROMPT_CHECK = "prompt.check"

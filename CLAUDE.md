@@ -808,9 +808,17 @@ literal equal to any member — which is how twelve *positional* call sites in
 the enum, and that the list is declared once. It was declared twice in `frontend/src`,
 identically, which is how the first divergence went unnoticed.
 
-**The three `query.*` actions are written only when a query is *refused*.** No successful
+**The two `query.*` actions are written only when a query is *refused*.** No successful
 query is audited, which is why nothing carries a per-answer quality metric — see Answer
 quality telemetry under Important Notes for where that goes instead.
+
+There were three until 2026-09-06. `query.source_scope` was removed with its only writer,
+an adapter in `api/deps/documents.py` that imported a module `4994d7f3` had deleted — so
+the console offered a filter that could only ever return nothing, which is the defect this
+section opens with, reached from the opposite direction: not a name that disagreed with the
+backend, but one both ends agreed on with no row behind it. The direction the existing
+tests checked was console ⊆ enum, and that passes on a member nothing writes;
+`test_every_action_in_the_vocabulary_is_named_by_some_module` checks the other.
 
 ### Knowledge Agent and retrieval execution
 
@@ -1393,6 +1401,17 @@ now enforces that -- it finds every `@lru_cache` function reading an editable fi
 requires the reload to clear it, following one level of indirection through the named
 clearers, and it was verified able to fail by removing the reranker's.
 
+**That guard sees `@lru_cache` and nothing else, and a hand-rolled cache slipped past it**
+(fixed 2026-09-06). `decide_route` is memoized in `app/agents/shared/cache.py` by a TTL/LRU
+store of this repository's own, on a key of question and hints only -- and its result reads
+two editable settings, `ENABLE_CALIBRATION` through `_calibrated` and
+`ENABLE_WEB_ROUTE_DOWNGRADE` through `_llm_route`. So toggling either from the console
+reported success and left every question already in the cache routing the old way for up to
+thirty minutes. `clear_router_decision_cache` existed, did exactly this, and had no caller
+outside tests; it is in the reload sequence now, pinned by
+`test_the_reload_empties_the_router_decision_memo`. Adding a cache that is not an
+`lru_cache` means adding it to the sequence by hand -- the guard cannot find it for you.
+
 **What an administrator may change is an allowlist**, `app/core/config_schema.py`, not an
 annotation per field. `Settings` has 235 of them; annotating individually would scatter a
 security-relevant decision across 236 lines and leave "what can console access reach?"
@@ -1838,7 +1857,7 @@ verified (60 inputs and 336 pins respectively, zero differences).
 
 `tests/` was cleared ahead of the v0.7 rewrite and is being rebuilt incrementally: each bug
 fix lands with the regression test that would have caught it, rather than as a separate
-back-filling effort. As of 2026-09-06 there are 1490 tests covering the chat round trip,
+back-filling effort. As of 2026-09-06 there are 1492 tests covering the chat round trip,
 conversation context, graph routing, clarification, the async load guard, engine reuse,
 answer safety, reader-facing citation numbering, stage-timeout degradation, the governed
 tool stack with its multi-step loop and approve-then-resume cycle, retrieval
@@ -2220,17 +2239,62 @@ Two things learned doing this the first time:
   `_SEPARATOR_ROW_RE` in `tables.py`, was written for three call sites and has
   one left; its docstring says so rather than continuing to claim three.
 
-  **62 non-reachable definitions remain in `app/`** -- 55 unreachable, 5 in
-  modules nothing imports (`evaluation/baselines/chroma/*`, `graph/streaming*`),
-  2 reached only from tests. Three read exactly like `create_user`, a copy left
-  behind when the live one moved: `retrievers/hybrid/fusion.py::reciprocal_rank_fusion`
-  beside the live `knowledge/fusion.py::reciprocal_rank_fuse`,
+  **The second batch (2026-09-06) cleared `api/deps/documents.py` and three
+  left-behind twins**, and two of them were worth more than the lines they cost.
+
+  Nine of that module's helpers were unreachable and a tenth, `_source_mtime_ns`,
+  was reachable only from one of the nine. Two of the nine were labelled
+  "compatibility adapter for callers that still import the old API helper" -- with
+  no such callers, and importing `app.orchestration.compatibility_post_execution`,
+  a module `4994d7f3` deleted. They would have raised `ModuleNotFoundError`. **A
+  function-local import is what hid that**: at module scope it would have failed at
+  startup.
+
+  One of them was the only writer of `AuditAction.QUERY_SOURCE_SCOPE`, so that
+  member and its console filter option are gone too -- the "filter that can only
+  ever return nothing" this file describes under Audit log vocabulary, arrived at
+  from the other direction.
+  `test_every_action_in_the_vocabulary_is_named_by_some_module` closes it:
+  `test_the_console_filter_offers_actions_that_exist` checks only that the console
+  offers nothing the enum lacks, and passes happily on a member nothing writes.
+
+  The twins: `retrievers/hybrid/fusion.py::reciprocal_rank_fusion` beside the live
+  `knowledge/fusion.py::reciprocal_rank_fuse`,
   `outbound_redaction.py::redact_text_for_provider` beside the live plural and
-  `..._messages_...` forms, and `citation_grounding.py::_split_sentences`, which
-  `_makes_a_claim`'s docstring still names as the function in the path when the
-  caller is `_sentence_spans`. Clearing those comes before refactoring the 85:
-  there is no point spending judgement on the complexity of code that should not
-  exist.
+  `..._messages_...` forms, and `citation_grounding.py::_split_sentences`, whose
+  name `_makes_a_claim`'s docstring gave as the function in the path when the
+  caller is `_sentence_spans`.
+
+  **Neither test-only definition was a test helper, and that is the useful half.**
+  `_resolve_manageable_source_for_filename` was a back-compat wrapper no endpoint
+  called, and the security test asserting an ambiguous filename refuses was the
+  only thing keeping it alive -- so the refusal it proved was the wrapper's, not
+  the resolver's. The wrapper is gone and the test asserts against
+  `_resolve_manageable_document`. And `clear_router_decision_cache` was **not dead
+  at all**: `decide_route` is memoized for 30 minutes on a key of question and
+  hints only, its result reads two admin-editable settings (`ENABLE_CALIBRATION`
+  through `_calibrated`, `ENABLE_WEB_ROUTE_DOWNGRADE` through `_llm_route`), and
+  `apply_config_reload` did not clear it -- so toggling either from the console
+  reported success and left every question already cached routing the old way
+  until its entry expired. Same defect as the reranker's `lru_cache`, in a store
+  `test_the_reload_reaches_every_cache_that_holds_an_editable_setting` cannot see,
+  because that guard walks `@lru_cache` and this is hand-rolled. It is wired into
+  the reload now.
+
+  **`reachability.py` had a second bug of the first one's kind**, found by noticing
+  it had never listed `_source_mtime_ns`. Its walk treated statements inside
+  function bodies as module-level, so every name mentioned anywhere in a module
+  became an import-time root -- and a helper called only from dead code looked
+  alive. Fixed 2026-09-06; the correction surfaced six more, including
+  `request_helpers.py::get_string_param` and `resilience.py::circuit_breaker_snapshot`,
+  each called only from a function that is itself dead. Both of its bugs
+  under- or over-reported in ways only reading caught, which is the argument for
+  the docstring's "candidate, never a verdict" and for it never becoming a gate.
+
+  **54 non-reachable definitions remain in `app/`** -- 48 unreachable, 5 in modules
+  nothing imports (`evaluation/baselines/chroma/*`, `graph/streaming*`), 1 reached
+  only from tests. Clearing those comes before refactoring the 85: there is no
+  point spending judgement on the complexity of code that should not exist.
 - **Answer provenance**: what a message may claim about where it came from is computed in
   one place — `retrieval_summary` (`app/api/routes/internal/pipeline_contract.py`), from the
   knowledge diagnostics both entry points already carry. **`used` means a source contributed

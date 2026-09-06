@@ -151,6 +151,36 @@ def test_the_reload_sequence_clears_the_validation_caches():
     assert "clear_validation_caches()" in sequence
 
 
+def test_the_reload_empties_the_router_decision_memo():
+    """A cached route outlives the setting that produced it, unless cleared.
+
+    `decide_route` is memoized for 30 minutes on a key of question and hints
+    only, and its result reads two editable settings -- ENABLE_CALIBRATION via
+    `_calibrated`, and ENABLE_WEB_ROUTE_DOWNGRADE via `_llm_route`. Until
+    2026-09-06 the reload did not clear it, so toggling either from the admin
+    console returned success and left every question already in the cache routing
+    the old way until its entry expired: the reranker-lru_cache defect again, in
+    a store the guard below cannot see because it is hand-rolled rather than
+    `@lru_cache`.
+
+    Two halves, because neither alone is the property. The clearer has to empty
+    the store, and the shared reload sequence has to call it -- a clearer that
+    works and is only called by the admin endpoint is the "second, quieter
+    definition of reloaded" its sibling above is about.
+    """
+
+    from app.agents.shared import cache as router_cache
+
+    router_cache._router_decision_cache.set("some-cached-route", "vector")
+    assert router_cache._router_decision_cache.get("some-cached-route") == "vector"
+    router_cache.clear_router_decision_cache()
+    assert router_cache._router_decision_cache.get("some-cached-route") is None
+
+    source = (REPO / "app" / "api" / "application" / "config_reload.py").read_text(encoding="utf-8")
+    sequence = source.split("def apply_config_reload(", 1)[1].split("\ndef ", 1)[0]
+    assert "clear_router_decision_cache()" in sequence
+
+
 # --- an editable field behind an lru_cache must be cleared by the reload ------
 
 

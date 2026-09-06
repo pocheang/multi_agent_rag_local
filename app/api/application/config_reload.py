@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import logging
 
+from app.agents.shared.cache import clear_router_decision_cache
 from app.agents.validation.public import clear_validation_caches
 from app.api import dependencies as api_dependencies
 from app.core.config import Settings, get_settings, reload_settings
@@ -55,6 +56,14 @@ def apply_config_reload() -> Settings:
     # clear_model_caches covers chat and embedding only; the reranker keeps
     # its own lru_cache keyed on RERANKER_MODEL_NAME.
     clear_reranker_cache()
+    # `decide_route` is memoized for 30 minutes on a key of question and hints
+    # only, and its result reads two editable settings: ENABLE_CALIBRATION,
+    # through `_calibrated`, and ENABLE_WEB_ROUTE_DOWNGRADE, through `_llm_route`.
+    # Toggling either from the console reported success and left every question
+    # already in the cache routing the old way until the entry expired. Not caught
+    # by test_the_reload_reaches_every_cache_that_holds_an_editable_setting, which
+    # walks `@lru_cache` functions -- this one is a hand-rolled TTL store.
+    clear_router_decision_cache()
     Neo4jClient.close_shared_driver()
     reset_bulkheads()
     return new_settings

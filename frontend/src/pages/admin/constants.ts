@@ -17,7 +17,6 @@ export const ACTION_KEYWORD_OPTIONS = [
   "session.delete",
   "query.load_guard",
   "query.credit_reserve",
-  "query.source_scope",
   "document.upload",
   "document.delete",
   "prompt.create",

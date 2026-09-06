@@ -171,7 +171,7 @@ def collect(path: Path, module: str):
     defs: list[Def] = []
     module_level: set[str] = set()
 
-    def walk(node, prefix, cls):
+    def walk(node, prefix, cls, at_import_time):
         for child in ast.iter_child_nodes(node):
             if isinstance(child, ast.FunctionDef | ast.AsyncFunctionDef):
                 decorators = [ast.unparse(d) for d in child.decorator_list]
@@ -186,15 +186,24 @@ def collect(path: Path, module: str):
                 )
                 info.refs = referenced_names(child)
                 defs.append(info)
-                walk(child, f"{prefix}{child.name}.", cls)
+                # Descend to find nested defs, but a function's *body* does not run
+                # at import: at_import_time goes false. It stayed true until
+                # 2026-09-06, which made every name mentioned anywhere in the module
+                # an import-time root -- so a helper called only from dead code
+                # looked alive. `_source_mtime_ns` in api/deps/documents.py was
+                # exactly that, and was found by reading rather than by this.
+                walk(child, f"{prefix}{child.name}.", cls, False)
             elif isinstance(child, ast.ClassDef):
-                walk(child, f"{prefix}{child.name}.", child.name)
+                # A class body does run at import, so it keeps the flag it was given.
+                walk(child, f"{prefix}{child.name}.", child.name, at_import_time)
+            elif not at_import_time:
+                continue
             else:
                 # Module- and class-level statements run at import, so the names
                 # they mention are reachable from the moment the module loads.
                 module_level.update(referenced_names(child))
 
-    walk(tree, "", None)
+    walk(tree, "", None, True)
     return defs, module_level, tree
 
 

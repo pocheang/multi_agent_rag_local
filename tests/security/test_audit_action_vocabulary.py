@@ -73,3 +73,36 @@ def test_the_vocabulary_is_only_declared_once() -> None:
         if p != _CONSOLE_OPTIONS and "ACTION_KEYWORD_OPTIONS = [" in p.read_text(encoding="utf-8")
     ]
     assert not duplicates, f"the console's action list is declared again in: {duplicates}"
+
+
+def test_every_action_in_the_vocabulary_is_named_by_some_module() -> None:
+    """A member nothing mentions is a filter option that can only return nothing.
+
+    ``test_the_console_filter_offers_actions_that_exist`` checks the other
+    direction -- that the console offers nothing the enum lacks -- and passes
+    happily on a member that exists and is written by nobody, which is the state
+    ``QUERY_SOURCE_SCOPE`` was in on 2026-09-06: its one writer was an adapter in
+    ``api/deps/documents.py`` that imported ``compatibility_post_execution``,
+    a module ``4994d7f3`` had deleted, so calling it would have raised. The enum
+    member, the console option and the dead writer all still agreed with each
+    other; there was simply no row.
+
+    Deliberately "named by", not "written by". Some members are read rather than
+    written -- ``runtime_ops`` compares against them -- and a test that demanded a
+    ``_audit(action=...)`` call for each would fail on those for no reason.
+    """
+
+    named: set[str] = set()
+    for path in _python_sources():
+        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Attribute) and isinstance(node.value, ast.Name):
+                if node.value.id == "AuditAction":
+                    named.add(node.attr)
+
+    orphans = sorted(action.name for action in AuditAction if action.name not in named)
+    assert not orphans, (
+        f"these audit actions are defined and nothing in app/ mentions them: {orphans}. "
+        "Delete the member, or add the writer it was defined for -- an action with no "
+        "writer is a console filter that reports 'no results' for every date range."
+    )

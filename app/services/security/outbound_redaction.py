@@ -221,12 +221,6 @@ def _should_passthrough_string(parent_key: str, value: str) -> bool:
     return False
 
 
-def redact_text_for_provider(text: str, *, provider: str, for_embeddings: bool = False) -> str:
-    if not is_external_provider(provider) or not outbound_redaction_enabled(for_embeddings=for_embeddings):
-        return str(text or "")
-    return _redact_text_with_state(str(text or ""), _RedactionState())
-
-
 def redact_texts_for_provider(texts: list[str], *, provider: str, for_embeddings: bool = False) -> list[str]:
     values = [str(item or "") for item in list(texts or [])]
     if not is_external_provider(provider) or not outbound_redaction_enabled(for_embeddings=for_embeddings):
